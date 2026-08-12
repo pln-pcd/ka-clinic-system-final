@@ -73,13 +73,13 @@ export default function Toast({ msg, message, title, type = 'info', onClose }) {
         zIndex: 9999,
         display: 'flex',
         alignItems: 'center',
-        gap: 18,
-        minWidth: 380,
-        maxWidth: 560,
+        gap: 15,
+        minWidth: 320,
+        maxWidth: 470,
         background: '#FFFFFF',
-        borderRadius: 14,
-        padding: '20px 22px 20px 0',
-        boxShadow: '0 12px 32px rgba(15, 23, 42, 0.16), 0 2px 8px rgba(15, 23, 42, 0.08)',
+        borderRadius: 12,
+        padding: '16px 18px 16px 0',
+        boxShadow: '0 10px 26px rgba(15, 23, 42, 0.15), 0 2px 6px rgba(15, 23, 42, 0.07)',
         animation: 'toastIn .22s cubic-bezier(.16,1,.3,1)',
         overflow: 'hidden',
       }}
@@ -87,9 +87,9 @@ export default function Toast({ msg, message, title, type = 'info', onClose }) {
       {/* accent bar */}
       <div
         style={{
-          width: 6,
+          width: 5,
           alignSelf: 'stretch',
-          margin: '4px 0 4px 14px',
+          margin: '4px 0 4px 12px',
           borderRadius: 3,
           background: v.accent,
           flexShrink: 0,
@@ -99,8 +99,8 @@ export default function Toast({ msg, message, title, type = 'info', onClose }) {
       {/* circular icon */}
       <div
         style={{
-          width: 40,
-          height: 40,
+          width: 34,
+          height: 34,
           borderRadius: '50%',
           background: v.accent,
           display: 'flex',
@@ -110,8 +110,8 @@ export default function Toast({ msg, message, title, type = 'info', onClose }) {
         }}
       >
         <svg
-          width="22"
-          height="22"
+          width="19"
+          height="19"
           viewBox="0 0 24 24"
           fill="none"
           stroke="#FFFFFF"
@@ -128,7 +128,7 @@ export default function Toast({ msg, message, title, type = 'info', onClose }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
           style={{
-            fontSize: '1.0625rem',
+            fontSize: '.9375rem',
             fontWeight: 700,
             color: '#1F2937',
             lineHeight: 1.3,
@@ -139,11 +139,11 @@ export default function Toast({ msg, message, title, type = 'info', onClose }) {
         </div>
         <div
           style={{
-            fontSize: '.9375rem',
+            fontSize: '.84375rem',
             fontWeight: 500,
             color: '#94A3B8',
             lineHeight: 1.4,
-            marginTop: 3,
+            marginTop: 2,
           }}
         >
           {text}
@@ -167,7 +167,7 @@ export default function Toast({ msg, message, title, type = 'info', onClose }) {
             flexShrink: 0,
           }}
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
             <line x1="18" y1="6" x2="6" y2="18" />
             <line x1="6" y1="6" x2="18" y2="18" />
           </svg>
