@@ -244,6 +244,11 @@ export default function AdminDashboard({ onLogout }) {
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [readNotifIds, setReadNotifIds] = useState(new Set());
+  // Seeded from localStorage so the list is correct on first paint, then
+  // reconciled against Firestore below. localStorage alone is per-origin, so
+  // a dismissal on localhost never reached the deployed site — and Vercel
+  // gives every deployment its own hostname, which wiped the list on each
+  // redeploy. Firestore is the durable copy; localStorage is just the cache.
   const [dismissedNotifIds, setDismissedNotifIds] = useState(() => {
     try {
       const saved = localStorage.getItem('kna_dismissed_notifications');
@@ -516,6 +521,25 @@ export default function AdminDashboard({ onLogout }) {
     return () => unsubAppts();
   }, []);
 
+  // Pull the durable dismissed list for this admin. Unioned with whatever is
+  // already in state so a dismissal made while offline isn't dropped by the
+  // first server snapshot.
+  useEffect(() => {
+    const uid = auth?.currentUser?.uid;
+    if (!uid) return;
+    const unsub = onSnapshot(doc(db, 'admins', uid), snap => {
+      const saved = snap.data()?.dismissedNotifications;
+      if (!Array.isArray(saved)) return;
+      setDismissedNotifIds(prev => {
+        const next = new Set([...prev, ...saved]);
+        if (next.size === prev.size) return prev;
+        try { localStorage.setItem('kna_dismissed_notifications', JSON.stringify([...next])); } catch (e) {}
+        return next;
+      });
+    }, err => console.error('Dismissed notifications listener failed:', err));
+    return () => unsub();
+  }, []);
+
   const filteredNotifications = notifications.filter(n => {
     if (dismissedNotifIds.has(n.id)) return false;
     if (n.id.startsWith('inv-')) {
@@ -534,11 +558,22 @@ export default function AdminDashboard({ onLogout }) {
 
   const unreadNotifCount = filteredNotifications.filter(n => !readNotifIds.has(n.id)).length;
   const markAllRead  = () => setReadNotifIds(new Set(filteredNotifications.map(n => n.id)));
+
+  // Writes the dismissed set to both the local cache and admins/{uid}, so it
+  // survives logout, a different browser, and a fresh Vercel deployment URL.
+  const persistDismissed = (next) => {
+    try { localStorage.setItem('kna_dismissed_notifications', JSON.stringify([...next])); } catch (e) {}
+    const uid = auth?.currentUser?.uid;
+    if (!uid) return;
+    setDoc(doc(db, 'admins', uid), { dismissedNotifications: [...next] }, { merge: true })
+      .catch(err => console.error('Failed to save dismissed notifications:', err));
+  };
+
   const dismissNotif = id => {
     setDismissedNotifIds(prev => {
       const next = new Set(prev);
       next.add(id);
-      try { localStorage.setItem('kna_dismissed_notifications', JSON.stringify([...next])); } catch (e) {}
+      persistDismissed(next);
       return next;
     });
   };
@@ -546,7 +581,7 @@ export default function AdminDashboard({ onLogout }) {
   const clearAllNotifs = () => {
     setDismissedNotifIds(prev => {
       const next = new Set([...prev, ...filteredNotifications.map(n => n.id)]);
-      try { localStorage.setItem('kna_dismissed_notifications', JSON.stringify([...next])); } catch (e) {}
+      persistDismissed(next);
       return next;
     });
   };
@@ -985,8 +1020,8 @@ export default function AdminDashboard({ onLogout }) {
 
               {/* ── NOTIFICATION DROPDOWN — BIGGER UNIFIED IPHONE NOTES LIST ── */}
               {notifOpen && (
-                <div className="absolute right-0 top-12 w-96 sm:w-[500px] rounded-3xl shadow-2xl border border-slate-200/90 bg-[#F2F2F7] z-50 overflow-hidden p-4" style={{ animation: 'kna-notif-in 0.22s cubic-bezier(0.22,1,0.36,1) both' }}>
-                  <div className="px-2 py-2 flex items-center justify-between mb-1">
+                <div className="absolute right-0 top-12 w-[min(380px,calc(100vw-2rem))] rounded-2xl shadow-2xl border border-slate-200/90 bg-[#F2F2F7] z-50 overflow-hidden p-2.5" style={{ animation: 'kna-notif-in 0.22s cubic-bezier(0.22,1,0.36,1) both' }}>
+                  <div className="px-1.5 pb-2 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-bold text-slate-900 tracking-tight">Notifications</span>
                       {filteredNotifications.length > 0 && (
@@ -1008,7 +1043,7 @@ export default function AdminDashboard({ onLogout }) {
                   </div>
 
                   {/* Single Unified iPhone Notes Grouped Card Container */}
-                  <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden max-h-96 overflow-y-auto custom-scrollbar divide-y divide-slate-100">
+                  <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm max-h-[22rem] overflow-y-auto custom-scrollbar divide-y divide-slate-100">
                     {filteredNotifications.length === 0 ? (
                       <div className="py-10 text-center px-4">
                         <Bell size={24} className="text-slate-300 mx-auto mb-1.5" />
@@ -1023,22 +1058,24 @@ export default function AdminDashboard({ onLogout }) {
                           <div
                             key={n.id}
                             onClick={() => handleNotifClick(n)}
-                            className="px-4 py-3 flex items-center justify-between gap-3 hover:bg-slate-50 transition-colors cursor-pointer group relative"
+                            className="px-3 py-2.5 flex items-start gap-2 hover:bg-slate-50 transition-colors cursor-pointer group relative"
                             style={{ animation: `kna-notif-item 0.18s ease-out ${idx * 0.02}s both` }}
                           >
-                            <div className="flex items-start gap-3 min-w-0 flex-1">
-                              <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1 ${style.dot}`}/>
+                            <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                              <div className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${style.dot}`}/>
                               <div className="min-w-0 flex-1">
-                                <div className="flex items-center justify-between gap-2 mb-0.5">
-                                  <p className={`text-xs ${isUnread ? 'font-bold text-slate-900' : 'font-semibold text-slate-700'} truncate`}>{n.title}</p>
-                                  <span className="text-[10px] font-medium text-slate-400 flex-shrink-0">{n.time}</span>
+                                <div className="flex items-baseline justify-between gap-2">
+                                  <p className={`text-[13px] ${isUnread ? 'font-bold text-slate-900' : 'font-semibold text-slate-700'} truncate`}>{n.title}</p>
+                                  <span className="text-[10px] font-medium text-slate-400 flex-shrink-0 tabular-nums">{n.time}</span>
                                 </div>
-                                <p className="text-[11.5px] text-slate-500 leading-snug truncate">{n.message}</p>
+                                {/* Two-line clamp rather than truncate — patient name plus date/time
+                                    never fits on one line at this width. */}
+                                <p className="text-[11.5px] text-slate-500 leading-snug mt-0.5 line-clamp-2">{n.message}</p>
                               </div>
                             </div>
                             <button
                               onClick={(e) => { e.stopPropagation(); dismissNotif(n.id); }}
-                              className="text-slate-300 hover:text-slate-600 p-1 rounded-full hover:bg-slate-200/60 transition-colors flex-shrink-0 cursor-pointer opacity-0 group-hover:opacity-100"
+                              className="text-slate-400 hover:text-slate-700 p-1 -mr-0.5 rounded-full hover:bg-slate-200/70 transition-colors flex-shrink-0 cursor-pointer"
                               title="Dismiss"
                             >
                               <X size={14}/>

@@ -570,7 +570,10 @@ export default function VaccinationTrackerPage() {
                   <th style={{ padding: '16px 12px 16px 20px', width: '10%', textAlign: 'left', fontWeight: 600, color: '#64748B' }}>Patient ID</th>
                   <th style={{ padding: '16px 12px', width: '26%', textAlign: 'left', fontWeight: 600, color: '#64748B' }}>Patient Name</th>
                   <th style={{ padding: '16px 12px', width: '8%', textAlign: 'left', fontWeight: 600, color: '#64748B' }}>Service</th>
-                  <th style={{ padding: '16px 12px', width: '28%', textAlign: 'right', fontWeight: 600, color: '#64748B' }}>Dose Progress</th>
+                  <th style={{ padding: '16px 12px', width: '28%', textAlign: 'left', fontWeight: 600, color: '#64748B' }}>
+                    {/* Matches the progress bar's own max width so the label centers over the bar, not the wider cell */}
+                    <div style={{ maxWidth: 230, textAlign: 'center' }}>Dose Progress</div>
+                  </th>
                   <th style={{ padding: '16px 12px', width: '13%', textAlign: 'left', fontWeight: 600, color: '#64748B' }}>Next Dose</th>
                   <th style={{ padding: '16px 12px', width: '15%', textAlign: 'center', fontWeight: 600, color: '#64748B' }}>Actions</th>
                 </tr>
@@ -613,7 +616,7 @@ export default function VaccinationTrackerPage() {
                       </td>
                       <td style={{ padding: '16px 12px' }}>{serviceBadge(p.service)}</td>
                       <td style={{ padding: '16px 12px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxWidth: 230, margin: '0 0 0 auto' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxWidth: 230, margin: '0 auto 0 0' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.75rem', fontWeight: 600 }}>
                             <span style={{ color: '#64748B' }}>{doneNum}/{doses.length} Doses</span>
                             <span style={{ color: pct === 100 ? '#059669' : '#1E293B' }}>{pct}%</span>
