@@ -1,0 +1,297 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Batch 5 finalization: status must be "active" — an invited or
+    // revoked admins/{uid} doc no longer counts as "admin" for every
+    // other collection's isAdmin() checks below. get() (not exists())
+    // so the status field is available to compare; get() on a
+    // nonexistent doc errors, which — same as before — makes the whole
+    // boolean expression false (fail-closed) for a caller with no doc.
+    function isAdmin() {
+      return request.auth != null &&
+        get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.status == "active";
+    }
+
+    // Appointment creation requires an authenticated patient with a valid
+    // clinic MRN (format "<year>-<seq>", e.g. "2026-001" — see
+    // ka-clinic-admin/src/patients.jsx getAndIncrementNextMRN, no "MRN-"
+    // prefix) and a uid matching the caller's real Firebase Auth session.
+    // Unverified/guest appointment creation is denied — guests have no MRN.
+    function isValidPatientBooking() {
+      let d = request.resource.data;
+      return request.auth != null
+        && d.status == 'pending'
+        && d.patientId is string && d.patientId.matches('^[0-9]{4}-[0-9]{3,}$')
+        && (d.patientUid == request.auth.uid || d.userId == request.auth.uid)
+        && d.name is string && d.name.size() > 0 && d.name.size() < 100
+        && d.contactNumber is string && d.contactNumber.size() > 0 && d.contactNumber.size() < 30
+        && d.date is string && d.date.size() > 0 && d.date.size() < 60;
+    }
+
+    // The public landing page's BookingModal (ka-clinic-admin/src/components/
+    // landing/BookingModal.jsx) has no auth concept at all — it's an
+    // unauthenticated marketing-site contact form, so it can never satisfy
+    // isValidPatientBooking()'s request.auth requirement. Give it its own
+    // narrowly-validated, no-auth-required path instead.
+    function isValidPublicBooking() {
+      let d = request.resource.data;
+      return d.status == 'pending'
+        && d.source == 'online'
+        && d.name is string && d.name.size() > 0 && d.name.size() < 100
+        && d.contactNumber is string && d.contactNumber.size() > 0 && d.contactNumber.size() < 30
+        && d.date is string && d.date.size() > 0 && d.date.size() < 60;
+    }
+
+    // A patient may cancel (never re-open) their own appointment, or delete
+    // their own already-cancelled appointment to clear it from their history.
+    function isOwnCancellation() {
+      return request.auth != null
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'cancelled';
+    }
+    function isOwnCancelledAppt() {
+      return request.auth != null
+        && resource.data.userId == request.auth.uid
+        && resource.data.status == 'cancelled';
+    }
+
+    match /appointments/{docId} {
+      allow read: if isAdmin() || (request.auth != null && (resource.data.patientUid == request.auth.uid || resource.data.userId == request.auth.uid));
+      allow create: if isAdmin() || isValidPatientBooking() || isValidPublicBooking();
+      allow update: if isAdmin() || isOwnCancellation();
+      allow delete: if isAdmin() || isOwnCancelledAppt();
+    }
+
+    // Device sessions: one doc per (patient, device) so a patient can see where
+    // they are signed in and sign a lost device out. Strictly self-scoped —
+    // a patient reads and writes only rows carrying their own uid, and the
+    // document id is "<uid>_<deviceId>" so it cannot collide across patients.
+    //
+    // Deliberately NOT admin-readable: staff have no reason to enumerate a
+    // patient's personal devices, and keeping it self-only means the collection
+    // never becomes a directory of who owns which phone.
+    match /patientSessions/{sessionId} {
+      allow read, delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow create, update: if request.auth != null
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.deviceId is string
+        && request.resource.data.deviceId.size() > 0
+        && request.resource.data.deviceId.size() < 100
+        && sessionId == request.auth.uid + '_' + request.resource.data.deviceId
+        && request.resource.data.keys().hasOnly(
+             ['uid', 'deviceId', 'label', 'platform', 'osVersion', 'lastActiveAt', 'createdAt', 'revoked']);
+    }
+
+    // Slot holds: one doc per taken (date, time) pair, keyed "<date>_<time>".
+    // Exists purely so patients can see which slots are gone WITHOUT being able
+    // to read other patients' appointment documents — the docs below carry no
+    // name, age, address, contact number, or MRN, only occupancy.
+    //
+    // The document ID is the slot identity, so Firestore's "create fails if the
+    // doc already exists" is itself the double-booking guard: two patients
+    // racing for the same hour both target the same ID and exactly one wins.
+    function isValidSlotHold() {
+      let d = request.resource.data;
+      return request.auth != null
+        && d.date is string && d.date.size() > 0 && d.date.size() < 60
+        && d.time is string && d.time.size() > 0 && d.time.size() < 60
+        // Ties the hold to its creator so it can be audited, but this is a uid,
+        // not identifying patient data.
+        && d.heldBy == request.auth.uid
+        // Slot holds are occupancy only — reject any attempt to smuggle patient
+        // details into a world-readable collection.
+        && d.keys().hasOnly(['date', 'time', 'heldBy', 'createdAt']);
+    }
+
+    match /appointmentSlots/{slotId} {
+      // World-readable: contains no patient-identifying data, and the booking
+      // calendar must show taken slots before the patient authenticates a write.
+      allow read: if true;
+      // create only — never update. A patient cannot steal or overwrite a hold
+      // that someone else already owns; releasing one is an admin action.
+      allow create: if isAdmin() || isValidSlotHold();
+      allow update, delete: if isAdmin();
+    }
+
+    match /authorizedPatients/{docId} {
+      allow read: if true;
+      allow update: if isAdmin() || (request.auth != null && request.auth.uid == request.resource.data.uid);
+      allow create, delete: if isAdmin();
+    }
+
+    // Patients sign in with real Firebase Auth using the same email address
+    // stored on their vaccinations doc (see patient-app/config/firebase.ts
+    // signInWithMRN/completeMRNSignup), so token.email == resource.data.email
+    // is a real identity check, not just a same-document tautology.
+    function ownsVaccinationDoc() {
+      return request.auth != null && request.auth.token.email == resource.data.email;
+    }
+
+    // Recovery monitoring: the patient app appends photo+note entries to the
+    // woundLog array on their own vaccinations doc (patient-app/app/(tabs)/
+    // index.tsx saveLog), which the dashboard renders in the Wound / Clinical
+    // Log panel (ka-clinic-admin/src/patients.jsx WoundLog).
+    //
+    // woundLog must be the ONLY field the write changes. diff().affectedKeys()
+    // is what enforces that: without it, granting patients update access to
+    // this document would also let them rewrite their own doses, category,
+    // MRN, or email — i.e. their entire clinical record.
+    function onlyChangesWoundLog() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['woundLog'])
+        && request.resource.data.woundLog is list
+        // Bounded so a client cannot grow the array without limit; the log is
+        // an append-only clinical note list, not bulk storage.
+        && request.resource.data.woundLog.size() <= 200
+        // Append-only from the patient side: existing entries cannot be edited
+        // or removed, only added to. Admins retain full control below.
+        && request.resource.data.woundLog.size() >= resource.data.get('woundLog', []).size();
+    }
+
+    match /vaccinations/{docId} {
+      allow read: if isAdmin() || ownsVaccinationDoc();
+      allow update: if isAdmin() || (ownsVaccinationDoc() && onlyChangesWoundLog());
+      allow create, delete: if isAdmin();
+    }
+
+    match /inventory/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Anonymized bite-incident pins (no patient identifiers — see
+    // ka-clinic-admin/src/incidents.jsx) power the patient app's Safety Map,
+    // so any signed-in or anonymous-but-authenticated caller may read them.
+    match /incidents/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // One chat thread per escalation (see patient-app/app/(tabs)/chat.tsx
+    // onStaffButtonPress) — auto-id doc carrying patientUid, so a patient can
+    // accumulate multiple resolved threads over time in their history. A
+    // resolved thread is never reopened; each escalation creates a new doc.
+    // `resolved` is the single source of truth for open/closed: the patient
+    // app queries patientUid + resolved == false to decide whether to show
+    // "Talk to Clinic Staff" (new) or "Back to Clinic Staff Chat" (resume).
+    // Either side may close it — patient via Done / End Conversation, staff
+    // via the Archive action — both setting resolved plus closedBy/closedAt.
+    //
+    // Lifecycle: open (resolved false) -> closed (resolved true) -> archived
+    // (archived true + archivedAt). Archiving is admin-only in practice and
+    // happens either explicitly via the Archive button or via the sweep in
+    // messages.jsx, which files away anything closed AND already read. A
+    // conversation the patient closed but no admin has opened stays in the
+    // Active list until someone reads it — closing must never hide a
+    // conversation from the clinic before it has been seen.
+    //
+    // Deleting a thread is admin-only and also deletes its chatMessages;
+    // patients can never delete their own history.
+    // Only the escalating patient or an admin may read/write it.
+    match /chatThreads/{threadId} {
+      allow read, update: if isAdmin() || (request.auth != null && resource.data.patientUid == request.auth.uid);
+      allow create: if isAdmin() || (request.auth != null && request.resource.data.patientUid == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    // A message belongs to whichever patient owns its parent chatThreads
+    // doc — looked up by threadId since chatMessages no longer shares an id
+    // with the patient's uid the way the old one-thread-per-patient schema did.
+    match /chatMessages/{msgId} {
+      allow read: if isAdmin() || (request.auth != null &&
+        get(/databases/$(database)/documents/chatThreads/$(resource.data.threadId)).data.patientUid == request.auth.uid);
+      allow create: if isAdmin() || (request.auth != null &&
+        get(/databases/$(database)/documents/chatThreads/$(request.resource.data.threadId)).data.patientUid == request.auth.uid);
+      allow update, delete: if isAdmin();
+    }
+
+    // patientChatState/{uid} — LEGACY, no longer read or written by any code.
+    // It used to hold { mode, activeThreadId } to force the patient app into
+    // admin-only mode during an escalation. That state is now derived from
+    // chatThreads (patientUid + resolved == false) so the bot stays usable
+    // alongside an open staff conversation, and so the button survives an app
+    // restart without a second document to keep in sync. The rule is kept so
+    // existing documents remain readable/deletable by their owner during
+    // cleanup; drop this block once they have been purged.
+    // Read/delete only — no create or update, since nothing writes here any
+    // more. A stale doc left behind by the old flow is harmless (it is never
+    // read) but stays removable by its owner or an admin.
+    match /patientChatState/{uid} {
+      allow read, delete: if isAdmin() || (request.auth != null && request.auth.uid == uid);
+      allow create, update: if false;
+    }
+
+    // Patient-authored recovery log (photo + note), scoped to its owner —
+    // see patient-app/app/(tabs)/index.tsx and wound.tsx.
+    match /woundLogs/{docId} {
+      allow read, update, delete: if isAdmin() || (request.auth != null && request.auth.uid == resource.data.userId);
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+    }
+
+    // Patient-submitted daily symptom checks — see patient-app/app/(tabs)/symp.tsx.
+    // No Admin Dashboard UI reads this collection yet; rule is scoped ready for
+    // when that view is built.
+    match /symptomReports/{docId} {
+      allow read: if isAdmin() || (request.auth != null && request.auth.uid == resource.data.userId);
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+      allow update, delete: if isAdmin();
+    }
+
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // admins/{uid} — role-based team management. Shape:
+    //   name: string, email: string, role: "manager" | "staff",
+    //   invitedBy: uid | null, status: "active" | "invited" | "revoked",
+    //   createdAt: timestamp,
+    //   trustedDevices: { [fingerprintDeviceId(deviceId)]: { deviceId,
+    //     deviceName, createdAt, lastActiveAt, expiresAt } } — a map, not
+    //   an array (Batch 7), so a single device can be looked up/updated/
+    //   deleted atomically without a read-modify-write race. Keyed by a
+    //   one-way fingerprint of deviceId, never the raw deviceId itself.
+    //   failedLoginAttempts: number, lockedUntil: timestamp | null
+    //
+    // FINALIZED (Batch 5). Read is split so staff can never enumerate or
+    // read teammates' docs — including trustedDevices/lockout fields —
+    // even via direct Firestore SDK calls bypassing the Manage Admins UI:
+    //   - get:  your own doc (needed for useAuth's role fetch, the login
+    //           page's post-password status check, etc.), OR any doc if
+    //           you're a manager.
+    //   - list: manager only (powers the Manage Admins table).
+    // Write stays manager-only, unchanged from the Batch 1 draft.
+    match /admins/{uid} {
+      allow get: if request.auth != null &&
+        (request.auth.uid == uid ||
+         get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == "manager");
+      allow list: if request.auth != null &&
+        get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == "manager";
+      allow write: if get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == "manager";
+    }
+
+    // invites/{token} — { email, adminUid, expiresAt, used }. Batch 2's
+    // /accept-invite page reads this directly client-side to validate the
+    // link before rendering the signup form, so `get` (never `list`) is
+    // allowed for anyone who already has the exact token — the random
+    // 192-bit token itself is the capability/secret here (same trust model
+    // as e.g. a Stripe payment link), not a login credential, so this does
+    // not need request.auth. Writes stay server-only: only /invite-admin
+    // and /accept-invite (Admin SDK, bypasses rules) ever create or mark
+    // one used.
+    match /invites/{token} {
+      allow get: if true;
+      allow list, write: if false;
+    }
+
+    // otps/{uid} — { code, expiresAt, createdAt }, the second-factor code
+    // sent after a successful password sign-in (Batch 3). Mirrors the
+    // patient /otpVerifications collection: server-only, no client rule —
+    // only /send-admin-otp and /verify-admin-otp (Admin SDK) ever touch it.
+
+    // Deny everything else by default.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

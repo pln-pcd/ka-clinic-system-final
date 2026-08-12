@@ -1,0 +1,15 @@
+{
+  "buildCommand": "cd ka-clinic-admin && npm install && npm run build",
+  "outputDirectory": "ka-clinic-admin/dist",
+  "devCommand": "cd ka-clinic-admin && npm run dev -- --port $PORT",
+  "framework": null,
+  "rewrites": [
+    { "source": "/((?!api/)(?!@)(?!src/)(?!node_modules/)(?!.*\\.).*)", "destination": "/index.html" }
+  ],
+  "crons": [
+    {
+      "path": "/api/archive-read-conversations",
+      "schedule": "0 16 * * *"
+    }
+  ]
+}

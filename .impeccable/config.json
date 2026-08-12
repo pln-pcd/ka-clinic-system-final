@@ -1,0 +1,32 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "src/components/landing/ClinicMap.jsx"
+        ],
+        "createdAt": "2026-07-26T08:30:16.277Z",
+        "reason": "User confirmed: this is a CSS zero-size triangle (transparent left/right borders + solid top border) drawing the map pin's tail, not a card accent border"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "ka-clinic-admin/src/components/landing/ClinicMap.jsx"
+        ],
+        "createdAt": "2026-07-26T09:00:48.931Z",
+        "reason": "User confirmed: this is a CSS zero-size triangle (transparent left/right borders + solid top border) drawing the map pin's tail, not a card accent border (correcting file path from earlier attempt, which was missing the ka-clinic-admin/ prefix relative to the repo root)"
+      },
+      {
+        "rule": "bounce-easing",
+        "value": "cubic-bezier(0.34, 1.56, 0.64, 1)",
+        "createdAt": "2026-07-26T12:44:41.741Z",
+        "reason": "User confirmed: this is the literal ink-stamp effect on the vaccination card's Day-0 marker \\u2014 a rubber stamp pressed onto paper genuinely overshoots and settles, so the elastic easing simulates real physical motion rather than decorating a generic UI element"
+      }
+    ]
+  }
+}
