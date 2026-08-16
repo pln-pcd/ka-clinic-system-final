@@ -23,7 +23,6 @@ import {
   Plus,
   RotateCcw,
   Tag,
-  Trash2,
   UserCheck,
   X
 } from 'lucide-react';
@@ -34,9 +33,9 @@ import Toast from '../components/Toast';
 /* ─────────────────────────── CSS ─────────────────────────── */
 const globalCSS = `
   :root {
-    --primary-red: #C8151A;
-    --red-hover: #A81015;
-    --red-soft: #FFD6D7;
+    --primary-red: #6366F1;
+    --red-hover: #4F46E5;
+    --red-soft: #EEF2FF;
     --bg-main: #FAF9F9;
     --bg-card: #FFFFFF;
     --bg-subtle: #F4F1F1;
@@ -93,12 +92,12 @@ const globalCSS = `
     width: 38px;
     height: 38px;
     border-radius: var(--radius-md);
-    background: #FEF2F2;
-    border: 1px solid #FECACA;
+    background: #EEF2FF;
+    border: 1px solid #C7D2FE;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #E31837;
+    color: #6366F1;
   }
   .header-title {
     color: #111827;
@@ -254,12 +253,12 @@ const globalCSS = `
     opacity: 0.3;
   }
   .cal-day-cell.selected {
-    background: #FFF0F0;
-    border: 2px solid var(--primary-red) !important;
+    background: #EEF2FF;
+    border: 2px solid #6366F1 !important;
     border-radius: 8px;
   }
   .cal-day-cell.selected:hover {
-    background: #FFE5E5;
+    background: #E0E7FF;
   }
   /* Bookable days — clinic only accepts appointments Sat & Sun. Weekdays
      just carry a small "Closed" label; weekends are the implied default,
@@ -274,11 +273,11 @@ const globalCSS = `
     line-height: 1;
   }
   .cal-day-cell.today:not(.selected) .cal-num {
-    color: var(--primary-red);
+    color: #6366F1;
     font-weight: 800;
   }
   .cal-day-cell.selected .cal-num {
-    color: var(--primary-red);
+    color: #6366F1;
     font-weight: 800;
   }
   .cal-closed-tag {
@@ -310,7 +309,7 @@ const globalCSS = `
   }
   .dot-confirmed { background-color: var(--green); }
   .dot-pending { background-color: var(--amber); }
-  .dot-cancelled { background-color: var(--primary-red); }
+  .dot-cancelled { background-color: #EF4444; }
   .dot-done { background-color: var(--blue); }
 
   /* Legend */
@@ -376,7 +375,7 @@ const globalCSS = `
   .timeline-card-item.tl-confirmed { border-left-color: var(--green); }
   .timeline-card-item.tl-pending { border-left-color: var(--amber); }
   .timeline-card-item.tl-done { border-left-color: var(--blue); }
-  .timeline-card-item.tl-cancelled { border-left-color: var(--primary-red); }
+  .timeline-card-item.tl-cancelled { border-left-color: #EF4444; }
 
   .tl-left-info {
     display: flex;
@@ -776,90 +775,6 @@ const globalCSS = `
   }
   .toast-success { background: #15803D; }
   .toast-error { background: #B91C1C; }
-
-  /* Delete Confirmation Dialog */
-  .confirm-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(17, 24, 39, 0.6);
-    z-index: 1100;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    backdrop-filter: blur(8px);
-    padding: 16px;
-    animation: confirmFadeIn 0.15s ease;
-  }
-  @keyframes confirmFadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
-  .confirm-card {
-    background: var(--bg-card);
-    border-radius: 16px;
-    padding: 28px 24px 20px;
-    width: 380px;
-    max-width: 100%;
-    box-shadow: 0 20px 50px rgba(0,0,0,0.25);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 14px;
-    text-align: center;
-    animation: confirmPop 0.2s cubic-bezier(0.16,1,0.3,1);
-  }
-  @keyframes confirmPop {
-    from { transform: scale(0.92); opacity: 0; }
-    to { transform: scale(1); opacity: 1; }
-  }
-  .confirm-icon {
-    width: 52px;
-    height: 52px;
-    border-radius: 50%;
-    background: var(--red-soft);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #B91C1C;
-  }
-  .confirm-title {
-    font-size: 1rem;
-    font-weight: 900;
-    color: var(--text-main);
-  }
-  .confirm-msg {
-    font-size: 0.8125rem;
-    color: var(--text-muted);
-    line-height: 1.5;
-  }
-  .confirm-actions {
-    display: flex;
-    gap: 10px;
-    margin-top: 6px;
-    width: 100%;
-  }
-  .confirm-actions button {
-    flex: 1;
-    padding: 10px 16px;
-    border-radius: var(--radius-md);
-    font-size: 0.8125rem;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.12s;
-    border: none;
-  }
-  .btn-confirm-cancel {
-    background: var(--bg-subtle);
-    border: 1px solid var(--border) !important;
-    color: var(--text-main);
-  }
-  .btn-confirm-cancel:hover { background: #E5E7EB; }
-  .btn-confirm-delete {
-    background: #B91C1C;
-    color: #FFFFFF;
-    box-shadow: 0 2px 8px rgba(185, 28, 28, 0.3);
-  }
-  .btn-confirm-delete:hover { background: #991B1B; }
 `;
 
 const TIME_SLOTS = [
@@ -960,8 +875,6 @@ export default function AppointmentPage() {
   const [toast, setToast] = useState({ msg: '', type: '' });
   const [saving, setSaving] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState(null);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -1158,29 +1071,6 @@ export default function AppointmentPage() {
       .catch(err => {
         console.error('Edit error:', err);
         showToast(err?.message || 'Failed to update appointment', 'error');
-      });
-  };
-
-  const requestDelete = (id, name) => {
-    setIsDeleting(false);
-    setDeleteConfirm({ id, name: name || 'this appointment' });
-  };
-
-  const handleDeleteApt = () => {
-    if (!deleteConfirm) return;
-    const targetId = deleteConfirm.id;
-    // Capture the hour before the doc goes away so its slot hold can be freed.
-    const target = appointments.find(a => a.id === targetId);
-    setDeleteConfirm(null);
-    setEditModalOpen(false);
-    setEditingApt(null);
-    setIsDeleting(false);
-    showToast('Appointment deleted', 'success');
-    deleteDoc(doc(db, 'appointments', targetId))
-      .then(() => { if (target) releaseSlot(target.date, target.time); })
-      .catch(err => {
-        console.error('Delete error:', err);
-        showToast(err?.message || 'Failed to delete appointment', 'error');
       });
   };
 
@@ -1454,14 +1344,6 @@ export default function AppointmentPage() {
                                   <RotateCcw size={10} />
                                   <span>Reactivate</span>
                                 </button>
-                                <button
-                                  className="icon-btn danger"
-                                  onClick={() => requestDelete(apt.id, apt.name)}
-                                  title="Delete record permanently"
-                                  style={{ padding: 4 }}
-                                >
-                                  <Trash2 size={11} />
-                                </button>
                               </div>
                             </td>
                           </tr>
@@ -1710,7 +1592,7 @@ export default function AppointmentPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{
                   width: 38, height: 38, borderRadius: '50%',
-                  background: 'linear-gradient(135deg, #E31837, #A81015)',
+                  background: 'linear-gradient(135deg, #6366F1, #4338CA)',
                   color: '#FFF', fontWeight: 800, fontSize: '0.85rem',
                   display: 'flex', alignItems: 'center', justifyContent: 'center'
                 }}>
@@ -1856,15 +1738,6 @@ export default function AppointmentPage() {
             </div>
 
             <div className="modal-footer" style={{ gap: 8 }}>
-              <button
-                className="btn-secondary"
-                style={{ color: '#B91C1C', borderColor: '#FFD6D7', background: '#FFF0F0', display: 'flex', alignItems: 'center', gap: 4 }}
-                onClick={() => requestDelete(editingApt.id, editingApt.name)}
-              >
-                <Trash2 size={13} />
-                Delete
-              </button>
-
               {editForm.status === 'cancelled' && (
                 <button
                   className="btn-secondary"
@@ -1887,26 +1760,6 @@ export default function AppointmentPage() {
         </div>
       )}
 
-      {/* Delete Confirmation Dialog */}
-      {deleteConfirm && (
-        <div className="confirm-overlay" onClick={() => setDeleteConfirm(null)}>
-          <div className="confirm-card" onClick={e => e.stopPropagation()}>
-            <div className="confirm-icon">
-              <Trash2 size={24} />
-            </div>
-            <h3 className="confirm-title">Delete Appointment</h3>
-            <p className="confirm-msg">
-              Are you sure you want to permanently delete the appointment for <strong>{deleteConfirm.name}</strong>? This action cannot be undone.
-            </p>
-            <div className="confirm-actions">
-              <button className="btn-confirm-cancel" onClick={() => setDeleteConfirm(null)} disabled={isDeleting}>Cancel</button>
-              <button className="btn-confirm-delete" onClick={handleDeleteApt} disabled={isDeleting}>
-                {isDeleting ? 'Deleting...' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

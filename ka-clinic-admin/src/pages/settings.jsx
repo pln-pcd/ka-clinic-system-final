@@ -692,7 +692,7 @@ export default function SettingsPage({ onLogout }) {
                 <button
                   onClick={handleSave}
                   disabled={saving}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-[#C8151A] hover:bg-red-700 text-white text-xs font-bold rounded-xl transition-all disabled:opacity-60 cursor-pointer shadow-xs"
+                  className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all disabled:opacity-60 cursor-pointer shadow-xs"
                 >
                   {saving
                     ? <><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Saving Changes…</>

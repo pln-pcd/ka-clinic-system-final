@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -9,13 +11,49 @@
 }
 
 body, button, input, select, textarea, table {
-  font-family: 'Roboto', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 .font-display {
-  font-family: 'Roboto', system-ui, sans-serif;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.7);
+}
+
+/* Glassmorphism & UI Utilities */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(241, 245, 249, 1);
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05), 0 2px 6px -1px rgba(15, 23, 42, 0.02);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.glass-card:hover {
+  box-shadow: 0 10px 25px -3px rgba(15, 23, 42, 0.08), 0 4px 10px -2px rgba(15, 23, 42, 0.04);
+  transform: translateY(-1px);
 }
 
 @keyframes drift {
@@ -39,10 +77,6 @@ body, button, input, select, textarea, table {
 
 /* ─────────────────────────────────────────────────────────────
    ENTER ANIMATIONS
-   Minimal stand-in for the `tailwindcss-animate` utilities used
-   across the pages (animate-in / fade-in / slide-in-from-* /
-   zoom-in-* / duration-*). The plugin is not installed, so these
-   classes were previously inert and no entrance motion played.
 ───────────────────────────────────────────────────────────── */
 @keyframes enter {
   from {
@@ -67,16 +101,13 @@ body, button, input, select, textarea, table {
 .slide-in-from-top-1     { --enter-translate-y: -0.25rem; }
 .slide-in-from-top-2     { --enter-translate-y: -0.5rem; }
 .slide-in-from-bottom-1  { --enter-translate-y: 0.25rem; }
-.slide-in-from-bottom-2  { --enter-translate-y: 0.5rem; }
+.slide-in-from-bottom-2  { --enter-translate-y: -0.5rem; }
 .slide-in-from-bottom-4  { --enter-translate-y: 1rem; }
 
-/* Scoped to .animate-in so Tailwind's transition-duration utilities
-   keep working on elements that only animate on hover/state change. */
 .animate-in.duration-200 { animation-duration: 200ms; }
 .animate-in.duration-300 { animation-duration: 300ms; }
 .animate-in.duration-500 { animation-duration: 500ms; }
 
-/* Respect users who ask for reduced motion. */
 @media (prefers-reduced-motion: reduce) {
   .animate-in,
   .animate-drift-slow,
@@ -117,12 +148,12 @@ body, button, input, select, textarea, table {
    GLOBAL DARK MODE & CONTRAST OVERRIDES FOR ADMIN DASHBOARD
 ───────────────────────────────────────────────────────────── */
 .dark-mode-root {
-  background-color: #0F172A !important;
+  background-color: #0B0F19 !important;
   color: #F8FAFC !important;
 }
 
 .dark-mode-root .bg-white {
-  background-color: #1E293B !important;
+  background-color: #111827 !important;
   color: #F8FAFC !important;
 }
 
@@ -131,7 +162,7 @@ body, button, input, select, textarea, table {
 .dark-mode-root .bg-gray-50\/50,
 .dark-mode-root .bg-gray-50\/60,
 .dark-mode-root .bg-gray-50\/70 {
-  background-color: #0F172A !important;
+  background-color: #0B0F19 !important;
   color: #F8FAFC !important;
 }
 
@@ -151,30 +182,30 @@ body, button, input, select, textarea, table {
 .dark-mode-root .border-gray-200,
 .dark-mode-root .border-gray-300,
 .dark-mode-root .border-slate-200 {
-  border-color: #334155 !important;
+  border-color: #1F2937 !important;
 }
 
 .dark-mode-root input:not([type="checkbox"]):not([type="radio"]),
 .dark-mode-root select,
 .dark-mode-root textarea {
-  background-color: #0F172A !important;
+  background-color: #111827 !important;
   color: #F8FAFC !important;
-  border-color: #475569 !important;
+  border-color: #374151 !important;
 }
 
 .dark-mode-root table thead tr,
 .dark-mode-root table thead {
-  background-color: #0F172A !important;
+  background-color: #0B0F19 !important;
 }
 
 .dark-mode-root table tbody tr:hover {
-  background-color: #334155 !important;
+  background-color: #1F2937 !important;
 }
 
 .dark-mode-root .card,
 .dark-mode-root .page-header-bar,
 .dark-mode-root .rec-detail {
-  background-color: #1E293B !important;
-  border-color: #334155 !important;
+  background-color: #111827 !important;
+  border-color: #1F2937 !important;
   color: #F8FAFC !important;
 }

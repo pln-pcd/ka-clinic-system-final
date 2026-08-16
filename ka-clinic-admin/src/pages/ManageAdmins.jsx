@@ -118,7 +118,7 @@ export default function ManageAdmins() {
           </div>
           <button
             onClick={() => setInviteOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#C8151A] hover:bg-red-700 text-white text-sm font-bold rounded-xl shadow-sm transition-all cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl shadow-sm transition-all cursor-pointer"
           >
             <UserPlus size={16} /> Invite Admin
           </button>
@@ -294,7 +294,7 @@ export default function ManageAdmins() {
                 <button
                   type="submit"
                   disabled={inviteSending || !inviteEmail.trim()}
-                  className="px-5 py-2 bg-[#C8151A] hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all disabled:opacity-60 cursor-pointer shadow-xs"
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all disabled:opacity-60 cursor-pointer shadow-xs"
                 >
                   {inviteSending ? 'Sending Invitation…' : 'Send Invite'}
                 </button>

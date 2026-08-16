@@ -7,7 +7,7 @@ import {
   ChevronLeft, ChevronRight as ChevronRightIcon,
   Edit2, Eye, Filter, Home, Info, LogOut, MapPin as MapIcon, Menu,
   MessageSquare, Moon, MoreVertical, Package, Phone, Plus,
-  RotateCcw, Search, Settings, Shield, Sun, Sunset, Trash2, UserPlus,
+  RotateCcw, Search, Settings, Shield, Sun, Sunset, UserPlus,
   Users, Wrench, X
 } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
@@ -31,7 +31,7 @@ function getGreeting(hour) {
 }
 
 // ── Circular SVG Progress Indicator Component ──────────────────────────────────
-function CircularProgress({ percentage = 75, size = 46, strokeWidth = 4, color = "#E31837", trackColor = "#E2E8F0", textColor = color }) {
+function CircularProgress({ percentage = 75, size = 46, strokeWidth = 4, color = "#6366F1", trackColor = "#E2E8F0", textColor = color }) {
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (Math.min(100, Math.max(0, percentage)) / 100) * circumference;
@@ -639,8 +639,8 @@ export default function AdminDashboard({ onLogout }) {
           onClick={() => setSelectedCalendarDay(isSelected ? null : day)}
           className="relative p-1.5 text-center rounded-lg text-xs font-semibold cursor-pointer select-none"
           style={{
-            background: isSelected ? '#111827' : isToday ? '#E31837' : hasApts ? '#FEF2F2' : 'transparent',
-            color: isSelected ? '#fff' : isToday ? '#fff' : hasApts ? '#991B1B' : '#374151',
+            background: isSelected ? '#111827' : isToday ? '#6366F1' : hasApts ? '#EEF2FF' : 'transparent',
+            color: isSelected ? '#fff' : isToday ? '#fff' : hasApts ? '#4338CA' : '#374151',
             fontWeight: isToday ? 700 : 500,
             transition: 'background 0.18s,color 0.18s,transform 0.15s'
           }}
@@ -770,8 +770,8 @@ export default function AdminDashboard({ onLogout }) {
             style={{ animation: 'kna-modal-in 0.28s cubic-bezier(0.22,1,0.36,1) both' }}
             onClick={e => e.stopPropagation()}>
             <div className="px-6 pt-6 pb-4 flex flex-col items-center text-center">
-              <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4 bg-red-50 border border-red-200">
-                <LogOut size={24} style={{ color: '#E31837' }} />
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4 bg-rose-50 border border-rose-200">
+                <LogOut size={24} className="text-rose-600" />
               </div>
               <h2 className="text-base font-bold">Sign out of Admin Panel?</h2>
               <p className="text-sm mt-1.5 leading-relaxed text-gray-500">You will be redirected to the login page.</p>
@@ -784,8 +784,7 @@ export default function AdminDashboard({ onLogout }) {
               </button>
               <button
                 onClick={confirmLogout}
-                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white transition-all cursor-pointer hover:opacity-95"
-                style={{ background: 'linear-gradient(135deg,#E31837,#c0102a)', boxShadow: '0 4px 14px rgba(227,24,55,0.3)' }}>
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white transition-all cursor-pointer hover:opacity-95 bg-rose-600 hover:bg-rose-700 shadow-md shadow-rose-600/20">
                 Yes, Sign Out
               </button>
             </div>
@@ -834,16 +833,16 @@ export default function AdminDashboard({ onLogout }) {
                     <button key={item.id} onClick={() => setActivePage(item.id)}
                       className={`group w-full flex items-center gap-3 pl-3 pr-3 py-2.5 rounded-lg relative cursor-pointer text-sm leading-snug transition-colors border-l-2 ${
                         isActive
-                          ? 'bg-slate-800 text-white font-medium border-red-500'
+                          ? 'bg-indigo-600/10 text-white font-semibold border-indigo-500'
                           : 'text-slate-400 font-medium hover:bg-slate-800/60 hover:text-slate-100 border-transparent'
                       }`}
                       title={!sidebarOpen ? item.label : ''}>
-                      <item.icon size={19} strokeWidth={1.9} className={`flex-shrink-0 transition-colors ${isActive ? 'text-red-500' : 'text-slate-500 group-hover:text-slate-300'}`}/>
+                      <item.icon size={19} strokeWidth={1.9} className={`flex-shrink-0 transition-colors ${isActive ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-300'}`}/>
                       <span style={{ opacity: sidebarOpen ? 1 : 0, overflow: 'hidden', whiteSpace: 'nowrap', transition: 'opacity 0.18s', flex: 1, textAlign: 'left' }}>
                         {item.label}
                       </span>
                       {item.badge > 0 && (
-                        <span className={`bg-red-600 text-white text-[11px] font-medium rounded-full flex items-center justify-center ${sidebarOpen ? 'px-2 py-0.5' : 'absolute top-1 right-1 w-4 h-4 text-[9px]'}`}>
+                        <span className={`bg-rose-600 text-white text-[11px] font-medium rounded-full flex items-center justify-center ${sidebarOpen ? 'px-2 py-0.5' : 'absolute top-1 right-1 w-4 h-4 text-[9px]'}`}>
                           {item.badge > 9 ? '9+' : item.badge}
                         </span>
                       )}
@@ -866,11 +865,11 @@ export default function AdminDashboard({ onLogout }) {
                     <button key={item.id} onClick={() => setActivePage(item.id)}
                       className={`group w-full flex items-center gap-3 pl-3 pr-3 py-2.5 rounded-lg relative cursor-pointer text-sm leading-snug transition-colors border-l-2 ${
                         isActive
-                          ? 'bg-slate-800 text-white font-medium border-red-500'
+                          ? 'bg-indigo-600/10 text-white font-semibold border-indigo-500'
                           : 'text-slate-400 font-medium hover:bg-slate-800/60 hover:text-slate-100 border-transparent'
                       }`}
                       title={!sidebarOpen ? item.label : ''}>
-                      <item.icon size={19} strokeWidth={1.9} className={`flex-shrink-0 transition-colors ${isActive ? 'text-red-500' : 'text-slate-500 group-hover:text-slate-300'}`}/>
+                      <item.icon size={19} strokeWidth={1.9} className={`flex-shrink-0 transition-colors ${isActive ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-300'}`}/>
                       <span style={{ opacity: sidebarOpen ? 1 : 0, overflow: 'hidden', whiteSpace: 'nowrap', transition: 'opacity 0.18s', flex: 1, textAlign: 'left' }}>
                         {item.label}
                       </span>
@@ -1211,7 +1210,7 @@ export default function AdminDashboard({ onLogout }) {
                             <p className="text-xs mt-0.5 text-slate-400">Patients past due on their next scheduled dose</p>
                           </div>
                           <button onClick={() => setActivePage('vaccination')}
-                            className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-white bg-[#E31837] hover:bg-[#C41228] transition-colors cursor-pointer">
+                            className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition-all shadow-sm cursor-pointer">
                             View All →
                           </button>
                         </div>
@@ -1253,7 +1252,7 @@ export default function AdminDashboard({ onLogout }) {
                             <p className="text-xs mt-0.5 text-slate-400">Real-time stock status</p>
                           </div>
                           <button onClick={() => setActivePage('inventory')}
-                            className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-white bg-[#E31837] hover:bg-[#C41228] transition-colors cursor-pointer">
+                            className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition-all shadow-sm cursor-pointer">
                             Manage Inventory →
                           </button>
                         </div>
@@ -1311,7 +1310,7 @@ export default function AdminDashboard({ onLogout }) {
                             <p className="text-xs mt-0.5 text-slate-400">Libon, Albay Surveillance</p>
                           </div>
                           <button onClick={() => setActivePage('incidents')}
-                            className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-white bg-[#E31837] hover:bg-[#C41228] transition-colors cursor-pointer">
+                            className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition-all shadow-sm cursor-pointer">
                             View Map →
                           </button>
                         </div>

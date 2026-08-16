@@ -431,7 +431,7 @@ export default function AdminLogin({ onSuccess, onBack }) {
                     </p>
                     <button
                       onClick={() => { setShowForgot(false); setForgotSent(false); setError(''); }}
-                      className="w-full bg-[#E31837] hover:bg-[#C41228] text-white py-3 rounded-lg text-sm font-bold transition-all shadow-md shadow-red-600/20 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:scale-[0.99]"
+                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-lg text-sm font-bold transition-all shadow-md shadow-indigo-600/20 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:scale-[0.99]"
                     >
                       Back to Login
                     </button>
@@ -459,7 +459,7 @@ export default function AdminLogin({ onSuccess, onBack }) {
                     <button
                       onClick={handleForgotPassword}
                       disabled={forgotSending || !email.trim()}
-                      className="w-full bg-[#E31837] hover:bg-[#C41228] text-white py-3 rounded-lg text-sm font-bold transition-all shadow-md shadow-red-600/20 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-60 mb-3"
+                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-lg text-sm font-bold transition-all shadow-md shadow-indigo-600/20 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-60 mb-3"
                     >
                       {forgotSending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Send Reset Link'}
                     </button>
@@ -558,7 +558,7 @@ export default function AdminLogin({ onSuccess, onBack }) {
                 <button
                   type="submit"
                   disabled={busy}
-                  className="w-full bg-[#E31837] hover:bg-[#C41228] text-white py-3 rounded-lg text-sm font-bold tracking-tight transition-all shadow-md shadow-red-600/20 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-md"
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-lg text-sm font-bold tracking-tight transition-all shadow-md shadow-indigo-600/20 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-md"
                 >
                   {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : (
                     <>

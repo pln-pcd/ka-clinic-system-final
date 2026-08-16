@@ -2,17 +2,14 @@
 import {
   addDoc,
   collection,
-  deleteDoc,
   doc,
-  getDocs,
   onSnapshot,
   orderBy,
   query,
   updateDoc,
   where,
-  writeBatch,
 } from 'firebase/firestore';
-import { Archive, AlertCircle, CheckCheck, Inbox, MessageSquare, Search, Send, Trash2 } from 'lucide-react';
+import { Archive, AlertCircle, CheckCheck, Inbox, MessageSquare, Search, Send } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { db } from '../lib/firebase';
 
@@ -84,7 +81,6 @@ export default function MessagesPage() {
   const [sending, setSending] = useState(false);
   const [resolving, setResolving] = useState(false);
   const [view, setView] = useState(VIEW_ACTIVE);
-  const [deletingId, setDeletingId] = useState(null);
 
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
@@ -234,40 +230,6 @@ export default function MessagesPage() {
       alert('Failed to archive the conversation. Please try again.');
     } finally {
       setResolving(false);
-    }
-  };
-
-  /* ── permanently delete an archived conversation ───────────── */
-  // Removes the thread and every message belonging to it. Messages are
-  // deleted first: if the run fails partway, the thread doc still exists and
-  // the operation can be retried, whereas deleting the thread first would
-  // strand its messages with no way to find them from the UI.
-  const handleDelete = async (thread) => {
-    if (!thread?.id || deletingId) return;
-    const label = thread.patientName || 'this patient';
-    if (!window.confirm(
-      `Permanently delete this conversation with ${label}?\n\n` +
-      'The conversation and all of its messages will be erased. This cannot be undone.'
-    )) return;
-
-    setDeletingId(thread.id);
-    try {
-      const msgSnap = await getDocs(query(collection(db, 'chatMessages'), where('threadId', '==', thread.id)));
-      // Firestore caps a batch at 500 writes; chunk so long conversations
-      // do not silently fail to delete.
-      const docsToDelete = msgSnap.docs;
-      for (let i = 0; i < docsToDelete.length; i += 450) {
-        const batch = writeBatch(db);
-        docsToDelete.slice(i, i + 450).forEach(d => batch.delete(d.ref));
-        await batch.commit();
-      }
-      await deleteDoc(doc(db, 'chatThreads', thread.id));
-      setSelectedThread(prev => (prev?.id === thread.id ? null : prev));
-    } catch (err) {
-      console.error('Delete conversation error:', err);
-      alert('Failed to delete the conversation. Please try again.');
-    } finally {
-      setDeletingId(null);
     }
   };
 
@@ -488,18 +450,6 @@ export default function MessagesPage() {
                         </div>
                       </div>
                     </button>
-
-                    {/* Delete — archived conversations only */}
-                    {isArchived && (
-                      <button
-                        onClick={() => handleDelete(t)}
-                        disabled={deletingId === t.id}
-                        title="Delete permanently"
-                        className="mt-3.5 mr-3 p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-all disabled:opacity-40 flex-shrink-0"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    )}
                   </div>
                 );
               })
@@ -540,18 +490,9 @@ export default function MessagesPage() {
                     </div>
                   )}
                   {selectedThread.archived ? (
-                    <>
-                      <span className="text-xs font-bold px-3 py-1.5 rounded-xl bg-gray-100 text-gray-500 ring-1 ring-gray-200 flex items-center gap-1.5">
-                        <CheckCheck size={13} /> {formatArchivedDate(selectedThread.archivedAt)}
-                      </span>
-                      <button
-                        onClick={() => handleDelete(selectedThread)}
-                        disabled={deletingId === selectedThread.id}
-                        className="text-xs font-bold px-3 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 ring-1 ring-red-200 transition-all disabled:opacity-40 flex items-center gap-1.5"
-                      >
-                        <Trash2 size={13} /> {deletingId === selectedThread.id ? 'Deleting…' : 'Delete'}
-                      </button>
-                    </>
+                    <span className="text-xs font-bold px-3 py-1.5 rounded-xl bg-gray-100 text-gray-500 ring-1 ring-gray-200 flex items-center gap-1.5">
+                      <CheckCheck size={13} /> {formatArchivedDate(selectedThread.archivedAt)}
+                    </span>
                   ) : (
                     <button
                       onClick={handleArchive}
@@ -630,7 +571,7 @@ export default function MessagesPage() {
                     <button
                       onClick={handleSend}
                       disabled={!reply.trim() || sending}
-                      className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
                     >
                       <Send size={13} />
                       <span>Send</span>

@@ -1,9 +1,9 @@
 // kna-admin/src/incidents.jsx
 import {
-  addDoc, collection, deleteDoc, doc,
-  onSnapshot, orderBy, query, updateDoc
+  addDoc, collection, doc,
+  onSnapshot, orderBy, query
 } from 'firebase/firestore';
-import { Calendar, CheckCircle2, ChevronDown, Layers, Lock, MapPin, Repeat, RotateCcw, ShieldAlert, Trash2, X } from 'lucide-react';
+import { Calendar, CheckCircle2, ChevronDown, Layers, Lock, MapPin, Repeat, ShieldAlert, X } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '../lib/firebase';
 import { LIBON_BARANGAYS, geocodeLibonAddress } from './patients';
@@ -13,14 +13,11 @@ const INCIDENT_TYPES = ['Dog Bite', 'Cat Scratch', 'Bat Contact', 'Other Animal 
 // Severity colors mirror the Category I/II/III convention used across the
 // rest of the app (vaccination tracker, patient records).
 const CATEGORY_COLOR = { 'Category I': '#059669', 'Category II': '#D97706', 'Category III': '#C8151A' };
-const RESOLVED_COLOR = '#94A3B8';
 const categoryColor = (cat) => CATEGORY_COLOR[cat] || CATEGORY_COLOR['Category III'];
 
 const LAYER_OPTIONS = [
   { key: 'all', label: 'All Incidents' },
   { key: 'highrisk', label: 'High-Risk Zones Only' },
-  { key: 'active', label: 'Active Only' },
-  { key: 'resolved', label: 'Resolved Only' },
 ];
 
 const EMPTY_FORM = {
@@ -63,10 +60,8 @@ export default function IncidentMapPage() {
   const [layerFilter, setLayerFilter] = useState('all');
   const [layerMenuOpen, setLayerMenuOpen] = useState(false);
   const [legendExpanded, setLegendExpanded] = useState(false);
-  const [resolvingId, setResolvingId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
-  const [deletingId, setDeletingId] = useState(null);
 
   const setF = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -265,9 +260,6 @@ export default function IncidentMapPage() {
   // never disagree about what's currently shown. ─────────────────────────
   const filteredIncidents = useMemo(() => {
     return incidents.filter(inc => {
-      const status = inc.status || 'active';
-      if (layerFilter === 'active') return status === 'active';
-      if (layerFilter === 'resolved') return status === 'resolved';
       if (layerFilter === 'highrisk') {
         const key = (inc.barangay || inc.location || '').trim().toLowerCase();
         return repeatZoneKeys.has(key);
@@ -283,8 +275,7 @@ export default function IncidentMapPage() {
       const lng = inc.lng ?? inc.longitude;
       if (!lat || !lng) return null;
 
-      const status = inc.status || 'active';
-      const color = status === 'resolved' ? RESOLVED_COLOR : categoryColor(inc.category);
+      const color = categoryColor(inc.category);
 
       const popupContent = `
         <div style="font-family:'Roboto',system-ui,sans-serif;padding:6px 4px;min-width:200px">
@@ -299,12 +290,11 @@ export default function IncidentMapPage() {
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
               Anonymized
             </div>
-            ${status === 'resolved' ? '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;border-radius:4px;padding:2px 6px;display:inline-flex;color:#64748B;background:#F1F5F9">Resolved</div>' : ''}
           </div>
         </div>
       `;
 
-      return { id: inc.id, lat, lng, color, status, popupContent };
+      return { id: inc.id, lat, lng, color, popupContent };
     }).filter(Boolean);
   }, [filteredIncidents]);
 
@@ -384,32 +374,6 @@ export default function IncidentMapPage() {
       console.error('Save incident error:', err);
       alert('Failed to save incident. Please try again.');
     });
-  };
-
-  // ── Delete Incident ─────────────────────────────────────────
-  const handleDelete = async (id) => {
-    if (!window.confirm('Remove this incident pin?')) return;
-    setDeletingId(id);
-    try {
-      await deleteDoc(doc(db, 'incidents', id));
-    } catch {
-      alert('Failed to delete.');
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
-  // ── Mark Resolved / Reopen ───────────────────────────────────
-  const handleToggleStatus = async (inc) => {
-    const newStatus = (inc.status || 'active') === 'resolved' ? 'active' : 'resolved';
-    setResolvingId(inc.id);
-    try {
-      await updateDoc(doc(db, 'incidents', inc.id), { status: newStatus });
-    } catch {
-      alert('Failed to update incident status.');
-    } finally {
-      setResolvingId(null);
-    }
   };
 
   // ── Pan to Marker ────────────────────────────────────────────
@@ -503,9 +467,6 @@ export default function IncidentMapPage() {
                   <div className="flex items-center gap-2 text-[10px] font-semibold text-slate-600">
                     <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: CATEGORY_COLOR['Category III'] }} /> Category III
                   </div>
-                  <div className="flex items-center gap-2 text-[10px] font-semibold text-slate-600">
-                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: RESOLVED_COLOR }} /> Resolved
-                  </div>
                 </div>
               </div>
             )}
@@ -534,8 +495,6 @@ export default function IncidentMapPage() {
                 <p className="text-[11px] text-slate-400">{incidents.length === 0 ? 'Click map to pin incident' : 'Try switching active filter'}</p>
               </div>
             ) : filteredIncidents.map(inc => {
-              const status = inc.status || 'active';
-              const isResolved = status === 'resolved';
               const catColor = categoryColor(inc.category);
               return (
                 <div
@@ -550,16 +509,9 @@ export default function IncidentMapPage() {
                         <span className="text-[13px] font-bold text-slate-900 group-hover:text-red-600 transition-colors truncate">
                           {inc.location || 'Libon, Albay'}
                         </span>
-                        <div className="flex items-center gap-1.5 flex-shrink-0">
-                          {isResolved && (
-                            <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded uppercase tracking-wider">
-                              Resolved
-                            </span>
-                          )}
-                          <span className="text-[10px] font-normal text-slate-400">
-                            {inc.date || 'Today'}
-                          </span>
-                        </div>
+                        <span className="text-[10px] font-normal text-slate-400 flex-shrink-0">
+                          {inc.date || 'Today'}
+                        </span>
                       </div>
 
                       {/* iOS Notes Subtitle Line */}
@@ -571,25 +523,6 @@ export default function IncidentMapPage() {
                       </div>
                     </div>
 
-                    {/* Quick Actions (Status toggle & delete) */}
-                    <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity ml-1 flex-shrink-0">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleToggleStatus(inc); }}
-                        disabled={resolvingId === inc.id}
-                        className="p-1 rounded-md text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
-                        title={isResolved ? 'Reopen Incident' : 'Mark Resolved'}
-                      >
-                        {isResolved ? <RotateCcw size={13} /> : <CheckCircle2 size={13} />}
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleDelete(inc.id); }}
-                        disabled={deletingId === inc.id}
-                        className="p-1 rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                        title="Remove Incident"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
                   </div>
                 </div>
               );
@@ -703,7 +636,7 @@ export default function IncidentMapPage() {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="px-6 py-2.5 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl transition-colors disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+                className="px-6 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
               >
                 {saving ? 'Pinning…' : <><MapPin size={13} /> Confirm & Pin</>}
               </button>

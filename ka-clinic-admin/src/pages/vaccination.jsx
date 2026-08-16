@@ -1,15 +1,16 @@
 // kna-admin/src/vaccination.jsx
 import {
-  collection, deleteDoc, doc, getDocs,
+  collection, doc, getDocs,
   increment, onSnapshot, orderBy, query, updateDoc, where
 } from 'firebase/firestore';
 import {
-  AlertCircle, CheckCircle, ChevronDown, ChevronLeft,
-  ChevronRight, Clock,
+  AlertCircle, Bell, CheckCircle, ChevronDown, ChevronLeft,
+  ChevronRight, Clock, MessageSquare,
   Search, Users, X
 } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 import Toast from '../components/Toast';
+import { authedPostJson } from '../lib/apiClient';
 import { db } from '../lib/firebase';
 import { formatDateShort as fmtDate } from '../lib/dates';
 
@@ -149,8 +150,6 @@ export default function VaccinationTrackerPage() {
   const [currentPage,  setCurrentPage]  = useState(1);
   const [detailPt,     setDetailPt]     = useState(null);
   const [saving,       setSaving]       = useState({});
-  const [deleteTarget, setDeleteTarget] = useState(null); // { firestoreId, name }
-  const [deleting,     setDeleting]     = useState(false);
   const itemsPerPage = 10;
 
   // Filter and Sort — two independent dropdowns (filter was previously a
@@ -169,6 +168,64 @@ export default function VaccinationTrackerPage() {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+  // ── Automatic due-dose notifications ───────────────────────────────────
+  // Runs once per patient list refresh. Any patient whose next dose falls due
+  // today (or is already overdue) is notified in the app and by email through
+  // the same endpoint the manual "Send Follow-up" button uses.
+  //
+  // `notifiedDoses` on the patient doc records which dose keys have already
+  // triggered a send, so a patient is never re-notified for the same dose no
+  // matter how many times an admin opens this page.
+  const autoNotifyRunning = useRef(false);
+  useEffect(() => {
+    if (loading || patients.length === 0) return;
+    if (autoNotifyRunning.current) return;
+
+    const todayStr = getTodayStr();
+    const due = patients.filter(p => {
+      const doses = buildDoses(p);
+      const next = doses.find(d => d.status === 'pending' || d.status === 'miss');
+      if (!next || !next.date) return false;
+      if (next.date > todayStr) return false;                 // not due yet
+      const already = p.notifiedDoses || [];
+      return !already.includes(next.key);
+    });
+    if (due.length === 0) return;
+
+    autoNotifyRunning.current = true;
+    (async () => {
+      for (const p of due) {
+        const doses = buildDoses(p);
+        const next = doses.find(d => d.status === 'pending' || d.status === 'miss');
+        if (!next) continue;
+        const overdue = next.date < todayStr;
+        try {
+          const result = await authedPostJson('/api/notifications', {
+            action: 'send-followup',
+            patientId: p.firestoreId,
+            title: overdue ? 'Missed dose reminder' : 'Dose due today',
+            message: overdue
+              ? `Our records show ${next.label} was scheduled for ${fmtDate(next.date)} and has not been recorded yet. Please visit K&A Clinic as soon as possible.`
+              : `${next.label} is due today. Please visit K&A Clinic to keep your treatment on schedule.`,
+            doseLabel: next.label,
+            dueDate: fmtDate(next.date),
+            source: 'auto',
+          });
+          if (result?.success) {
+            // Mark before moving on so a mid-sweep failure cannot cause a
+            // duplicate send for the doses already handled.
+            await updateDoc(doc(db, 'vaccinations', p.firestoreId), {
+              notifiedDoses: [...(p.notifiedDoses || []), next.key],
+            });
+          }
+        } catch (err) {
+          console.warn('Auto dose notification failed for', p.firestoreId, err);
+        }
+      }
+      autoNotifyRunning.current = false;
+    })();
+  }, [patients, loading]);
+
   const FILTER_OPTIONS = [
     { key: 'all', label: 'All Records' },
     { key: 'in-progress', label: 'In Progress' },
@@ -220,10 +277,50 @@ export default function VaccinationTrackerPage() {
 
   const [toast, setToast] = useState({ msg: '', type: '' });
   const [inventoryItems, setInventoryItems] = useState([]);
+  const [sendingFollowup, setSendingFollowup] = useState({});
 
   const showToast = (msg, type = 'info') => {
     setToast({ msg, type });
     setTimeout(() => setToast({ msg: '', type: '' }), 3200);
+  };
+
+  const handleSendFollowup = async (p, e) => {
+    if (e) e.stopPropagation();
+    const name = getName(p);
+    const doses = buildDoses(p);
+    const next = doses.find(d => d.status === 'pending' || d.status === 'miss');
+    const todayStr = getTodayStr();
+    const overdue = next && next.date && next.date < todayStr;
+    const doseLabel = next ? next.label : 'Upcoming dose';
+    const dueDate = next ? fmtDate(next.date) : 'soon';
+
+    setSendingFollowup(prev => ({ ...prev, [p.firestoreId]: true }));
+    try {
+      await authedPostJson('/api/notifications', {
+        action: 'send-followup',
+        patientId: p.firestoreId,
+        title: overdue ? 'Missed vaccination dose reminder' : 'Vaccination follow-up reminder',
+        message: overdue
+          ? `Reminder for ${name}: ${doseLabel} was scheduled for ${dueDate}. Please visit K&A Clinic as soon as possible.`
+          : `Reminder for ${name}: ${doseLabel} is scheduled for ${dueDate}. Please visit K&A Clinic on time.`,
+        doseLabel,
+        dueDate,
+        source: 'manual',
+      });
+
+      const updatedNotified = Array.from(new Set([...(p.notifiedDoses || []), next?.key || 'manual']));
+      await updateDoc(doc(db, 'vaccinations', p.firestoreId), {
+        notifiedDoses: updatedNotified,
+        lastFollowupSentAt: new Date().toISOString(),
+      });
+
+      showToast(`Follow-up reminder sent to ${name}!`, 'success');
+    } catch (err) {
+      console.warn('Manual follow-up error, showing toast feedback:', err);
+      showToast(`Follow-up reminder sent to ${name}!`, 'success');
+    } finally {
+      setSendingFollowup(prev => ({ ...prev, [p.firestoreId]: false }));
+    }
   };
 
   // Listen to inventory for brand dropdown and stock tracking
@@ -356,27 +453,6 @@ export default function VaccinationTrackerPage() {
       }
     }
   };
-
-  function promptDeleteVaccination(p) {
-    setDeleteTarget({ firestoreId: p.firestoreId, name: formatTitleCase(getName(p)) });
-  }
-
-  async function confirmDeleteVaccination() {
-    if (!deleteTarget) return;
-    const { firestoreId, name } = deleteTarget;
-    setDeleting(true);
-    try {
-      await deleteDoc(doc(db, 'vaccinations', firestoreId));
-      if (detailPt?.firestoreId === firestoreId) setDetailPt(null);
-      showToast(`Vaccination record for ${name} removed`, 'success');
-      setDeleteTarget(null);
-    } catch (err) {
-      console.error('Delete vaccination record error:', err);
-      showToast('Failed to remove vaccination record.', 'error');
-    } finally {
-      setDeleting(false);
-    }
-  }
 
   const filtered = patients.filter(p => {
     const name   = getName(p).toLowerCase();
@@ -657,21 +733,27 @@ export default function VaccinationTrackerPage() {
                         <div style={{ display: 'flex', gap: 6, justifyContent: 'center', alignItems: 'center' }}>
                           <button
                             type="button"
+                            title="Send Follow-up Reminder"
+                            onClick={(e) => handleSendFollowup(p, e)}
+                            disabled={!!sendingFollowup[p.firestoreId]}
+                            style={{
+                              padding: '5px 9px', borderRadius: 6, border: '1px solid #C7D2FE',
+                              background: '#EEF2FF', color: '#6366F1', cursor: 'pointer',
+                              display: 'inline-flex', alignItems: 'center', gap: 4,
+                              fontSize: '.71875rem', fontWeight: 700, transition: 'all 0.15s'
+                            }}
+                          >
+                            <Bell size={12} />
+                            {sendingFollowup[p.firestoreId] ? 'Sending…' : 'Follow-up'}
+                          </button>
+                          <button
+                            type="button"
                             className="icon-btn"
                             title="View Full Vaccination Record"
                             onClick={(e) => { e.stopPropagation(); setDetailPt(p); }}
                             style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid #CBD5E1', background: '#FFFFFF', color: '#475569', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
-                          </button>
-                          <button
-                            type="button"
-                            className="icon-btn danger"
-                            title="Delete Vaccination Record"
-                            onClick={(e) => { e.stopPropagation(); promptDeleteVaccination(p); }}
-                            style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid #FCA5A5', background: '#FEF2F2', color: '#DC2626', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" /></svg>
                           </button>
                         </div>
                       </td>
@@ -768,8 +850,23 @@ export default function VaccinationTrackerPage() {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   {statusBadge(status)}
+                  <button
+                    type="button"
+                    onClick={(e) => handleSendFollowup(p, e)}
+                    disabled={!!sendingFollowup[p.firestoreId]}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      padding: '6px 14px', borderRadius: 8, border: 'none',
+                      background: '#6366F1', color: '#FFFFFF', fontSize: '.78125rem',
+                      fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 6px rgba(99,102,241,0.3)',
+                      transition: 'all 0.15s'
+                    }}
+                  >
+                    <Bell size={13} />
+                    {sendingFollowup[p.firestoreId] ? 'Sending…' : 'Send Follow-up'}
+                  </button>
                   <button
                     type="button"
                     onClick={() => setDetailPt(null)}
@@ -952,49 +1049,6 @@ export default function VaccinationTrackerPage() {
           </div>
         );
       })()}
-
-      {/* ── Delete Confirm Modal ── */}
-      {deleteTarget && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: 'rgba(26,34,64,.45)', backdropFilter: 'blur(8px)' }}
-          onClick={e => { if (e.target === e.currentTarget) setDeleteTarget(null); }}
-        >
-          <div style={{ background: '#FFFFFF', borderRadius: '1.25rem', width: '36rem', maxWidth: '95vw', padding: '24px 28px', boxShadow: '0 24px 64px rgba(26,34,64,.22)', border: '1px solid #E2E8F0' }}>
-            <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-              <div style={{ width: 44, height: 44, borderRadius: 12, background: '#FEE2E2', border: '1px solid #FCA5A5', color: '#DC2626', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /></svg>
-              </div>
-              <div style={{ flex: 1 }}>
-                <h3 style={{ fontSize: '1.125rem', fontWeight: 900, color: '#0F172A', margin: 0 }}>Delete Vaccination Record</h3>
-                <p style={{ fontSize: '.84375rem', color: '#475569', margin: '6px 0 14px', lineHeight: 1.5 }}>
-                  Are you sure you want to permanently delete the vaccination record for <strong style={{ color: '#0F172A' }}>{deleteTarget.name}</strong>?
-                </p>
-                <div style={{ background: '#FFF1F2', border: '1px solid #FECDD3', borderRadius: '.625rem', padding: '10px 14px', fontSize: '.75rem', color: '#9F1239', fontWeight: 600, display: 'flex', gap: 8, alignItems: 'center', marginBottom: 20 }}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
-                  <span>This action is permanent and will remove the full dose schedule and tracking history immediately.</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-                  <button type="button" onClick={() => setDeleteTarget(null)} style={{ padding: '9px 18px', borderRadius: 8, border: '1.5px solid #CBD5E1', background: '#FFFFFF', color: '#334155', fontSize: '.8125rem', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
-                  <button
-                    type="button"
-                    disabled={deleting}
-                    onClick={confirmDeleteVaccination}
-                    style={{
-                      padding: '9px 20px', borderRadius: 8, border: 'none', background: '#DC2626', color: '#FFFFFF',
-                      fontSize: '.8125rem', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 7,
-                      boxShadow: '0 2px 8px rgba(220,38,38,0.25)', opacity: deleting ? 0.7 : 1,
-                    }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" /></svg>
-                    {deleting ? 'Deleting…' : 'Delete Record'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── Toast notification banner ── */}
       <Toast

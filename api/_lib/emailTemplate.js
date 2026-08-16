@@ -148,3 +148,34 @@ export function buildInviteEmailHtml({ inviteUrl, inviterName }) {
     ].join('\n'),
   });
 }
+
+// Patient follow-up / reminder mail. Sent two ways: automatically when the
+// clinic's schedule says a dose is due, and manually when an admin presses
+// "Send Follow-up" on a patient record.
+//
+// `ackUrl` is a one-tap acknowledgement link — the patient confirms they got
+// the notification without signing in, and the click is recorded against the
+// notification doc (see api/notifications.js, action `ack`). It is omitted
+// when no acknowledgement is wanted.
+export function buildFollowUpEmailHtml({ patientName, message, ackUrl, doseLabel, dueDate }) {
+  const greeting = patientName ? `Dear ${patientName},` : 'Dear Patient,';
+  const scheduleLine = doseLabel && dueDate
+    ? paragraph(`<strong>${doseLabel}</strong> is scheduled for <strong>${dueDate}</strong>.`)
+    : '';
+  return shell({
+    title: 'K&amp;A Clinic follow-up reminder',
+    preheader: message
+      ? String(message).slice(0, 120)
+      : 'A follow-up reminder from your K&A Anti-Rabies Clinic care team.',
+    body: [
+      heading('Follow-up reminder'),
+      paragraph(greeting),
+      paragraph(message || 'This is a reminder from K&amp;A Clinic about your anti-rabies treatment schedule. Please visit the clinic on your scheduled date to stay on track.'),
+      scheduleLine,
+      ackUrl ? button(ackUrl, 'I received this notification') : '',
+      ackUrl
+        ? footnote('Tapping the button above simply lets the clinic know this reminder reached you. You can also confirm from the K&amp;A Clinic Patient App.')
+        : footnote('If you have already completed this visit, you can ignore this reminder.'),
+    ].filter(Boolean).join('\n'),
+  });
+}

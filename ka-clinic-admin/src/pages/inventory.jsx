@@ -1,6 +1,6 @@
 // kna-admin/src/inventory.jsx
-import { addDoc, collection, deleteDoc, doc, limit, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
-import { AlertCircle, Check, Download, Edit3, FileText, Minus, Package, Plus, Search, Trash2, X, XCircle } from 'lucide-react';
+import { addDoc, collection, doc, limit, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
+import { AlertCircle, Check, Download, Edit3, FileText, Minus, Package, Plus, Search, X, XCircle } from 'lucide-react';
 import { useEffect, useState, useRef } from 'react';
 import { db } from '../lib/firebase';
 
@@ -119,64 +119,87 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 const fmtUnit = (u) => u ? u.charAt(0).toUpperCase() + u.slice(1) : '';
 
-const exportCSV = (rows, filename) => {
-  const headers = ['Item Name', 'Category', 'Stock', 'Unit', 'Expiry', 'Status'];
-  const lines = [
-    headers.join(','),
-    ...rows.map(r => [
-      `"${r.name}"`,
-      `"${r.category}"`,
-      r.stock,
-      `"${fmtUnit(r.unit)}"`,
-      `"${r.expiry || ''}"`,
-      liveStatus(r) === 'in-stock' ? 'In Stock' : 'Out of Stock',
-    ].join(','))
-  ];
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-};
+const INVENTORY_HEADERS = ['Item Name', 'Category', 'Stock', 'Unit', 'Expiry', 'Status'];
 
-const exportXLS = (rows, filename) => {
-  const headers = ['Item Name', 'Category', 'Stock', 'Unit', 'Expiry', 'Status'];
-  const tableRows = rows.map(r => `<tr>
-    <td>${r.name}</td><td>${r.category}</td><td>${r.stock}</td><td>${fmtUnit(r.unit)}</td>
-    <td>${r.expiry || ''}</td><td>${liveStatus(r) === 'in-stock' ? 'In Stock' : 'Out of Stock'}</td>
-  </tr>`).join('');
-  const html = `<html><head><meta charset="utf-8"></head><body><table border="1"><thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${tableRows}</tbody></table></body></html>`;
-  const blob = new Blob(['\uFEFF' + html], { type: 'application/vnd.ms-excel' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-};
+const statusLabel = r => liveStatus(r) === 'in-stock' ? 'In Stock' : 'Out of Stock';
 
-const exportPDF = (rows) => {
-  const w = window.open('', '_blank');
+// One source of truth for the report body — the same markup is shown in the
+// in-app preview and written to the print window.
+const buildInventoryReportHtml = (rows, periodLabel) => {
   const tableRows = rows.map((r, i) => `<tr>
     <td>${i + 1}</td><td>${r.name}</td><td>${r.category}</td><td>${r.stock} ${fmtUnit(r.unit)}</td>
-    <td>${r.expiry || '—'}</td><td>${liveStatus(r) === 'in-stock' ? 'In Stock' : 'Out of Stock'}</td>
+    <td>${r.expiry || '—'}</td><td>${statusLabel(r)}</td>
   </tr>`).join('');
-  w.document.write(`<!DOCTYPE html><html><head><title>Inventory Stock Report</title>
+  return `<!DOCTYPE html><html><head><title>Inventory Stock Report</title>
   <style>
-    body{font-family:'Roboto',sans-serif;color:#0F172A;padding:24px;margin:0;}
-    h1{font-size:18px;margin:0 0 4px;color:#0F172A;}
+    *{box-sizing:border-box;}
+    body{font-family:'Work Sans','Roboto',-apple-system,'Segoe UI',sans-serif;color:#1E293B;padding:0;margin:0;font-size:12.5px;}
+    .letterhead{background:#0F172A;color:#fff;padding:20px 40px;}
+    .letterhead .brand{font-size:16px;font-weight:700;letter-spacing:.2px;}
+    .letterhead .brand em{color:#F87171;font-style:normal;}
+    .letterhead .tagline{font-size:9.5px;color:#CBD5E1;margin-top:2px;text-transform:uppercase;letter-spacing:.5px;}
+    .body-pad{padding:26px 40px 36px;}
+    h1{font-size:16px;font-weight:700;margin:0 0 3px;color:#0F172A;}
     .sub{font-size:11px;color:#64748B;margin-bottom:20px;}
     table{width:100%;border-collapse:collapse;font-size:11px;}
-    th{background:#FAFAFA;border:1px solid #E2E8F0;padding:8px 10px;text-align:left;color:#64748B;font-size:9.5px;text-transform:uppercase;}
-    td{border:1px solid #E2E8F0;padding:8px 10px;}
-    tr:nth-child(even) td{background:#FAFAFA;}
+    th{background:#F1F5F9;border:1px solid #E2E8F0;padding:8px 10px;text-align:left;color:#475569;font-size:9.5px;text-transform:uppercase;letter-spacing:.3px;}
+    td{border:1px solid #E2E8F0;padding:7px 10px;}
+    tr:nth-child(even) td{background:#FAFAFC;}
+    .footer{font-size:9.5px;color:#94A3B8;margin-top:20px;border-top:1px solid #E2E8F0;padding-top:12px;}
+    @media print{@page{margin:12mm 14mm;}}
   </style></head><body>
-  <h1>K&A Clinic — Inventory Stock Report</h1>
-  <div class="sub">Generated: ${new Date().toLocaleString()} | Total Items: ${rows.length}</div>
-  <table><thead><tr><th>#</th><th>Item Name</th><th>Category</th><th>Stock</th><th>Expiry</th><th>Status</th></tr></thead>
-  <tbody>${tableRows}</tbody></table></body></html>`);
+  <div class="letterhead">
+    <div class="brand">K&amp;A <em>Clinic</em></div>
+    <div class="tagline">Anti-Rabies &amp; Animal Bite Center</div>
+  </div>
+  <div class="body-pad">
+    <h1>Inventory Stock Report</h1>
+    <div class="sub">Period: ${periodLabel} &nbsp;|&nbsp; Generated: ${new Date().toLocaleString('en-PH')} &nbsp;|&nbsp; Total Items: ${rows.length}</div>
+    <table><thead><tr><th>#</th><th>Item Name</th><th>Category</th><th>Stock</th><th>Expiry</th><th>Status</th></tr></thead>
+    <tbody>${tableRows}</tbody></table>
+    <div class="footer">K&amp;A Clinic &mdash; Inventory Stock Report &mdash; ${new Date().getFullYear()}</div>
+  </div>
+  </body></html>`;
+};
+
+// Excel has no page-header concept in an HTML table, so the letterhead rides
+// in as merged title rows above the column headings — same information the
+// printed report carries.
+const exportXLS = (rows, filename, periodLabel) => {
+  const cols = INVENTORY_HEADERS.length;
+  const tableRows = rows.map(r => `<tr>
+    <td>${r.name}</td><td>${r.category}</td><td>${r.stock}</td><td>${fmtUnit(r.unit)}</td>
+    <td>${r.expiry || ''}</td><td>${statusLabel(r)}</td>
+  </tr>`).join('');
+  const html = `<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8">
+    <style>
+      td,th{font-family:Calibri,Arial,sans-serif;font-size:11pt;}
+      .brand{font-size:16pt;font-weight:bold;color:#0F172A;}
+      .tagline{font-size:9pt;color:#475569;}
+      .meta{font-size:10pt;color:#475569;}
+      th.col{background:#F1F5F9;font-weight:bold;color:#0F172A;text-align:left;}
+    </style></head><body>
+    <table border="0">
+      <tr><td class="brand" colspan="${cols}">K&amp;A Clinic</td></tr>
+      <tr><td class="tagline" colspan="${cols}">Anti-Rabies &amp; Animal Bite Center</td></tr>
+      <tr><td class="meta" colspan="${cols}">Inventory Stock Report — ${periodLabel}</td></tr>
+      <tr><td class="meta" colspan="${cols}">Generated: ${new Date().toLocaleString('en-PH')} | Total Items: ${rows.length}</td></tr>
+      <tr><td colspan="${cols}"></td></tr>
+    </table>
+    <table border="1"><thead><tr>${INVENTORY_HEADERS.map(h => `<th class="col">${h}</th>`).join('')}</tr></thead><tbody>${tableRows}</tbody></table>
+    </body></html>`;
+  const blob = new Blob(['﻿' + html], { type: 'application/vnd.ms-excel' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+const exportPDF = (rows, periodLabel) => {
+  const w = window.open('', '_blank');
+  w.document.write(buildInventoryReportHtml(rows, periodLabel));
   w.document.close();
   w.print();
 };
@@ -189,7 +212,10 @@ export default function VaccineInventoryPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportPeriod, setExportPeriod] = useState('all');
-  const [exportFormat, setExportFormat] = useState('csv'); // 'csv' | 'xls' | 'pdf'
+  const [exportFormat, setExportFormat] = useState('pdf'); // 'xls' | 'pdf'
+  // Preview gate — the report is shown in-app before anything is downloaded
+  // or sent to the printer. 'form' = pick period/format, 'preview' = review.
+  const [exportStep, setExportStep] = useState('form');
   const [selectedItem, setSelectedItem] = useState(null);
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({ name: '', category: 'Vaccine', unit: 'Vials', stock: '', minStock: '10', expiry: '' });
@@ -197,9 +223,6 @@ export default function VaccineInventoryPage() {
   // Edit modal state
   const [showEditModal, setShowEditModal] = useState(false);
   const [editFormData, setEditFormData] = useState({ name: '', category: 'Vaccine', unit: 'Vials', stock: '', minStock: '10', expiry: '' });
-
-  // Delete confirmation state
-  const [deleteConfirm, setDeleteConfirm] = useState(null);
 
   // Use stock modal state
   const [showUseStockModal, setShowUseStockModal] = useState(false);
@@ -308,16 +331,6 @@ export default function VaccineInventoryPage() {
     }
   };
 
-  /* ── Delete Item ── */
-  const handleDelete = () => {
-    if (!deleteConfirm) return;
-    const itemId = deleteConfirm.id;
-    setDeleteConfirm(null);
-    deleteDoc(doc(db, 'inventory', itemId)).catch(err => {
-      console.error('Inventory delete error:', err);
-    });
-  };
-
   /* ── Use Stock (reduce) ── */
   const openUseStockModal = (item) => {
     setSelectedItem(item);
@@ -359,17 +372,22 @@ export default function VaccineInventoryPage() {
     return cutoff ? inventory.filter(i => (i.createdAt || 0) >= cutoff) : inventory;
   };
 
+  const exportPeriodLabel = () => periods.find(p => p.key === exportPeriod)?.label || exportPeriod;
+
   const handleExport = () => {
     const rows = getExportRows();
-    const label = periods.find(p => p.key === exportPeriod)?.label.replace(' ', '-') || exportPeriod;
-    if (exportFormat === 'csv') {
-      exportCSV(rows, `inventory-${label}-${today()}.csv`);
-    } else if (exportFormat === 'xls') {
-      exportXLS(rows, `inventory-${label}-${today()}.xls`);
+    const label = exportPeriodLabel().replace(' ', '-');
+    if (exportFormat === 'xls') {
+      exportXLS(rows, `inventory-${label}-${today()}.xls`, exportPeriodLabel());
     } else if (exportFormat === 'pdf') {
-      exportPDF(rows);
+      exportPDF(rows, exportPeriodLabel());
     }
+    closeExportModal();
+  };
+
+  const closeExportModal = () => {
     setShowExportModal(false);
+    setExportStep('form');
   };
 
   const exportRowCount = getExportRows().length;
@@ -472,9 +490,9 @@ export default function VaccineInventoryPage() {
               type="button"
               onClick={() => setShowAddModal(true)}
               style={{
-                background: '#E31837', color: '#fff', border: 'none', padding: '7px 16px', borderRadius: '.5rem',
+                background: '#6366F1', color: '#fff', border: 'none', padding: '7px 16px', borderRadius: '.5rem',
                 fontWeight: 700, fontSize: '.78125rem', display: 'inline-flex', alignItems: 'center', gap: 6,
-                boxShadow: '0 2px 4px rgba(227,24,55,0.2)', cursor: 'pointer'
+                boxShadow: '0 2px 4px rgba(99,102,241,0.2)', cursor: 'pointer'
               }}
             >
               <Plus size={14} />
@@ -537,15 +555,6 @@ export default function VaccineInventoryPage() {
                         style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid #CBD5E1', background: '#FFFFFF', color: '#475569', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
                       >
                         <Edit3 size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        className="icon-btn danger"
-                        title="Delete Item"
-                        onClick={() => setDeleteConfirm(item)}
-                        style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid #FCA5A5', background: '#FEF2F2', color: '#DC2626', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-                      >
-                        <Trash2 size={14} />
                       </button>
                     </div>
                   </td>
@@ -669,7 +678,7 @@ export default function VaccineInventoryPage() {
               <button
                 onClick={handleSave}
                 disabled={saving || !formData.name || !formData.stock}
-                className="px-5 py-2 text-white bg-[#C8151A] hover:bg-red-700 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-xs"
+                className="px-5 py-2 text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-xs"
               >
                 <Plus size={14} /> {saving ? 'Saving Item…' : 'Save Item'}
               </button>
@@ -774,41 +783,10 @@ export default function VaccineInventoryPage() {
               <button
                 onClick={handleEditSave}
                 disabled={!editFormData.name || !editFormData.stock}
-                className="px-5 py-2 text-white bg-[#C8151A] hover:bg-red-700 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-xs"
+                className="px-5 py-2 text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-xs"
               >
                 <Check size={14} /> Save Changes
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Delete Confirmation Modal ── */}
-      {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-xs overflow-hidden shadow-xl">
-            <div className="p-6 text-center">
-              <div className="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ border: '1.5px solid #FECACA' }}>
-                <Trash2 size={24} color="#DC2626" />
-              </div>
-              <h2 className="text-base font-bold text-gray-900">Delete Item?</h2>
-              <p className="text-sm text-gray-400 mt-1.5 leading-relaxed">
-                Are you sure you want to delete <span className="font-bold text-gray-600">"{deleteConfirm.name}"</span>? This action cannot be undone.
-              </p>
-              <div className="flex gap-2 mt-5">
-                <button
-                  onClick={() => setDeleteConfirm(null)}
-                  className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-lg font-bold text-xs hover:bg-gray-50 transition-all"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleDelete}
-                  className="flex-1 py-2.5 bg-red-600 text-white rounded-lg font-bold text-xs hover:bg-red-700 transition-all flex items-center justify-center gap-1.5"
-                >
-                  <Trash2 size={13} /> Delete
-                </button>
-              </div>
             </div>
           </div>
         </div>
@@ -883,7 +861,7 @@ export default function VaccineInventoryPage() {
               </div>
               <button
                 type="button"
-                onClick={() => setShowExportModal(false)}
+                onClick={closeExportModal}
                 style={{
                   width: 32, height: 32, borderRadius: 8, border: 'none',
                   background: 'rgba(255,255,255,0.12)', color: '#FFFFFF',
@@ -902,7 +880,7 @@ export default function VaccineInventoryPage() {
             <div style={{ padding: 24 }}>
 
             {/* Selection Grid (Landscape side-by-side) */}
-            <div style={{ display: 'flex', gap: 20, marginBottom: 20 }}>
+            <div style={{ display: exportStep === 'form' ? 'flex' : 'none', gap: 20, marginBottom: 20 }}>
               {/* Period selection in 2-column grid */}
               <div style={{ flex: '1.4 1 0' }}>
                 <div style={{ fontSize: '.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: '#64748B', marginBottom: 8 }}>Reporting Period</div>
@@ -941,7 +919,6 @@ export default function VaccineInventoryPage() {
                 <div style={{ fontSize: '.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: '#64748B', marginBottom: 8 }}>Export Format</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {[
-                    { key: 'csv', label: 'CSV Spreadsheet' },
                     { key: 'xls', label: 'Excel (XLS)' },
                     { key: 'pdf', label: 'PDF Document' },
                   ].map(f => (
@@ -962,28 +939,73 @@ export default function VaccineInventoryPage() {
               </div>
             </div>
 
+            {/* Preview — the exact report that will be exported or printed */}
+            {exportStep === 'preview' && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: '.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: '#64748B', marginBottom: 8 }}>Report Preview</div>
+                <div style={{ border: '1.5px solid #E2E8F0', borderRadius: 8, overflow: 'hidden', background: '#FFFFFF' }}>
+                  <iframe
+                    title="Inventory report preview"
+                    sandbox=""
+                    srcDoc={buildInventoryReportHtml(getExportRows(), exportPeriodLabel())}
+                    style={{ display: 'block', width: '100%', height: 380, border: 'none', background: '#FFFFFF' }}
+                  />
+                </div>
+                <div style={{ fontSize: '.6875rem', color: '#64748B', marginTop: 6 }}>
+                  Review the report above before exporting or printing.
+                </div>
+              </div>
+            )}
+
             {/* Footer */}
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button
-                type="button"
-                onClick={() => setShowExportModal(false)}
-                style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #CBD5E1', background: '#FFFFFF', color: '#475569', fontSize: '.78125rem', fontWeight: 600, cursor: 'pointer' }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleExport}
-                disabled={exportRowCount === 0}
-                style={{
-                  padding: '8px 18px', borderRadius: 8, border: 'none', background: '#E31837', color: '#FFFFFF',
-                  fontSize: '.78125rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer',
-                  boxShadow: '0 2px 4px rgba(227,24,55,0.2)', opacity: exportRowCount === 0 ? 0.5 : 1
-                }}
-              >
-                <Download size={14} />
-                Export {exportFormat.toUpperCase()}
-              </button>
+              {exportStep === 'form' ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={closeExportModal}
+                    style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #CBD5E1', background: '#FFFFFF', color: '#475569', fontSize: '.78125rem', fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExportStep('preview')}
+                    disabled={exportRowCount === 0}
+                    style={{
+                      padding: '8px 18px', borderRadius: 8, border: 'none', background: '#6366F1', color: '#FFFFFF',
+                      fontSize: '.78125rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer',
+                      boxShadow: '0 2px 4px rgba(99,102,241,0.2)', opacity: exportRowCount === 0 ? 0.5 : 1
+                    }}
+                  >
+                    <FileText size={14} />
+                    Preview Report
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setExportStep('form')}
+                    style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #CBD5E1', background: '#FFFFFF', color: '#475569', fontSize: '.78125rem', fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExport}
+                    disabled={exportRowCount === 0}
+                    style={{
+                      padding: '8px 18px', borderRadius: 8, border: 'none', background: '#6366F1', color: '#FFFFFF',
+                      fontSize: '.78125rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer',
+                      boxShadow: '0 2px 4px rgba(99,102,241,0.2)', opacity: exportRowCount === 0 ? 0.5 : 1
+                    }}
+                  >
+                    <Download size={14} />
+                    {exportFormat === 'pdf' ? 'Print / Save PDF' : 'Export XLS'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

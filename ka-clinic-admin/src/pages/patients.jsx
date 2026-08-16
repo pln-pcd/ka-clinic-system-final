@@ -1,4 +1,5 @@
-import { addDoc, collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, runTransaction, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
+import { authedPostJson } from "../lib/apiClient";
+import { addDoc, collection, doc, getDocs, limit, onSnapshot, orderBy, query, runTransaction, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import { useEffect, useRef, useState } from "react";
 import { auth, db } from "../lib/firebase";
 import { buildDoses } from "./vaccination";
@@ -80,12 +81,12 @@ const globalCSS = `
   .tab-row{display:flex;align-items:center;gap:4px;margin-bottom:14px;flex-wrap:wrap;}
   .tab-btn{padding:5px 13px;border-radius:var(--r-sm);border:1px solid #E5E7EB;background:#F9FAFB;font-size:.78125rem;font-weight:500;font-family:inherit;color:#4B5563;cursor:pointer;transition:all .13s;}
   .tab-btn:hover{background:#F3F4F6;color:#111827;}
-  .tab-btn.on{background:#E31837;color:#fff;font-weight:700;border-color:#E31837;}
+  .tab-btn.on{background:#6366F1;color:#fff;font-weight:700;border-color:#6366F1;}
 
   /* Search */
   .table-search{padding:5px 11px 5px 30px;border-radius:var(--r-sm);border:1px solid #E5E7EB;background:#F9FAFB;font-size:.78125rem;font-family:inherit;color:#111827;outline:none;transition:border-color .14s;width:180px;}
   .table-search::placeholder{color:#9CA3AF;}
-  .table-search:focus{border-color:#E31837;background:#FFFFFF;}
+  .table-search:focus{border-color:#6366F1;background:#FFFFFF;}
 
   /* Page header — LIGHT CARD SYSTEM */
   .page-header-bar{
@@ -196,80 +197,6 @@ const globalCSS = `
   .toast.error{background:var(--red);}
   @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 
-  /* ── DELETE CONFIRM MODAL ── */
-  .delete-confirm-overlay{
-    position:fixed;inset:0;
-    background:rgba(0,0,0,0.6);
-    z-index:1200;
-    display:flex;align-items:flex-start;justify-content:center;
-    padding-top:10vh;overflow-y:auto;
-    backdrop-filter:blur(8px);
-    animation:fadeIn .18s ease;
-  }
-  .delete-confirm-box{
-    background:#fff;
-    border-radius:1.125rem;
-    width:26rem;
-    max-width:95vw;
-    overflow:hidden;
-    box-shadow:0 24px 64px rgba(0,0,0,0.18);
-    animation:scaleIn .2s cubic-bezier(.34,1.56,.64,1);
-  }
-  @keyframes scaleIn{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:scale(1)}}
-  .delete-confirm-top{
-    background:linear-gradient(135deg,#fff1f1 0%,#ffe4e4 100%);
-    padding:28px 28px 20px;
-    text-align:center;
-    border-bottom:1px solid #fecaca;
-  }
-  .delete-confirm-icon{
-    width:52px;height:52px;
-    border-radius:50%;
-    background:#fee2e2;
-    border:2px solid #fca5a5;
-    display:flex;align-items:center;justify-content:center;
-    margin:0 auto 14px;
-  }
-  .delete-confirm-title{font-size:1rem;font-weight:800;color:#991b1b;margin-bottom:6px;}
-  .delete-confirm-name{
-    display:inline-flex;align-items:center;gap:6px;
-    padding:4px 12px;border-radius:20px;
-    background:#fff;border:1px solid #fca5a5;
-    font-size:.8125rem;font-weight:700;color:#b91c1c;
-    margin-bottom:8px;
-  }
-  .delete-confirm-sub{font-size:.75rem;color:#9b2626;line-height:1.5;}
-  .delete-confirm-body{padding:20px 24px;}
-  .delete-confirm-warning{
-    background:#fef3c7;border:1px solid #fde68a;
-    border-radius:var(--r-md);
-    padding:10px 14px;
-    display:flex;gap:8px;align-items:flex-start;
-    font-size:.75rem;color:#92400e;
-    margin-bottom:16px;
-    line-height:1.5;
-  }
-  .delete-confirm-actions{display:flex;gap:8px;}
-  .delete-cancel-btn{
-    flex:1;padding:9px 0;
-    border-radius:var(--r-md);
-    border:1.5px solid var(--border);
-    background:var(--white);
-    font-family:inherit;font-size:.8125rem;font-weight:600;
-    color:var(--text-2);cursor:pointer;transition:all .13s;
-  }
-  .delete-cancel-btn:hover{border-color:var(--border-2);background:var(--bg);}
-  .delete-confirm-btn{
-    flex:1;padding:9px 0;
-    border-radius:var(--r-md);
-    border:none;
-    background:linear-gradient(135deg,#dc2626,#b91c1c);
-    font-family:inherit;font-size:.8125rem;font-weight:700;
-    color:#fff;cursor:pointer;transition:all .13s;
-    display:flex;align-items:center;justify-content:center;gap:6px;
-    box-shadow:0 2px 8px rgba(185,28,28,.35);
-  }
-  .delete-confirm-btn:hover{background:linear-gradient(135deg,#b91c1c,#991b1b);box-shadow:0 4px 14px rgba(185,28,28,.45);}
 
   /* ── WOUND LOG ── */
   .wound-log-entry{
@@ -326,6 +253,69 @@ const VACCINE_PRESETS = {
 };
 
 /* ─────────────────────────── LIBON GEODATA DICTIONARY ─────────────────────────── */
+// Standard option lists for the patient intake form. Free-text fields were
+// converted to dropdowns so records stay consistent and searchable; each list
+// keeps an "Other" escape hatch where clinical reality demands one.
+export const ZONE_OPTIONS = [
+  'Zone 1', 'Zone 2', 'Zone 3', 'Zone 4', 'Zone 5', 'Zone 6', 'Zone 7',
+  'Zone 8', 'Zone 9', 'Zone 10', 'Zone 11',
+  'Purok 1', 'Purok 2', 'Purok 3', 'Purok 4', 'Purok 5', 'Purok 6',
+  'Sitio Proper', 'Poblacion',
+];
+
+export const GENERIC_NAME_OPTIONS = [
+  'Purified Chick Embryo Cell Rabies Vaccine (PCECV)',
+  'Purified Vero Cell Rabies Vaccine (PVRV)',
+  'Human Diploid Cell Rabies Vaccine (HDCV)',
+  'Equine Rabies Immunoglobulin (ERIG)',
+  'Human Rabies Immunoglobulin (HRIG)',
+  'Tetanus Toxoid (TT)',
+  'Tetanus-Diphtheria (Td)',
+  'Other',
+];
+
+export const WOUND_LOCATION_OPTIONS = [
+  'Right Hand', 'Left Hand', 'Right Arm', 'Left Arm',
+  'Right Leg', 'Left Leg', 'Right Foot', 'Left Foot',
+  'Head', 'Face', 'Neck', 'Trunk / Torso', 'Back',
+  'Multiple Sites', 'Other',
+];
+
+export const PAST_VACCINE_OPTIONS = [
+  'None',
+  'Completed PEP (within 1 year)',
+  'Completed PEP (1–3 years ago)',
+  'Completed PEP (over 3 years ago)',
+  'Incomplete / Interrupted PEP',
+  'Pre-Exposure Prophylaxis (PrEP) only',
+  'Tetanus Toxoid only',
+  'Unknown',
+];
+
+export const ALLERGY_OPTIONS = [
+  'No known allergies',
+  'Penicillin',
+  'Sulfa drugs',
+  'Aspirin / NSAIDs',
+  'Eggs',
+  'Seafood',
+  'Latex',
+  'Previous vaccine reaction',
+  'Other',
+];
+
+export const PLACE_OF_EXPOSURE_OPTIONS = [
+  'Own residence',
+  "Neighbor's residence",
+  'Street / Roadside',
+  'Public market',
+  'School premises',
+  'Workplace',
+  'Farm / Field',
+  'Other municipality',
+  'Other',
+];
+
 export const LIBON_BARANGAYS = [
   'San Juan', 'San Rafael', 'Matacon', 'Bulusan', 'Bonavista', 'Carisac East',
   'Carisac West', 'Rawis', 'Pantao', 'Bap-bap', 'Bambon', 'Barbon', 'Burabod',
@@ -956,12 +946,15 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [] }) {
                 </div>
 
                 <div className="form-field"><label>Zone / Street / Purok</label>
-                  <input type="text" value={form.zone || ''} placeholder="e.g. Zone 2, Purok 4" onChange={e => {
+                  <select value={form.zone || ''} onChange={e => {
                     const z = e.target.value;
                     const b = form.barangay || 'San Juan';
                     const fullAddr = `${z ? z + ', ' : ''}Brgy. ${b}, Libon, Albay`;
                     setForm(f => ({ ...f, zone: z, address: fullAddr }));
-                  }} />
+                  }}>
+                    <option value="">— Select zone / purok —</option>
+                    {ZONE_OPTIONS.map(z => <option key={z} value={z}>{z}</option>)}
+                  </select>
                 </div>
 
                 <div className="form-field full" style={{ marginTop: 2 }}>
@@ -1026,7 +1019,10 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [] }) {
                   <input type="date" value={form.date || today()} onChange={e => set('date', e.target.value)} />
                 </div>
                 <div className="form-field"><label>Place of Exposure</label>
-                  <input type="text" value={form.placeOfExposure || ''} onChange={e => set('placeOfExposure', e.target.value)} placeholder="e.g. Brgy. San Juan, Libon" />
+                  <select value={form.placeOfExposure || ''} onChange={e => set('placeOfExposure', e.target.value)}>
+                    <option value="">— Select place —</option>
+                    {PLACE_OF_EXPOSURE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
                 </div>
 
                 <div className="form-field"><label>Type of Exposure</label>
@@ -1075,11 +1071,17 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [] }) {
                 </div>
 
                 <div className="form-field full"><label>Generic Name</label>
-                  <input type="text" value={form.genericName || ''} onChange={e => set('genericName', e.target.value)} placeholder="e.g. Purified Chick Embryo Cell Rabies Vaccine" />
+                  <select value={form.genericName || ''} onChange={e => set('genericName', e.target.value)}>
+                    <option value="">— Select generic name —</option>
+                    {GENERIC_NAME_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
                 </div>
 
                 <div className="form-field"><label>Wound Location</label>
-                  <input type="text" value={form.woundLocation || ''} onChange={e => set('woundLocation', e.target.value)} placeholder="e.g. Right Hand" />
+                  <select value={form.woundLocation || ''} onChange={e => set('woundLocation', e.target.value)}>
+                    <option value="">— Select location —</option>
+                    {WOUND_LOCATION_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
                 </div>
                 <div className="form-field"><label>Wound Depth</label>
                   <select value={form.woundDepth || 'Superficial'} onChange={e => set('woundDepth', e.target.value)}>
@@ -1124,10 +1126,16 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [] }) {
 
               <div className="form-grid" style={{ gap: 14 }}>
                 <div className="form-field full"><label>Past Vaccination History</label>
-                  <input type="text" value={form.pastVaccines || ''} onChange={e => set('pastVaccines', e.target.value)} placeholder="e.g. Fully vaccinated in 2023, None, etc." />
+                  <select value={form.pastVaccines || ''} onChange={e => set('pastVaccines', e.target.value)}>
+                    <option value="">— Select history —</option>
+                    {PAST_VACCINE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
                 </div>
                 <div className="form-field full"><label>Allergies</label>
-                  <input type="text" value={form.allergies || ''} onChange={e => set('allergies', e.target.value)} placeholder="e.g. No known allergies, Penicillin, etc." />
+                  <select value={form.allergies || ''} onChange={e => set('allergies', e.target.value)}>
+                    <option value="">— Select allergy —</option>
+                    {ALLERGY_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
                 </div>
 
                 {/* Additional Non-PEP Specific Fields */}
@@ -1431,7 +1439,10 @@ function EditPatientModal({ patient, onClose, onSave, inventoryItems = [] }) {
                     </select>
                   </div>
                   <div className="form-field"><label>Wound Location</label>
-                    <input type="text" value={form.woundLocation} onChange={e => set('woundLocation', e.target.value)} placeholder="e.g. Right Hand" />
+                    <select value={form.woundLocation || ''} onChange={e => set('woundLocation', e.target.value)}>
+                      <option value="">— Select location —</option>
+                      {WOUND_LOCATION_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
                   </div>
                   <div className="form-field"><label>Wound Depth</label>
                     <select value={form.woundDepth} onChange={e => set('woundDepth', e.target.value)}>
@@ -1447,10 +1458,16 @@ function EditPatientModal({ patient, onClose, onSave, inventoryItems = [] }) {
               <h3 style={{ fontSize: '.9375rem', fontWeight: 800, color: 'var(--navy, #1A2240)', margin: '0 0 12px' }}>Medical History & Notes</h3>
               <div className="form-grid" style={{ gap: 14 }}>
                 <div className="form-field full"><label>Past Vaccination History</label>
-                  <input type="text" value={form.pastVaccines} onChange={e => set('pastVaccines', e.target.value)} placeholder="e.g. Fully vaccinated in 2023, None, etc." />
+                  <select value={form.pastVaccines || ''} onChange={e => set('pastVaccines', e.target.value)}>
+                    <option value="">— Select history —</option>
+                    {PAST_VACCINE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
                 </div>
                 <div className="form-field full"><label>Allergies</label>
-                  <input type="text" value={form.allergies} onChange={e => set('allergies', e.target.value)} placeholder="e.g. No known allergies, Penicillin, etc." />
+                  <select value={form.allergies || ''} onChange={e => set('allergies', e.target.value)}>
+                    <option value="">— Select allergy —</option>
+                    {ALLERGY_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
                 </div>
 
                 {form.service === 'Tetanus' && (
@@ -1518,59 +1535,6 @@ function EditPatientModal({ patient, onClose, onSave, inventoryItems = [] }) {
           <button type="button" className="btn btn-primary" onClick={handleSave} style={{ fontWeight: 700, padding: '9px 24px' }}>
             Save Changes
           </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ─────────────────────────── DELETE CONFIRM MODAL (LANDSCAPE) ─────────────────────────── */
-function DeleteConfirmModal({ name, onConfirm, onCancel }) {
-  const formattedName = formatTitleCase(name);
-  return (
-    <div className="modal-overlay" style={{ alignItems: 'center' }} onClick={e => { if (e.target.classList.contains('modal-overlay')) onCancel(); }}>
-      <div style={{
-        background: '#FFFFFF',
-        borderRadius: '1.25rem',
-        width: '36rem',
-        maxWidth: '95vw',
-        padding: '24px 28px',
-        boxShadow: '0 24px 64px rgba(26,34,64,.22)',
-        border: '1px solid #E2E8F0',
-      }}>
-        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-          <div style={{
-            width: 44, height: 44, borderRadius: 12, background: '#FEE2E2', border: '1px solid #FCA5A5',
-            color: '#DC2626', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
-          }}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-          </div>
-          <div style={{ flex: 1 }}>
-            <h3 style={{ fontSize: '1.125rem', fontWeight: 900, color: '#0F172A', margin: 0 }}>Delete Patient Record</h3>
-            <p style={{ fontSize: '.84375rem', color: '#475569', margin: '6px 0 14px', lineHeight: 1.5 }}>
-              Are you sure you want to permanently delete the patient record for <strong style={{ color: '#0F172A' }}>{formattedName}</strong>?
-            </p>
-            <div style={{ background: '#FFF1F2', border: '1px solid #FECDD3', borderRadius: '.625rem', padding: '10px 14px', fontSize: '.75rem', color: '#9F1239', fontWeight: 600, display: 'flex', gap: 8, alignItems: 'center', marginBottom: 20 }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-              <span>This action is permanent and will remove the vaccination record and app login authorization immediately.</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-              <button type="button" className="btn btn-outline" onClick={onCancel} style={{ fontWeight: 600, padding: '8px 16px' }}>Cancel</button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={onConfirm}
-                style={{
-                  background: '#DC2626', color: '#FFFFFF', fontWeight: 700, padding: '9px 20px', border: 'none',
-                  display: 'inline-flex', alignItems: 'center', gap: 7,
-                  boxShadow: '0 2px 8px rgba(220,38,38,0.25)',
-                }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" /></svg>
-                Delete Record
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -1920,7 +1884,7 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEx
         {/* Action buttons */}
         <button
           className="btn btn-sm"
-          style={{ background: '#E31837', color: '#FFFFFF', border: 'none', fontFamily: 'inherit', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', padding: '7px 14px', borderRadius: 8, boxShadow: '0 2px 6px rgba(227,24,55,0.3)' }}
+          style={{ background: '#6366F1', color: '#FFFFFF', border: 'none', fontFamily: 'inherit', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', padding: '7px 14px', borderRadius: 8, boxShadow: '0 2px 6px rgba(99,102,241,0.25)' }}
           onClick={() => onEdit?.(r || patient)}
         >
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
@@ -1935,10 +1899,10 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEx
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20, paddingBottom: 16, borderBottom: '1px solid #E2E8F0' }}>
           <div style={{
             width: 44, height: 44, borderRadius: '50%',
-            background: 'linear-gradient(135deg,#E31837 0%,#991B1B 100%)',
+            background: 'linear-gradient(135deg,#6366F1 0%,#4338CA 100%)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: '.9375rem', fontWeight: 800, color: '#fff', flexShrink: 0,
-            boxShadow: '0 2px 8px rgba(227,24,55,0.25)',
+            boxShadow: '0 2px 8px rgba(99,102,241,0.25)',
           }}>
             {getInitials(patient.name || '?')}
           </div>
@@ -2179,12 +2143,15 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
   ];
 
   const fileIcon = <svg {...iconProps}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>;
-  const [exportFormat, setExportFormat] = useState('pdf'); // 'csv' | 'xls' | 'pdf'
+  const [exportFormat, setExportFormat] = useState('pdf'); // 'xls' | 'pdf'
   const FORMATS = [
-    { key: 'csv', label: 'CSV' },
-    { key: 'xls', label: 'XLS' },
+    { key: 'xls', label: 'Excel (XLS)' },
     { key: 'pdf', label: 'PDF' },
   ];
+
+  // Preview gate — nothing leaves the modal until the user has seen the
+  // rendered report. 'form' = pick period/format, 'preview' = review it.
+  const [step, setStep] = useState('form');
 
   // ── Single-patient search — filters the same already-loaded `patients`
   // list the main table searches (that list is capped at the 20 most
@@ -2304,28 +2271,6 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
     </div>`;
   }
 
-  function exportBulkCSV() {
-    const rows = getFilteredPatients();
-    if (rows.length === 0) { onToast('No patients found for this period', 'error'); return; }
-    const headers = ['Case No.', 'Name', 'Age', 'Sex', 'Address', 'Contact', 'Service', 'Status', 'Date Registered'];
-    const lines = [
-      headers.join(','),
-      ...rows.map(p => [
-        p.id || '', p.name || '', p.age || '', p.sex || '', `"${(p.address || '').replace(/"/g, '""')}"`,
-        p.contact || '', p.service || '', derivePatientStatus(p),
-        p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString('en-PH') : (p.date || ''),
-      ].join(',')),
-    ];
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `patient-report-${period}-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    onToast(`${period.charAt(0).toUpperCase() + period.slice(1)} CSV exported (${rows.length} patient${rows.length !== 1 ? 's' : ''})`, 'success');
-  }
-
   // Excel opens an HTML table saved with a .xls extension just fine — no
   // extra dependency needed for a real, double-click-to-open spreadsheet.
   function exportBulkXLS() {
@@ -2338,7 +2283,27 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
       <td>${derivePatientStatus(p)}</td>
       <td>${p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString('en-PH') : (p.date || '')}</td>
     </tr>`).join('');
-    const html = `<html><head><meta charset="utf-8"></head><body><table border="1"><thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${tableRows}</tbody></table></body></html>`;
+    // Excel has no page-header concept in an HTML table, so the letterhead
+    // rides in as merged title rows above the column headings — same
+    // information the printed/PDF report carries.
+    const cols = headers.length;
+    const html = `<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8">
+      <style>
+        td,th{font-family:Calibri,Arial,sans-serif;font-size:11pt;}
+        .brand{font-size:16pt;font-weight:bold;color:#0F172A;}
+        .tagline{font-size:9pt;color:#475569;}
+        .meta{font-size:10pt;color:#475569;}
+        th.col{background:#F1F5F9;font-weight:bold;color:#0F172A;text-align:left;}
+      </style></head><body>
+      <table border="0">
+        <tr><td class="brand" colspan="${cols}">K&amp;A Clinic</td></tr>
+        <tr><td class="tagline" colspan="${cols}">Anti-Rabies &amp; Animal Bite Center</td></tr>
+        <tr><td class="meta" colspan="${cols}">Patient Report — ${periodLabel()}</td></tr>
+        <tr><td class="meta" colspan="${cols}">Generated: ${new Date().toLocaleString('en-PH')} | Total Patients: ${rows.length}</td></tr>
+        <tr><td colspan="${cols}"></td></tr>
+      </table>
+      <table border="1"><thead><tr>${headers.map(h => `<th class="col">${h}</th>`).join('')}</tr></thead><tbody>${tableRows}</tbody></table>
+      </body></html>`;
     const blob = new Blob(['﻿' + html], { type: 'application/vnd.ms-excel' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -2411,7 +2376,7 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
   }
 
   // Bulk PDF — built with jsPDF/autoTable rather than "print, then Save As
-  // PDF," so Export → PDF is a real one-click file, same as CSV/XLS.
+  // PDF," so Export → PDF is a real one-click file, same as XLS.
   function buildBulkPdf(rows) {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
@@ -2474,8 +2439,7 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
   }
 
   function runBulkExport() {
-    if (exportFormat === 'csv') exportBulkCSV();
-    else if (exportFormat === 'xls') exportBulkXLS();
+    if (exportFormat === 'xls') exportBulkXLS();
     else exportBulkPdf();
   }
 
@@ -2852,9 +2816,30 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
 
   function switchMode(next) {
     setMode(next);
+    setStep('form');
     setShowEmailInput(false);
     setEmailTo('');
   }
+
+  // Reusable preview pane — renders the exact HTML that will be printed or
+  // emailed, inside a sandboxed iframe so the report's own CSS can't leak
+  // into the admin UI.
+  const previewPane = (html) => (
+    <div style={{ marginBottom: 18 }}>
+      <div style={{ fontSize: '.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: 'var(--muted-2)', marginBottom: 8 }}>Report Preview</div>
+      <div style={{ border: '1.5px solid var(--border)', borderRadius: 'var(--r-lg)', overflow: 'hidden', background: '#fff' }}>
+        <iframe
+          title="Report preview"
+          sandbox=""
+          srcDoc={html}
+          style={{ display: 'block', width: '100%', height: 380, border: 'none', background: '#fff' }}
+        />
+      </div>
+      <div style={{ fontSize: '.6875rem', color: 'var(--muted)', marginTop: 6 }}>
+        Review the report above before exporting, printing, or emailing.
+      </div>
+    </div>
+  );
 
   const emailRow = (onSend) => showEmailInput && (
     <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
@@ -2925,7 +2910,7 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
         {mode === 'bulk' ? (
           <>
             {/* Period selector + Export format, side by side (landscape) */}
-            <div style={{ display: 'flex', gap: 20, marginBottom: 18 }}>
+            <div style={{ display: step === 'form' ? 'flex' : 'none', gap: 20, marginBottom: 18 }}>
               <div style={{ flex: '1.5 1 0' }}>
                 <div style={{ fontSize: '.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: 'var(--muted-2)', marginBottom: 8 }}>Report Period</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
@@ -2970,32 +2955,46 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
               </div>
             </div>
 
-            <div className="modal-footer" style={{ flexWrap: 'wrap' }}>
-              <button className="btn btn-outline" onClick={onClose}>Cancel</button>
-              <button className="btn btn-outline" onClick={runBulkExport} disabled={preview.length === 0}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-                Export {FORMATS.find(f => f.key === exportFormat)?.label}
-              </button>
-              <button className="btn btn-outline" onClick={exportPrint} disabled={preview.length === 0}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></svg>
-                Print Report
-              </button>
-              <button className="btn btn-primary" onClick={() => setShowEmailInput(v => !v)} disabled={preview.length === 0}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16v16H4z" /><path d="M22 6l-10 7L2 6" /></svg>
-                Email Report
-              </button>
-            </div>
-            {emailRow(() => sendReportEmail(emailTo, `K&A Clinic — ${period.charAt(0).toUpperCase() + period.slice(1)} Report (${periodLabel()})`, buildBulkReportHtml(preview)))}
+            {step === 'preview' && previewPane(buildBulkReportHtml(preview))}
+
+            {step === 'form' ? (
+              <div className="modal-footer" style={{ flexWrap: 'wrap' }}>
+                <button className="btn btn-outline" onClick={onClose}>Cancel</button>
+                <button className="btn btn-primary" onClick={() => setStep('preview')} disabled={preview.length === 0}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+                  Preview Report
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="modal-footer" style={{ flexWrap: 'wrap' }}>
+                  <button className="btn btn-outline" onClick={() => { setStep('form'); setShowEmailInput(false); }}>Back</button>
+                  <button className="btn btn-outline" onClick={runBulkExport} disabled={preview.length === 0}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                    Export {FORMATS.find(f => f.key === exportFormat)?.label}
+                  </button>
+                  <button className="btn btn-outline" onClick={exportPrint} disabled={preview.length === 0}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></svg>
+                    Print Report
+                  </button>
+                  <button className="btn btn-primary" onClick={() => setShowEmailInput(v => !v)} disabled={preview.length === 0}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16v16H4z" /><path d="M22 6l-10 7L2 6" /></svg>
+                    Email Report
+                  </button>
+                </div>
+                {emailRow(() => sendReportEmail(emailTo, `K&A Clinic — ${period.charAt(0).toUpperCase() + period.slice(1)} Report (${periodLabel()})`, buildBulkReportHtml(preview)))}
+              </>
+            )}
           </>
         ) : (
           <>
             {/* Patient search */}
-            <div style={{ position: 'relative', marginBottom: selectedPatient ? 14 : 4 }}>
+            <div style={{ position: 'relative', marginBottom: selectedPatient ? 14 : 4, display: step === 'form' ? 'block' : 'none' }}>
               <input
                 type="text"
                 placeholder="Search by patient name or MRN..."
                 value={patientQuery}
-                onChange={e => { setPatientQuery(e.target.value); setSelectedPatient(null); }}
+                onChange={e => { setPatientQuery(e.target.value); setSelectedPatient(null); setStep('form'); }}
                 style={{ width: '100%', padding: '9px 12px', fontSize: '.8125rem', border: '1.5px solid var(--border-2)', borderRadius: 'var(--r-md)', background: '#fff', color: 'var(--text)', outline: 'none' }}
               />
               {matchingPatients.length > 0 && (
@@ -3033,7 +3032,7 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
                 </div>
 
                 {/* Document — check one or both; at least one stays checked */}
-                <div style={{ marginBottom: 18 }}>
+                <div style={{ marginBottom: 18, display: step === 'form' ? 'block' : 'none' }}>
                   <div style={{ fontSize: '.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: 'var(--muted-2)', marginBottom: 8 }}>Document</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {[
@@ -3057,22 +3056,36 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
                   </div>
                 </div>
 
-                <div className="modal-footer" style={{ flexWrap: 'wrap' }}>
-                  <button className="btn btn-outline" onClick={onClose}>Cancel</button>
-                  <button className="btn btn-outline" onClick={() => exportSinglePatientPdf(selectedPatient)}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-                    Export PDF
-                  </button>
-                  <button className="btn btn-outline" onClick={() => printSinglePatientReport(selectedPatient)}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></svg>
-                    Print
-                  </button>
-                  <button className="btn btn-primary" onClick={() => { setShowEmailInput(v => !v); if (!emailTo) setEmailTo(selectedPatient.email || ''); }}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16v16H4z" /><path d="M22 6l-10 7L2 6" /></svg>
-                    Email
-                  </button>
-                </div>
-                {emailRow(() => emailSinglePatientPdf(selectedPatient, emailTo))}
+                {step === 'preview' && previewPane(buildDocumentHtml(selectedPatient, docType))}
+
+                {step === 'form' ? (
+                  <div className="modal-footer" style={{ flexWrap: 'wrap' }}>
+                    <button className="btn btn-outline" onClick={onClose}>Cancel</button>
+                    <button className="btn btn-primary" onClick={() => setStep('preview')}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+                      Preview {docTypeLabel(docType)}
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="modal-footer" style={{ flexWrap: 'wrap' }}>
+                      <button className="btn btn-outline" onClick={() => { setStep('form'); setShowEmailInput(false); }}>Back</button>
+                      <button className="btn btn-outline" onClick={() => exportSinglePatientPdf(selectedPatient)}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                        Export PDF
+                      </button>
+                      <button className="btn btn-outline" onClick={() => printSinglePatientReport(selectedPatient)}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></svg>
+                        Print
+                      </button>
+                      <button className="btn btn-primary" onClick={() => { setShowEmailInput(v => !v); if (!emailTo) setEmailTo(selectedPatient.email || ''); }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16v16H4z" /><path d="M22 6l-10 7L2 6" /></svg>
+                        Email
+                      </button>
+                    </div>
+                    {emailRow(() => emailSinglePatientPdf(selectedPatient, emailTo))}
+                  </>
+                )}
               </>
             ) : (
               <p style={{ fontSize: '.75rem', color: 'var(--muted)', textAlign: 'center', padding: '28px 0' }}>
@@ -3081,6 +3094,122 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
             )}
           </>
         )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────── FOLLOW-UP NOTIFICATION MODAL ─────────────────────────── */
+// Manual send. The same /api/notifications send-followup action also backs the
+// automatic due-dose sweep, so both paths produce identical patient-facing
+// notifications and identical acknowledgement tracking.
+function FollowUpModal({ patient, onClose, onToast }) {
+  const PRESETS = [
+    { key: 'due', label: 'Dose due reminder', text: 'Your next anti-rabies vaccine dose is due. Please visit K&A Clinic on your scheduled date to stay on track with your treatment.' },
+    { key: 'missed', label: 'Missed dose follow-up', text: 'Our records show you missed a scheduled dose. Please visit K&A Clinic as soon as possible so your treatment schedule can be adjusted safely.' },
+    { key: 'checkup', label: 'Wound check-up', text: 'Please come in for a follow-up wound assessment at K&A Clinic. Bring your patient record with you.' },
+    { key: 'custom', label: 'Custom message', text: '' },
+  ];
+  const [preset, setPreset] = useState('due');
+  const [message, setMessage] = useState(PRESETS[0].text);
+  const [sending, setSending] = useState(false);
+
+  const pickPreset = (key) => {
+    setPreset(key);
+    const found = PRESETS.find(x => x.key === key);
+    if (found && found.key !== 'custom') setMessage(found.text);
+    if (found && found.key === 'custom') setMessage('');
+  };
+
+  async function send() {
+    if (!message.trim()) { onToast('Enter a message to send.', 'error'); return; }
+    setSending(true);
+    try {
+      const result = await authedPostJson('/api/notifications', {
+        action: 'send-followup',
+        patientId: patient.firestoreId || patient.id,
+        title: 'Follow-up reminder',
+        message: message.trim(),
+        source: 'manual',
+      });
+      if (!result?.success) {
+        onToast(result?.error || 'Failed to send follow-up.', 'error');
+        setSending(false);
+        return;
+      }
+      // Partial delivery is normal (no email on file, or no app installed) —
+      // report what actually went out rather than a blanket success.
+      const parts = [];
+      if (result.pushSent > 0) parts.push('app');
+      if (result.emailed) parts.push('email');
+      onToast(
+        parts.length
+          ? `Follow-up sent via ${parts.join(' and ')} to ${formatTitleCase(patient.name)}`
+          : `Notification saved, but no delivery channel was available for ${formatTitleCase(patient.name)}`,
+        parts.length ? 'success' : 'error',
+      );
+      onClose();
+    } catch (err) {
+      console.error('Follow-up send error:', err);
+      onToast('Failed to send follow-up.', 'error');
+      setSending(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay" style={{ alignItems: 'center' }} onClick={e => { if (e.target.classList.contains('modal-overlay')) onClose(); }}>
+      <div className="modal" style={{ width: '560px', padding: 0, overflow: 'hidden' }}>
+        <div style={{ background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)', padding: '18px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <h3 style={{ fontSize: '1.0625rem', fontWeight: 800, color: '#FFFFFF', margin: 0 }}>Send Follow-up</h3>
+            <p style={{ fontSize: '.75rem', color: 'rgba(255,255,255,0.65)', margin: '3px 0 0' }}>
+              Notifies {formatTitleCase(patient.name)} in the app and by email
+            </p>
+          </div>
+          <button type="button" onClick={onClose}
+            style={{ width: 32, height: 32, borderRadius: 8, border: 'none', background: 'rgba(255,255,255,0.12)', color: '#FFFFFF', fontSize: '1rem', fontWeight: 700, cursor: 'pointer' }}>✕</button>
+        </div>
+
+        <div style={{ padding: 24 }}>
+          <div style={{ fontSize: '.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: 'var(--muted-2)', marginBottom: 8 }}>Message Template</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
+            {PRESETS.map(x => (
+              <button key={x.key} type="button" onClick={() => pickPreset(x.key)}
+                style={{
+                  padding: '10px 12px', borderRadius: 'var(--r-lg)', textAlign: 'left',
+                  border: `1.5px solid ${preset === x.key ? '#C8151A' : 'var(--border)'}`,
+                  background: 'var(--bg)', boxShadow: preset === x.key ? '0 0 0 3px rgba(200,21,26,0.08)' : 'none',
+                  cursor: 'pointer', fontFamily: 'inherit',
+                  fontSize: '.78125rem', fontWeight: preset === x.key ? 700 : 600, color: 'var(--text)',
+                }}
+              >
+                {x.label}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ fontSize: '.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: 'var(--muted-2)', marginBottom: 8 }}>Message</div>
+          <textarea
+            value={message}
+            onChange={e => { setMessage(e.target.value); setPreset('custom'); }}
+            rows={4}
+            placeholder="Write the follow-up message the patient will receive…"
+            style={{ width: '100%', padding: '10px 12px', fontSize: '.8125rem', border: '1.5px solid var(--border-2)', borderRadius: 'var(--r-md)', background: '#fff', color: 'var(--text)', outline: 'none', fontFamily: 'inherit', resize: 'vertical' }}
+          />
+
+          <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '.625rem', padding: '10px 14px', marginTop: 14, fontSize: '.75rem', color: '#1D4ED8', lineHeight: 1.5 }}>
+            The patient gets a push notification in the app and an email
+            {patient.email ? ` at ${patient.email}` : ' (no email on file — app only)'}.
+            Both include a button to confirm they received it.
+          </div>
+
+          <div className="modal-footer">
+            <button className="btn btn-outline" onClick={onClose} disabled={sending}>Cancel</button>
+            <button className="btn btn-primary" onClick={send} disabled={sending}>
+              {sending ? 'Sending…' : 'Send Follow-up'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -3097,11 +3226,10 @@ export default function App() {
   const [showModal, setModal] = useState(false);
   const [editPatient, setEditPatient] = useState(null);
   const [toast, setToast] = useState({ msg: '', type: '' });
-  // Delete confirm modal state
-  const [deleteTarget, setDeleteTarget] = useState(null); // { firestoreId, name }
   const [pinTarget, setPinTarget] = useState(null);
   const [pinning, setPinning] = useState(false);
   const [exportModal, setExportModal] = useState(false);
+  const [followUpTarget, setFollowUpTarget] = useState(null);
   // Inventory items for vaccine brand dropdown
   const [inventoryItems, setInventoryItems] = useState([]);
 
@@ -3412,22 +3540,6 @@ export default function App() {
     updateDoc(doc(db, 'vaccinations', targetId), updatedData).catch(err => {
       console.error('Edit patient error:', err);
       showToast('Failed to update patient.', 'error');
-    });
-  }
-
-  function promptDelete(firestoreId, name) {
-    setDeleteTarget({ firestoreId, name });
-  }
-
-  function confirmDelete() {
-    if (!deleteTarget) return;
-    const targetId = deleteTarget.firestoreId;
-    setDeleteTarget(null);
-    if (selected?.firestoreId === targetId) setSelected(null);
-    showToast('Patient record removed', 'error');
-    deleteDoc(doc(db, 'vaccinations', targetId)).catch(err => {
-      console.error('Delete patient error:', err);
-      showToast('Failed to remove patient.', 'error');
     });
   }
 
@@ -3745,7 +3857,7 @@ export default function App() {
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '.78125rem', fontWeight: 600, padding: '7px 12px' }}
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-                Export CSV
+                Export Report
               </button>
 
               {/* Add Patient Button — Tight inline placement */}
@@ -3868,15 +3980,6 @@ export default function App() {
                             >
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
                             </button>
-                            <button
-                              type="button"
-                              className="icon-btn danger"
-                              title="Delete Patient"
-                              onClick={() => promptDelete(p.firestoreId, p.name)}
-                              style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid #FCA5A5', background: '#FEF2F2', color: '#DC2626', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-                            >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" /></svg>
-                            </button>
                           </div>
                         </td>
                       </tr>
@@ -3939,16 +4042,15 @@ export default function App() {
 
       {showModal && <AddPatientModal onClose={() => setModal(false)} onAdd={handleAddPatient} inventoryItems={inventoryItems} />}
       {editPatient && <EditPatientModal patient={editPatient} onClose={() => setEditPatient(null)} onSave={handleEditSave} inventoryItems={inventoryItems} />}
-      {exportModal && <ExportReportModal patients={patients} initialPatient={typeof exportModal === 'object' ? exportModal : null} onClose={() => setExportModal(false)} onToast={showToast} />}
-
-      {/* Custom Delete Confirmation Modal */}
-      {deleteTarget && (
-        <DeleteConfirmModal
-          name={deleteTarget.name}
-          onConfirm={confirmDelete}
-          onCancel={() => setDeleteTarget(null)}
+      {followUpTarget && (
+        <FollowUpModal
+          patient={followUpTarget}
+          onClose={() => setFollowUpTarget(null)}
+          onToast={showToast}
         />
       )}
+
+      {exportModal && <ExportReportModal patients={patients} initialPatient={typeof exportModal === 'object' ? exportModal : null} onClose={() => setExportModal(false)} onToast={showToast} />}
 
       {/* Pin Map Confirmation Modal */}
       {pinTarget && (

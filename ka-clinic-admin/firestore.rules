@@ -159,6 +159,25 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // Clinic-sent follow-up notifications (api/notifications.js). Patients read
+    // their own by MRN — the same MRN that is their vaccinations doc id — so
+    // the notification centre in the app can list them.
+    //
+    // Writes are server-only on purpose: sending is admin-gated in the API, and
+    // the acknowledgement ("I received this") is applied with the Admin SDK,
+    // which bypasses these rules. A patient must not be able to forge a
+    // notification or silently mark one acknowledged from the client.
+    function ownsPatientNotification() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/vaccinations/$(resource.data.patientId))
+        && get(/databases/$(database)/documents/vaccinations/$(resource.data.patientId)).data.email == request.auth.token.email;
+    }
+
+    match /patientNotifications/{docId} {
+      allow read: if isAdmin() || ownsPatientNotification();
+      allow write: if isAdmin();
+    }
+
     // Anonymized bite-incident pins (no patient identifiers — see
     // ka-clinic-admin/src/incidents.jsx) power the patient app's Safety Map,
     // so any signed-in or anonymous-but-authenticated caller may read them.
