@@ -1,6 +1,6 @@
 {
   "firestore": {
     "rules": "ka-clinic-admin/firestore.rules",
-    "indexes": "firestore.indexes.json"
+    "indexes": "ka-clinic-admin/firestore.indexes.json"
   }
 }
