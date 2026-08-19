@@ -9,6 +9,7 @@ import Animated, {
   useSharedValue,
   withTiming
 } from 'react-native-reanimated';
+import { markOnboardingSeen } from '../config/appPrefs';
 import { moderateScale, scale, verticalScale } from '../constants/scale';
 
 const { width } = Dimensions.get('window');
@@ -42,6 +43,13 @@ export default function Onboarding2() {
     }
   };
 
+  // Finishing the carousel is what marks this install as onboarded — from here
+  // on, launches go straight to login (or the app, if a session is kept).
+  const handleFinish = async () => {
+    await markOnboardingSeen();
+    router.replace('/auth/login');
+  };
+
   return (
     <View style={styles.container}>
       <LinearGradient colors={['#FFFFFF', '#FDF2F3', '#FFFFFF']} style={styles.background}>
@@ -70,31 +78,29 @@ export default function Onboarding2() {
           <View style={styles.glassEffect} />
           <Animated.Image 
             source={require('../assets/onboarding2.png')} 
-            style={[styles.image, imageAnimatedStyle]} 
+            style={[styles.image, imageAnimatedStyle]}
             resizeMode="contain"
           />
         </View>
 
-        {/* WHITE CARD - 37% SCREEN HEIGHT (BUTTON ELEVATED) */}
+        {/* WHITE CARD - 37% SCREEN HEIGHT */}
         <Animated.View style={[styles.card, animatedStyle]}>
           <View style={styles.cardContent}>
             <View style={styles.indicatorContainer}>
               <View style={styles.indicator} />
               <View style={[styles.indicator, styles.activeIndicator]} />
-              <View style={styles.indicator} />
-              <View style={styles.indicator} />
             </View>
 
-            <Text style={styles.tag}>FEATURE: SEQUENTIAL RECORDING</Text>
-            <Text style={styles.title}>Digital Wound{"\n"}Gallery</Text>
+            <Text style={styles.tag}>SUPPORT: FIRST-LINE TRIAGE</Text>
+            <Text style={styles.title}>Guided Assistance</Text>
             
             <Text style={styles.description}>
-              Maintain a secure, digital photo log of your wound recovery. Document the bite area as it heals over time, giving healthcare providers clear visibility into your progress.
+              Our integrated AI assistant handles routine health questions, guides you through wound care procedures, and instantly connects you with clinic staff for urgent care.
             </Text>
           </View>
 
           <TouchableOpacity 
-            onPress={() => router.push('/onboarding3')} 
+            onPress={handleFinish} 
             activeOpacity={0.85}
             style={styles.buttonShadow}
           >
@@ -104,8 +110,8 @@ export default function Onboarding2() {
               end={{ x: 1, y: 0 }}
               style={styles.button}
             >
-              <Text style={styles.buttonText}>Next</Text>
-              <Ionicons name="arrow-forward" size={18} color="#FFF" style={{ marginLeft: 8 }} />
+              <Text style={styles.buttonText}>Get Started</Text>
+              <Ionicons name="rocket-sharp" size={18} color="#FFF" style={{ marginLeft: 8 }} />
             </LinearGradient>
           </TouchableOpacity>
         </Animated.View>
@@ -156,8 +162,8 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   image: {
-    width: width * 0.94,
-    height: width * 0.94,
+    width: width * 0.78,
+    height: width * 0.78,
     zIndex: 2
   },
   glassEffect: {
@@ -166,7 +172,7 @@ const styles = StyleSheet.create({
     height: width * 0.68,
     backgroundColor: 'rgba(227, 24, 55, 0.04)',
     borderRadius: scale(40),
-    transform: [{ rotate: '-10deg' }],
+    transform: [{ rotate: '12deg' }],
   },
   card: {
     flex: 0.37,

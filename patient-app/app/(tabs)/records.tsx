@@ -42,18 +42,6 @@ const C = {
   bg: SOFT_GRAY_BG,
 };
 
-type LogEntry = {
-  id: string;
-  type: 'wound' | 'note';
-  note: string;
-  photoUrl: string | null;
-  symptoms: string[];
-  by: string;
-  time: string;
-  date: string;
-  createdAt: number;
-};
-
 const DEFAULT_RECORD_DOSES = [
   { id: 'd1', label: '1st Dose (Day 0)', vaccineBrand: 'Speeda ARV (Lot #2026-08A)', dosage: '0.5 mL (IM)', date: '08/04/26', provider: 'K&A Main Clinic / RN S. Santos', done: true },
   { id: 'd2', label: '2nd Dose (Day 3)', vaccineBrand: 'Speeda ARV (Lot #2026-08A)', dosage: '0.5 mL (IM)', date: '08/07/26', provider: 'K&A Main Clinic / RN S. Santos', done: true },
@@ -68,8 +56,6 @@ export default function RecordsScreen() {
   const insets = useSafeAreaInsets();
 
   const [patientRecord, setPatientRecord] = useState<any | null>(null);
-  const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [viewingLog, setViewingLog] = useState<LogEntry | null>(null);
 
   // 3D Flip Card State
   const flipAnim = useSharedValue(0);
@@ -129,12 +115,7 @@ export default function RecordsScreen() {
     if (!mrn) return;
     return onSnapshot(doc(db, 'vaccinations', mrn), snap => {
       if (snap.exists()) {
-        const data = snap.data();
-        setPatientRecord(data);
-        if (Array.isArray(data.woundLog)) {
-          const sorted = [...data.woundLog].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-          setLogs(sorted);
-        }
+        setPatientRecord(snap.data());
       }
     });
   }, [mrn]);
@@ -204,18 +185,14 @@ export default function RecordsScreen() {
               <Text style={[s.recordTableCellValue, { flex: 1.8 }]}>{pr.animalStatus || 'Alive & Observed'}</Text>
             </View>
             <View style={s.recordTableRow}>
-              <Text style={[s.recordTableCellLabel, { flex: 1.2 }]}>Wound Site / Location</Text>
-              <Text style={[s.recordTableCellValue, { flex: 1.8 }]}>{pr.site || 'Lower Extremity / Arm'}</Text>
-            </View>
-            <View style={[s.recordTableRow, s.recordTableRowAlt]}>
               <Text style={[s.recordTableCellLabel, { flex: 1.2 }]}>Local Washing</Text>
               <Text style={[s.recordTableCellValue, { flex: 1.8 }]}>{pr.washTreatment || 'Soap & Running Water'}</Text>
             </View>
-            <View style={s.recordTableRow}>
+            <View style={[s.recordTableRow, s.recordTableRowAlt]}>
               <Text style={[s.recordTableCellLabel, { flex: 1.2 }]}>Known Allergies</Text>
               <Text style={[s.recordTableCellValue, { flex: 1.8 }]}>{pr.allergies || 'None Reported'}</Text>
             </View>
-            <View style={[s.recordTableRow, s.recordTableRowAlt, { borderBottomWidth: 0 }]}>
+            <View style={[s.recordTableRow, { borderBottomWidth: 0 }]}>
               <Text style={[s.recordTableCellLabel, { flex: 1.2 }]}>Attending ABTC</Text>
               <Text style={[s.recordTableCellValue, { flex: 1.8, fontWeight: '700', color: C.charcoal }]}>K&A Animal Bite Center</Text>
             </View>

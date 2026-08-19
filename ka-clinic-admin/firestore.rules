@@ -129,30 +129,13 @@ service cloud.firestore {
       return request.auth != null && request.auth.token.email == resource.data.email;
     }
 
-    // Recovery monitoring: the patient app appends photo+note entries to the
-    // woundLog array on their own vaccinations doc (patient-app/app/(tabs)/
-    // index.tsx saveLog), which the dashboard renders in the Wound / Clinical
-    // Log panel (ka-clinic-admin/src/patients.jsx WoundLog).
-    //
-    // woundLog must be the ONLY field the write changes. diff().affectedKeys()
-    // is what enforces that: without it, granting patients update access to
-    // this document would also let them rewrite their own doses, category,
-    // MRN, or email — i.e. their entire clinical record.
-    function onlyChangesWoundLog() {
-      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['woundLog'])
-        && request.resource.data.woundLog is list
-        // Bounded so a client cannot grow the array without limit; the log is
-        // an append-only clinical note list, not bulk storage.
-        && request.resource.data.woundLog.size() <= 200
-        // Append-only from the patient side: existing entries cannot be edited
-        // or removed, only added to. Admins retain full control below.
-        && request.resource.data.woundLog.size() >= resource.data.get('woundLog', []).size();
-    }
-
+    // Patients read their own clinical record but never write to it. The one
+    // patient-writable field used to be `woundLog` (the self-service recovery
+    // monitoring feature), which has been removed from the app entirely — so
+    // there is no longer any patient write path into this document at all.
     match /vaccinations/{docId} {
       allow read: if isAdmin() || ownsVaccinationDoc();
-      allow update: if isAdmin() || (ownsVaccinationDoc() && onlyChangesWoundLog());
-      allow create, delete: if isAdmin();
+      allow update, create, delete: if isAdmin();
     }
 
     match /inventory/{docId} {
@@ -178,12 +161,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Anonymized bite-incident pins (no patient identifiers — see
-    // ka-clinic-admin/src/incidents.jsx) power the patient app's Safety Map,
-    // so any signed-in or anonymous-but-authenticated caller may read them.
+    // Bite-incident pins (ka-clinic-admin/src/incidents.jsx). Clinic-staff only:
+    // the patient-facing incident map has been removed, and bite locations,
+    // exposure category and treatment status are public-safety/patient-privacy
+    // data that must not be world-readable.
     match /incidents/{docId} {
-      allow read: if true;
-      allow write: if isAdmin();
+      allow read, write: if isAdmin();
     }
 
     // One chat thread per escalation (see patient-app/app/(tabs)/chat.tsx
@@ -238,22 +221,6 @@ service cloud.firestore {
     match /patientChatState/{uid} {
       allow read, delete: if isAdmin() || (request.auth != null && request.auth.uid == uid);
       allow create, update: if false;
-    }
-
-    // Patient-authored recovery log (photo + note), scoped to its owner —
-    // see patient-app/app/(tabs)/index.tsx and wound.tsx.
-    match /woundLogs/{docId} {
-      allow read, update, delete: if isAdmin() || (request.auth != null && request.auth.uid == resource.data.userId);
-      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
-    }
-
-    // Patient-submitted daily symptom checks — see patient-app/app/(tabs)/symp.tsx.
-    // No Admin Dashboard UI reads this collection yet; rule is scoped ready for
-    // when that view is built.
-    match /symptomReports/{docId} {
-      allow read: if isAdmin() || (request.auth != null && request.auth.uid == resource.data.userId);
-      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
-      allow update, delete: if isAdmin();
     }
 
     match /settings/{docId} {

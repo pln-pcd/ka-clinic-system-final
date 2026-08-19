@@ -13,8 +13,8 @@
       [
         "expo-image-picker",
         {
-          "cameraPermission": "Allow K&A Rabies Monitoring to access your camera so you can take wound photos for monitoring.",
-          "photosPermission": "Allow K&A Rabies Monitoring to access your photos so you can upload wound images for monitoring."
+          "cameraPermission": "Allow K&A Clinic to access your camera so you can take a profile photo.",
+          "photosPermission": "Allow K&A Clinic to access your photos so you can choose a profile photo."
         }
       ],
       [
@@ -27,8 +27,8 @@
     ],
     "ios": {
       "infoPlist": {
-        "NSCameraUsageDescription": "This app needs camera access to capture wound photos for rabies monitoring.",
-        "NSPhotoLibraryUsageDescription": "This app needs photo library access so you can upload wound images for monitoring."
+        "NSCameraUsageDescription": "This app needs camera access so you can take a profile photo.",
+        "NSPhotoLibraryUsageDescription": "This app needs photo library access so you can choose a profile photo."
       },
       "bundleIdentifier": "com.anonymous.kna-rabies-monitoring"
     },

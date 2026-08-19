@@ -15,20 +15,6 @@
       ]
     },
     {
-      "collectionGroup": "woundLogs",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "userId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "chatMessages",
       "queryScope": "COLLECTION",
       "fields": [

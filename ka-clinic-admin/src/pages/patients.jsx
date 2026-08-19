@@ -197,46 +197,6 @@ const globalCSS = `
   .toast.error{background:var(--red);}
   @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 
-
-  /* ── WOUND LOG ── */
-  .wound-log-entry{
-    display:flex;gap:10px;align-items:flex-start;
-    padding:10px 12px;
-    background:var(--bg);
-    border-radius:var(--r-md);
-    border:1px solid var(--border);
-    margin-bottom:8px;
-    transition:border-color .13s;
-  }
-  .wound-log-entry:hover{border-color:var(--border-2);}
-  .wound-log-entry:last-child{margin-bottom:0;}
-  .wound-log-dot{
-    width:8px;height:8px;border-radius:50%;
-    background:var(--blue);
-    flex-shrink:0;margin-top:5px;
-  }
-  .wound-log-body{flex:1;min-width:0;}
-  .wound-log-note{font-size:.8125rem;font-weight:500;color:var(--text-2);line-height:1.5;word-break:break-word;}
-  .wound-log-meta{font-size:.6875rem;color:var(--muted-2);margin-top:3px;}
-  .wound-log-add{
-    display:flex;gap:8px;align-items:flex-end;
-    margin-top:10px;
-  }
-  .wound-log-add textarea{
-    flex:1;font-family:inherit;font-size:.8125rem;font-weight:500;
-    padding:8px 11px;border:1.5px solid var(--border);
-    border-radius:var(--r-md);background:var(--white);color:var(--text);
-    outline:none;resize:none;transition:border-color .15s,box-shadow .15s;
-    min-height:60px;
-  }
-  .wound-log-add textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(200,21,26,.10);}
-  .wound-log-add textarea::placeholder{color:var(--muted-2);}
-  .wound-log-empty{
-    padding:20px 16px;text-align:center;
-    background:var(--bg);border-radius:var(--r-md);
-    border:1.5px dashed var(--border-2);
-  }
-
   ::-webkit-scrollbar{width:4px;height:4px;}
   ::-webkit-scrollbar-thumb{background:var(--border-2);border-radius:99px;}
   ::-webkit-scrollbar-track{background:transparent;}
@@ -507,61 +467,6 @@ function ServiceSelector({ value, onChange }) {
 /* ─────────────────────────── TOAST ─────────────────────────── */
 
 
-
-/* ─────────────────────────── RECOVERY NOTES FROM PATIENT ─────────────────────────── */
-function RecoveryNotesFromPatient({ patientId, woundLog = [], onDelete }) {
-  const entries = [...woundLog].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-
-  return (
-    <div style={{ background: '#FFFFFF', borderRadius: 'var(--r-lg)', border: '1px solid #E2E8F0', overflow: 'hidden', marginBottom: 20 }}>
-      <div style={{ padding: '10px 16px', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', fontSize: '.71875rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.6px', color: '#475569', display: 'flex', alignItems: 'center', gap: 6 }}>
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-          <polyline points="14 2 14 8 20 8" />
-        </svg>
-        Recovery Notes from Patient
-      </div>
-
-      <div style={{ padding: '16px 20px' }}>
-
-      {entries.length === 0 ? (
-        <div style={{ padding: '18px', textAlign: 'center', background: '#F8FAFC', borderRadius: 'var(--r-md)', border: '1.5px dashed #E2E8F0' }}>
-          <div style={{ fontSize: '.8125rem', fontWeight: 600, color: '#64748B' }}>No recovery notes submitted by patient yet</div>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {entries.map((entry, i) => (
-            <div key={entry.id || i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 14px', background: '#F8FAFC', borderRadius: 'var(--r-md)', border: '1px solid #E2E8F0' }}>
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#E31837', marginTop: 5, flexShrink: 0 }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '.8125rem', fontWeight: 600, color: '#0F172A', lineHeight: 1.4 }}>{entry.note}</div>
-                {entry.photoUrl && (
-                  <img src={entry.photoUrl} alt="Patient-submitted wound/recovery photo" style={{ marginTop: 8, width: 96, height: 96, objectFit: 'cover', borderRadius: 'var(--r-md)', border: '1px solid #E2E8F0' }} />
-                )}
-                <div style={{ fontSize: '.6875rem', color: '#64748B', marginTop: 3, display: 'flex', gap: 8 }}>
-                  {entry.date && <span>{entry.date}</span>}
-                  {entry.by && <span>· by {entry.by}</span>}
-                </div>
-              </div>
-              {onDelete && (
-                <button
-                  onClick={() => onDelete(entry.id || i)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', padding: '2px 4px', borderRadius: 4, transition: 'color .13s' }}
-                  onMouseEnter={e => e.currentTarget.style.color = '#E31837'}
-                  onMouseLeave={e => e.currentTarget.style.color = '#94A3B8'}
-                  title="Remove log entry"
-                >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-      </div>
-    </div>
-  );
-}
 
 /* ─────────────────────────── SCHEDULE SUMMARY CALCULATION ─────────────────────────── */
 function ScheduleSummary({ service, baseDate }) {
@@ -1811,26 +1716,6 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEx
   }
 
   const rec = r || { doses: [], address: '—', date: patient.date, id: patient.id, age: patient.age, animal: patient.animal, cat: patient.cat };
-  const woundLog = patient.woundLog || [];
-
-  async function handleAddWoundLog(noteText) {
-    if (!patient.firestoreId) return;
-    const entry = {
-      id: Date.now().toString(),
-      note: noteText,
-      date: new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }),
-      by: 'Admin',
-      createdAt: Date.now(),
-    };
-    const updated = [...woundLog, entry];
-    await updateDoc(doc(db, 'vaccinations', patient.firestoreId), { woundLog: updated });
-  }
-
-  async function handleDeleteWoundLog(entryId) {
-    if (!patient.firestoreId) return;
-    const updated = woundLog.filter((e, i) => (e.id || i.toString()) !== entryId.toString());
-    await updateDoc(doc(db, 'vaccinations', patient.firestoreId), { woundLog: updated });
-  }
 
   return (
     <div style={{ padding: '22px 24px 32px' }}>
@@ -2068,9 +1953,6 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEx
           </div>
 
         </div>
-
-        {/* ── Recovery Notes from Patient ── */}
-        <RecoveryNotesFromPatient patientId={patient.firestoreId} woundLog={woundLog} onDelete={handleDeleteWoundLog} />
 
         {/* ── Treatment Timeline ── */}
         <div style={{ background: 'var(--white)', borderRadius: 'var(--r-lg)', border: '1px solid #E2E8F0', overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
@@ -2486,11 +2368,6 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
         <td style="padding:8px 12px;border:1px solid #ddd;">${d.date || '—'}</td>
         <td style="padding:8px 12px;border:1px solid #ddd;text-transform:capitalize;font-weight:bold;color:${d.s === 'done' || d.status === 'done' ? '#15803D' : d.s === 'miss' || d.status === 'miss' ? '#DC2626' : '#D97706'}">${d.s || d.status || 'pending'}</td>
       </tr>`).join('');
-    const woundLog = p.woundLog || [];
-    const logRows = woundLog.map(e => `
-      <div style="margin-bottom:8px;padding:8px 10px;background:#f9f9f9;border-left:3px solid #C8151A;font-size:12px;">
-        <strong>${e.date || ''}${e.by ? ` (by ${e.by})` : ''}</strong>: ${e.note}
-      </div>`).join('');
     const registered = p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString('en-PH') : (p.date || '—');
     return `
       <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#111;font-size:13px;line-height:1.5;">
@@ -2529,12 +2406,6 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
           <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:#666;font-size:11px;">Past Vaccines</span><span style="font-weight:bold;">${p.pastVaccines || '—'}</span></div>
           <div style="display:flex;justify-content:space-between;"><span style="color:#666;font-size:11px;">Allergies</span><span style="font-weight:bold;">${p.allergies || '—'}</span></div>
         </div>
-        ${logRows ? `
-          <div style="margin-bottom:20px;">
-            <div style="font-weight:bold;font-size:12px;margin-bottom:6px;text-transform:uppercase;color:#444;">Clinical Observations &amp; Wound Logs</div>
-            ${logRows}
-          </div>
-        ` : ''}
         <div>
           <div style="font-weight:bold;font-size:12px;margin-bottom:6px;text-transform:uppercase;color:#444;">Treatment Timeline</div>
           <table style="width:100%;border-collapse:collapse;">
@@ -2672,17 +2543,6 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
       styles: { fontSize: 8, cellPadding: 3 },
       alternateRowStyles: { fillColor: [250, 250, 252] },
     });
-
-    const woundLog = p.woundLog || [];
-    if (woundLog.length) {
-      autoTable(doc, {
-        startY: doc.lastAutoTable.finalY + 10,
-        head: [['Clinical Observations & Wound Logs']],
-        body: woundLog.map(e => [`${e.date || ''}${e.by ? ` (by ${e.by})` : ''}: ${e.note}`]),
-        headStyles: { fillColor: [71, 85, 105], textColor: 255, fontSize: 8 },
-        styles: { fontSize: 8, cellPadding: 4 },
-      });
-    }
 
     doc.setFontSize(8);
     doc.setTextColor(148, 163, 184);

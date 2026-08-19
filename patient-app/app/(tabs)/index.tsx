@@ -1,18 +1,15 @@
 // app/(tabs)/index.tsx
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   collection,
   doc,
-  getDoc,
   limit,
   onSnapshot,
   orderBy,
   query,
-  updateDoc,
   where,
 } from 'firebase/firestore';
 import React, { useEffect, useRef, useState } from 'react';
@@ -22,8 +19,6 @@ import {
   Animated as RNAnimated,
   Dimensions,
   Image,
-  Keyboard,
-  KeyboardAvoidingView,
   Modal,
   PanResponder,
   Platform,
@@ -31,15 +26,11 @@ import {
   StatusBar,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   UIManager,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import MapViewContainer from '../../components/map/MapViewContainer';
-import { LIBON_MAP_VIEW, getSeverityStyle } from '../../components/map/mapTheme';
 import { formatDoseDate } from '../../config/dates';
 import Animated, {
   Easing,
@@ -66,10 +57,6 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 const { width } = Dimensions.get('window');
 
-const CLOUDINARY_CLOUD_NAME = 'dg14fztnu';
-const CLOUDINARY_UPLOAD_PRESET = 'rabies_app';
-const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
-
 const MEDICAL_RED = '#EF4444';
 const SOFT_GRAY_BG = '#EEF2F6';
 
@@ -89,16 +76,8 @@ const C = {
 
 type VaccineDose = { id: string; dose: number; label: string; date: string; rawDate: string | null; done: boolean; missed: boolean; vaccineType?: 'Pre-Exposure' | 'Post-Exposure'; };
 type NextDoseNotif = { id: string; doseLabel: string; doseDate: string; message: string; sentAt: string; };
-// Matches ka-clinic-admin/src/incidents.jsx's actual write shape — there is
-// no `title` field on the real doc, so this no longer assumes one.
-type Incident = { id: string; location?: string; barangay?: string; type?: string; category?: string; description?: string; date?: string; latitude: number; longitude: number; status?: 'active' | 'resolved'; };
-// Written to the SAME `vaccinations/{mrn}.woundLog` array the Admin
-// Dashboard's Wound / Clinical Log reads/writes (ka-clinic-admin/src/patients.jsx
-// WoundLog component) — {id, note, date, by, createdAt}, plus an app-only
-// `photoUrl`/`symptoms` the admin UI just ignores rather than a separate collection.
-type LogEntry = { id: string; type: 'wound' | 'note'; note: string; photoUrl: string | null; symptoms: string[]; by: string; time: string; date: string; createdAt: number; };
 // Full raw `vaccinations/{mrn}` doc, kept alongside the derived `vaccineSchedule`
-// so the vaccination card and wound-log read-modify-write ops have real fields.
+// so the vaccination card has real fields to render.
 type PatientRecord = { [key: string]: any };
 
 type AppNotification = {
@@ -107,7 +86,7 @@ type AppNotification = {
   message: string;
   time: string;
   unread: boolean;
-  type: 'dose' | 'map' | 'wound' | 'system' | 'appointment' | 'followup';
+  type: 'dose' | 'system' | 'appointment' | 'followup';
   // Only clinic-sent follow-ups carry these: the Firestore doc id the
   // acknowledgement is recorded against, and whether it already happened.
   notificationId?: string;
@@ -151,8 +130,6 @@ function formatApptDate(ds?: string | null): string {
   return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
-const SYMPTOMS_LIST = ['Redness', 'Swelling', 'Discharge', 'Bleeding', 'Itching', 'Pain', 'Warmth', 'Fever', 'Numbness', 'Pus'];
-
 const DEFAULT_RECORD_DOSES = [
   { id: 'd1', label: '1st Dose (Day 0)', vaccineBrand: 'Speeda ARV (Lot #2026-08A)', dosage: '0.5 mL (IM)', date: '08/04/26', provider: 'K&A Main Clinic / RN S. Santos' },
   { id: 'd2', label: '2nd Dose (Day 3)', vaccineBrand: 'Speeda ARV (Lot #2026-08A)', dosage: '0.5 mL (IM)', date: '08/07/26', provider: 'K&A Main Clinic / RN S. Santos' },
@@ -172,16 +149,6 @@ const GUEST_PLACEHOLDER_DOSES = [
   { id: 'g4', label: '4th Dose (Day 14)',   done: false, blankRow: true },
   { id: 'g5', label: 'RIG (Immunoglobulin)', done: false, blankRow: true },
 ];
-
-async function uploadToCloudinary(localUri: string): Promise<string> {
-  const formData = new FormData();
-  formData.append('file', { uri: localUri, type: 'image/jpeg', name: `wound_${Date.now()}.jpg` } as any);
-  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-  const res = await fetch(CLOUDINARY_UPLOAD_URL, { method: 'POST', body: formData });
-  if (!res.ok) throw new Error(`Cloudinary error: ${await res.text()}`);
-  const data = await res.json();
-  return data.secure_url as string;
-}
 
 const NotifSwipeToDeleteRow = ({ children, onDelete }: { children: React.ReactNode; onDelete: () => void }) => {
   const translateX = useRef(new RNAnimated.Value(0)).current;
@@ -260,8 +227,6 @@ export default function RabiesRecoveryApp() {
 
   const [vaccineSchedule, setVaccineSchedule] = useState<VaccineDose[]>([]);
   const [patientRecord, setPatientRecord] = useState<PatientRecord | null>(null);
-  const [incidents, setIncidents] = useState<Incident[]>([]);
-  const [incidentsError, setIncidentsError] = useState('');
 
   // Notification State — derived from real data below (dose reminders, chat
   // replies); dismiss state persists to AsyncStorage per-patient so a cleared
@@ -372,19 +337,6 @@ export default function RabiesRecoveryApp() {
       mainScrollViewRef.current?.scrollTo({ y: 340, animated: true });
     }
   }, [tabParam]);
-  const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [logsError, setLogsError] = useState('');
-
-  const [showWoundModal, setShowWoundModal] = useState(false);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [description, setDescription] = useState('');
-  const [symptoms, setSymptoms] = useState<string[]>([]);
-  const [uploading, setUploading] = useState(false);
-
-  const [viewingLog, setViewingLog] = useState<LogEntry | null>(null);
-  const [editingLog, setEditingLog] = useState<LogEntry | null>(null);
-  const [editDesc, setEditDesc] = useState('');
-  const [editSymptoms, setEditSymptoms] = useState<string[]>([]);
 
   useEffect(() => {
     if (!authLoading && !user) router.replace('/auth/login');
@@ -452,63 +404,6 @@ export default function RabiesRecoveryApp() {
       console.error('Vaccination listener error:', err);
     });
   }, [mrn]);
-
-  useEffect(() => {
-    // Same top-level `incidents` collection ka-clinic-admin/src/incidents.jsx
-    // pins to the Admin Dashboard's Incident Map. Resolved incidents are kept
-    // (greyed, per the shared legend) so this map plots exactly what staff see
-    // on the dashboard. Older docs carry `lat`/`lng` instead of the newer
-    // `latitude`/`longitude`, so both spellings are accepted.
-    const q = query(collection(db, 'incidents'), orderBy('pinnedAt', 'desc'));
-    return onSnapshot(q, (snapshot) => {
-      setIncidentsError('');
-      setIncidents(
-        snapshot.docs
-          .map(d => {
-            const data = d.data() as any;
-            return {
-              ...data,
-              id: d.id,
-              latitude: data.latitude ?? data.lat,
-              longitude: data.longitude ?? data.lng,
-            } as Incident;
-          })
-          .filter(inc => typeof inc.latitude === 'number' && typeof inc.longitude === 'number')
-      );
-    }, (err) => {
-      console.error('Incidents listener error:', err);
-      setIncidentsError(err?.code === 'permission-denied'
-        ? 'Incident map is unavailable right now.'
-        : 'Could not load nearby incidents.');
-    });
-  }, []);
-
-  // Recovery Monitoring entries live in the SAME `vaccinations/{mrn}.woundLog`
-  // array the Admin Dashboard's Wound / Clinical Log reads/writes (see
-  // ka-clinic-admin/src/patients.jsx WoundLog component) — one shared log
-  // per patient instead of a separate app-only collection, so a nurse's
-  // clinical note and a patient's wound photo show up in the same place.
-  useEffect(() => {
-    if (!mrn) { setLogs([]); setLogsError(''); return; }
-    if (!patientRecord) { setLogs([]); return; }
-    const raw: any[] = Array.isArray(patientRecord.woundLog) ? patientRecord.woundLog : [];
-    const sorted = [...raw].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-    setLogsError('');
-    setLogs(sorted.map((entry, i) => {
-      const createdDate = new Date(entry.createdAt || Date.now());
-      return {
-        id: entry.id || `log${i}`,
-        type: entry.type || (entry.photoUrl ? 'wound' : 'note'),
-        note: entry.note || '',
-        photoUrl: entry.photoUrl || null,
-        symptoms: Array.isArray(entry.symptoms) ? entry.symptoms : [],
-        by: entry.by || 'Patient',
-        time: createdDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        date: entry.date || createdDate.toLocaleDateString([], { month: 'short', day: 'numeric' }),
-        createdAt: entry.createdAt || 0,
-      };
-    }));
-  }, [patientRecord, mrn]);
 
   // Clinic-sent follow-ups (manual "Send Follow-up" from the dashboard, and
   // the automatic due-dose sweep). Delivered as push when the app is closed;
@@ -623,16 +518,6 @@ export default function RabiesRecoveryApp() {
         type: 'system',
       });
     }
-    incidents.slice(0, 1).forEach(inc => {
-      list.push({
-        id: `incident-${inc.id}`,
-        title: 'Geospatial Rabies Advisory',
-        message: `${inc.type || 'Bite incident'}${inc.category ? ` (${inc.category})` : ''} reported near ${inc.location || 'your area'}.`,
-        time: '',
-        unread: false,
-        type: 'map',
-      });
-    });
     return list
       .filter(n => !dismissedNotifIds.includes(n.id))
       .map(n => ({ ...n, unread: n.unread && !readNotifIds.includes(n.id) }));
@@ -666,126 +551,6 @@ export default function RabiesRecoveryApp() {
     setDismissedNotifIds(next);
     AsyncStorage.setItem(dismissedNotifsKey, JSON.stringify(next)).catch(() => {});
   };
-
-  const handleMediaAction = async (useCamera: boolean) => {
-    const { status } = useCamera
-      ? await ImagePicker.requestCameraPermissionsAsync()
-      : await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') return Alert.alert('Permission Denied');
-    const result = useCamera
-      ? await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.7 })
-      : await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.7 });
-    if (!result.canceled) {
-      setSelectedImage(result.assets[0].uri);
-      setShowWoundModal(true);
-    }
-  };
-
-  const saveLog = async () => {
-    if (!mrn) { Alert.alert('No linked patient record', 'Recovery entries need a clinic MRN on your account.'); return; }
-    if (!selectedImage && !description.trim() && symptoms.length === 0) {
-      Alert.alert('Nothing to save', 'Add a photo, a note, or a symptom before saving.');
-      return;
-    }
-    setUploading(true);
-    let photoUrl: string | null = null;
-    if (selectedImage) {
-      try {
-        photoUrl = await uploadToCloudinary(selectedImage);
-      } catch (e) {
-        // Previously this only warned and saved the entry anyway, so a failed
-        // upload silently produced a photo entry with no photo — the clinic
-        // would see a note where the patient believed they had sent an image.
-        console.warn('Cloudinary upload failed:', e);
-        setUploading(false);
-        Alert.alert(
-          'Photo upload failed',
-          'Your photo could not be uploaded, so nothing was saved. Check your connection and try again.'
-        );
-        return;
-      }
-    }
-    try {
-      const composedNote = symptoms.length
-        ? `Symptoms: ${symptoms.join(', ')}.${description.trim() ? ' ' + description.trim() : ''}`
-        : description.trim();
-      const entry = {
-        id: Date.now().toString(),
-        type: selectedImage ? 'wound' : 'note',
-        note: composedNote,
-        photoUrl,
-        symptoms: [...symptoms],
-        by: 'Patient (App)',
-        date: formatDoseDate(new Date().toISOString().slice(0, 10)),
-        createdAt: Date.now(),
-      };
-      // Re-read the document rather than appending to the copy in local state.
-      // Staff add entries to the same array from the dashboard, so a stale
-      // local copy would drop whatever they added since this screen loaded —
-      // and the security rule rejects a shrinking woundLog outright.
-      const ref = doc(db, 'vaccinations', mrn);
-      const fresh = await getDoc(ref);
-      const existing: any[] = Array.isArray(fresh.data()?.woundLog) ? fresh.data()!.woundLog : [];
-      await updateDoc(ref, { woundLog: [...existing, entry] });
-      closeModal();
-    } catch (e: any) {
-      Alert.alert('Could not save entry', e?.code === 'permission-denied'
-        ? 'You do not have permission to save recovery entries.'
-        : (e?.message || 'Please try again.'));
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const closeModal = () => {
-    setShowWoundModal(false);
-    setSelectedImage(null);
-    setDescription('');
-    setSymptoms([]);
-  };
-
-  const toggleSymptom = (sym: string) =>
-    setSymptoms(prev => prev.includes(sym) ? prev.filter(s => s !== sym) : [...prev, sym]);
-
-  const deleteLog = (id: string) =>
-    Alert.alert('Delete Entry', 'Remove this log entry?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => {
-        if (!mrn) return;
-        try {
-          const existing: any[] = Array.isArray(patientRecord?.woundLog) ? patientRecord!.woundLog : [];
-          await updateDoc(doc(db, 'vaccinations', mrn), { woundLog: existing.filter(e => e.id !== id) });
-          setViewingLog(null);
-        } catch (e: any) {
-          Alert.alert('Could not delete entry', e?.message || 'Please try again.');
-        }
-      } },
-    ]);
-
-  const openEdit = (log: LogEntry) => {
-    setViewingLog(null);
-    setEditingLog(log);
-    setEditDesc(log.note);
-    setEditSymptoms([...log.symptoms]);
-  };
-
-  const saveEdit = async () => {
-    if (!editingLog || !mrn) return;
-    try {
-      const composedNote = editSymptoms.length
-        ? `Symptoms: ${editSymptoms.join(', ')}.${editDesc.trim() ? ' ' + editDesc.trim() : ''}`
-        : editDesc.trim();
-      const existing: any[] = Array.isArray(patientRecord?.woundLog) ? patientRecord!.woundLog : [];
-      const updated = existing.map(e => e.id === editingLog.id ? { ...e, note: composedNote, symptoms: [...editSymptoms] } : e);
-      await updateDoc(doc(db, 'vaccinations', mrn), { woundLog: updated });
-      setEditingLog(null);
-    } catch (e: any) {
-      Alert.alert('Could not save changes', e?.message || 'Please try again.');
-    }
-  };
-
-  const toggleEditSym = (sym: string) =>
-    setEditSymptoms(prev => prev.includes(sym) ? prev.filter(s => s !== sym) : [...prev, sym]);
 
   if (authLoading) return <View style={s.loader}><ActivityIndicator size="large" color={C.red} /></View>;
 
@@ -1035,10 +800,6 @@ export default function RabiesRecoveryApp() {
                       </View>
                     </View>
                     <View style={s.cdcFieldsRow}>
-                      <View style={[s.cdcFieldBox, { flex: 2 }]}>
-                        <Text style={s.cdcFieldLabel}>Location / Place of Exposure</Text>
-                        <Text style={s.cdcFieldValue}>{blank(pr.placeOfExposure || pr.address, 'San Juan')}</Text>
-                      </View>
                       <View style={[s.cdcFieldBox, { flex: 1 }]}>
                         <Text style={s.cdcFieldLabel}>Exposure Category</Text>
                         <Text style={[s.cdcFieldValue, { color: MEDICAL_RED }]}>{blank(pr.category, 'Category II')}</Text>
@@ -1089,206 +850,6 @@ export default function RabiesRecoveryApp() {
                   <Ionicons name="expand-outline" size={13} color="#FFFFFF" />
                   <Text style={s.enlargeCardBtnTxt}>Enlarge Card</Text>
                 </TouchableOpacity>
-              </View>
-
-              {/* ── RECOVERY MONITORING ── */}
-              <View style={s.section}>
-                <View style={s.sectionHeader}>
-                  <View style={s.sectionAccent} />
-                  <Text style={s.sectionTitle}>Recovery Monitoring</Text>
-                </View>
-
-                {/* One Single Unified Action Card Container */}
-                <View style={s.unifiedActionCard}>
-                  {/* Take Photo */}
-                  <TouchableOpacity 
-                    style={s.unifiedActionItem} 
-                    onPress={() => handleMediaAction(true)} 
-                    activeOpacity={0.85}
-                  >
-                    <View style={s.hubIconBoxCameraSolid}>
-                      <Ionicons name="camera" size={20} color="#FFFFFF" />
-                    </View>
-                    <Text style={s.hubTitleCol} numberOfLines={1}>Take Photo</Text>
-                    <Text style={s.hubDescCol} numberOfLines={1}>Camera</Text>
-                  </TouchableOpacity>
-
-                  {/* Vertical Divider */}
-                  <View style={s.unifiedCardDivider} />
-
-                  {/* Upload Photo */}
-                  <TouchableOpacity 
-                    style={s.unifiedActionItem} 
-                    onPress={() => handleMediaAction(false)} 
-                    activeOpacity={0.85}
-                  >
-                    <View style={s.hubIconBoxGallerySolid}>
-                      <Ionicons name="image" size={20} color="#FFFFFF" />
-                    </View>
-                    <Text style={s.hubTitleCol} numberOfLines={1}>Upload Photo</Text>
-                    <Text style={s.hubDescCol} numberOfLines={1}>Gallery</Text>
-                  </TouchableOpacity>
-
-                  {/* Vertical Divider */}
-                  <View style={s.unifiedCardDivider} />
-
-                  {/* Add Recovery Note */}
-                  <TouchableOpacity 
-                    style={s.unifiedActionItem} 
-                    onPress={() => { setSelectedImage(null); setShowWoundModal(true); }} 
-                    activeOpacity={0.85}
-                  >
-                    <View style={s.hubIconBoxNoteSolid}>
-                      <Ionicons name="document-text" size={20} color="#FFFFFF" />
-                    </View>
-                    <Text style={s.hubTitleCol} numberOfLines={1}>Add Note</Text>
-                    <Text style={s.hubDescCol} numberOfLines={1}>Log progress</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* ── RECOVERY TIMELINE ── */}
-              <View style={s.section}>
-                <View style={s.sectionHeader}>
-                  <View style={s.sectionAccent} />
-                  <Text style={s.sectionTitle}>Recovery Timeline</Text>
-
-                  {logs.length > 0 && (
-                    <TouchableOpacity 
-                      style={s.seeAllLinkBtn} 
-                      onPress={() => router.push('/recovery-timeline')}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={s.seeAllLinkText}>See All</Text>
-                      <Ionicons name="chevron-forward" size={14} color="#E31837" />
-                    </TouchableOpacity>
-                  )}
-                </View>
-
-                {logsError ? (
-                  <View style={s.emptyState}>
-                    <Ionicons name="alert-circle-outline" size={28} color={C.red} />
-                    <Text style={s.emptyTitle}>{logsError}</Text>
-                  </View>
-                ) : logs.length === 0 ? (
-                  <View style={s.emptyState}>
-                    <PawIllustration />
-                    <Text style={s.emptyTitle}>No Entries Yet</Text>
-                    <Text style={s.emptySubText}>Tap above to log your first wound photo or note!</Text>
-                  </View>
-                ) : (
-                  <View style={s.timelineContainerSimple}>
-                    {/* Display maximum of 4 most recent entries on Home dashboard */}
-                    {logs.slice(0, 4).map((log, idx) => (
-                      <TouchableOpacity
-                        key={log.id}
-                        style={[s.timelineRowSimple, idx === Math.min(logs.length, 4) - 1 && s.timelineRowSimpleLast]}
-                        onPress={() => setViewingLog(log)}
-                        activeOpacity={0.6}
-                      >
-                        {/* Icon badge */}
-                        <View style={s.timelineRowIconBox}>
-                          <Ionicons
-                            name={log.type === 'wound' ? 'camera-outline' : 'document-text-outline'}
-                            size={scale(24)}
-                            color={C.slate}
-                          />
-                        </View>
-
-                        {/* Date/Time as Title + note preview */}
-                        <View style={{ flex: 1 }}>
-                          <Text style={s.timelineRowTitle} numberOfLines={1}>
-                            {log.date} · {log.time}
-                          </Text>
-                          {log.note ? (
-                            <Text style={s.timelineRowSnippet} numberOfLines={1}>{log.note}</Text>
-                          ) : log.photoUrl ? (
-                            <Text style={s.timelineRowSnippetPhoto}>Wound photo attached</Text>
-                          ) : (
-                            <Text style={s.timelineRowSnippetEmpty}>No additional text</Text>
-                          )}
-                        </View>
-
-                        <Ionicons name="chevron-forward" size={scale(22)} color="#C4CDD8" />
-                      </TouchableOpacity>
-                    ))}
-
-                  </View>
-                )}
-
-                {/* View All Button when > 4 entries — sits below the card, not inside it */}
-                {logs.length > 4 && (
-                  <TouchableOpacity
-                    style={s.seeAllFooterBtn}
-                    onPress={() => router.push('/recovery-timeline')}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={s.seeAllFooterText}>View All {logs.length} Log Entries</Text>
-                    <Ionicons name="chevron-forward" size={14} color="#E31837" />
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {/* ── INCIDENT MAP ── */}
-              <View style={s.section}>
-                <View style={s.sectionHeader}>
-                  <View style={s.sectionAccent} />
-                  <Text style={s.sectionTitle}>Incident Map</Text>
-                </View>
-
-                {incidentsError ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6), paddingHorizontal: scale(20), marginBottom: verticalScale(10) }}>
-                    <Ionicons name="alert-circle-outline" size={14} color={C.red} />
-                    <Text style={{ color: C.red, fontSize: moderateScale(12) }}>{incidentsError}</Text>
-                  </View>
-                ) : null}
-
-                <View style={s.elevatedMapFrame}>
-                  <MapViewContainer
-                    view={LIBON_MAP_VIEW}
-                    markers={incidents.map(inc => ({
-                      id: inc.id,
-                      latitude: inc.latitude,
-                      longitude: inc.longitude,
-                      title: inc.location || 'Libon, Albay',
-                      category: inc.category,
-                      status: inc.status || 'active',
-                      date: inc.date,
-                    }))}
-                  />
-                </View>
-
-                {/* Case list — same `incidents` collection/dataset as the map
-                    above, mirroring the Admin Dashboard's incident sidebar. */}
-                {incidents.length === 0 ? (
-                  <View style={s.emptyState}>
-                    <Ionicons name="shield-checkmark-outline" size={28} color="#94A3B8" />
-                    <Text style={s.emptyTitle}>No Reported Cases</Text>
-                    <Text style={s.emptySubText}>Bite incidents reported in your area will appear here.</Text>
-                  </View>
-                ) : (
-                  <View style={s.timelineContainerSimple}>
-                    {incidents.map((inc, idx) => {
-                      const sev = getSeverityStyle(inc.category, inc.status);
-                      return (
-                        <View
-                          key={inc.id}
-                          style={[s.caseRow, idx === incidents.length - 1 && s.timelineRowSimpleLast]}
-                        >
-                          <View style={[s.caseStatusDot, { backgroundColor: sev.dotColor }]} />
-                          <View style={{ flex: 1 }}>
-                            <Text style={s.timelineRowTitle} numberOfLines={1}>
-                              {inc.location || inc.barangay || 'Libon, Albay'}
-                            </Text>
-                            <Text style={s.timelineRowSnippet} numberOfLines={1}>
-                              {(inc.category || inc.type || 'Bite incident')}{inc.date ? ` · ${inc.date}` : ''}
-                            </Text>
-                          </View>
-                        </View>
-                      );
-                    })}
-                  </View>
-                )}
               </View>
           </>
         </View>
@@ -1459,7 +1020,7 @@ export default function RabiesRecoveryApp() {
                     >
                       <View style={[s.notifIconBox, n.type === 'dose' ? { backgroundColor: '#EFF6FF' } : n.type === 'appointment' ? { backgroundColor: '#ECFDF5' } : n.type === 'followup' ? { backgroundColor: '#FEF2F2' } : { backgroundColor: '#F8FAFC' }]}>
                         <Ionicons
-                          name={n.type === 'dose' ? 'calendar' : n.type === 'map' ? 'alert-circle' : n.type === 'appointment' ? 'checkmark-circle' : n.type === 'followup' ? 'notifications' : 'medkit'}
+                          name={n.type === 'dose' ? 'calendar' : n.type === 'appointment' ? 'checkmark-circle' : n.type === 'followup' ? 'notifications' : 'medkit'}
                           size={18}
                           color={n.type === 'dose' ? '#2563EB' : n.type === 'appointment' ? '#059669' : n.type === 'followup' ? MEDICAL_RED : '#64748B'}
                         />
@@ -1510,181 +1071,6 @@ export default function RabiesRecoveryApp() {
         </View>
       </Modal>
 
-      {/* ── VIEW LOG MODAL ── */}
-      <Modal visible={!!viewingLog} animationType="fade" transparent>
-        <View style={s.centeredOverlay}>
-          <View style={[s.centeredSheet, { padding: 0, maxHeight: '90%', overflow: 'hidden' }]}>
-            {/* Dark Navy / Blue Header */}
-            <LinearGradient
-              colors={['#0F172A', '#1E293B']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={s.modalBlueHeader}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={s.modalBlueHeaderTitle}>{viewingLog?.date} · {viewingLog?.time}</Text>
-                <Text style={s.modalBlueHeaderSub}>
-                  {viewingLog?.type === 'wound' ? 'Wound Photo Update' : 'Recovery Note'}
-                </Text>
-              </View>
-              <TouchableOpacity onPress={() => setViewingLog(null)} style={s.modalBlueCloseBtn} activeOpacity={0.8}>
-                <Ionicons name="close" size={18} color="#FFFFFF" />
-              </TouchableOpacity>
-            </LinearGradient>
-
-            <View style={{ padding: scale(20) }}>
-              {/* Matches the recovery-timeline popup: the sheet's own maxHeight
-                  bounds the overall popup, so this cap only needs to scroll long
-                  notes rather than compete with the square photo for space.
-                  resizeMode="contain" keeps the whole photo visible — "cover"
-                  was cropping it. */}
-              <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: verticalScale(560) }}>
-                {viewingLog?.photoUrl && (
-                  <Image source={{ uri: viewingLog.photoUrl }} style={s.detailImageLarge} resizeMode="contain" />
-                )}
-
-                {viewingLog?.note ? (
-                  <Text style={s.detailNoteText}>{viewingLog.note}</Text>
-                ) : null}
-
-                {(viewingLog?.symptoms?.length ?? 0) > 0 && (
-                  <View style={s.symptomsWrap}>
-                    <Text style={s.symptomsTitle}>Symptoms Logged</Text>
-                    <View style={s.chipsRow}>
-                      {viewingLog!.symptoms.map(sym => (
-                        <View key={sym} style={s.symptomChip}>
-                          <Text style={s.symptomChipText}>{sym}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                )}
-              </ScrollView>
-
-              <View style={s.modalFooterRow}>
-                <TouchableOpacity
-                  style={s.modalDeleteBtn}
-                  onPress={() => viewingLog && deleteLog(viewingLog.id)}
-                >
-                  <Ionicons name="trash-outline" size={16} color="#64748B" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={s.modalEditBtn}
-                  onPress={() => viewingLog && openEdit(viewingLog)}
-                >
-                  <Ionicons name="create-outline" size={15} color="#334155" />
-                  <Text style={s.modalEditText}>Edit</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ── EDIT LOG MODAL ── */}
-      <Modal visible={!!editingLog} animationType="fade" transparent>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-            <View style={s.centeredOverlay}>
-              <TouchableWithoutFeedback onPress={() => {}}>
-                <View style={[s.centeredSheet, { padding: 0 }]}>
-                  {/* Dark Navy / Blue Header */}
-                  <LinearGradient
-                    colors={['#0F172A', '#1E293B']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={s.modalBlueHeader}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={s.modalBlueHeaderTitle}>Edit Log Entry</Text>
-                      <Text style={s.modalBlueHeaderSub}>Update symptoms or details</Text>
-                    </View>
-                    <TouchableOpacity onPress={() => setEditingLog(null)} style={s.modalBlueCloseBtn} activeOpacity={0.8}>
-                      <Ionicons name="close" size={18} color="#FFFFFF" />
-                    </TouchableOpacity>
-                  </LinearGradient>
-
-                  <View style={{ padding: scale(20) }}>
-                    {editingLog?.photoUrl && <Image source={{ uri: editingLog.photoUrl }} style={s.popupImage} />}
-                    <Text style={s.fieldLabel}>Symptoms</Text>
-                    <View style={s.chipGroup}>
-                      {SYMPTOMS_LIST.map(sym => (
-                        <TouchableOpacity key={sym} style={[s.chip, editSymptoms.includes(sym) && s.chipActive]} onPress={() => toggleEditSym(sym)}>
-                          <Text style={[s.chipText, editSymptoms.includes(sym) && s.chipTextActive]}>{sym}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                    <Text style={[s.fieldLabel, { marginTop: 8 }]}>Details</Text>
-                    <TextInput style={s.textArea} placeholder="Add details..." multiline value={editDesc} onChangeText={setEditDesc} />
-                    <View style={s.modalActions}>
-                      <TouchableOpacity style={s.cancelBtn} onPress={() => setEditingLog(null)}>
-                        <Text style={s.cancelBtnText}>Cancel</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={s.saveBtn} onPress={saveEdit}>
-                        <Text style={s.saveBtnText}>Save Changes</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </View>
-              </TouchableWithoutFeedback>
-            </View>
-          </TouchableWithoutFeedback>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* ── NEW LOG MODAL ── */}
-      <Modal visible={showWoundModal} animationType="fade" transparent>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-            <View style={s.centeredOverlay}>
-              <TouchableWithoutFeedback onPress={() => {}}>
-                <View style={[s.centeredSheet, { padding: 0 }]}>
-                  {/* Dark Navy / Blue Header */}
-                  <LinearGradient
-                    colors={['#0F172A', '#1E293B']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={s.modalBlueHeader}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={s.modalBlueHeaderTitle}>New Log Entry</Text>
-                      <Text style={s.modalBlueHeaderSub}>Record symptoms or wound updates</Text>
-                    </View>
-                    <TouchableOpacity onPress={closeModal} style={s.modalBlueCloseBtn} activeOpacity={0.8}>
-                      <Ionicons name="close" size={18} color="#FFFFFF" />
-                    </TouchableOpacity>
-                  </LinearGradient>
-
-                  <View style={{ padding: scale(20) }}>
-                    {selectedImage && <Image source={{ uri: selectedImage }} style={s.popupImage} />}
-                    <Text style={s.fieldLabel}>Symptoms</Text>
-                    <View style={s.chipGroup}>
-                      {SYMPTOMS_LIST.map(sym => (
-                        <TouchableOpacity key={sym} style={[s.chip, symptoms.includes(sym) && s.chipActive]} onPress={() => toggleSymptom(sym)}>
-                          <Text style={[s.chipText, symptoms.includes(sym) && s.chipTextActive]}>{sym}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                    <Text style={[s.fieldLabel, { marginTop: 8 }]}>Details</Text>
-                    <TextInput style={s.textArea} placeholder="Add details..." multiline value={description} onChangeText={setDescription} />
-                    <View style={s.modalActions}>
-                      <TouchableOpacity style={s.cancelBtn} onPress={closeModal}>
-                        <Text style={s.cancelBtnText}>Cancel</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={[s.saveBtn, uploading && { opacity: 0.6 }]} onPress={saveLog} disabled={uploading}>
-                        {uploading
-                          ? <ActivityIndicator color="#FFF" size="small" />
-                          : <Text style={s.saveBtnText}>Save Entry</Text>}
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </View>
-              </TouchableWithoutFeedback>
-            </View>
-          </TouchableWithoutFeedback>
-        </KeyboardAvoidingView>
-      </Modal>
-
       {/* ── ENLARGE CARD POPUP MODAL (Matching Reference UI) ── */}
       <Modal visible={showEnlargeModal} animationType="slide" transparent statusBarTranslucent>
         <View style={s.enlargeModalOverlay}>
@@ -1726,10 +1112,6 @@ export default function RabiesRecoveryApp() {
                         </View>
                       </View>
                       <View style={s.cdcFieldsRowPopup}>
-                        <View style={[s.cdcFieldBox, { flex: 2 }]}>
-                          <Text style={s.cdcFieldLabelPopup}>Location / Place of Exposure</Text>
-                          <Text style={s.cdcFieldValuePopup}>{blank(pr.placeOfExposure || pr.address, 'San Juan')}</Text>
-                        </View>
                         <View style={[s.cdcFieldBox, { flex: 1 }]}>
                           <Text style={s.cdcFieldLabelPopup}>Exposure Category</Text>
                           <Text style={[s.cdcFieldValuePopup, { color: MEDICAL_RED }]}>{blank(pr.category, 'Category II')}</Text>
@@ -1951,18 +1333,6 @@ export default function RabiesRecoveryApp() {
     </View>
   );
 }
-
-function PawIllustration() {
-  return (
-    <View style={styles.pawWrap}>
-      <Ionicons name="paw" size={40} color={C.muted} />
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  pawWrap: { marginBottom: verticalScale(8), alignItems: 'center' },
-});
 
 const nav = StyleSheet.create({
   bar: {
@@ -2530,160 +1900,17 @@ const s = StyleSheet.create({
     fontWeight: '600',
   },
 
-  section: { marginTop: verticalScale(24) },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: verticalScale(14), gap: scale(8) },
-  sectionAccent: { width: scale(4), height: verticalScale(18), borderRadius: scale(2), backgroundColor: MEDICAL_RED },
-  sectionTitle: { fontSize: moderateScale(18), fontWeight: '900', color: C.charcoal, flex: 1 },
   countBadge: { backgroundColor: C.softRed, borderRadius: scale(10), paddingHorizontal: scale(8), paddingVertical: verticalScale(2) },
   countText: { fontSize: moderateScale(11), fontWeight: '800', color: MEDICAL_RED },
 
-  unifiedActionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: scale(20),
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    paddingVertical: verticalScale(16),
-    paddingHorizontal: scale(8),
-    shadowColor: '#0F172A',
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
-  },
-  unifiedActionItem: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: scale(4),
-  },
-  unifiedCardDivider: {
-    width: scale(1),
-    height: verticalScale(48),
-    backgroundColor: '#F1F5F9',
-  },
 
-  hubIconBoxCameraSolid: {
-    width: scale(40),
-    height: verticalScale(40),
-    borderRadius: scale(14),
-    backgroundColor: '#E31837',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: verticalScale(8),
-    shadowColor: '#E31837',
-    shadowOpacity: 0.22,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
-  },
-  hubIconBoxGallerySolid: {
-    width: scale(40),
-    height: verticalScale(40),
-    borderRadius: scale(14),
-    backgroundColor: '#0284C7',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: verticalScale(8),
-    shadowColor: '#0284C7',
-    shadowOpacity: 0.22,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
-  },
-  hubIconBoxNoteSolid: {
-    width: scale(40),
-    height: verticalScale(40),
-    borderRadius: scale(14),
-    backgroundColor: '#7C3AED',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: verticalScale(8),
-    shadowColor: '#7C3AED',
-    shadowOpacity: 0.22,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
-  },
-  hubTitleCol: { fontSize: moderateScale(12.5), fontWeight: '800', color: '#0F172A', textAlign: 'center', letterSpacing: -0.2 },
-  hubDescCol:  { fontSize: moderateScale(10.5), fontWeight: '600', color: '#475569', textAlign: 'center', marginTop: verticalScale(2) },
 
-  emptyState: { alignItems: 'center', padding: scale(24), backgroundColor: '#FFF', borderRadius: scale(20), borderWidth: 1, borderColor: C.border },
-  emptyTitle: { fontSize: moderateScale(15), fontWeight: '800', color: C.charcoal },
-  emptySubText: { fontSize: moderateScale(12), color: C.muted, textAlign: 'center', marginTop: verticalScale(4) },
 
-  timelineContainerSimple: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: scale(16),
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    overflow: 'hidden',
-  },
-  timelineRowSimple: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: scale(16),
-    paddingVertical: verticalScale(16),
-    gap: scale(14),
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E2E8F0',
-  },
-  timelineRowSimpleLast: { borderBottomWidth: 0 },
-  timelineRowIconBox: {
-    // Square — scale() on both axes so the box doesn't render oval.
-    width: scale(44),
-    height: scale(44),
-    borderRadius: scale(12),
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    backgroundColor: SOFT_GRAY_BG,
-    borderColor: C.border,
-  },
-  timelineRowTitle: {
-    fontSize: moderateScale(15.5),
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  timelineRowSnippet: { fontSize: moderateScale(13.5), color: '#64748B', marginTop: verticalScale(3), fontWeight: '500' },
-  timelineRowSnippetPhoto: { fontSize: moderateScale(13.5), color: '#E31837', marginTop: verticalScale(3), fontWeight: '600' },
-  timelineRowSnippetEmpty: { fontSize: moderateScale(13.5), color: '#94A3B8', marginTop: verticalScale(3), fontWeight: '500', fontStyle: 'italic' },
   timelineRowDateTime: {
     fontSize: moderateScale(11.5),
     fontWeight: '500',
     color: '#64748B',
     marginTop: verticalScale(2),
-  },
-  seeAllLinkBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: scale(3),
-    marginLeft: 'auto',
-    paddingVertical: verticalScale(4),
-    paddingHorizontal: scale(8),
-  },
-  seeAllLinkText: {
-    fontSize: moderateScale(12.5),
-    fontWeight: '700',
-    color: '#E31837',
-  },
-  seeAllFooterBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: scale(6),
-    backgroundColor: '#FFF1F3',
-    borderWidth: 1,
-    borderColor: '#FECDD3',
-    paddingVertical: verticalScale(11),
-    borderRadius: scale(14),
-    marginTop: verticalScale(10),
-  },
-  seeAllFooterText: {
-    fontSize: moderateScale(12.5),
-    fontWeight: '800',
-    color: '#E31837',
   },
 
   timelineContainer: { gap: scale(12) },
@@ -2706,17 +1933,6 @@ const s = StyleSheet.create({
   logActionDanger: { backgroundColor: '#FFF1F3', borderColor: '#FECDD3' },
 
   // Taller map frame (380px) so satellite view and incident pins are spacious and readable.
-  elevatedMapFrame: { height: verticalScale(380), borderRadius: scale(22), overflow: 'hidden', elevation: 4, marginBottom: verticalScale(14) },
-  caseRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: scale(14),
-    paddingVertical: verticalScale(12),
-    gap: scale(12),
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E2E8F0',
-  },
-  caseStatusDot: { width: scale(8), height: verticalScale(8), borderRadius: scale(4) },
   caseStatusDotActive: { backgroundColor: '#E31837' },
   caseStatusDotResolved: { backgroundColor: '#94A3B8' },
   caseStatusPill: { paddingHorizontal: scale(9), paddingVertical: verticalScale(4), borderRadius: scale(20), borderWidth: 1 },
@@ -2728,25 +1944,11 @@ const s = StyleSheet.create({
 
   // MODAL OVERLAY & SHEETS
   centeredOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: scale(20) },
-  centeredSheet: { width: '100%', backgroundColor: '#FFF', borderRadius: scale(28), padding: scale(22), elevation: 10 },
   popupHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(16) },
   popupTitle: { fontSize: moderateScale(19), fontWeight: '900', color: C.charcoal, letterSpacing: -0.3 },
   popupTitleIconBox: { width: scale(30), height: verticalScale(30), borderRadius: scale(10), backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0', justifyContent: 'center', alignItems: 'center' },
   closeBtn: { width: scale(30), height: verticalScale(30), borderRadius: scale(15), backgroundColor: SOFT_GRAY_BG, justifyContent: 'center', alignItems: 'center' },
-  popupImage: { width: '100%', height: verticalScale(185), borderRadius: scale(16), marginBottom: verticalScale(14) },
-  fieldLabel: { fontSize: moderateScale(11.5), fontWeight: '800', color: C.slate, textTransform: 'uppercase', letterSpacing: 0.5 },
   fieldValue: { fontSize: moderateScale(11.5), fontWeight: '600', color: C.charcoal, marginTop: verticalScale(3) },
-  chipGroup: { flexDirection: 'row', flexWrap: 'wrap', gap: scale(8), marginTop: verticalScale(8) },
-  chip: { paddingHorizontal: scale(11), paddingVertical: verticalScale(6), borderRadius: scale(10), backgroundColor: SOFT_GRAY_BG, borderWidth: 1, borderColor: C.border },
-  chipActive: { backgroundColor: '#F1F5F9', borderColor: '#334155' },
-  chipText: { fontSize: moderateScale(11.5), color: C.slate, fontWeight: '700' },
-  chipTextActive: { fontSize: moderateScale(11.5), color: '#0F172A', fontWeight: '800' },
-  textArea: { backgroundColor: SOFT_GRAY_BG, borderRadius: scale(14), padding: scale(12), height: verticalScale(86), fontSize: moderateScale(11.5), color: C.charcoal, borderWidth: 1, borderColor: C.border, marginTop: verticalScale(8), lineHeight: moderateScale(17) },
-  modalActions: { flexDirection: 'row', gap: scale(8), marginTop: verticalScale(18) },
-  cancelBtn: { flex: 1, height: verticalScale(38), borderRadius: scale(12), backgroundColor: SOFT_GRAY_BG, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: C.border },
-  cancelBtnText: { fontSize: moderateScale(12.5), fontWeight: '800', color: C.slate },
-  saveBtn: { flex: 1, height: verticalScale(38), borderRadius: scale(12), backgroundColor: MEDICAL_RED, justifyContent: 'center', alignItems: 'center' },
-  saveBtnText: { fontSize: moderateScale(12.5), fontWeight: '800', color: '#FFF' },
 
   // PROGRESS BANNER MODAL
   // Sheet has no padding of its own so the gradient hero can bleed edge-to-edge;
@@ -3240,74 +2442,10 @@ const s = StyleSheet.create({
   clearNotifText: { fontSize: moderateScale(12.5), fontWeight: '700', color: C.muted },
   closeNotifBtn: { paddingHorizontal: scale(16), paddingVertical: verticalScale(8), backgroundColor: SOFT_GRAY_BG, borderRadius: scale(10) },
   closeNotifBtnText: { fontSize: moderateScale(13), fontWeight: '700', color: C.slate },
-  modalBlueHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: scale(16),
-    paddingVertical: verticalScale(11),
-    borderTopLeftRadius: scale(28),
-    borderTopRightRadius: scale(28),
-    gap: scale(12),
-  },
-  modalBlueHeaderTitle: {
-    fontSize: moderateScale(14),
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: -0.3,
-  },
-  modalBlueHeaderSub: {
-    fontSize: moderateScale(10.5),
-    color: '#94A3B8',
-    marginTop: verticalScale(1),
-    fontWeight: '500',
-  },
-  modalBlueCloseBtn: {
-    // Square — scale() on both axes so the circle doesn't render oval.
-    width: scale(28),
-    height: scale(28),
-    borderRadius: scale(14),
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: verticalScale(14) },
   modalDateTitle: { fontSize: moderateScale(19), fontWeight: '800', color: '#0F172A' },
   modalTypeSub: { fontSize: moderateScale(12), color: '#64748B', marginTop: verticalScale(2), fontWeight: '500' },
   modalCloseBtn: { width: scale(30), height: verticalScale(30), borderRadius: scale(15), backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
-  detailImageLarge: { width: '100%', aspectRatio: 1, borderRadius: scale(14), marginBottom: verticalScale(12), backgroundColor: '#F1F5F9' },
-  detailNoteText: { fontSize: moderateScale(14), color: '#0F172A', lineHeight: moderateScale(20), marginBottom: verticalScale(12) },
-  symptomsWrap: { marginBottom: verticalScale(12) },
-  symptomsTitle: { fontSize: moderateScale(11.5), fontWeight: '700', color: '#64748B', marginBottom: verticalScale(6) },
-  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: scale(6) },
-  symptomChip: { backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0', paddingHorizontal: scale(8), paddingVertical: verticalScale(4), borderRadius: scale(6) },
-  symptomChipText: { fontSize: moderateScale(10.5), fontWeight: '700', color: '#334155' },
-  modalFooterRow: { flexDirection: 'row', gap: scale(8), marginTop: verticalScale(10) },
-  modalDeleteBtn: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: scale(38),
-    height: verticalScale(38),
-    borderRadius: scale(10),
-    backgroundColor: '#F1F5F9',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  modalEditBtn: {
-    // Takes the width the removed Close button used to occupy.
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: scale(5),
-    height: verticalScale(38),
-    paddingHorizontal: scale(14),
-    borderRadius: scale(10),
-    backgroundColor: '#F1F5F9',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  modalEditText: { fontSize: moderateScale(12), fontWeight: '700', color: '#334155' },
 
   // CDC OFFICIAL CARD STYLES
   recordsHeaderTitle: {

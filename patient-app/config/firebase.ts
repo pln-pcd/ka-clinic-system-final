@@ -42,8 +42,8 @@ export const signOut = _signOut;
 export const updateProfile = _updateProfile;
 
 // "Continue as Guest" now creates a real anonymous Firebase Auth session —
-// request.auth is non-null so Firestore rules that require auth (incidents,
-// chatThreads, etc.) still evaluate correctly. Guests simply have no
+// request.auth is non-null so Firestore rules that require auth (chatThreads,
+// appointments, etc.) still evaluate correctly. Guests simply have no
 // authorizedPatients/vaccinations record, so patient-specific data stays empty.
 export const signInAsGuest = () => signInAnonymously(auth);
 
