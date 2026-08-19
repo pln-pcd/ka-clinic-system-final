@@ -2360,7 +2360,18 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
     return `${p.service || 'Vaccination'} treatment`;
   }
 
-  function medicalRecordBodyHtml(p) {
+  // `audience` decides whether wound location/depth appear. The same generators
+  // back three different deliverables — the admin's own PDF download, the
+  // admin's print view, and the PDF emailed to the patient — so the audience
+  // has to be an argument rather than a blanket edit:
+  //   'clinic'  — staff-held clinical record. Full detail, wound site included.
+  //   'patient' — copy the patient receives. Wound location/depth omitted, per
+  //               the same rule applied to the patient app's vaccination card
+  //               and Medical Records screen. Exposure Category stays.
+  const PATIENT_HIDDEN_NOTE = 'Wound assessment details are held in your clinical file at K&A Clinic.';
+
+  function medicalRecordBodyHtml(p, audience = 'clinic') {
+    const showWoundDetail = audience !== 'patient';
     const doses = p.doses || [];
     const doseRows = doses.map(d => `
       <tr>
@@ -2399,12 +2410,15 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
         <div style="background:#fff5f5;border:1px solid #ffd6d7;border-radius:6px;padding:12px 14px;margin-bottom:20px;">
           <div style="font-weight:bold;text-transform:uppercase;font-size:11px;color:#b91c1c;margin-bottom:8px;border-bottom:1px solid #eee;padding-bottom:4px;">Clinical History &amp; Details</div>
           ${p.service === 'PEP' ? `
-            <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:#666;font-size:11px;">Wound Location</span><span style="font-weight:bold;">${p.woundLocation || '—'}</span></div>
-            <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:#666;font-size:11px;">Wound Depth</span><span style="font-weight:bold;">${p.woundDepth || '—'}</span></div>
+            ${showWoundDetail ? `
+              <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:#666;font-size:11px;">Wound Location</span><span style="font-weight:bold;">${p.woundLocation || '—'}</span></div>
+              <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:#666;font-size:11px;">Wound Depth</span><span style="font-weight:bold;">${p.woundDepth || '—'}</span></div>
+            ` : ''}
             <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:#666;font-size:11px;">No. of Bites</span><span style="font-weight:bold;">${p.numberOfBites || '—'}</span></div>
           ` : ''}
           <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:#666;font-size:11px;">Past Vaccines</span><span style="font-weight:bold;">${p.pastVaccines || '—'}</span></div>
           <div style="display:flex;justify-content:space-between;"><span style="color:#666;font-size:11px;">Allergies</span><span style="font-weight:bold;">${p.allergies || '—'}</span></div>
+          ${!showWoundDetail && p.service === 'PEP' ? `<div style="margin-top:8px;color:#888;font-size:10px;font-style:italic;">${PATIENT_HIDDEN_NOTE}</div>` : ''}
         </div>
         <div>
           <div style="font-weight:bold;font-size:12px;margin-bottom:6px;text-transform:uppercase;color:#444;">Treatment Timeline</div>
@@ -2458,9 +2472,9 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
       </div>`;
   }
 
-  function buildDocumentHtml(p, type) {
+  function buildDocumentHtml(p, type, audience = 'clinic') {
     const sections = [];
-    if (type !== 'certificate') sections.push(`<div style="padding:30px 30px 10px;">${medicalRecordBodyHtml(p)}</div>`);
+    if (type !== 'certificate') sections.push(`<div style="padding:30px 30px 10px;">${medicalRecordBodyHtml(p, audience)}</div>`);
     if (type !== 'record') sections.push(`<div style="padding:${type === 'both' ? '0' : '30px'} 30px 30px;${type === 'both' ? 'page-break-before:always;' : ''}">${certificateBodyHtml(p)}</div>`);
     const titleMap = { record: 'Medical Record', certificate: 'Medical Certificate', both: 'Medical Record & Certificate' };
     return `<!DOCTYPE html><html><head><title>${titleMap[type]} — ${formatTitleCase(p.name)}</title>
@@ -2468,7 +2482,8 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
     </head><body>${sections.join('')}</body></html>`;
   }
 
-  function drawMedicalRecordPdf(doc, p) {
+  function drawMedicalRecordPdf(doc, p, audience = 'clinic') {
+    const showWoundDetail = audience !== 'patient';
     const pageWidth = doc.internal.pageSize.getWidth();
     const doses = buildDoses(p);
     const registered = p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString('en-PH') : (p.date || '—');
@@ -2514,10 +2529,13 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
       ? [
           ['Biting Animal', p.animal || '—'],
           ['Exposure Category', `Category ${p.cat || '—'}`],
-          ['Wound Location / Depth', `${p.woundLocation || '—'} (${p.woundDepth || '—'})`],
+          ...(showWoundDetail
+            ? [['Wound Location / Depth', `${p.woundLocation || '—'} (${p.woundDepth || '—'})`]]
+            : []),
           ['No. of Bites', p.numberOfBites || '—'],
           ['Past Vaccines', p.pastVaccines || '—'],
           ['Allergies', p.allergies || '—'],
+          ...(showWoundDetail ? [] : [['Wound Assessment', PATIENT_HIDDEN_NOTE]]),
         ]
       : [
           ['Past Vaccines', p.pastVaccines || '—'],
@@ -2633,10 +2651,10 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
     doc.text(`K&A Anti-Rabies Vaccine Clinic · Issued: ${issuedDate} · Patient ID: ${p.id || p.mrn || '—'}`, pageWidth / 2, doc.internal.pageSize.getHeight() - 12, { align: 'center' });
   }
 
-  function buildDocumentPdf(p, type) {
+  function buildDocumentPdf(p, type, audience = 'clinic') {
     const doc = new jsPDF();
     let started = false;
-    if (type !== 'certificate') { drawMedicalRecordPdf(doc, p); started = true; }
+    if (type !== 'certificate') { drawMedicalRecordPdf(doc, p, audience); started = true; }
     if (type !== 'record') {
       if (started) doc.addPage();
       drawCertificatePdf(doc, p);
@@ -2648,21 +2666,26 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
     return type === 'record' ? 'Medical Record' : type === 'certificate' ? 'Medical Certificate' : 'Medical Record & Certificate';
   }
 
+  // Admin-internal: the file lands on the staff member's own machine, so it is
+  // the full clinical record — wound location/depth included.
   function exportSinglePatientPdf(p) {
-    buildDocumentPdf(p, docType).save(`${docType}-${p.id || p.firestoreId}-${new Date().toISOString().slice(0, 10)}.pdf`);
+    buildDocumentPdf(p, docType, 'clinic').save(`${docType}-${p.id || p.firestoreId}-${new Date().toISOString().slice(0, 10)}.pdf`);
     onToast(`${docTypeLabel(docType)} exported for ${formatTitleCase(p.name)}`, 'success');
   }
 
+  // Admin-internal: printed for the clinic's own files. Full clinical record.
   function printSinglePatientReport(p) {
     const w = window.open('', '_blank');
-    w.document.write(buildDocumentHtml(p, docType));
+    w.document.write(buildDocumentHtml(p, docType, 'clinic'));
     w.document.close();
     w.print();
     onToast(`${docTypeLabel(docType)} opened for printing — ${formatTitleCase(p.name)}`, 'success');
   }
 
+  // PATIENT-FACING: this PDF is emailed to the patient, so it is built with the
+  // 'patient' audience and omits wound location/depth.
   async function emailSinglePatientPdf(p, to) {
-    const base64 = buildDocumentPdf(p, docType).output('base64');
+    const base64 = buildDocumentPdf(p, docType, 'patient').output('base64');
     const label = docTypeLabel(docType);
     await sendReportEmail(
       to,
@@ -2683,10 +2706,13 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
 
   // Reusable preview pane — renders the exact HTML that will be printed or
   // emailed, inside a sandboxed iframe so the report's own CSS can't leak
-  // into the admin UI.
-  const previewPane = (html) => (
+  // into the admin UI. `patientCopy` flags that what is shown is the reduced
+  // copy the patient receives, not the full clinical record.
+  const previewPane = (html, patientCopy = false) => (
     <div style={{ marginBottom: 18 }}>
-      <div style={{ fontSize: '.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: 'var(--muted-2)', marginBottom: 8 }}>Report Preview</div>
+      <div style={{ fontSize: '.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: 'var(--muted-2)', marginBottom: 8 }}>
+        Report Preview{patientCopy ? ' — Patient Copy' : ''}
+      </div>
       <div style={{ border: '1.5px solid var(--border)', borderRadius: 'var(--r-lg)', overflow: 'hidden', background: '#fff' }}>
         <iframe
           title="Report preview"
@@ -2696,7 +2722,9 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
         />
       </div>
       <div style={{ fontSize: '.6875rem', color: 'var(--muted)', marginTop: 6 }}>
-        Review the report above before exporting, printing, or emailing.
+        {patientCopy
+          ? 'This is the copy the patient receives — wound location and depth are omitted. Export or Print gives you the full clinical record.'
+          : 'Review the report above before exporting, printing, or emailing.'}
       </div>
     </div>
   );
@@ -2916,7 +2944,14 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
                   </div>
                 </div>
 
-                {step === 'preview' && previewPane(buildDocumentHtml(selectedPatient, docType))}
+                {/* The emailed copy is the patient-facing variant (no wound
+                    location/depth), so once the Email field is open the preview
+                    switches to that variant — otherwise it would promise the
+                    admin a document the patient never receives. */}
+                {step === 'preview' && previewPane(
+                  buildDocumentHtml(selectedPatient, docType, showEmailInput ? 'patient' : 'clinic'),
+                  showEmailInput,
+                )}
 
                 {step === 'form' ? (
                   <div className="modal-footer" style={{ flexWrap: 'wrap' }}>
