@@ -13,6 +13,10 @@ export async function askGemini(prompt, history = []) {
       body: JSON.stringify({
         prompt,
         history: history.map(m => ({ role: m.role, text: m.text || m.html || '' })),
+        // Public website: no "Talk to Clinic Staff" button and no signed-in
+        // patient, so clinical hand-offs must point at the phone/address
+        // instead of a control this surface does not have.
+        channel: 'public',
       }),
     });
     const data = await res.json();

@@ -4,100 +4,118 @@
 // give identical, guardrailed answers. Moved here (server-side) from the
 // old ka-clinic-admin/src/geminiService.js so the Gemini API key never ships
 // in a client bundle.
-const DOH_SYSTEM_INSTRUCTION = `
-You are the official AI Health Assistant for K&A Anti-Rabies Clinic located at San Juan St., Libon, Albay, Philippines.
-Your responses MUST adhere strictly to the Philippine Department of Health (DOH) Anti-Rabies Vaccination Guidelines and clinic policies.
+// SCOPE BOUNDARY — non-clinical only.
+//
+// This assistant used to answer general rabies/PEP/first-aid education. It no
+// longer does, for any caller. Unsupervised clinical content is now handled by
+// clinic staff, and the bot's only job is logistics: using the app, when the
+// clinic is open, how to book, and how to reach the clinic.
+//
+// The classifier below is the real enforcement — a clinical message never
+// reaches Gemini at all. This instruction is the second layer, for anything
+// that slips through as in-scope but turns clinical mid-answer.
+const CLINIC_SYSTEM_INSTRUCTION = `
+You are the front-desk assistant for K&A Anti-Rabies Clinic, San Juan St., Libon, Albay, Philippines.
+You handle LOGISTICS ONLY. You are not a medical assistant and must never behave like one.
 
-CRITICAL RULES FOR INTENT DISAMBIGUATION:
-- Rule 1: If the user asks about 'hours', 'schedule', 'opening time', 'when open', 'clinic schedule', 'operating hours', 'what time', or 'when close', ALWAYS answer with K&A Clinic's physical operating hours (8:00 AM – 5:00 PM, Monday to Sunday) and walk-in/appointment availability. Do NOT explain vaccine dose intervals unless specifically asked.
-- Rule 2: ONLY explain the 5-dose Day 0, 3, 7, 14, 28 PEP scheme if the user explicitly asks about 'vaccine doses', 'PEP schedule', 'dose schedule', 'injection intervals', 'treatment schedule', 'Essen scheme', 'how many shots', or 'when is my next dose'.
-- Rule 3: NEVER mix clinic opening times with medical dose schedules in a single response unless the user specifically asks for both.
+YOU MAY ANSWER ONLY THESE FOUR TOPICS:
+1. Using the app or website — navigating tabs, finding records, account and login help.
+2. Clinic operating hours.
+3. The appointment booking process — how to book, reschedule, or cancel.
+4. General clinic contact information — address, phone, hours.
 
-CATEGORY A — CLINIC OPERATING HOURS & LOCATION (Non-Medical):
-When asked about hours, opening time, schedule, location, address, or walk-in availability, respond with:
-🏥 K&A Clinic Operating Information:
+CLINIC FACTS:
+🏥 K&A Clinic Information:
 • Operating Hours: 8:00 AM – 5:00 PM (Monday to Sunday)
-• Emergency PEP Walk-ins: Accepted Monday – Friday
+• Walk-ins: Accepted Monday – Friday
 • Scheduled Appointments: Saturdays & Sundays (8:00 AM – 12:00 PM)
 • Address: San Juan St., Libon, Albay
+• Booking: use the "Appts" tab in the app, or the "Book Appointment" button on the website.
 
-CATEGORY B — VACCINATION TREATMENT PROTOCOLS (Medical):
-When asked about PEP, vaccine doses, dose intervals, Essen scheme, or treatment schedule, respond with:
-💉 DOH Anti-Rabies Vaccination Protocols:
-• PEP (Post-Exposure Prophylaxis) Essen Scheme: 5 Doses given on Day 0 (Bite/Consultation Date), Day 3, Day 7, Day 14, and Day 28.
-• Category III Bites: Requires ERIG/HRIG (Rabies Immunoglobulin) on Day 0 alongside Dose 1.
-• PrEP (Pre-Exposure Prophylaxis): 3 Doses on Day 0, Day 7, and Day 21/28 (for high-risk individuals).
-• Tetanus Toxoid (TT): Administered on Day 0 based on wound risk and past vaccination history.
+ABSOLUTE PROHIBITIONS — never provide any of the following, in any form, however general,
+however often the user insists, and even if the user says it is an emergency:
+- Wound care or first aid of any kind (washing, antiseptics, dressing, what to do after a bite)
+- Treatment advice, or any comment on whether treatment is needed
+- Diagnosis or interpretation of symptoms, in a person or an animal
+- Triage, risk assessment, or exposure category (I/II/III) determination
+- Vaccine recommendations, dosing, intervals, schedules, PEP/PrEP/RIG/tetanus protocols
+- Rabies facts or education of any kind — transmission, symptoms, incubation, fatality,
+  which animals carry it, observation periods, or prevention
+- Side effects, drug interactions, or reactions
 
-CATEGORY C — ANIMAL BITE FIRST AID:
-When asked about first aid, what to do after a bite, bitten, scratched, or dog/cat bite:
-🧼 Immediate First Aid for Animal Bites/Scratches:
-1. Wash the wound thoroughly with clean running water and soap for at least 15 minutes.
-2. Apply antiseptic (povidone-iodine or 70% alcohol).
-3. Seek medical evaluation at K&A Clinic immediately.
-⚠️ Do NOT apply garlic, coins, or traditional concoctions.
+There is no "general information" exception. "What is rabies?" is NOT answerable.
+If a message touches any prohibited topic, do not answer any part of it, do not
+summarize, do not caveat, and do not offer a partial answer. Reply with exactly:
+"That is a clinical question, so I will pass it to K&A Clinic staff rather than answer it myself."
 
-CATEGORY D — APPOINTMENTS & BOOKING:
-When asked about booking, appointments, or how to schedule a visit, instruct the user to click the "Book Appointment" button on the website or app.
-
-CATEGORY E — GENERAL RABIES & PUBLIC HEALTH EDUCATION:
-General educational questions about rabies ARE in scope and MUST be answered directly — never refused. This includes: what rabies is, how it is transmitted, its symptoms and incubation period, why it is fatal once symptoms begin, which animals carry it, how it is prevented, the 14-day animal observation period, DOH exposure categories (I/II/III), and RA 9482 content (mandatory pet vaccination, impoundment, leash laws).
-Example — "What is rabies?" is an in-scope educational question. Answer it: rabies is a viral infection of the central nervous system, transmitted through the saliva of an infected animal via bites, scratches, or licks on broken skin or mucous membranes; it is almost always fatal once symptoms appear, but is nearly always preventable with prompt wound care and post-exposure prophylaxis.
-Bites to the head, neck, or face are always treated as Category III regardless of how minor they look.
-
-CATEGORY F — MEDICAL GUARDRAILS:
-- If a user asks for specific clinical diagnosis, prescription, deep medical advice, or treatment modification (e.g. "diagnose my wound", "what medicine should I take", "can I stop treatment"), respond: "For specific clinical diagnosis or medical evaluation, please consult a physician or visit K&A Clinic directly."
-- If a user mentions bleeding, pus, fever, allergic reaction, severe pain, or wants to speak with a doctor, respond with medical caution and suggest they contact the clinic directly or speak with an admin.
-- Refuse ONLY questions with no connection at all to rabies, animal bites, tetanus, or K&A Clinic services — for example weather, sports, celebrities, recipes, coding, or homework. For those, respond: "I am trained only to answer questions regarding rabies, animal bite care, and K&A Clinic services. Please ask a related query." Never use this refusal for a question that mentions rabies, animal bites, vaccination, or the clinic — those are in scope, and a general or one-word question about them (e.g. just "rabies") should be answered with the relevant general information rather than refused.
-- Keep responses friendly, informative, professional, and clear. Never mention 'Gemini' or any AI model name.
+Never mention 'Gemini' or any AI model name. Keep replies short, plain, and friendly.
 `;
 
-// Three-way triage of an incoming message, per the chatbot scope reference:
+// Two-way triage: may the bot answer this, yes or no?
 //
-//   'answerable'  — in scope, the bot may answer directly
-//   'restricted'  — in scope (rabies/ABTC) but off-limits for the bot, so a
-//                   human is genuinely waiting on an answer -> escalate
-//   'out_of_scope'— not rabies/ABTC at all -> standard fallback, NO escalation
+//   'in_scope'    — non-clinical logistics (app usage, hours, booking,
+//                   contact). The only category the bot answers itself.
+//   'clinical'    — anything rabies/medical/clinical, however general.
+//                   A person is waiting on an answer -> escalate.
+//   'out_of_scope'— unrelated small talk (weather, sport, code). Standard
+//                   fallback, NO escalation — routing this to staff would
+//                   just fill the clinic inbox with noise.
 //
-// The distinction that matters is between 'restricted' and 'out_of_scope':
-// both get a non-answer from the bot, but only 'restricted' should surface a
-// "Talk to Clinic Staff" button. Escalating out-of-scope chatter (weather,
-// recipes) would just fill the admin inbox with noise.
+// 'clinical' and 'out_of_scope' are both "the bot does not answer"; they are
+// kept apart only because the escalation flag differs. That is the two-way
+// split the button state machine consumes.
+//
+// This replaces the older answerable/restricted/out_of_scope triage, where
+// 'answerable' covered general rabies education, first aid and dose
+// schedules. None of that is answerable any more.
 //
 // Deliberately keyword-based rather than model-driven: this runs identically
 // on the Gemini path and the keyword-fallback path, so classification does
 // not silently change behavior when the API is unreachable or quota-limited.
-const RESTRICTED_PATTERNS = [
-  // Definitive clinical diagnosis — human patient or biting animal.
-  /\b(do|have)\s+i\s+(have|got)\s+rabies\b/, /\bam\s+i\s+(infected|rabid|going to die)\b/,
-  /\bis\s+(the|my|that|this)?\s*(dog|cat|animal|bat|monkey)\s+(rabid|infected|sick|have rabies)\b/,
-  /\bdiagnos(e|is|ing)\b/, /\bis\s+my\s+wound\s+(infected|serious|bad)\b/,
-  // Prescribing / substituting / changing dose or schedule.
-  /\b(can|should|may)\s+i\s+(skip|miss|delay|stop|postpone|reschedule|discontinue)\b.*\b(dose|day|shot|vaccine|jab|treatment|pep|schedule)\b/,
-  /\b(skip|miss|delay|stop|postpone)\s+(day\s*\d+|dose\s*\d+|my\s+(next\s+)?(dose|shot))\b/,
-  /\b(different|another|substitute|change|switch|cheaper|alternative)\s+(vaccine|brand|dose|dosage|schedule|treatment)\b/,
-  /\bwhat\s+(dose|dosage|brand|vaccine)\s+should\s+i\b/, /\bprescri(be|ption|bing)\b/,
-  /\b(increase|decrease|adjust|double|halve)\s+(the\s+)?(dose|dosage)\b/,
-  // Substituting for a physical medical procedure.
-  /\b(how\s+do\s+i|can\s+i|teach\s+me|show\s+me|walk\s+me\s+through|guide\s+me)\b.*\b(inject|injection|infiltrat\w*|suture|stitch|flush)\w*\b/,
-  /\b(infiltrat\w*|suturing)\b/,
-  /\b(self|at\s*-?\s*home|myself)\s*-?\s*(inject|administer|vaccinat)/,
-  /\b(id|im|intradermal|intramuscular|rig|erig|hrig)\b.*\b(technique|how\s+to|administer|inject|myself)\b/,
-  // Veterinary diagnosis / lab-result interpretation.
-  /\b(lab|laboratory|test|titer|titre|fat|dfa|blood)\s+(result|report)s?\b/,
+
+// Any clinical or rabies-domain signal. Broad on purpose — over-escalating is
+// the safe failure direction here, since the cost is a staff reply and the
+// cost of the opposite is unsupervised medical advice.
+const CLINICAL_PATTERNS = [
+  // The domain itself.
+  /\b(rabies|rabid|abtc|anti-?rabies|lyssa\w*)\b/,
+  // Exposure events and wounds.
+  /\b(bite|bit|bitten|scratch|scratched|lick(ed)?|wound|bleed\w*|puncture|laceration)\b/,
+  /\b(dog|cat|puppy|kitten|bat|monkey|rat|animal)\b/,
+  // Vaccines, biologics, protocols.
+  /\b(vaccin\w*|pep|prep|post-?exposure|pre-?exposure|rig|erig|hrig|immunoglobulin|booster|tetanus|toxoid|essen|antigen|serum)\b/,
+  /\b(dose|dosage|shot|jab|injection|inject\w*|intradermal|intramuscular|day\s*\d+)\b/,
+  // Triage, category, and risk language.
+  /\b(categor(y|ies)\s*(i{1,3}|1|2|3)?|exposure\s+categor\w*|triage|risk\s+(level|assessment)|observation\s+period)\b/,
+  // Symptoms, diagnosis, treatment.
+  /\b(symptom\w*|sign\w*\s+of|fever|swelling|redness|pus|infect\w*|inflam\w*|rash|pain|numbness|hydrophobia|paralysis|seizure)\b/,
+  /\b(diagnos\w*|prognos\w*|treat\w*|cure|therapy|medicine|medication|prescri\w*|antibiotic|antiseptic|povidone|betadine|alcohol\s+swab)\b/,
+  /\b(first\s*aid|wash\s+(the\s+)?wound|clean\s+(the\s+)?wound|dressing|suture|stitch)\b/,
+  /\b(side\s*-?\s*effects?|adverse|reaction|allerg\w*|contraindicat\w*|interaction)\b/,
+  // Asking the bot to assess a person or an animal.
+  /\b(do|have)\s+i\s+(have|got|need)\b/, /\bam\s+i\b/, /\bis\s+(it|this|that|my|the)\s+(serious|dangerous|bad|normal|okay|ok|safe)\b/,
+  /\bshould\s+i\s+(go|come|worry|be\s+worried|get|take)\b/,
+  // Lab and clinical records interpretation.
+  /\b(lab|laboratory|test|titer|titre|dfa|blood)\s+(result|report)s?\b/,
   /\b(interpret|read|explain)\s+(my|the|these|this)\s+(result|report|lab)/,
-  /\b(treat|cure|medicine|medication)\s+(for\s+)?(my\s+)?(dog|cat|pet|animal)\b/,
-  // Non-rabies medical emergency.
-  /\b(fractur\w*|broken\s+(bone|arm|leg|rib)|heart\s+attack|stroke|seizure|unconscious|venomous|poison\w*|overdose|bleeding\s+heavily|can'?t\s+breathe|chest\s+pain|appendicitis|diabet\w*|asthma\s+attack)\b/,
+  // Non-rabies medical emergencies still belong with a human, not the bot.
+  /\b(fractur\w*|broken\s+(bone|arm|leg|rib)|heart\s+attack|stroke|unconscious|venomous|poison\w*|overdose|can'?t\s+breathe|chest\s+pain|appendicitis|diabet\w*|asthma)\b/,
   /\b(snake|scorpion|spider|centipede|jellyfish|stingray)\b/,
-  // Legal / financial / administrative.
-  /\b(philhealth|insurance|claim|reimburse|refund|billing|bill\s+dispute|overcharge|liab(le|ility)|sue|lawsuit|legal|malpractice)\b/,
-  /\bcomplain(t|ing)?\b.*\b(against|about)\b|\b(file|lodge|submit)\s+a\s+complaint\b/,
 ];
 
-// Genuinely outside the rabies/ABTC domain. Checked only after the restricted
-// patterns, and only when no in-domain term appears, so "can I skip Day 7 of
-// my vaccine" is never misread as small talk.
+// The four permitted topics. Only consulted when nothing clinical matched.
+const NON_CLINICAL_PATTERNS = [
+  // Clinic hours.
+  /\b(hours?|open(ing|ed)?|close?[sd]?|closing|what\s+time|when\s+(are|do)\s+you|walk-?in|weekend|saturday|sunday|holiday)\b/,
+  // Booking and appointments.
+  /\b(book\w*|appointment|reschedul\w*|cancel\w*|slot|reserve|reservation|schedule\s+(a\s+)?(visit|appointment)|availab\w*)\b/,
+  // Contact and location.
+  /\b(address|location|where\s+(are|is)|direction|contact|phone|number|email|reach\s+you|map)\b/,
+  // App and account usage.
+  /\b(app|application|website|log\s*-?\s*in|login|log\s*-?\s*out|sign\s*-?\s*(in|up)|password|account|profile|register\w*|otp|verif\w*|tab|screen|button|navigate|how\s+do\s+i\s+(use|find|open|change|update)|notification|record\s+card|mrn)\b/,
+];
+
+// Genuinely unrelated to the clinic in any way.
 const OUT_OF_SCOPE_PATTERNS = [
   /\b(weather|forecast|rain|typhoon)\b/, /\b(movie|film|song|music|celebrity|artist|concert|k-?pop)\b/,
   /\b(recipe|cook|bake|adobo|sinigang|restaurant|food\s+delivery)\b/,
@@ -108,47 +126,65 @@ const OUT_OF_SCOPE_PATTERNS = [
   /\b(joke|riddle|poem|story\s+about)\b/,
 ];
 
-// Anything that keeps a message inside the clinic's domain even when it also
-// trips an out-of-scope keyword.
-const IN_DOMAIN_PATTERNS = [
-  /\b(rabies|rabid|abtc|anti-?rabies)\b/, /\b(bite|bitten|scratch|scratched|lick(ed)?)\b/,
-  /\b(vaccin|pep|prep|rig|erig|hrig|immunoglobulin|booster|tetanus|toxoid)\b/,
-  /\b(dog|cat|puppy|kitten|bat|monkey|animal)\b/, /\b(clinic|appointment|schedule|dose|shot|jab|wound)\b/,
-  /\b(day\s*0|day\s*3|day\s*7|day\s*14|day\s*28|essen|observation)\b/,
-];
-
 function classifyMessage(text) {
   const q = (text || '').toLowerCase().trim();
-  if (!q) return 'answerable';
+  if (!q) return 'in_scope';
 
-  // Restricted wins outright: these are in-domain by construction, and a
-  // person is waiting on an answer the bot is not allowed to give.
-  if (RESTRICTED_PATTERNS.some(re => re.test(q))) return 'restricted';
+  // Clinical wins outright, and wins over the non-clinical patterns too. A
+  // message like "can I book an appointment for my next dose" mentions
+  // booking, but it also mentions a dose — and the bot must not be the thing
+  // that decides which half of that sentence it is safe to engage with.
+  if (CLINICAL_PATTERNS.some(re => re.test(q))) return 'clinical';
 
-  // Out-of-scope only when nothing anchors the message to the clinic domain.
-  const inDomain = IN_DOMAIN_PATTERNS.some(re => re.test(q));
-  if (!inDomain && OUT_OF_SCOPE_PATTERNS.some(re => re.test(q))) return 'out_of_scope';
+  if (NON_CLINICAL_PATTERNS.some(re => re.test(q))) return 'in_scope';
 
-  return 'answerable';
+  if (OUT_OF_SCOPE_PATTERNS.some(re => re.test(q))) return 'out_of_scope';
+
+  // Unrecognized. Escalate rather than guess: an unclassified message is far
+  // more likely to be a clinical question phrased in a way the patterns above
+  // did not anticipate than it is to be small talk, and a human reading it is
+  // the safe outcome either way.
+  return 'clinical';
 }
 
-// The reply the bot gives when it must not answer a restricted in-domain
-// question. Deliberately does not attempt a partial answer.
-const RESTRICTED_REPLY =
-  'That needs a member of our clinical staff — it is not something I can safely answer myself. ' +
-  'Please tap "Talk to Clinic Staff" below and someone from K&A Clinic will help you directly. ' +
-  'If this is an emergency, go to the nearest ABTC or emergency room now.';
+// Named export purely so the scope boundary can be asserted in isolation;
+// Vercel only ever invokes the default export below.
+export { classifyMessage };
+
+// The reply for any clinical message. Deliberately attempts no partial answer,
+// no reassurance, and no "but generally speaking" — the whole point of the
+// narrowed scope is that the bot says nothing clinical at all.
+//
+// The closing line differs by channel because the two front-ends offer
+// different next steps: the patient app has a "Talk to Clinic Staff" button
+// that opens a real thread, while the public website chatbot has no such
+// control and no signed-in patient to attach a thread to. Pointing a website
+// visitor at a button that does not exist would be a dead end.
+const CLINICAL_REPLY_BASE =
+  'That is a clinical question, so I will not answer it myself — anything about rabies, wounds, ' +
+  'symptoms, or vaccination needs a member of K&A Clinic staff.';
+const EMERGENCY_TAIL =
+  ' If this is an emergency, go to the nearest Animal Bite Treatment Center or emergency room now.';
+
+const CLINICAL_REPLY_APP =
+  `${CLINICAL_REPLY_BASE} Tap "Talk to Clinic Staff" below and someone will help you directly.${EMERGENCY_TAIL}`;
+const CLINICAL_REPLY_PUBLIC =
+  `${CLINICAL_REPLY_BASE} Please call or visit K&A Clinic at San Juan St., Libon, Albay ` +
+  `(8:00 AM – 5:00 PM, Monday to Sunday), or sign in to the patient app to message our staff.${EMERGENCY_TAIL}`;
+
+const clinicalReplyFor = (channel) => (channel === 'public' ? CLINICAL_REPLY_PUBLIC : CLINICAL_REPLY_APP);
 
 const OUT_OF_SCOPE_REPLY =
-  'I can only assist with rabies and ABTC-related concerns. Please ask a question about animal bites, ' +
-  'rabies vaccination, or K&A Clinic services.';
+  'I can only help with using the app, clinic hours, booking appointments, and clinic contact details. ' +
+  'Please ask about one of those.';
 
-// The catch-all getFallbackDOHReply returns when no keyword matched — i.e. the
+// The catch-all getFallbackReply returns when no keyword matched — i.e. the
 // bot genuinely had nothing to say. Compared by identity at the end of the
 // handler to tell "no answer" apart from a real keyword-matched answer, so it
 // must stay a single shared constant rather than a duplicated literal.
 const GENERIC_FALLBACK_REPLY =
-  "👋 Hello! I'm the K&A Health Assistant. I can answer questions about rabies first aid, PEP & PrEP vaccination schedules, clinic operating hours, and appointment booking. How can I help you?";
+  "👋 Hello! I'm the K&A Clinic assistant. I can help with using the app, clinic hours, booking an " +
+  'appointment, and clinic contact details. For anything medical, I will put you through to clinic staff.';
 
 // Section 5A applies to the Gemini path too: the model can return one of the
 // system instruction's own non-answers (the "unrelated question" refusal, or
@@ -165,70 +201,40 @@ const MODEL_NON_ANSWER_PATTERNS = [
   /consult a physician or visit k&a clinic directly/i,
   /i (can|could) only assist with/i,
   /please ask a related query/i,
+  /clinical question, so i will pass it/i,
 ];
 
 const isModelNonAnswer = (reply) => MODEL_NON_ANSWER_PATTERNS.some(re => re.test(reply || ''));
 
-function getFallbackDOHReply(text) {
+// Keyword fallback for when Gemini is unavailable. Only ever reached for
+// messages already classified 'in_scope', so every branch here is logistics —
+// there is deliberately no clinical branch left to fall back to.
+function getFallbackReply(text) {
   const q = (text || '').toLowerCase().trim();
 
-  const medicalKeywords = ['diagnose', 'prescription', 'allergic reaction', 'medicine to take', 'stop treatment', 'is my wound infected', 'deep advice'];
-  if (medicalKeywords.some(kw => q.includes(kw))) {
-    return 'For specific clinical diagnosis or medical evaluation, please consult a physician or visit K&A Clinic directly.';
+  const CLINIC_INFO =
+    '🏥 K&A Clinic Information:\n' +
+    '• Operating Hours: 8:00 AM – 5:00 PM (Monday to Sunday)\n' +
+    '• Walk-ins: Accepted Monday – Friday\n' +
+    '• Scheduled Appointments: Saturdays & Sundays (8:00 AM – 12:00 PM)\n' +
+    '• Address: San Juan St., Libon, Albay';
+
+  const hoursKeywords = ['hour', 'opening time', 'open', 'when close', 'close time', 'operating', 'walk-in', 'what time', 'weekend', 'saturday', 'sunday'];
+  const contactKeywords = ['location', 'address', 'where', 'contact', 'phone', 'number', 'email', 'direction', 'map'];
+  if (hoursKeywords.some(kw => q.includes(kw)) || contactKeywords.some(kw => q.includes(kw))) {
+    return CLINIC_INFO;
   }
 
-  const irrelevantKeywords = ['weather', 'sports', 'president', 'movie', 'game', 'recipe', 'python', 'code', 'math'];
-  if (irrelevantKeywords.some(kw => q.includes(kw)) && !q.includes('bite') && !q.includes('rabies') && !q.includes('vaccine')) {
-    return 'I am trained only to answer questions regarding rabies, animal bite care, and K&A Clinic services. Please ask a related query.';
+  if (q.includes('book') || q.includes('appointment') || q.includes('reserve') || q.includes('slot') || q.includes('reschedul') || q.includes('cancel')) {
+    return '📅 To book an appointment, open the "Appts" tab in the K&A Clinic app (or the "Book Appointment" button on our website), pick a weekend date and an available time slot, and confirm. You can reschedule or cancel from the same tab. Weekend slots run Saturday & Sunday, 8:00 AM – 12:00 PM.';
   }
 
-  const escalationKeywords = ['bleeding', 'pus', 'fever', 'severe pain', 'speak with admin', 'speak with doctor', 'talk to doctor'];
-  if (escalationKeywords.some(kw => q.includes(kw))) {
-    return '⚠️ This sounds like it may require immediate medical attention. Please contact K&A Clinic directly at San Juan St., Libon, Albay or speak with our clinic staff for urgent assistance.';
+  if (q.includes('log in') || q.includes('login') || q.includes('sign in') || q.includes('sign up') || q.includes('password') || q.includes('account') || q.includes('otp') || q.includes('verif')) {
+    return '🔐 Sign in with the email address on file with the clinic. If you cannot get in, use "Forgot Password" on the login screen to reset it, or contact the clinic so staff can check the email on your record.';
   }
 
-  const hoursKeywords = ['hour', 'opening time', 'when open', 'when close', 'close time', 'operating', 'walk-in', 'location', 'address', 'where'];
-  if (hoursKeywords.some(kw => q.includes(kw))) {
-    return '🏥 K&A Clinic Operating Information:\n• Operating Hours: 8:00 AM – 5:00 PM (Monday to Sunday)\n• Emergency PEP Walk-ins: Accepted Monday – Friday\n• Scheduled Appointments: Saturdays & Sundays (8:00 AM – 12:00 PM)\n• Address: San Juan St., Libon, Albay';
-  }
-
-  if (q.includes('schedule')) {
-    const isDoseSchedule = q.includes('dose') || q.includes('vaccine') || q.includes('pep') || q.includes('prep') || q.includes('injection') || q.includes('treatment') || q.includes('shot');
-    if (isDoseSchedule) {
-      return '💉 DOH Anti-Rabies Vaccination Protocols:\n• PEP (Post-Exposure Prophylaxis) Essen Scheme: 5 Doses on Day 0 (Bite/Consultation Date), Day 3, Day 7, Day 14, and Day 28.\n• Category III Bites: Requires ERIG/HRIG on Day 0 alongside Dose 1.\n• PrEP (Pre-Exposure Prophylaxis): 3 Doses on Day 0, Day 7, and Day 21/28.';
-    }
-    return '🏥 K&A Clinic Operating Information:\n• Operating Hours: 8:00 AM – 5:00 PM (Monday to Sunday)\n• Emergency PEP Walk-ins: Accepted Monday – Friday\n• Scheduled Appointments: Saturdays & Sundays (8:00 AM – 12:00 PM)\n• Address: San Juan St., Libon, Albay';
-  }
-
-  if (q.includes('first aid') || q.includes('bitten') || q.includes('scratched') || q.includes('what to do') || q.includes('dog bite') || q.includes('cat scratch') || q.includes('emergency')) {
-    return '🧼 Immediate First Aid for Animal Bites/Scratches:\n1. Wash the wound thoroughly with clean running water and soap for at least 15 minutes.\n2. Apply antiseptic (povidone-iodine or 70% alcohol).\n3. Seek medical evaluation at K&A Clinic immediately.\n⚠️ Do NOT apply garlic, coins, or traditional concoctions.';
-  }
-
-  if (q.includes('pep') || q.includes('dose') || q.includes('essen') || q.includes('post-exposure') || q.includes('how many injection') || q.includes('how many shot') || q.includes('next shot') || q.includes('next dose')) {
-    return '💉 DOH Anti-Rabies Vaccination Protocols:\n• PEP (Post-Exposure Prophylaxis) Essen Scheme: 5 Doses on Day 0 (Bite/Consultation Date), Day 3, Day 7, Day 14, and Day 28.\n• Category III Bites: Requires ERIG/HRIG on Day 0 alongside Dose 1.\n• PrEP (Pre-Exposure Prophylaxis): 3 Doses on Day 0, Day 7, and Day 21/28.';
-  }
-
-  if (q.includes('prep') || q.includes('pre-exposure') || q.includes('preventive vaccine')) {
-    return '💉 Pre-Exposure Prophylaxis (PrEP) consists of 3 vaccine doses on Day 0, Day 7, and Day 21 or 28. Recommended for high-risk individuals such as veterinarians, animal handlers, and travelers.';
-  }
-
-  // General rabies education — Category E. Checked after the specific branches
-  // above (first aid, PEP, hours) so a more precise question still wins, but
-  // before the catch-all so "what is rabies" is never treated as a non-answer.
-  if (q.includes('rabies') || q.includes('rabid')) {
-    return '🦠 About Rabies:\n• Rabies is a viral infection of the central nervous system, spread through the saliva of an infected animal — usually via a bite, scratch, or a lick on broken skin or mucous membranes.\n• Common carriers in the Philippines are dogs and cats; bats and monkeys can also carry it.\n• Once symptoms begin it is almost always fatal, but it is nearly always preventable with prompt wound washing and post-exposure prophylaxis (PEP).\n• Symptoms can appear weeks to months after exposure, so never wait for them before seeking care.\n➡️ If you were bitten or scratched, wash the wound with soap and running water for 15 minutes and go to K&A Clinic or the nearest ABTC immediately.';
-  }
-
-  if (q.includes('tetanus') || q.includes('tt')) {
-    return 'Tetanus Toxoid (TT) is administered on Day 0 alongside Dose 1 depending on wound severity and past vaccination history.';
-  }
-
-  if (q.includes('book') || q.includes('appointment') || q.includes('reserve') || q.includes('slot')) {
-    return '📅 To book an appointment at K&A Clinic, click the "Book Appointment" button on our website or use the K&A Clinic mobile app. Weekend slots (Saturday & Sunday, 8:00 AM – 12:00 PM) are available for scheduled consultations.';
-  }
-
-  if (q.includes('cost') || q.includes('price') || q.includes('how much') || q.includes('fee') || q.includes('payment')) {
-    return 'For current vaccine pricing and payment options, please contact K&A Clinic directly at San Juan St., Libon, Albay. We accept PhilHealth for covered treatments.';
+  if (q.includes('app') || q.includes('tab') || q.includes('screen') || q.includes('navigate') || q.includes('how do i use') || q.includes('record') || q.includes('profile') || q.includes('notification')) {
+    return '📱 Getting around the app: "Home" shows your vaccination card and next appointment, "Appts" is for booking, "Records" holds your medical records, "Chat" is this assistant, and "Account" has your profile and settings.';
   }
 
   return GENERIC_FALLBACK_REPLY;
@@ -243,18 +249,22 @@ export default async function handler(req, res) {
   try {
     const prompt = (req.body?.prompt || '').toString();
     const history = Array.isArray(req.body?.history) ? req.body.history : [];
+    // 'app' (patient app, has a Talk to Clinic Staff button) or 'public' (the
+    // website chatbot, which does not). Only changes the wording of the
+    // clinical hand-off, never whether a message is escalated.
+    const channel = req.body?.channel === 'public' ? 'public' : 'app';
     if (!prompt.trim()) {
       res.status(400).json({ success: false, error: 'A message is required.' });
       return;
     }
 
-    // Triage before spending a Gemini call: a restricted question must get the
-    // same hand-off reply every time (never a partial answer the model
-    // improvised), and an out-of-scope one never needs the model at all.
+    // Triage before spending a Gemini call. A clinical message must get the
+    // same hand-off every time — never a partial answer the model improvised —
+    // so it never reaches the model at all. Out-of-scope needs no model either.
     const category = classifyMessage(prompt);
-    if (category === 'restricted') {
+    if (category === 'clinical') {
       res.status(200).json({
-        success: true, text: RESTRICTED_REPLY, source: 'classifier',
+        success: true, text: clinicalReplyFor(channel), source: 'classifier',
         category, needsEscalation: true, fallbackReason: null,
       });
       return;
@@ -272,7 +282,7 @@ export default async function handler(req, res) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
     const contents = [
-      { role: 'user', parts: [{ text: DOH_SYSTEM_INSTRUCTION }] },
+      { role: 'user', parts: [{ text: CLINIC_SYSTEM_INSTRUCTION }] },
       ...history.slice(-20).map(m => ({
         role: m.role === 'user' ? 'user' : 'model',
         parts: [{ text: m.text || m.html || '' }],
@@ -323,16 +333,18 @@ export default async function handler(req, res) {
       console.warn('Gemini API network error, using DOH fallback:', err);
     }
 
-    // Section 5A — a general fallback means the bot could not actually answer,
-    // so a human should pick it up. Distinguishes a keyword-matched answer
-    // (hours, first aid: a real answer, no escalation) from the catch-all
-    // greeting getFallbackDOHReply returns when nothing matched at all.
+    // A general fallback means the bot could not actually answer, so a human
+    // should pick it up. Distinguishes a keyword-matched answer (hours,
+    // booking: a real answer, no escalation) from the catch-all greeting
+    // getFallbackReply returns when nothing matched at all.
     let needsEscalation = false;
     if (!text) {
-      text = getFallbackDOHReply(prompt);
+      text = getFallbackReply(prompt);
       needsEscalation = text === GENERIC_FALLBACK_REPLY;
     } else if (isModelNonAnswer(text)) {
-      // The model answered, but its answer was one of its own non-answers.
+      // The model answered, but its answer was one of its own non-answers —
+      // including the clinical refusal the system instruction mandates, which
+      // catches anything clinical the keyword classifier missed.
       needsEscalation = true;
     }
     console.log(`[chatbot] source=${source} category=${category} escalate=${needsEscalation}${fallbackReason ? ` reason=${fallbackReason}` : ''} model=${modelName}`);

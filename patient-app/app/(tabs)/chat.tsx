@@ -78,11 +78,15 @@ const C = {
   aiBubble: '#F1F3F5',
 };
 
+// Non-clinical prompts only. These used to be "After a bite?", "Dose count?",
+// "Side effects?" and "What is Rabies?" — all clinical, and all of them now
+// route straight to staff, so offering them as one-tap shortcuts would promise
+// an answer the assistant is no longer allowed to give.
 const SUGGESTIONS = [
-  { icon: 'medkit', label: 'After a bite?' },
-  { icon: 'fitness', label: 'Dose count?' },
-  { icon: 'alert-circle', label: 'Side effects?' },
-  { icon: 'help-buoy', label: 'What is Rabies?' },
+  { icon: 'time', label: 'Clinic hours?' },
+  { icon: 'calendar', label: 'How do I book an appointment?' },
+  { icon: 'location', label: 'Where is the clinic?' },
+  { icon: 'phone-portrait', label: 'How do I use this app?' },
 ];
 
 export default function ChatScreen() {
@@ -470,7 +474,11 @@ export default function ChatScreen() {
                 <Ionicons name={mode === 'admin' ? 'person-circle' : 'medical'} size={34} color={C.red} />
               </View>
               <Text style={s.heroTitle}>{mode === 'admin' ? 'Message the Clinic' : 'How Can We Help?'}</Text>
-              <Text style={s.heroSub}>Ask any rabies, dose, or bite care questions below</Text>
+              <Text style={s.heroSub}>
+                {mode === 'admin'
+                  ? 'Send a message and clinic staff will reply here'
+                  : 'Ask about appointments, clinic hours, or how to use the app. Medical questions go straight to clinic staff.'}
+              </Text>
             </View>
             {mode === 'bot' && (
               <View style={s.grid}>
@@ -593,7 +601,7 @@ export default function ChatScreen() {
                 <Text style={s.modalTitle}>Talk to Clinic Staff</Text>
               </View>
               <Text style={s.modalMsg}>
-                The AI Assistant cannot answer this prompt. Would you like to connect directly with K&A Clinic staff?
+                Medical and rabies-related questions are answered by clinic staff, not the assistant. Would you like to connect directly with K&A Clinic staff?
               </Text>
               <View style={s.modalActions}>
                 <TouchableOpacity

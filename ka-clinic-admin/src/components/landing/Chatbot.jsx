@@ -67,7 +67,7 @@ export default function Chatbot() {
       setBadge(false);
       setMessages(m => {
         if (m.length === 0) {
-          return [{ role: 'bot', text: "👋 Hello! I'm the K&A Health Assistant. I can answer questions about rabies first aid, PEP & PrEP vaccination schedules, and clinic services. How can I help you today?", time: now() }];
+          return [{ role: 'bot', text: "👋 Hello! I'm the K&A Clinic assistant. I can help with clinic hours, booking an appointment, how to reach us, and using the app. For anything medical, please contact clinic staff directly. How can I help?", time: now() }];
         }
         return m;
       });
@@ -89,16 +89,18 @@ export default function Chatbot() {
       addMsg('bot', replyText);
     } catch (err) {
       setTyping(false);
-      addMsg('bot', "For specific clinical diagnosis or medical evaluation, please consult a physician or visit K&A Clinic directly.");
+      addMsg('bot', "I'm having trouble connecting right now. Please call or visit K&A Clinic at San Juan St., Libon, Albay, or try again shortly.");
     }
   }, [input, messages, addMsg]);
 
+  // Non-clinical only, matching the assistant's narrowed scope. The former
+  // "PEP Vaccine Doses", "Bite First Aid" and "Vaccine Cost" prompts are gone —
+  // the assistant now hands all three to clinic staff, so offering them as
+  // one-tap shortcuts would advertise an answer that never arrives.
   const QUICK = [
-    ['🕒 Operating Hours', 'What are the clinic\'s operating hours and location?'],
-    ['💉 PEP Vaccine Doses', 'What is the PEP 5-dose vaccination schedule?'],
-    ['🧼 Bite First Aid', 'What is the immediate first aid for a dog or cat bite?'],
+    ['🕒 Operating Hours', 'What are the clinic\'s operating hours?'],
     ['📅 Book Appointment', 'How do I book an appointment at K&A Clinic?'],
-    ['💰 Vaccine Cost', 'What is the cost of the rabies vaccine?'],
+    ['📍 Location', 'Where is K&A Clinic located?'],
     ['📱 Mobile App', 'How do I download the K&A Clinic app?']
   ];
 
@@ -329,7 +331,7 @@ export default function Chatbot() {
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), send())}
-            placeholder="Ask anything about rabies or K&A Clinic…"
+            placeholder="Ask about hours, booking, or the app…"
             style={{
               flex: 1, background: 'rgba(241,245,249,0.8)',
               border: '1px solid #E2E8F0', borderRadius: 9999,
