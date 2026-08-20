@@ -145,19 +145,19 @@ function ToastNotificationCard({ type = 'info', title, message, time, onDismiss,
 
 function WelcomeBanner({ stats, onNavigate, adminName, tagline }) {
   return (
-    <div className="relative rounded-xl w-full h-full p-4 sm:p-5 overflow-hidden flex items-center justify-between gap-4 bg-gradient-to-r from-[#0F172A] to-[#1E293B]"
+    <div className="relative rounded-3xl w-full h-full p-6 sm:p-7 overflow-hidden flex items-center justify-between gap-4 bg-white border border-slate-200/70 shadow-xs"
       style={{ animation: 'kna-banner-in 0.45s cubic-bezier(0.22,1,0.36,1) both' }}>
 
       <div className="relative z-10 max-w-sm sm:max-w-md">
-        <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
+        <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
           Hello {adminName || 'Admin'}!
         </h2>
-        <p className="text-xs sm:text-sm mt-1.5 leading-relaxed text-slate-300">
+        <p className="text-xs sm:text-sm mt-2 leading-relaxed text-slate-500 font-medium">
           {tagline || 'Your trusted partner in rabies prevention and clinical care. Track patient vaccinations, appointments, and exposure cases in Libon, Albay.'}
         </p>
       </div>
 
-      <div className="relative z-10 hidden sm:block self-stretch shrink-0 w-1/2 max-w-[360px]">
+      <div className="relative z-10 hidden sm:block self-stretch shrink-0 w-1/2 max-w-[340px]">
         <img
           src="/assets/dashboard/welcome_banner.png"
           alt="Clinic support staff assisting patients by phone and chat"
@@ -277,6 +277,7 @@ export default function AdminDashboard({ onLogout }) {
   // Search Box & Toast Notification States
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
+  const [selectedOverduePatientId, setSelectedOverduePatientId] = useState(null);
   const searchRef = useRef(null);
   const searchContainerRef = useRef(null);
   const [activeToast, setActiveToast] = useState(null);
@@ -629,42 +630,22 @@ export default function AdminDashboard({ onLogout }) {
 
     for (let day = 1; day <= total; day++) {
       const isToday = day === today.getDate() && currentMonth.getMonth() === today.getMonth() && currentMonth.getFullYear() === today.getFullYear();
-      const dayApts = getAptsForDay(day);
-      const hasApts = dayApts.length > 0;
       const isSelected = selectedCalendarDay === day;
 
       days.push(
         <div
           key={day}
           onClick={() => setSelectedCalendarDay(isSelected ? null : day)}
-          className="relative p-1.5 text-center rounded-lg text-xs font-semibold cursor-pointer select-none"
+          className="relative p-2 text-center rounded-xl text-xs font-bold cursor-pointer select-none transition-all"
           style={{
-            background: isSelected ? '#111827' : isToday ? '#6366F1' : hasApts ? '#EEF2FF' : 'transparent',
-            color: isSelected ? '#fff' : isToday ? '#fff' : hasApts ? '#4338CA' : '#374151',
-            fontWeight: isToday ? 700 : 500,
-            transition: 'background 0.18s,color 0.18s,transform 0.15s'
+            background: isSelected ? '#0F172A' : isToday ? '#3B50DF' : 'transparent',
+            color: isSelected || isToday ? '#ffffff' : '#334155',
+            boxShadow: isToday ? '0 2px 8px rgba(59,80,223,0.3)' : 'none',
           }}
-          onMouseEnter={e => { if (!isSelected && !isToday) e.currentTarget.style.transform = 'scale(1.15)'; }}
-          onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+          onMouseEnter={e => { if (!isSelected && !isToday) { e.currentTarget.style.background = '#F1F5F9'; e.currentTarget.style.transform = 'scale(1.08)'; } }}
+          onMouseLeave={e => { if (!isSelected && !isToday) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.transform = 'scale(1)'; } }}
         >
           {day}
-          {hasApts && !isToday && !isSelected && (
-            <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 flex gap-0.5">
-              {dayApts.slice(0, 3).map((a, i) => (
-                <span
-                  key={i}
-                  className={`w-1 h-1 rounded-full inline-block ${
-                    a.status === 'confirmed' ? 'bg-green-500' :
-                    a.status === 'cancelled' ? 'bg-red-500' :
-                    a.status === 'done' ? 'bg-sky-500' : 'bg-amber-500'
-                  }`}
-                />
-              ))}
-            </span>
-          )}
-          {hasApts && isToday && (
-            <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-white inline-block" />
-          )}
         </div>
       );
     }
@@ -704,7 +685,7 @@ export default function AdminDashboard({ onLogout }) {
       if (missed.length === 0) return null;
       const earliest = missed.reduce((a, b) => (a.date < b.date ? a : b));
       const daysOverdue = Math.floor((Date.now() - new Date(earliest.date).getTime()) / 86400000);
-      return { id: p.id, name: getName(p), doseLabel: earliest.label, dueDate: earliest.date, daysOverdue };
+      return { id: p.id, firestoreId: p.firestoreId || p.id, name: getName(p), doseLabel: earliest.label, dueDate: earliest.date, daysOverdue };
     })
     .filter(Boolean)
     .sort((a, b) => b.daysOverdue - a.daysOverdue);
@@ -723,38 +704,38 @@ export default function AdminDashboard({ onLogout }) {
       label: 'Total Patients',
       value: stats.patients,
       sub: `${stats.patientsThisWeek} registered this week`,
-      color: '#475569', tint: '#F1F5F9', border: '#E2E8F0',
+      color: '#3B50DF', tint: '#EEF2FF', border: '#E0E7FF',
       Icon: Users,
-      progress: null, // plain running total — no bounded rate to ring
+      progress: null,
       page: 'patients'
     },
     {
       label: 'Today Appointments',
       value: stats.todayApts,
       sub: `${todayApts.filter(a => a.status === 'confirmed').length} confirmed`,
-      color: '#475569', tint: '#F1F5F9', border: '#E2E8F0',
+      color: '#E11D48', tint: '#FFF1F2', border: '#FFE4E6',
       Icon: Calendar,
-      progress: todayApts.length ? Math.round((todayApts.filter(a => a.status === 'confirmed').length / todayApts.length) * 100) : 0,
+      progress: null,
       page: 'appointments'
     },
     {
       label: 'Unread Messages',
       value: stats.unreadMessages,
       sub: 'Require attention',
-      color: '#475569', tint: '#F1F5F9', border: '#E2E8F0',
+      color: '#D97706', tint: '#FEF3C7', border: '#FDE68A',
       Icon: MessageSquare,
-      progress: null, // no natural denominator in current data
+      progress: null,
       page: 'messages'
     },
     {
       label: 'Low Stock Items',
       value: stats.lowStock,
       sub: stats.lowStock > 0 ? 'Action required' : 'Stock optimal',
-      color: stats.lowStock > 0 ? '#C8151A' : '#059669',
+      color: stats.lowStock > 0 ? '#DC2626' : '#059669',
       tint: stats.lowStock > 0 ? '#FEF2F2' : '#ECFDF5',
-      border: stats.lowStock > 0 ? '#FECACA' : '#A7F3D0',
+      border: stats.lowStock > 0 ? '#FCA5A5' : '#A7F3D0',
       Icon: Package,
-      progress: inventoryList.length ? Math.round(((inventoryList.length - stats.lowStock) / inventoryList.length) * 100) : 100,
+      progress: null,
       page: 'inventory'
     }
   ];
@@ -792,8 +773,8 @@ export default function AdminDashboard({ onLogout }) {
         </div>
       )}
 
-      {/* ── SIDEBAR (permanent dark charcoal nav rail) ── */}
-      <div className="fixed h-screen z-40 border-r border-slate-800 shadow-sm flex flex-col justify-between bg-slate-900 text-slate-300 transition-all duration-300"
+      {/* ── SIDEBAR (Deep Midnight Navy Theme with SVG Curved Notch Cutout Active Tabs) ── */}
+      <div className="fixed h-screen z-40 shadow-xl flex flex-col justify-between bg-[#0F172A] text-white transition-all duration-300"
         style={{ width: sidebarOpen ? 256 : 76 }}>
         <div className="flex flex-col min-h-0 flex-1">
           {/* Logo Header — White background logo beside clinic name */}
@@ -807,42 +788,55 @@ export default function AdminDashboard({ onLogout }) {
                 />
               </div>
               <div className="min-w-0">
-                <h1 className="font-bold text-base tracking-tight leading-tight text-white">K&A Clinic</h1>
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Clinical Admin</p>
+                <h1 className="font-bold text-base tracking-normal leading-tight text-white whitespace-nowrap">K&A Clinic</h1>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5 whitespace-nowrap">Clinical Admin</p>
               </div>
             </div>
             <button onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-2 rounded-xl flex-shrink-0 cursor-pointer transition-colors hover:bg-slate-800 text-slate-400 hover:text-white"
+              className="p-2 rounded-xl flex-shrink-0 cursor-pointer transition-colors hover:bg-white/10 text-slate-400 hover:text-white"
               title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}>
               <Menu size={20} strokeWidth={2} />
             </button>
           </div>
 
           {/* Nav List */}
-          <nav className="px-3 py-4 space-y-5 overflow-y-auto flex-1 custom-scrollbar">
+          <nav className="pl-3 pr-0 py-4 space-y-4 overflow-y-auto flex-1 custom-scrollbar">
             <div>
               {sidebarOpen && (
-                <div className="px-3 pb-2 text-[10.5px] font-medium uppercase tracking-widest text-slate-500">
+                <div className="px-3 pb-2 text-[10.5px] font-bold uppercase tracking-widest text-slate-400">
                   Clinical Management
                 </div>
               )}
-              <div className="space-y-0.5">
+              <div className="space-y-1">
                 {menuItems.slice(0, 7).map((item) => {
                   const isActive = activePage === item.id;
                   return (
                     <button key={item.id} onClick={() => setActivePage(item.id)}
-                      className={`group w-full flex items-center gap-3 pl-3 pr-3 py-2.5 rounded-lg relative cursor-pointer text-sm leading-snug transition-colors border-l-2 ${
+                      className={`group w-full flex items-center gap-3 relative cursor-pointer text-sm leading-snug transition-all ${
                         isActive
-                          ? 'bg-indigo-600/10 text-white font-semibold border-indigo-500'
-                          : 'text-slate-400 font-medium hover:bg-slate-800/60 hover:text-slate-100 border-transparent'
+                          ? 'bg-[#F2F5FA] text-[#0F172A] font-extrabold rounded-l-2xl pl-3.5 pr-3 py-3 shadow-2xs relative z-10'
+                          : 'text-slate-300/90 font-medium hover:bg-white/10 hover:text-white pl-3.5 pr-3 py-2.5 rounded-xl mr-3'
                       }`}
                       title={!sidebarOpen ? item.label : ''}>
-                      <item.icon size={19} strokeWidth={1.9} className={`flex-shrink-0 transition-colors ${isActive ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-300'}`}/>
-                      <span style={{ opacity: sidebarOpen ? 1 : 0, overflow: 'hidden', whiteSpace: 'nowrap', transition: 'opacity 0.18s', flex: 1, textAlign: 'left' }}>
+
+                      {/* PERFECT SVG CONCAVE CURVED NOTCHES */}
+                      {isActive && (
+                        <>
+                          <svg className="absolute right-0 -top-4 w-4 h-4 text-[#F2F5FA] pointer-events-none z-20" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M16 16V0C16 8.83656 8.83656 16 0 16H16Z" />
+                          </svg>
+                          <svg className="absolute right-0 -bottom-4 w-4 h-4 text-[#F2F5FA] pointer-events-none z-20" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M16 0V16C16 7.16344 8.83656 0 0 0H16Z" />
+                          </svg>
+                        </>
+                      )}
+
+                      <item.icon size={19} strokeWidth={2.2} className={`flex-shrink-0 transition-colors relative z-10 ${isActive ? 'text-[#0F172A]' : 'text-slate-400 group-hover:text-white'}`}/>
+                      <span className="relative z-10" style={{ opacity: sidebarOpen ? 1 : 0, overflow: 'hidden', whiteSpace: 'nowrap', transition: 'opacity 0.18s', flex: 1, textAlign: 'left' }}>
                         {item.label}
                       </span>
                       {item.badge > 0 && (
-                        <span className={`bg-rose-600 text-white text-[11px] font-medium rounded-full flex items-center justify-center ${sidebarOpen ? 'px-2 py-0.5' : 'absolute top-1 right-1 w-4 h-4 text-[9px]'}`}>
+                        <span className={`relative z-10 bg-rose-500 text-white text-[11px] font-bold rounded-full flex items-center justify-center ${sidebarOpen ? 'px-2 py-0.5' : 'absolute top-1 right-1 w-4 h-4 text-[9px]'}`}>
                           {item.badge > 9 ? '9+' : item.badge}
                         </span>
                       )}
@@ -854,23 +848,36 @@ export default function AdminDashboard({ onLogout }) {
 
             <div>
               {sidebarOpen && (
-                <div className="px-3 pb-2 text-[10.5px] font-medium uppercase tracking-widest text-slate-500">
+                <div className="px-3 pb-2 text-[10.5px] font-bold uppercase tracking-widest text-slate-400">
                   System & Logistics
                 </div>
               )}
-              <div className="space-y-0.5">
+              <div className="space-y-1">
                 {menuItems.slice(7).map((item) => {
                   const isActive = activePage === item.id;
                   return (
                     <button key={item.id} onClick={() => setActivePage(item.id)}
-                      className={`group w-full flex items-center gap-3 pl-3 pr-3 py-2.5 rounded-lg relative cursor-pointer text-sm leading-snug transition-colors border-l-2 ${
+                      className={`group w-full flex items-center gap-3 relative cursor-pointer text-sm leading-snug transition-all ${
                         isActive
-                          ? 'bg-indigo-600/10 text-white font-semibold border-indigo-500'
-                          : 'text-slate-400 font-medium hover:bg-slate-800/60 hover:text-slate-100 border-transparent'
+                          ? 'bg-[#F2F5FA] text-[#0F172A] font-extrabold rounded-l-2xl pl-3.5 pr-3 py-3 shadow-2xs relative z-10'
+                          : 'text-slate-300/90 font-medium hover:bg-white/10 hover:text-white pl-3.5 pr-3 py-2.5 rounded-xl mr-3'
                       }`}
                       title={!sidebarOpen ? item.label : ''}>
-                      <item.icon size={19} strokeWidth={1.9} className={`flex-shrink-0 transition-colors ${isActive ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-300'}`}/>
-                      <span style={{ opacity: sidebarOpen ? 1 : 0, overflow: 'hidden', whiteSpace: 'nowrap', transition: 'opacity 0.18s', flex: 1, textAlign: 'left' }}>
+
+                      {/* PERFECT SVG CONCAVE CURVED NOTCHES */}
+                      {isActive && (
+                        <>
+                          <svg className="absolute right-0 -top-4 w-4 h-4 text-[#F2F5FA] pointer-events-none z-20" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M16 16V0C16 8.83656 8.83656 16 0 16H16Z" />
+                          </svg>
+                          <svg className="absolute right-0 -bottom-4 w-4 h-4 text-[#F2F5FA] pointer-events-none z-20" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M16 0V16C16 7.16344 8.83656 0 0 0H16Z" />
+                          </svg>
+                        </>
+                      )}
+
+                      <item.icon size={19} strokeWidth={2.2} className={`flex-shrink-0 transition-colors relative z-10 ${isActive ? 'text-[#0F172A]' : 'text-slate-400 group-hover:text-white'}`}/>
+                      <span className="relative z-10" style={{ opacity: sidebarOpen ? 1 : 0, overflow: 'hidden', whiteSpace: 'nowrap', transition: 'opacity 0.18s', flex: 1, textAlign: 'left' }}>
                         {item.label}
                       </span>
                     </button>
@@ -883,9 +890,9 @@ export default function AdminDashboard({ onLogout }) {
 
         {/* Logout Footer */}
         <div className="p-3 border-t border-slate-800">
-          <button onClick={handleLogout} className="w-full flex items-center gap-3 pl-3 pr-3 py-2.5 rounded-lg transition-colors cursor-pointer text-sm font-medium text-slate-400 hover:bg-slate-800 hover:text-red-400"
+          <button onClick={handleLogout} className="w-full flex items-center gap-3 pl-3.5 pr-3 py-2.5 rounded-xl transition-colors cursor-pointer text-sm font-medium text-slate-300/90 hover:bg-white/10 hover:text-rose-300"
           title={!sidebarOpen ? 'Sign Out' : ''}>
-            <LogOut size={19} strokeWidth={1.9} className="flex-shrink-0" />
+            <LogOut size={19} strokeWidth={2} className="flex-shrink-0" />
             <span style={{ opacity: sidebarOpen ? 1 : 0, overflow: 'hidden', whiteSpace: 'nowrap', transition: 'opacity 0.18s' }}>
               Sign Out
             </span>
@@ -897,28 +904,31 @@ export default function AdminDashboard({ onLogout }) {
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden"
         style={{ marginLeft: sidebarOpen ? 256 : 76, transition: 'margin-left 0.4s cubic-bezier(0.22,1,0.36,1)' }}>
 
-        {/* ── STICKY TOP HEADER ── */}
-        <header className="border-b sticky top-0 z-30 h-20 flex items-center px-7 justify-between flex-shrink-0 shadow-sm transition-colors bg-white border-gray-200 text-gray-900 gap-4">
+        {/* ── STICKY TOP HEADER (FROSTED GLASS MODERN DESIGN) ── */}
+        <header className="border-b sticky top-0 z-30 h-20 flex items-center px-7 justify-between flex-shrink-0 shadow-2xs transition-all bg-white/85 backdrop-blur-md border-slate-200/80 text-slate-900 gap-4">
           <div className="flex items-center gap-3 shrink-0">
-            <div className="h-6 w-1 rounded-full bg-red-600"/>
+            <div className="h-6 w-1 rounded-full bg-[#3B50DF]"/>
             <div>
-              <h1 className="text-lg font-semibold leading-none tracking-tight">{menuItems.find(m => m.id === activePage)?.label || 'Dashboard'}</h1>
-              <p className="text-xs leading-none mt-1.5 text-gray-500">K&A Anti-Rabies Vaccination Clinic</p>
+              <h1 className="text-lg font-bold leading-none tracking-tight text-slate-900">{menuItems.find(m => m.id === activePage)?.label || 'Dashboard'}</h1>
+              <p className="text-xs leading-none mt-1.5 text-slate-500 font-normal flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
+                K&A Anti-Rabies Vaccination Clinic
+              </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 shrink-0 ml-auto">
-            {/* ── EXPANDABLE CIRCULAR SEARCH BAR (HOME DASHBOARD ONLY) ── */}
+          <div className="flex items-center gap-3.5 shrink-0 ml-auto">
+            {/* ── EXPANDABLE CIRCULAR SEARCH BAR ── */}
             {activePage === 'dashboard' && (
               <div
                 className={`relative transition-all duration-300 ease-in-out ${
-                  searchFocused || searchQuery ? 'w-72 sm:w-80' : 'w-36 sm:w-44'
+                  searchFocused || searchQuery ? 'w-72 sm:w-80' : 'w-44 sm:w-52'
                 }`}
                 ref={searchContainerRef}
               >
                 <div className={`relative flex items-center w-full rounded-full border transition-all duration-300 ${
                   searchFocused
-                    ? 'bg-white border-slate-300 shadow-sm ring-2 ring-slate-200/60'
+                    ? 'bg-white border-indigo-300 shadow-xs ring-2 ring-indigo-500/10'
                     : 'bg-slate-100/90 border-slate-200/90 hover:bg-slate-100 hover:border-slate-300'
                 }`}>
                   <input
@@ -927,31 +937,33 @@ export default function AdminDashboard({ onLogout }) {
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
                     onFocus={() => setSearchFocused(true)}
-                    placeholder="Search..."
-                    className="w-full py-1.5 px-4 text-xs font-medium bg-transparent text-slate-800 placeholder-slate-400 outline-none rounded-full"
+                    placeholder="Search patients, stock..."
+                    className="w-full py-2 px-4 text-xs font-semibold bg-transparent text-slate-800 placeholder-slate-400 outline-none rounded-full"
                   />
                   {searchQuery ? (
                     <button
                       onClick={() => setSearchQuery('')}
-                      className="absolute right-2.5 p-1 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-200/50 cursor-pointer"
+                      className="absolute right-2.5 p-1 text-slate-400 hover:text-slate-700 rounded-full hover:bg-slate-200/60 cursor-pointer"
                       title="Clear search"
                     >
-                      <X size={13} />
+                      <X size={14} />
                     </button>
                   ) : (
-                    <button
-                      onClick={() => searchRef.current?.focus()}
-                      className="absolute right-3 text-slate-400 hover:text-slate-600 cursor-pointer"
-                      title="Search"
-                    >
-                      <Search size={14} />
-                    </button>
+                    <div className="absolute right-3 flex items-center gap-1">
+                      <button
+                        onClick={() => searchRef.current?.focus()}
+                        className="text-slate-400 hover:text-slate-700 cursor-pointer"
+                        title="Search"
+                      >
+                        <Search size={15} />
+                      </button>
+                    </div>
                   )}
                 </div>
 
                 {/* Circular Search Results Dropdown */}
                 {searchFocused && searchQuery.trim() !== '' && (
-                  <div className="absolute right-0 top-11 w-80 bg-white rounded-3xl shadow-2xl border border-slate-200/90 z-50 overflow-hidden max-h-96 overflow-y-auto custom-scrollbar"
+                  <div className="absolute right-0 top-11 w-72 sm:w-80 bg-white rounded-3xl shadow-xl border border-slate-200/90 z-50 overflow-hidden max-h-96 overflow-y-auto custom-scrollbar text-slate-900"
                     style={{ animation: 'kna-notif-in 0.18s ease-out both' }}>
                     <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
                       <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Search Results</span>
@@ -988,8 +1000,8 @@ export default function AdminDashboard({ onLogout }) {
                               className="p-2.5 rounded-2xl flex items-center justify-between gap-2.5 hover:bg-slate-50 transition-colors cursor-pointer border border-transparent hover:border-slate-100"
                             >
                               <div className="flex items-center gap-2.5 min-w-0">
-                                <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center flex-shrink-0">
-                                  <IconComp size={14} />
+                                <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center flex-shrink-0">
+                                  <IconComp size={15} />
                                 </div>
                                 <div className="min-w-0">
                                   <p className="text-xs font-bold text-slate-800 truncate">{res.title}</p>
@@ -1009,17 +1021,17 @@ export default function AdminDashboard({ onLogout }) {
               </div>
             )}
 
-            {/* Notification Bell */}
+            {/* Notification Bell (ENLARGED 44px x 44px) */}
             <div className="relative" ref={notifRef}>
               <button onClick={() => { setNotifOpen(o => !o); if (!notifOpen) markAllRead(); }}
-                className="w-10 h-10 flex items-center justify-center rounded-full border relative cursor-pointer transition-all border-gray-200 hover:bg-gray-100 text-gray-600 shadow-2xs">
-                <Bell size={17}/>
-                {unreadNotifCount > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1" style={{ animation: 'kna-badge-pop 0.3s cubic-bezier(0.22,1,0.36,1) both' }}>{unreadNotifCount > 9 ? '9+' : unreadNotifCount}</span>}
+                className="w-11 h-11 flex items-center justify-center rounded-full border border-slate-200/80 bg-slate-100/90 hover:bg-indigo-50 hover:border-indigo-200 hover:text-[#3B50DF] text-slate-700 shadow-2xs relative cursor-pointer transition-all">
+                <Bell size={19}/>
+                {unreadNotifCount > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-[20px] h-[20px] bg-rose-500 text-white text-[11px] font-bold rounded-full flex items-center justify-center px-1" style={{ animation: 'kna-badge-pop 0.3s cubic-bezier(0.22,1,0.36,1) both' }}>{unreadNotifCount > 9 ? '9+' : unreadNotifCount}</span>}
               </button>
 
-              {/* ── NOTIFICATION DROPDOWN — BIGGER UNIFIED IPHONE NOTES LIST ── */}
+              {/* ── NOTIFICATION DROPDOWN ── */}
               {notifOpen && (
-                <div className="absolute right-0 top-12 w-[min(380px,calc(100vw-2rem))] rounded-2xl shadow-2xl border border-slate-200/90 bg-[#F2F2F7] z-50 overflow-hidden p-2.5" style={{ animation: 'kna-notif-in 0.22s cubic-bezier(0.22,1,0.36,1) both' }}>
+                <div className="absolute right-0 top-13 w-[min(380px,calc(100vw-2rem))] rounded-2xl shadow-xl border border-slate-200/90 bg-[#F8FAFC] z-50 overflow-hidden p-2.5 text-slate-900" style={{ animation: 'kna-notif-in 0.22s cubic-bezier(0.22,1,0.36,1) both' }}>
                   <div className="px-1.5 pb-2 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-bold text-slate-900 tracking-tight">Notifications</span>
@@ -1035,13 +1047,13 @@ export default function AdminDashboard({ onLogout }) {
                           Clear
                         </button>
                       )}
-                      <button onClick={markAllRead} className="text-xs font-bold text-red-600 hover:text-red-700 transition-colors cursor-pointer">
+                      <button onClick={markAllRead} className="text-xs font-bold text-rose-600 hover:text-rose-700 transition-colors cursor-pointer">
                         Mark read
                       </button>
                     </div>
                   </div>
 
-                  {/* Single Unified iPhone Notes Grouped Card Container */}
+                  {/* Notifications List Container */}
                   <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm max-h-[22rem] overflow-y-auto custom-scrollbar divide-y divide-slate-100">
                     {filteredNotifications.length === 0 ? (
                       <div className="py-10 text-center px-4">
@@ -1067,8 +1079,6 @@ export default function AdminDashboard({ onLogout }) {
                                   <p className={`text-[13px] ${isUnread ? 'font-bold text-slate-900' : 'font-semibold text-slate-700'} truncate`}>{n.title}</p>
                                   <span className="text-[10px] font-medium text-slate-400 flex-shrink-0 tabular-nums">{n.time}</span>
                                 </div>
-                                {/* Two-line clamp rather than truncate — patient name plus date/time
-                                    never fits on one line at this width. */}
                                 <p className="text-[11.5px] text-slate-500 leading-snug mt-0.5 line-clamp-2">{n.message}</p>
                               </div>
                             </div>
@@ -1088,14 +1098,14 @@ export default function AdminDashboard({ onLogout }) {
               )}
             </div>
 
-            <div className="w-px h-6 bg-gray-200 mx-1"/>
+            <div className="w-px h-6 bg-slate-200/80 mx-1"/>
 
-            {/* Admin Profile Pill */}
-            <div className="flex items-center gap-2 p-1 px-2 rounded-full cursor-pointer transition-colors hover:bg-gray-100" onClick={() => setActivePage('settings')}>
-              <div className="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center text-white font-bold text-xs shadow-sm">
+            {/* Admin Profile Pill (ENLARGED) */}
+            <div className="flex items-center gap-3 p-1.5 px-4 rounded-full cursor-pointer transition-all bg-slate-100/90 hover:bg-white hover:shadow-xs border border-slate-200/90 text-slate-900" onClick={() => setActivePage('settings')}>
+              <div className="w-9 h-9 rounded-full bg-[#3B50DF] flex items-center justify-center text-white font-extrabold text-xs sm:text-sm shadow-2xs">
                 {adminProfile.initials}
               </div>
-              <span className="text-xs font-bold hidden sm:block">{adminProfile.name}</span>
+              <span className="text-xs sm:text-sm font-bold hidden sm:block text-slate-900">{adminProfile.name}</span>
             </div>
           </div>
         </header>
@@ -1118,52 +1128,75 @@ export default function AdminDashboard({ onLogout }) {
           <PageTransition pageKey={activePage}>
 
             {activePage === 'dashboard' && (
-              <div className="h-full overflow-y-auto bg-[#F4F5F7]">
-                <div className="px-7 py-6 max-w-screen-2xl mx-auto">
+              <div className="h-full overflow-y-auto bg-[#F2F5FA]">
+                <div className="px-4 sm:px-6 md:px-8 py-6 w-full max-w-[1700px] mx-auto space-y-6">
 
-                  <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 mb-5 items-stretch">
-                    <div className="xl:col-span-8 flex">
+                  {/* ── TOP HERO ROW: WELCOME BANNER + QUICK CLINIC OPERATIONS ── */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+                    <div className="lg:col-span-7 xl:col-span-8 flex">
                       <WelcomeBanner stats={stats} onNavigate={setActivePage} adminName={adminProfile.name} />
                     </div>
 
-                    <div className="xl:col-span-4 flex">
-                      <div className="rounded-xl border p-4 sm:p-4.5 w-full flex flex-col justify-between bg-white border-slate-200 text-slate-900"
-                        style={{ animation: 'kna-section-in 0.46s cubic-bezier(0.22,1,0.36,1) 0.22s both' }}>
-                        <div>
-                          <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400 mb-0.5">Clinic Operations</p>
-                          <h3 className="text-sm font-semibold mb-2.5">Quick Actions</h3>
+                    <div className="lg:col-span-5 xl:col-span-4 flex">
+                      <div className="rounded-3xl border p-5 sm:p-6 w-full flex flex-col bg-white border-slate-200/70 shadow-2xs text-slate-900 transition-all"
+                        style={{ animation: 'kna-section-in 0.46s cubic-bezier(0.22,1,0.36,1) 0.18s both' }}>
+                        <div className="flex-1 flex flex-col">
+                          <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-sm font-bold text-slate-900">Clinic Operations</h3>
+                          </div>
 
-                          <div className="space-y-2">
+                          {/* 2-Column responsive action grid filling card height evenly */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-3 flex-1">
                             <button
                               onClick={() => setActivePage('patients')}
-                              className="group w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer bg-slate-50 hover:bg-slate-100 hover:border-slate-300 border-slate-200 text-slate-800"
+                              className="group flex items-center justify-between p-3.5 px-4 rounded-2xl text-xs font-semibold border border-slate-200/70 transition-all cursor-pointer bg-slate-50/60 hover:bg-white hover:border-rose-200 text-slate-800 hover:text-rose-900 shadow-2xs hover:shadow-xs hover:-translate-y-0.5 h-full"
                             >
-                              <span className="flex items-center gap-2.5"><UserPlus size={16} className="text-red-600" /> Register New Patient</span>
-                              <ChevronRightIcon size={14} className="transition-colors text-slate-400 group-hover:text-slate-700" />
+                              <span className="flex items-center gap-2.5 truncate">
+                                <div className="w-7 h-7 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
+                                  <UserPlus size={15} />
+                                </div>
+                                <span className="truncate">New Patient</span>
+                              </span>
+                              <ChevronRightIcon size={14} className="transition-transform text-slate-400 group-hover:text-rose-600 group-hover:translate-x-0.5 shrink-0" />
                             </button>
 
                             <button
                               onClick={() => setActivePage('appointments')}
-                              className="group w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer bg-slate-50 hover:bg-slate-100 hover:border-slate-300 border-slate-200 text-slate-800"
+                              className="group flex items-center justify-between p-3.5 px-4 rounded-2xl text-xs font-semibold border border-slate-200/70 transition-all cursor-pointer bg-slate-50/60 hover:bg-white hover:border-indigo-200 text-slate-800 hover:text-indigo-900 shadow-2xs hover:shadow-xs hover:-translate-y-0.5 h-full"
                             >
-                              <span className="flex items-center gap-2.5"><Calendar size={16} className="text-slate-600" /> Walk-In Appointment</span>
-                              <ChevronRightIcon size={14} className="transition-colors text-slate-400 group-hover:text-slate-700" />
+                              <span className="flex items-center gap-2.5 truncate">
+                                <div className="w-7 h-7 rounded-xl bg-indigo-50 text-[#3B50DF] flex items-center justify-center shrink-0 border border-indigo-100">
+                                  <Calendar size={15} />
+                                </div>
+                                <span className="truncate">Walk-In Apt</span>
+                              </span>
+                              <ChevronRightIcon size={14} className="transition-transform text-slate-400 group-hover:text-[#3B50DF] group-hover:translate-x-0.5 shrink-0" />
                             </button>
 
                             <button
                               onClick={() => setActivePage('inventory')}
-                              className="group w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer bg-slate-50 hover:bg-slate-100 hover:border-slate-300 border-slate-200 text-slate-800"
+                              className="group flex items-center justify-between p-3.5 px-4 rounded-2xl text-xs font-semibold border border-slate-200/70 transition-all cursor-pointer bg-slate-50/60 hover:bg-white hover:border-emerald-200 text-slate-800 hover:text-emerald-900 shadow-2xs hover:shadow-xs hover:-translate-y-0.5 h-full"
                             >
-                              <span className="flex items-center gap-2.5"><Package size={16} className="text-slate-600" /> Check Vaccine Stock</span>
-                              <ChevronRightIcon size={14} className="transition-colors text-slate-400 group-hover:text-slate-700" />
+                              <span className="flex items-center gap-2.5 truncate">
+                                <div className="w-7 h-7 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
+                                  <Package size={15} />
+                                </div>
+                                <span className="truncate">Vaccine Stock</span>
+                              </span>
+                              <ChevronRightIcon size={14} className="transition-transform text-slate-400 group-hover:text-emerald-600 group-hover:translate-x-0.5 shrink-0" />
                             </button>
 
                             <button
                               onClick={() => setActivePage('incidents')}
-                              className="group w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer bg-slate-50 hover:bg-slate-100 hover:border-slate-300 border-slate-200 text-slate-800"
+                              className="group flex items-center justify-between p-3.5 px-4 rounded-2xl text-xs font-semibold border border-slate-200/70 transition-all cursor-pointer bg-slate-50/60 hover:bg-white hover:border-amber-200 text-slate-800 hover:text-amber-900 shadow-2xs hover:shadow-xs hover:-translate-y-0.5 h-full"
                             >
-                              <span className="flex items-center gap-2.5"><MapIcon size={16} className="text-slate-600" /> View Incident Map</span>
-                              <ChevronRightIcon size={14} className="transition-colors text-slate-400 group-hover:text-slate-700" />
+                              <span className="flex items-center gap-2.5 truncate">
+                                <div className="w-7 h-7 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100">
+                                  <MapIcon size={15} />
+                                </div>
+                                <span className="truncate">Incident Map</span>
+                              </span>
+                              <ChevronRightIcon size={14} className="transition-transform text-slate-400 group-hover:text-amber-600 group-hover:translate-x-0.5 shrink-0" />
                             </button>
                           </div>
                         </div>
@@ -1171,70 +1204,81 @@ export default function AdminDashboard({ onLogout }) {
                     </div>
                   </div>
 
-                  {/* Stat Cards */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+                  {/* ── STAT CARDS ROW — CLEAN ORGANIZED TYPOGRAPHY & GENEROUS CARD SPACING ── */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
                     {dashboardStatWidgets.map((w, i) => (
                       <div key={i} onClick={() => setActivePage(w.page)}
-                        className="rounded-xl border p-5 cursor-pointer flex items-center justify-between transition-colors bg-white border-slate-200 hover:border-slate-300"
+                        className="group rounded-3xl border p-5 sm:p-6 cursor-pointer flex items-center justify-between transition-all duration-200 bg-white border-slate-200/70 shadow-2xs hover:shadow-md hover:border-indigo-200/80 hover:-translate-y-0.5 w-full"
                         style={{ animation: `kna-card-in 0.42s cubic-bezier(0.22,1,0.36,1) ${0.04 + i * 0.06}s both` }}>
-                        <div>
-                          <p className="text-3xl font-bold leading-none tabular-nums mb-1.5 text-slate-900">
+                        <div className="min-w-0 pr-3">
+                          <p className="text-3xl font-extrabold leading-none tabular-nums text-slate-900 group-hover:text-[#3B50DF] transition-colors">
                             {w.value}
                           </p>
-                          <p className="text-sm font-medium text-slate-700">{w.label}</p>
-                          <p className="text-xs mt-0.5 text-slate-400">{w.sub}</p>
+                          <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mt-2 truncate">{w.label}</p>
+                          <p className="text-[11px] font-normal text-slate-400 mt-0.5 truncate">{w.sub}</p>
                         </div>
                         {w.progress === null ? (
-                          <div className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0"
+                          <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-105 shadow-2xs"
                             style={{ background: w.tint, border: `1px solid ${w.border}`, color: w.color }}>
-                            <w.Icon size={19} strokeWidth={1.9} />
+                            <w.Icon size={20} strokeWidth={2} />
                           </div>
                         ) : (
-                          <CircularProgress percentage={w.progress} size={46} strokeWidth={4} color={w.color} trackColor="#E2E8F0" />
+                          <div className="transition-transform group-hover:scale-105 shrink-0">
+                            <CircularProgress percentage={w.progress} size={48} strokeWidth={4} color={w.color === '#C8151A' ? '#C8151A' : '#3B50DF'} trackColor="#E2E8F0" />
+                          </div>
                         )}
                       </div>
                     ))}
                   </div>
 
-                  {/* Main Grid: Left 8 Cols, Right 4 Cols */}
-                  <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
-                    {/* Left 8 Cols */}
-                    <div className="xl:col-span-8 flex flex-col gap-5">
+                  {/* ── MAIN DASHBOARD GRID: LEFT 5 COLS (LONGER OVERDUE TRACKER), RIGHT 7 COLS (TODAY'S SCHED + CALENDAR, VACCINE INVENTORY BELOW) ── */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
 
-                      {/* Overdue Dose Tracker */}
-                      <div className="rounded-xl border overflow-hidden bg-white border-slate-200 text-slate-900"
+                    {/* LEFT COLUMN: OVERDUE DOSE TRACKER (LONGER PORTRAIT CARD) */}
+                    <div className="lg:col-span-5 xl:col-span-4 flex flex-col gap-6">
+
+                      {/* 1. Overdue Dose Tracker Card (Taller/Longer Format) */}
+                      <div className="rounded-3xl border overflow-hidden bg-white border-slate-200/70 shadow-2xs text-slate-900"
                         style={{ animation: 'kna-section-in 0.46s cubic-bezier(0.22,1,0.36,1) 0.10s both' }}>
-                        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
+                        <div className="p-5 border-b border-slate-100 bg-slate-50/40 flex items-center justify-between">
                           <div>
-                            <h3 className="text-sm font-semibold tracking-tight">Overdue Dose Tracker</h3>
-                            <p className="text-xs mt-0.5 text-slate-400">Patients past due on their next scheduled dose</p>
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-sm font-bold tracking-tight text-slate-900">Overdue Dose Tracker</h3>
+                              {overdueList.length > 0 && (
+                                <span className="bg-rose-50 text-rose-600 text-[10px] font-bold px-2 py-0.5 rounded-full border border-rose-200">
+                                  {overdueList.length} Action Needed
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] mt-0.5 text-slate-500 font-normal">Patients past due on scheduled doses</p>
                           </div>
                           <button onClick={() => setActivePage('vaccination')}
-                            className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition-all shadow-sm cursor-pointer">
+                            className="text-xs font-bold text-[#3B50DF] hover:underline cursor-pointer">
                             View All →
                           </button>
                         </div>
 
                         {overdueList.length === 0 ? (
-                          <div className="py-10 text-center">
-                            <CheckCircle size={22} className="text-emerald-400 mx-auto mb-2" />
-                            <p className="text-sm text-slate-400">No patients are overdue right now.</p>
+                          <div className="py-12 text-center p-5">
+                            <CheckCircle size={28} className="text-emerald-500 mx-auto mb-2" />
+                            <p className="text-sm font-bold text-slate-800">All patients on schedule!</p>
+                            <p className="text-xs text-slate-400 mt-0.5 font-normal">No overdue doses detected.</p>
                           </div>
                         ) : (
-                          <div className="p-2">
-                            {overdueList.slice(0, 5).map(o => (
-                              <button key={o.id} onClick={() => setActivePage('vaccination')}
-                                className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg transition-colors cursor-pointer text-left hover:bg-slate-50">
-                                <div className="flex items-center gap-3 min-w-0">
-                                  <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-rose-50 text-rose-600">
-                                    <AlertCircle size={16} />
+                          <div className="p-3.5 space-y-2.5">
+                            {overdueList.slice(0, 7).map(o => (
+                              <button key={o.id} onClick={() => { setSelectedOverduePatientId(o.firestoreId || o.id || o.name); setActivePage('vaccination'); }}
+                                className="w-full flex items-center justify-between gap-2.5 p-3 rounded-2xl transition-all cursor-pointer text-left bg-slate-50/50 hover:bg-rose-50/50 border border-slate-100 hover:border-rose-200 group">
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 bg-rose-100/80 text-rose-600 border border-rose-200/60">
+                                    <AlertCircle size={15} />
                                   </div>
                                   <div className="min-w-0">
-                                    <p className="text-xs font-medium truncate">{o.name}</p>
-                                    <p className="text-[11px] mt-0.5 text-slate-400">{o.doseLabel} was due {fmtDate(o.dueDate)}</p>
+                                    <p className="text-xs font-bold text-slate-900 group-hover:text-rose-900 transition-colors truncate">{o.name}</p>
+                                    <p className="text-[10.5px] text-slate-500 font-normal truncate">{o.doseLabel} · <span className="font-semibold text-rose-600">{fmtDate(o.dueDate)}</span></p>
                                   </div>
                                 </div>
-                                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full border flex-shrink-0 bg-rose-50 text-rose-700 border-rose-200">
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border flex-shrink-0 bg-rose-50 text-rose-600 border-rose-200">
                                   {o.daysOverdue}d overdue
                                 </span>
                               </button>
@@ -1242,17 +1286,105 @@ export default function AdminDashboard({ onLogout }) {
                           </div>
                         )}
                       </div>
+                    </div>
 
-                      {/* 2. Vaccine Inventory & Stock Level Overview Table Card */}
-                      <div className="rounded-xl border overflow-hidden bg-white border-slate-200 text-slate-900"
-                        style={{ animation: 'kna-section-in 0.46s cubic-bezier(0.22,1,0.36,1) 0.18s both' }}>
-                        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
+                    {/* RIGHT COLUMN: TODAY'S SCHEDULE & CALENDAR (ROW 1) + VACCINE INVENTORY (ROW 2) */}
+                    <div className="lg:col-span-7 xl:col-span-8 flex flex-col gap-6">
+
+                      {/* TOP ROW: TODAY'S SCHEDULE + STANDALONE CALENDAR (MATCHED HEIGHT) */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+
+                        {/* 1. Today's Schedule Card (Longer / Matched Height Format) */}
+                        <div className="rounded-3xl border p-5 bg-white border-slate-200/70 shadow-2xs text-slate-900 flex flex-col justify-between h-full"
+                          style={{ animation: 'kna-section-in 0.46s cubic-bezier(0.22,1,0.36,1) 0.14s both' }}>
                           <div>
-                            <h3 className="text-sm font-semibold tracking-tight">Vaccine Inventory Overview</h3>
-                            <p className="text-xs mt-0.5 text-slate-400">Real-time stock status</p>
+                            <div className="flex items-center justify-between mb-4">
+                              <div>
+                                <h3 className="text-sm font-bold tracking-tight text-slate-900">Today's Schedule</h3>
+                                <p className="text-[11px] text-slate-500 font-normal mt-0.5">{todayApts.length} appointment{todayApts.length !== 1 ? 's' : ''} today</p>
+                              </div>
+                              <button onClick={() => setActivePage('appointments')} className="text-xs font-bold text-[#3B50DF] hover:underline cursor-pointer">View All →</button>
+                            </div>
+
+                            {todayApts.length === 0 ? (
+                              <div className="flex-1 flex flex-col items-center justify-center py-12 text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 min-h-[220px]">
+                                <Calendar size={26} className="text-slate-300 mx-auto mb-2" />
+                                <p className="text-xs font-bold text-slate-700">No appointments today</p>
+                                <p className="text-[11px] text-slate-400 mt-0.5 font-normal">All clear for today</p>
+                              </div>
+                            ) : (
+                              <div className="relative pl-3 space-y-3.5 before:absolute before:left-1.5 before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-200/80">
+                                {[...todayApts].sort((a, b) => (a.time || '').localeCompare(b.time || '')).slice(0, 4).map((apt, idx) => {
+                                  const isTop = idx === 0;
+                                  return isTop ? (
+                                    <div key={apt.id} onClick={() => setActivePage('appointments')}
+                                      className="relative z-10 w-full p-3.5 rounded-2xl bg-[#3B50DF] text-white shadow-xs cursor-pointer transition-transform hover:scale-[1.01]">
+                                      <div className="flex items-center justify-between gap-2 mb-1">
+                                        <span className="text-[11px] font-bold text-indigo-100 flex items-center gap-1.5">
+                                          <Clock size={13} /> {apt.time || '10:00 AM'}
+                                        </span>
+                                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-white/20 text-white uppercase tracking-wider">
+                                          {apt.status || 'Scheduled'}
+                                        </span>
+                                      </div>
+                                      <h4 className="text-xs font-bold text-white truncate">{apt.name || apt.patient || 'Patient'}</h4>
+                                      <p className="text-[11px] text-indigo-100/90 mt-0.5 truncate">{apt.type || apt.purpose || 'Consultation'}</p>
+                                    </div>
+                                  ) : (
+                                    <div key={apt.id} onClick={() => setActivePage('appointments')}
+                                      className="relative z-10 flex items-center justify-between gap-3 p-2.5 rounded-2xl bg-slate-50/80 hover:bg-slate-100/80 border border-slate-100 cursor-pointer transition-colors group">
+                                      <div className="flex items-center gap-2.5 min-w-0">
+                                        <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 shrink-0" />
+                                        <div className="min-w-0">
+                                          <p className="text-xs font-bold text-slate-900 group-hover:text-[#3B50DF] transition-colors truncate">{apt.name || apt.patient}</p>
+                                          <p className="text-[10.5px] text-slate-500 font-normal mt-0.5 truncate">{apt.time || '—'} · {apt.type || apt.purpose || 'Consultation'}</p>
+                                        </div>
+                                      </div>
+                                      <ChevronRightIcon size={14} className="text-slate-400 group-hover:text-[#3B50DF] transition-transform group-hover:translate-x-0.5 shrink-0" />
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* 2. Standalone Interactive Calendar Widget */}
+                        <div className="rounded-3xl border overflow-hidden bg-white border-slate-200/70 shadow-2xs text-slate-900 flex flex-col justify-between h-full"
+                          style={{ animation: 'kna-section-in 0.46s cubic-bezier(0.22,1,0.36,1) 0.18s both' }}>
+                          <div>
+                            <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 bg-slate-50/40">
+                              <button onClick={() => { setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1)); setSelectedCalendarDay(null); }}
+                                className="w-7 h-7 flex items-center justify-center rounded-xl cursor-pointer transition-colors text-slate-500 hover:bg-white hover:shadow-2xs border border-transparent hover:border-slate-200">
+                                <ChevronLeft size={15}/>
+                              </button>
+                              <div className="text-center">
+                                <h3 className="text-xs font-bold text-slate-900">{currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</h3>
+                                <p className="text-[10px] text-slate-400 font-normal">Clinic Calendar</p>
+                              </div>
+                              <button onClick={() => { setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1)); setSelectedCalendarDay(null); }}
+                                className="w-7 h-7 flex items-center justify-center rounded-xl cursor-pointer transition-colors text-slate-500 hover:bg-white hover:shadow-2xs border border-transparent hover:border-slate-200">
+                                <ChevronRightIcon size={15}/>
+                              </button>
+                            </div>
+                            <div className="p-4">
+                              <div className="grid grid-cols-7 mb-2">{['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map((d, i) => (<div key={i} className="text-center text-[10px] font-bold py-0.5 text-slate-400">{d}</div>))}</div>
+                              <div className="grid grid-cols-7 gap-1">{renderCalendarDays()}</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* BOTTOM ROW: VACCINE INVENTORY OVERVIEW (MOVED A BIT DOWN) */}
+                      <div className="rounded-3xl border overflow-hidden bg-white border-slate-200/70 shadow-2xs text-slate-900 mt-2"
+                        style={{ animation: 'kna-section-in 0.46s cubic-bezier(0.22,1,0.36,1) 0.22s both' }}>
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/40">
+                          <div>
+                            <h3 className="text-sm font-bold tracking-tight text-slate-900">Vaccine Inventory Overview</h3>
+                            <p className="text-xs mt-0.5 text-slate-500 font-normal">Real-time clinical stock status</p>
                           </div>
                           <button onClick={() => setActivePage('inventory')}
-                            className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition-all shadow-sm cursor-pointer">
+                            className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-slate-700 bg-slate-100 hover:bg-indigo-50 hover:text-[#3B50DF] transition-all cursor-pointer shadow-2xs">
                             Manage Inventory →
                           </button>
                         </div>
@@ -1260,19 +1392,20 @@ export default function AdminDashboard({ onLogout }) {
                         <div className="overflow-x-auto">
                           <table className="w-full text-left border-collapse">
                             <thead>
-                              <tr className="border-b border-slate-100">
-                                <th className="px-5 py-2.5 text-[11px] font-medium text-slate-400 uppercase tracking-wide">Item Name</th>
-                                <th className="px-5 py-2.5 text-[11px] font-medium text-slate-400 uppercase tracking-wide">Category</th>
-                                <th className="px-5 py-2.5 text-[11px] font-medium text-slate-400 uppercase tracking-wide">Stock Level</th>
-                                <th className="px-5 py-2.5 text-[11px] font-medium text-slate-400 uppercase tracking-wide">Status</th>
+                              <tr className="border-b border-slate-100 bg-slate-50/50">
+                                <th className="px-6 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Item Name</th>
+                                <th className="px-6 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Category</th>
+                                <th className="px-6 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Stock Level</th>
+                                <th className="px-6 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Status</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
-                              {(inventoryList.length > 0 ? inventoryList.slice(0, 4) : [
+                              {(inventoryList.length > 0 ? inventoryList.slice(0, 5) : [
                                 { id: 'v1', name: 'Rabipur (PCEC Vaccine)', category: 'Vaccine', stock: 45, unit: 'Vials', status: 'optimal' },
                                 { id: 'v2', name: 'Verorab (PVRV Vaccine)', category: 'Vaccine', stock: 12, unit: 'Vials', status: 'warning' },
                                 { id: 'v3', name: 'Equirab (RIG Immunoglobulin)', category: 'Immunoglobulin', stock: 8, unit: 'Vials', status: 'critical' },
-                                { id: 'v4', name: 'Auto-Disable Syringes 1mL', category: 'Supplies', stock: 150, unit: 'Pcs', status: 'optimal' }
+                                { id: 'v4', name: 'Auto-Disable Syringes 1mL', category: 'Supplies', stock: 150, unit: 'Pcs', status: 'optimal' },
+                                { id: 'v5', name: 'Tetanus Toxoid 0.5mL', category: 'Vaccine', stock: 60, unit: 'Vials', status: 'optimal' }
                               ]).map((item) => {
                                 const qty = parseInt(item.stock ?? item.quantity) || 0;
                                 const isOut = qty <= 0;
@@ -1284,12 +1417,12 @@ export default function AdminDashboard({ onLogout }) {
                                   : 'bg-emerald-50 text-emerald-700 border-emerald-200';
 
                                 return (
-                                  <tr key={item.id} className="transition-colors hover:bg-slate-50">
-                                    <td className="px-5 py-3 text-xs font-medium">{item.name}</td>
-                                    <td className="px-5 py-3 text-xs text-slate-500">{item.category || 'Vaccine'}</td>
-                                    <td className="px-5 py-3 text-xs font-medium">{qty} {item.unit || 'units'}</td>
-                                    <td className="px-5 py-3">
-                                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full border text-[11px] font-medium ${badgeStyle}`}>
+                                  <tr key={item.id} className="transition-colors hover:bg-slate-50/80">
+                                    <td className="px-6 py-3.5 text-xs font-semibold text-slate-900">{item.name}</td>
+                                    <td className="px-6 py-3.5 text-xs text-slate-500 font-normal">{item.category || 'Vaccine'}</td>
+                                    <td className="px-6 py-3.5 text-xs font-bold text-slate-800 tabular-nums">{qty} {item.unit || 'units'}</td>
+                                    <td className="px-6 py-3.5">
+                                      <span className={`inline-flex items-center px-3 py-0.5 rounded-full border text-[11px] font-bold ${badgeStyle}`}>
                                         {isOut ? 'Out of Stock' : isLow ? 'Low Stock' : 'Optimal'}
                                       </span>
                                     </td>
@@ -1300,142 +1433,6 @@ export default function AdminDashboard({ onLogout }) {
                           </table>
                         </div>
                       </div>
-
-                      {/* 3. Incident Map Summary Cards Widget */}
-                      <div className="rounded-xl border p-5 bg-white border-slate-200 text-slate-900"
-                        style={{ animation: 'kna-section-in 0.46s cubic-bezier(0.22,1,0.36,1) 0.24s both' }}>
-                        <div className="flex items-center justify-between mb-4">
-                          <div>
-                            <h3 className="text-sm font-semibold tracking-tight">Rabies Exposure & Incident Summary</h3>
-                            <p className="text-xs mt-0.5 text-slate-400">Libon, Albay Surveillance</p>
-                          </div>
-                          <button onClick={() => setActivePage('incidents')}
-                            className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition-all shadow-sm cursor-pointer">
-                            View Map →
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                          <div className="p-4 rounded-lg border bg-slate-50 border-slate-100">
-                            <p className="text-2xl font-bold tabular-nums text-slate-900">{incidentList.length || 14}</p>
-                            <p className="text-xs mt-0.5 text-slate-600">Reported Bite Cases</p>
-                            <p className="text-[11px] mt-1 text-slate-400">Active exposure tracking</p>
-                          </div>
-                          <div className="p-4 rounded-lg border bg-slate-50 border-slate-100">
-                            <p className="text-2xl font-bold text-slate-900">Libon Zone 3</p>
-                            <p className="text-xs mt-0.5 text-slate-600">High Exposure Area</p>
-                            <p className="text-[11px] mt-1 text-slate-400">Top reported incidents</p>
-                          </div>
-                          <div className="p-4 rounded-lg border bg-slate-50 border-slate-100">
-                            <p className="text-2xl font-bold tabular-nums text-slate-900">78% Canine</p>
-                            <p className="text-xs mt-0.5 text-slate-600">Bite Classification</p>
-                            <p className="text-[11px] mt-1 text-slate-400">Dog bites vs Feline exposure</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Right 4 Cols */}
-                    <div className="xl:col-span-4 flex flex-col gap-5">
-
-                      {/* Today's Schedule */}
-                      <div className="rounded-xl border p-5 bg-white border-slate-200 text-slate-900"
-                        style={{ animation: 'kna-section-in 0.46s cubic-bezier(0.22,1,0.36,1) 0.16s both' }}>
-                        <div className="flex items-center justify-between mb-3.5">
-                          <h3 className="text-sm font-semibold tracking-tight">Today's Schedule</h3>
-                          <button onClick={() => setActivePage('appointments')} className="text-[11px] font-medium text-red-600 hover:text-red-700 transition-colors cursor-pointer">View All</button>
-                        </div>
-
-                        {todayApts.length === 0 ? (
-                          <p className="py-6 text-center text-xs text-slate-400">No appointments scheduled today.</p>
-                        ) : (
-                          <div className="space-y-1">
-                            {[...todayApts].sort((a, b) => (a.time || '').localeCompare(b.time || '')).slice(0, 5).map(apt => {
-                              const isCancelled = apt.status === 'cancelled';
-                              const isDone = apt.status === 'done';
-                              const isConfirmed = apt.status === 'confirmed';
-                              const tagStyle = isCancelled
-                                ? { bg: 'bg-rose-50', text: 'text-rose-600', Icon: AlertCircle }
-                                : isDone
-                                ? { bg: 'bg-sky-50', text: 'text-sky-600', Icon: CheckCircle }
-                                : isConfirmed
-                                ? { bg: 'bg-emerald-50', text: 'text-emerald-600', Icon: CheckCircle }
-                                : { bg: 'bg-amber-50', text: 'text-amber-600', Icon: Clock };
-                              return (
-                                <button key={apt.id} onClick={() => setActivePage('appointments')}
-                                  className="w-full flex items-center gap-3 px-2 py-2.5 rounded-lg transition-colors cursor-pointer text-left hover:bg-slate-50">
-                                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${tagStyle.bg} ${tagStyle.text}`}>
-                                    <tagStyle.Icon size={16} />
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-medium truncate">{apt.name || apt.patient || 'Patient'}</p>
-                                    <p className="text-[11px] mt-0.5 text-slate-400">{apt.time || '—'} · {apt.type || apt.purpose || 'Consultation'}</p>
-                                  </div>
-                                  <ChevronRightIcon size={15} className="text-slate-400 flex-shrink-0" />
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Interactive Calendar Widget */}
-                      <div className="rounded-xl border overflow-hidden bg-white border-slate-200 text-slate-900"
-                        style={{ animation: 'kna-section-in 0.46s cubic-bezier(0.22,1,0.36,1) 0.22s both' }}>
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-                          <button onClick={() => { setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1)); setSelectedCalendarDay(null); }}
-                            className="w-7 h-7 flex items-center justify-center rounded-lg cursor-pointer transition-colors text-slate-500 hover:bg-slate-100">
-                            <ChevronLeft size={16}/>
-                          </button>
-                          <span className="text-sm font-medium">{currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
-                          <button onClick={() => { setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1)); setSelectedCalendarDay(null); }}
-                            className="w-7 h-7 flex items-center justify-center rounded-lg cursor-pointer transition-colors text-slate-500 hover:bg-slate-100">
-                            <ChevronRightIcon size={16}/>
-                          </button>
-                        </div>
-                        <div className="px-4 pt-3 pb-2">
-                          <div className="grid grid-cols-7 mb-1.5">{['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map((d, i) => (<div key={i} className="text-center text-[10px] font-medium py-1 text-slate-400">{d}</div>))}</div>
-                          <div className="grid grid-cols-7 gap-0.5">{renderCalendarDays()}</div>
-                        </div>
-                        <div className="px-4 pb-3 pt-1.5 flex flex-wrap gap-x-3 gap-y-1 border-t border-slate-100">
-                          {[['#22C55E', 'Confirmed'], ['#F59E0B', 'Pending'], ['#EF4444', 'Cancelled'], ['#38BDF8', 'Done']].map(([c, l]) => (
-                            <span key={l} className="flex items-center gap-1.5 text-[10px] text-slate-500">
-                              <span className="w-1.5 h-1.5 rounded-full inline-block flex-shrink-0" style={{ background: c }}/>{l}
-                            </span>
-                          ))}
-                        </div>
-
-                        {selectedCalendarDay && (() => {
-                          const dayApts = getAptsForDay(selectedCalendarDay);
-                          const y = currentMonth.getFullYear();
-                          const m = String(currentMonth.getMonth() + 1).padStart(2, '0');
-                          const d = String(selectedCalendarDay).padStart(2, '0');
-                          const dateLabel = new Date(`${y}-${m}-${d}`).toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric' });
-                          return (
-                            <div className="border-t p-3 bg-slate-50 border-slate-100">
-                              <div className="flex items-center justify-between px-1 mb-2">
-                                <div><p className="text-xs font-medium">{dateLabel}</p><p className="text-[10px] text-slate-400">{dayApts.length} appointment{dayApts.length !== 1 ? 's' : ''}</p></div>
-                                <button onClick={() => setSelectedCalendarDay(null)} className="w-5 h-5 flex items-center justify-center rounded text-slate-400 hover:text-slate-600 cursor-pointer">
-                                  <X size={12}/>
-                                </button>
-                              </div>
-                              {dayApts.length === 0 ? (
-                                <p className="px-1 pb-1 text-[11px] text-slate-400 italic">No appointments on this day.</p>
-                              ) : (
-                                <div className="space-y-1.5 max-h-[160px] overflow-y-auto">
-                                  {dayApts.map((apt) => (
-                                    <div key={apt.id} className="rounded-lg border p-2.5 flex items-center gap-2.5 bg-white border-slate-100">
-                                      <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-medium text-white flex-shrink-0" style={{ background: `hsl(${(apt.name?.charCodeAt(0) || 65) * 7 % 360},58%,52%)` }}>{(apt.name || apt.patient || '?').charAt(0)}</div>
-                                      <div className="flex-1 min-w-0"><p className="text-xs font-medium truncate">{apt.name || apt.patient}</p><p className="text-[10px] text-slate-400">{apt.time || '—'} · {apt.type || apt.purpose || 'Consultation'}</p></div>
-                                    </div>
-                                  ))}
-                                  <button onClick={() => setActivePage('appointments')} className="w-full text-center text-[11px] font-medium pt-1 cursor-pointer text-red-600 hover:underline">Manage appointments →</button>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })()}
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -1444,7 +1441,7 @@ export default function AdminDashboard({ onLogout }) {
 
             {activePage === 'appointments' && <div className="h-full overflow-y-auto"><AppointmentPage/></div>}
             {activePage === 'patients'     && <div className="h-full overflow-y-auto"><PatientRecordsPage/></div>}
-            {activePage === 'vaccination'  && <div className="h-full overflow-y-auto"><VaccinationTrackerPage/></div>}
+            {activePage === 'vaccination'  && <div className="h-full overflow-y-auto"><VaccinationTrackerPage selectedPatientId={selectedOverduePatientId}/></div>}
             {activePage === 'inventory'    && <div className="h-full overflow-y-auto"><VaccineInventoryPage/></div>}
             {activePage === 'incidents'    && <div className="h-full overflow-y-auto"><IncidentMapPage/></div>}
             {activePage === 'messages'     && <div className="h-full overflow-y-auto"><MessagesPage/></div>}

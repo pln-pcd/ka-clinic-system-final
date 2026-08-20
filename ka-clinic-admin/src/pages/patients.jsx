@@ -1769,6 +1769,14 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEx
         {/* Action buttons */}
         <button
           className="btn btn-sm"
+          style={{ background: '#C8151A', color: '#FFFFFF', border: 'none', fontFamily: 'inherit', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', padding: '7px 14px', borderRadius: 8, boxShadow: '0 2px 6px rgba(200,21,26,0.25)' }}
+          onClick={() => onExport?.(r || patient)}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16v16H4z" /><path d="M22 6l-10 7L2 6" /></svg>
+          Export / Email Report
+        </button>
+        <button
+          className="btn btn-sm"
           style={{ background: '#6366F1', color: '#FFFFFF', border: 'none', fontFamily: 'inherit', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', padding: '7px 14px', borderRadius: 8, boxShadow: '0 2px 6px rgba(99,102,241,0.25)' }}
           onClick={() => onEdit?.(r || patient)}
         >
@@ -2119,85 +2127,239 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
     return '';
   }
 
-  // Shared print/email HTML shell — a real letterhead (dark header bar,
-  // brand sans-serif, restrained slate/red palette) instead of the old
-  // default-serif document look.
+  // Shared print/email HTML shell — official Philippine institutional letterhead with clean table layout
   function reportStyles() {
     return `
       *{box-sizing:border-box;}
-      body{font-family:'Work Sans',-apple-system,'Segoe UI',sans-serif;color:#1E293B;padding:0;margin:0;font-size:12.5px;}
-      .letterhead{background:#0F172A;color:#fff;padding:20px 40px;}
-      .letterhead .brand{font-size:16px;font-weight:700;letter-spacing:.2px;}
-      .letterhead .brand em{color:#F87171;font-style:normal;}
-      .letterhead .tagline{font-size:9.5px;color:#CBD5E1;margin-top:2px;text-transform:uppercase;letter-spacing:.5px;}
-      .body-pad{padding:26px 40px 36px;}
-      h1{font-size:16px;font-weight:700;margin:0 0 3px;color:#0F172A;}
-      .sub{color:#64748B;margin-bottom:18px;font-size:11px;}
-      .summary{display:flex;gap:14px;margin-bottom:22px;}
-      .stat{border:1px solid #E2E8F0;border-radius:8px;padding:10px 18px;text-align:center;background:#F8FAFC;}
-      .stat strong{font-size:20px;display:block;color:#0F172A;}
-      .stat span{font-size:9.5px;color:#64748B;text-transform:uppercase;letter-spacing:.3px;}
-      h3{font-size:11px;font-weight:700;margin:0 0 8px;color:#0F172A;text-transform:uppercase;letter-spacing:.4px;}
-      table{width:100%;border-collapse:collapse;margin-bottom:22px;font-size:11px;}
-      th{background:#F1F5F9;text-align:left;padding:8px 10px;border:1px solid #E2E8F0;font-size:9.5px;text-transform:uppercase;letter-spacing:.3px;color:#475569;}
-      td{padding:7px 10px;border:1px solid #E2E8F0;vertical-align:top;}
-      tr:nth-child(even) td{background:#FAFAFC;}
-      table.info th{width:110px;background:#F8FAFC;}
-      .footer{font-size:9.5px;color:#94A3B8;margin-top:20px;border-top:1px solid #E2E8F0;padding-top:12px;}
+      body{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,Helvetica,Arial,sans-serif;color:#0F172A;padding:0;margin:0;font-size:11.5px;line-height:1.5;background:#FFFFFF;}
+      .letterhead-container{border-bottom:2px solid #0F172A;padding-bottom:14px;margin-bottom:16px;}
+      .formal-summary{width:100%;border-collapse:collapse;margin-bottom:20px;border:1px solid #CBD5E1;}
+      .formal-summary th{background:#F1F5F9;color:#334155;font-weight:700;text-transform:uppercase;font-size:9px;letter-spacing:0.5px;padding:8px 12px;border:1px solid #CBD5E1;text-align:center;}
+      .formal-summary td{padding:10px 12px;border:1px solid #CBD5E1;text-align:center;font-size:14px;font-weight:800;color:#0F172A;}
+      
+      .section-title{font-size:10.5px;font-weight:800;margin:18px 0 10px;color:#0F172A;text-transform:uppercase;letter-spacing:0.6px;border-bottom:2px solid #0F172A;padding-bottom:4px;}
+      table.data-table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:11px;border:1px solid #CBD5E1;}
+      table.data-table th{background:#F1F5F9;text-align:left;padding:8px 10px;border:1px solid #CBD5E1;font-size:9px;text-transform:uppercase;letter-spacing:0.5px;color:#334155;font-weight:700;}
+      table.data-table td{padding:7px 10px;border:1px solid #E2E8F0;vertical-align:middle;color:#1E293B;}
+      table.data-table tr:nth-child(even) td{background:#F8FAFC;}
+      .status-pill{display:inline-block;padding:2px 8px;border-radius:4px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.3px;}
+      .status-completed{background:#DCFCE7;color:#15803D;border:1px solid #A7F3D0;}
+      .status-ongoing{background:#EFF6FF;color:#1D4ED8;border:1px solid #BFDBFE;}
+      .footer{font-size:9px;color:#94A3B8;margin-top:24px;border-top:1px solid #E2E8F0;padding-top:10px;display:flex;justify-content:space-between;align-items:center;}
     `;
   }
+
+  // Official Philippine Government / Institutional Letterhead
   function letterhead() {
-    return `<div class="letterhead">
-      <div class="brand">K&amp;A <em>Clinic</em></div>
-      <div class="tagline">Anti-Rabies &amp; Animal Bite Center</div>
-    </div>`;
+    return `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:14px;border-bottom:2px solid #0F172A;margin-bottom:16px;">
+        <!-- Left Accreditation Emblem -->
+        <div style="width:58px;height:58px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:#F8FAFC;border:1px solid #CBD5E1;flex-shrink:0;">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#C8151A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M12 6v12M6 12h12"/>
+          </svg>
+        </div>
+
+        <!-- Center Official Republic Letterhead Text -->
+        <div style="text-align:center;flex:1;padding:0 16px;">
+          <div style="font-family:'Times New Roman',Georgia,serif;font-size:10px;font-weight:600;color:#475569;letter-spacing:1.2px;text-transform:uppercase;">Republic of the Philippines</div>
+          <div style="font-family:'Times New Roman',Georgia,serif;font-size:18px;font-weight:800;color:#C8151A;margin:2px 0 1px;letter-spacing:-0.01em;">K&amp;A Anti-Rabies Vaccine Clinic</div>
+          <div style="font-family:'Segoe UI',sans-serif;font-size:10.5px;font-weight:700;color:#0F172A;text-transform:uppercase;letter-spacing:0.5px;">Animal Bite Treatment Center</div>
+          <div style="font-size:9px;color:#64748B;margin-top:3px;font-family:'Segoe UI',sans-serif;">Polangui, Albay &bull; Contact: (052) 486-1220 &bull; Email: knaclinic.ph@gmail.com</div>
+        </div>
+
+        <!-- Right Clinic Seal -->
+        <div style="width:58px;height:58px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:#0F172A;border:1px solid #0F172A;flex-shrink:0;">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <path d="M12 8v8M8 12h8"/>
+          </svg>
+        </div>
+      </div>
+    `;
   }
 
-  // Excel opens an HTML table saved with a .xls extension just fine — no
-  // extra dependency needed for a real, double-click-to-open spreadsheet.
+  // Realistic Simple Microsoft Excel Live Preview HTML
+  function buildExcelPreviewHtml(rows, periodLabelStr) {
+    const serviceCount = {};
+    const statusCount = { ongoing: 0, completed: 0 };
+    rows.forEach(p => {
+      const svc = p.service || 'PEP';
+      serviceCount[svc] = (serviceCount[svc] || 0) + 1;
+      const st = derivePatientStatus(p);
+      statusCount[st] = (statusCount[st] || 0) + 1;
+    });
+
+    const headers = ['#', 'Case No.', 'Patient Name', 'Age', 'Sex', 'Address', 'Contact No.', 'Service', 'Status', 'Date Registered'];
+    const colLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+
+    const tableRows = rows.map((p, idx) => {
+      const st = derivePatientStatus(p);
+      const rowNum = idx + 6;
+      return `<tr>
+        <td class="row-num">${rowNum}</td>
+        <td style="text-align:center;">${idx + 1}</td>
+        <td style="font-weight:bold;color:#0F172A;">${p.id || p.mrn || '—'}</td>
+        <td style="font-weight:bold;color:#0F172A;">${formatTitleCase(p.name || '—')}</td>
+        <td style="text-align:center;">${p.age || '—'}</td>
+        <td style="text-align:center;">${p.sex || '—'}</td>
+        <td>${p.address || '—'}</td>
+        <td>${p.contact || '—'}</td>
+        <td style="text-align:center;font-weight:bold;">${p.service || '—'}</td>
+        <td style="text-align:center;font-weight:bold;color:${st === 'completed' ? '#15803D' : '#1D4ED8'};">${st.toUpperCase()}</td>
+        <td style="text-align:center;">${p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString('en-PH') : (p.date || '—')}</td>
+      </tr>`;
+    }).join('');
+
+    return `<!DOCTYPE html><html><head><title>Excel Preview</title>
+      <style>
+        *{box-sizing:border-box;}
+        body{font-family:Calibri,'Segoe UI',Arial,sans-serif;margin:0;padding:0;background:#FFFFFF;font-size:11px;color:#1E293B;user-select:none;}
+        .sheet-container{background:#FFFFFF;overflow-x:auto;padding:0;}
+        table.excel-grid{border-collapse:collapse;width:100%;table-layout:fixed;}
+        table.excel-grid th, table.excel-grid td{border:1px solid #CBD5E1;padding:6px 9px;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        th.col-head{background:#F1F5F9;color:#475569;font-weight:700;text-align:center;font-size:10px;border:1px solid #CBD5E1;}
+        td.row-num{background:#F1F5F9;color:#64748B;font-weight:700;text-align:center;font-size:10px;width:36px;border:1px solid #CBD5E1;}
+        .sheet-tabs{background:#F1F5F9;border-top:1px solid #CBD5E1;padding:4px 12px;display:flex;align-items:center;gap:4px;font-size:11px;position:sticky;bottom:0;}
+        .tab{background:#FFFFFF;border:1px solid #CBD5E1;border-bottom:none;padding:4px 12px;font-weight:700;color:#15803D;border-top:2px solid #15803D;border-radius:3px 3px 0 0;}
+      </style></head><body>
+
+      <div class="sheet-container">
+        <table class="excel-grid">
+          <thead>
+            <tr>
+              <th class="col-head" style="width:36px;"></th>
+              ${colLetters.map(c => `<th class="col-head">${c}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="row-num">1</td>
+              <td colspan="10" style="font-size:13px;font-weight:bold;color:#0F172A;background:#F8FAFC;">K&amp;A CLINIC — PATIENT REGISTRY REPORT</td>
+            </tr>
+            <tr>
+              <td class="row-num">2</td>
+              <td colspan="10" style="color:#475569;background:#F8FAFC;">Report Period: <strong>${periodLabelStr}</strong> &nbsp;|&nbsp; Date Exported: ${new Date().toLocaleString('en-PH')}</td>
+            </tr>
+            <tr>
+              <td class="row-num">3</td>
+              <td colspan="3" style="background:#F1F5F9;font-weight:bold;">Total Patients: ${rows.length}</td>
+              <td colspan="3" style="background:#F1F5F9;font-weight:bold;color:#1D4ED8;">Ongoing: ${statusCount.ongoing || 0}</td>
+              <td colspan="4" style="background:#F1F5F9;font-weight:bold;color:#15803D;">Completed: ${statusCount.completed || 0}</td>
+            </tr>
+            <tr>
+              <td class="row-num">4</td>
+              <td colspan="10" style="background:#FFFFFF;height:4px;"></td>
+            </tr>
+            <tr style="background:#0F172A;color:#FFFFFF;font-weight:bold;">
+              <td class="row-num" style="background:#F1F5F9;color:#64748B;">5</td>
+              ${headers.map(h => `<td style="background:#0F172A;color:#FFFFFF;font-weight:bold;text-align:${h === '#' || h === 'Age' || h === 'Sex' || h === 'Service' || h === 'Status' || h === 'Date Registered' ? 'center' : 'left'};">${h}</td>`).join('')}
+            </tr>
+            ${tableRows}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sheet-tabs">
+        <div class="tab">Sheet1</div>
+        <span style="color:#64748B;margin-left:8px;">+</span>
+        <span style="margin-left:auto;color:#64748B;font-size:10px;">Ready</span>
+      </div>
+
+      </body></html>`;
+  }
+
+  // Excel HTML Export — formatted structured spreadsheet table
   function exportBulkXLS() {
     const rows = getFilteredPatients();
     if (rows.length === 0) { onToast('No patients found for this period', 'error'); return; }
-    const headers = ['Case No.', 'Name', 'Age', 'Sex', 'Address', 'Contact', 'Service', 'Status', 'Date Registered'];
-    const tableRows = rows.map(p => `<tr>
-      <td>${p.id || ''}</td><td>${p.name || ''}</td><td>${p.age || ''}</td><td>${p.sex || ''}</td>
-      <td>${p.address || ''}</td><td>${p.contact || ''}</td><td>${p.service || ''}</td>
-      <td>${derivePatientStatus(p)}</td>
-      <td>${p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString('en-PH') : (p.date || '')}</td>
-    </tr>`).join('');
-    // Excel has no page-header concept in an HTML table, so the letterhead
-    // rides in as merged title rows above the column headings — same
-    // information the printed/PDF report carries.
+    
+    const serviceCount = {};
+    const statusCount = { ongoing: 0, completed: 0 };
+    rows.forEach(p => {
+      const svc = p.service || 'PEP';
+      serviceCount[svc] = (serviceCount[svc] || 0) + 1;
+      const st = derivePatientStatus(p);
+      statusCount[st] = (statusCount[st] || 0) + 1;
+    });
+
+    const headers = ['#', 'Case No.', 'Patient Name', 'Age', 'Sex', 'Address', 'Contact No.', 'Service Type', 'Status', 'Date Registered'];
     const cols = headers.length;
+
+    const tableRows = rows.map((p, idx) => {
+      const st = derivePatientStatus(p);
+      const bg = idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
+      return `<tr style="background-color:${bg};">
+        <td style="padding:6px;border:1px solid #CBD5E1;text-align:center;">${idx + 1}</td>
+        <td style="padding:6px;border:1px solid #CBD5E1;font-weight:bold;">${p.id || p.mrn || '—'}</td>
+        <td style="padding:6px;border:1px solid #CBD5E1;font-weight:bold;">${formatTitleCase(p.name || '—')}</td>
+        <td style="padding:6px;border:1px solid #CBD5E1;text-align:center;">${p.age || '—'}</td>
+        <td style="padding:6px;border:1px solid #CBD5E1;text-align:center;">${p.sex || '—'}</td>
+        <td style="padding:6px;border:1px solid #CBD5E1;">${p.address || '—'}</td>
+        <td style="padding:6px;border:1px solid #CBD5E1;">${p.contact || '—'}</td>
+        <td style="padding:6px;border:1px solid #CBD5E1;text-align:center;font-weight:bold;">${p.service || '—'}</td>
+        <td style="padding:6px;border:1px solid #CBD5E1;text-align:center;font-weight:bold;color:${st === 'completed' ? '#15803D' : '#1D4ED8'};">${st.toUpperCase()}</td>
+        <td style="padding:6px;border:1px solid #CBD5E1;text-align:center;">${p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString('en-PH') : (p.date || '—')}</td>
+      </tr>`;
+    }).join('');
+
+    const svcSummaryRows = Object.entries(serviceCount).map(([svc, cnt]) =>
+      `<tr><td style="padding:6px;border:1px solid #CBD5E1;font-weight:bold;">${svc}</td><td style="padding:6px;border:1px solid #CBD5E1;text-align:center;">${cnt}</td><td style="padding:6px;border:1px solid #CBD5E1;text-align:center;">${((cnt / rows.length) * 100).toFixed(1)}%</td></tr>`
+    ).join('');
+
     const html = `<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8">
       <style>
-        td,th{font-family:Calibri,Arial,sans-serif;font-size:11pt;}
+        td,th{font-family:Calibri,Arial,sans-serif;font-size:10.5pt;}
         .brand{font-size:16pt;font-weight:bold;color:#0F172A;}
-        .tagline{font-size:9pt;color:#475569;}
-        .meta{font-size:10pt;color:#475569;}
-        th.col{background:#F1F5F9;font-weight:bold;color:#0F172A;text-align:left;}
+        .tagline{font-size:9.5pt;color:#475569;}
+        .meta{font-size:10pt;color:#334155;}
+        th.col{background:#0F172A;color:#FFFFFF;font-weight:bold;text-align:left;padding:8px;}
+        th.subcol{background:#334155;color:#FFFFFF;font-weight:bold;text-align:center;padding:6px;}
+        .card{background:#F8FAFC;border:1px solid #CBD5E1;font-weight:bold;text-align:center;}
       </style></head><body>
       <table border="0">
-        <tr><td class="brand" colspan="${cols}">K&amp;A Clinic</td></tr>
-        <tr><td class="tagline" colspan="${cols}">Anti-Rabies &amp; Animal Bite Center</td></tr>
-        <tr><td class="meta" colspan="${cols}">Patient Report — ${periodLabel()}</td></tr>
-        <tr><td class="meta" colspan="${cols}">Generated: ${new Date().toLocaleString('en-PH')} | Total Patients: ${rows.length}</td></tr>
+        <tr><td class="brand" colspan="${cols}">K&amp;A Clinic &mdash; Anti-Rabies &amp; Animal Bite Center</td></tr>
+        <tr><td class="tagline" colspan="${cols}">OFFICIAL CLINICAL PATIENT REPORT &bull; ${periodLabel()}</td></tr>
+        <tr><td class="meta" colspan="${cols}">Report Period: ${periodLabel()} | Exported: ${new Date().toLocaleString('en-PH')}</td></tr>
         <tr><td colspan="${cols}"></td></tr>
       </table>
-      <table border="1"><thead><tr>${headers.map(h => `<th class="col">${h}</th>`).join('')}</tr></thead><tbody>${tableRows}</tbody></table>
+      <table border="1" style="margin-bottom:15px;">
+        <tr style="background:#F1F5F9;">
+          <th style="background:#F1F5F9;color:#0F172A;font-weight:bold;" colspan="3">SUMMARY METRICS</th>
+        </tr>
+        <tr>
+          <td class="card">Total Patients: ${rows.length}</td>
+          <td class="card">Ongoing Cases: ${statusCount.ongoing || 0}</td>
+          <td class="card">Completed Cases: ${statusCount.completed || 0}</td>
+        </tr>
+      </table>
+      <br/>
+      <table border="1" style="margin-bottom:15px;">
+        <thead>
+          <tr><th class="subcol">Service Type</th><th class="subcol">Patient Count</th><th class="subcol">% of Total</th></tr>
+        </thead>
+        <tbody>${svcSummaryRows}</tbody>
+      </table>
+      <br/>
+      <table border="1">
+        <thead>
+          <tr>${headers.map(h => `<th class="col">${h}</th>`).join('')}</tr>
+        </thead>
+        <tbody>${tableRows}</tbody>
+      </table>
       </body></html>`;
-    const blob = new Blob(['﻿' + html], { type: 'application/vnd.ms-excel' });
+
+    const blob = new Blob(['\uFEFF' + html], { type: 'application/vnd.ms-excel' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `patient-report-${period}-${new Date().toISOString().slice(0, 10)}.xls`;
+    a.download = `clinic-report-${period}-${new Date().toISOString().slice(0, 10)}.xls`;
     a.click();
     URL.revokeObjectURL(url);
-    onToast(`XLS exported (${rows.length} patient${rows.length !== 1 ? 's' : ''})`, 'success');
+    onToast(`Excel report exported (${rows.length} patient${rows.length !== 1 ? 's' : ''})`, 'success');
   }
 
-  // Extracted so the exact same HTML can be either opened for printing OR
-  // emailed — one source of truth for the report.
   function buildBulkReportHtml(rows) {
     const serviceCount = {};
     const statusCount = { ongoing: 0, completed: 0 };
@@ -2208,41 +2370,71 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
       statusCount[st] = (statusCount[st] || 0) + 1;
     });
     const svcRows = Object.entries(serviceCount).map(([k, v]) =>
-      `<tr><td>${k}</td><td style="text-align:center">${v}</td><td style="text-align:center">${((v / rows.length) * 100).toFixed(1)}%</td></tr>`
+      `<tr><td style="font-weight:bold;">${k}</td><td style="text-align:center;">${v}</td><td style="text-align:center;">${((v / rows.length) * 100).toFixed(1)}%</td></tr>`
     ).join('');
-    const tableRows = rows.map((p, i) => `
+    const tableRows = rows.map((p, i) => {
+      const st = derivePatientStatus(p);
+      return `
       <tr>
-        <td>${i + 1}</td>
-        <td>${p.id || '—'}</td>
-        <td>${p.name || '—'}</td>
-        <td>${p.age || '—'}</td>
-        <td>${p.sex || '—'}</td>
-        <td>${p.service || '—'}</td>
-        <td>${derivePatientStatus(p)}</td>
-        <td>${p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString('en-PH') : (p.date || '—')}</td>
-      </tr>`).join('');
+        <td style="text-align:center;color:#64748B;">${i + 1}</td>
+        <td style="font-weight:bold;color:#0F172A;">${p.id || p.mrn || '—'}</td>
+        <td style="font-weight:bold;color:#0F172A;">${formatTitleCase(p.name || '—')}</td>
+        <td style="text-align:center;">${p.age || '—'}</td>
+        <td style="text-align:center;">${p.sex || '—'}</td>
+        <td style="text-align:center;font-weight:bold;">${p.service || '—'}</td>
+        <td style="text-align:center;"><span class="status-pill status-${st}">${st}</span></td>
+        <td style="text-align:center;">${p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString('en-PH') : (p.date || '—')}</td>
+      </tr>`;
+    }).join('');
     return `<!DOCTYPE html><html><head><title>Patient Report — ${periodLabel()}</title>
-    <style>${reportStyles()}</style></head><body>
+    <style>${reportStyles()}</style></head><body style="padding:28px 36px;">
     ${letterhead()}
-    <div class="body-pad">
-    <h1>Patient Report</h1>
-    <div class="sub">Period: ${periodLabel()} &nbsp;|&nbsp; Generated: ${new Date().toLocaleString('en-PH')}</div>
-    <div class="summary">
-      <div class="stat"><strong>${rows.length}</strong><span>Total Patients</span></div>
-      <div class="stat"><strong>${statusCount.ongoing || 0}</strong><span>Ongoing</span></div>
-      <div class="stat"><strong>${statusCount.completed || 0}</strong><span>Completed</span></div>
+    
+    <!-- Inline Metadata Row (Matching user sample format: Label: Underlined Value) -->
+    <div style="text-align:center;margin-bottom:14px;font-size:11px;color:#0F172A;line-height:1.8;">
+      <strong>Report Period:</strong> <span style="text-decoration:underline;margin-right:16px;">${periodLabel()}</span>
+      <strong>Date Exported:</strong> <span style="text-decoration:underline;margin-right:16px;">${new Date().toLocaleString('en-PH')}</span>
+      <strong>Total Records:</strong> <span style="text-decoration:underline;">${rows.length} Patients</span>
     </div>
-    <h3>By Service Type</h3>
-    <table style="width:auto;">
-      <thead><tr><th>Service</th><th>Count</th><th>%</th></tr></thead>
+
+    <!-- Centered Document Title -->
+    <div style="text-align:center;font-size:13.5px;font-weight:800;color:#0F172A;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:18px;">
+      OFFICIAL CLINICAL REGISTRY REPORT
+    </div>
+
+    <div class="section-title">Key Registry Metrics</div>
+    <table class="formal-summary">
+      <thead>
+        <tr>
+          <th>Total Patients Registered</th>
+          <th>Active Ongoing Cases</th>
+          <th>Completed Series Cases</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>${rows.length}</td>
+          <td style="color:#1D4ED8;">${statusCount.ongoing || 0}</td>
+          <td style="color:#15803D;">${statusCount.completed || 0}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="section-title">Summary Breakdown by Service</div>
+    <table class="data-table" style="width:auto;min-width:340px;">
+      <thead><tr><th>Service Category</th><th style="text-align:center;">Patient Count</th><th style="text-align:center;">Percentage</th></tr></thead>
       <tbody>${svcRows}</tbody>
     </table>
-    <h3>Patient List</h3>
-    <table>
-      <thead><tr><th>#</th><th>Case No.</th><th>Name</th><th>Age</th><th>Sex</th><th>Service</th><th>Status</th><th>Date</th></tr></thead>
+
+    <div class="section-title">Official Patient Registry</div>
+    <table class="data-table">
+      <thead><tr><th style="text-align:center;">#</th><th>Case No.</th><th>Patient Name</th><th style="text-align:center;">Age</th><th style="text-align:center;">Sex</th><th style="text-align:center;">Service</th><th style="text-align:center;">Status</th><th style="text-align:center;">Date Registered</th></tr></thead>
       <tbody>${tableRows}</tbody>
     </table>
-    <div class="footer">K&amp;A Clinic &mdash; Confidential Patient Report &mdash; ${new Date().getFullYear()}</div>
+
+    <div class="footer">
+      <span>K&amp;A Anti-Rabies &amp; Animal Bite Center &bull; Official Clinical Record</span>
+      <span>Page 1 of 1</span>
     </div>
     </body></html>`;
   }
@@ -2257,59 +2449,72 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
     onToast(`${period.charAt(0).toUpperCase() + period.slice(1)} report opened for printing`, 'success');
   }
 
-  // Bulk PDF — built with jsPDF/autoTable rather than "print, then Save As
-  // PDF," so Export → PDF is a real one-click file, same as XLS.
   function buildBulkPdf(rows) {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
-    const serviceCount = {};
     const statusCount = { ongoing: 0, completed: 0 };
     rows.forEach(p => {
       const st = derivePatientStatus(p);
       statusCount[st] = (statusCount[st] || 0) + 1;
     });
 
-    doc.setFillColor(15, 23, 42);
-    doc.rect(0, 0, pageWidth, 22, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(13);
-    doc.setFont(undefined, 'bold');
-    doc.text('K&A Clinic', 14, 12);
+    // Top Republic Letterhead Header
     doc.setFontSize(8);
     doc.setFont(undefined, 'normal');
-    doc.setTextColor(203, 213, 225);
-    doc.text('ANTI-RABIES & ANIMAL BITE CENTER', 14, 17);
+    doc.setTextColor(71, 85, 105);
+    doc.text('REPUBLIC OF THE PHILIPPINES', pageWidth / 2, 12, { align: 'center' });
 
-    doc.setTextColor(15, 23, 42);
-    doc.setFontSize(13);
+    doc.setFontSize(14);
     doc.setFont(undefined, 'bold');
-    doc.text('Patient Report', 14, 32);
+    doc.setTextColor(200, 21, 26);
+    doc.text('K&A Anti-Rabies Vaccine Clinic', pageWidth / 2, 18, { align: 'center' });
+
     doc.setFontSize(9);
     doc.setFont(undefined, 'normal');
+    doc.setTextColor(15, 23, 42);
+    doc.text('ANIMAL BITE TREATMENT CENTER', pageWidth / 2, 23, { align: 'center' });
+
+    doc.setFontSize(8);
     doc.setTextColor(100, 116, 139);
-    doc.text(`Period: ${periodLabel()}   |   Generated: ${new Date().toLocaleString('en-PH')}`, 14, 38);
+    doc.text('Polangui, Albay · Tel: (052) 486-1220 · knaclinic.ph@gmail.com', pageWidth / 2, 28, { align: 'center' });
+
+    doc.setDrawColor(15, 23, 42);
+    doc.setLineWidth(0.8);
+    doc.line(14, 31, pageWidth - 14, 31);
+
+    // Inline Metadata
+    doc.setFontSize(9);
+    doc.setTextColor(15, 23, 42);
+    doc.setFont(undefined, 'normal');
+    const metaStr = `Report Period: ${periodLabel()}   |   Exported: ${new Date().toLocaleString('en-PH')}   |   Total Patients: ${rows.length}`;
+    doc.text(metaStr, pageWidth / 2, 38, { align: 'center' });
+
+    // Title
+    doc.setFontSize(12);
+    doc.setFont(undefined, 'bold');
+    doc.text('OFFICIAL CLINICAL PATIENT REGISTRY REPORT', pageWidth / 2, 46, { align: 'center' });
 
     autoTable(doc, {
-      startY: 44,
-      head: [['Total Patients', 'Ongoing', 'Completed']],
+      startY: 50,
+      head: [['Total Patients Registered', 'Active Ongoing Cases', 'Completed Series Cases']],
       body: [[String(rows.length), String(statusCount.ongoing || 0), String(statusCount.completed || 0)]],
       theme: 'grid',
-      headStyles: { fillColor: [241, 245, 249], textColor: [71, 85, 105], fontSize: 8, fontStyle: 'bold' },
+      headStyles: { fillColor: [241, 245, 249], textColor: [51, 65, 85], fontSize: 8, fontStyle: 'bold', halign: 'center' },
       styles: { fontSize: 10, halign: 'center', cellPadding: 4 },
     });
 
     autoTable(doc, {
-      startY: doc.lastAutoTable.finalY + 10,
-      head: [['#', 'Case No.', 'Name', 'Age', 'Sex', 'Service', 'Status', 'Date']],
-      body: rows.map((p, i) => [i + 1, p.id || '—', p.name || '—', p.age || '—', p.sex || '—', p.service || '—', derivePatientStatus(p), p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString('en-PH') : (p.date || '—')]),
-      headStyles: { fillColor: [200, 21, 26], textColor: 255, fontSize: 8 },
+      startY: doc.lastAutoTable.finalY + 8,
+      head: [['#', 'Case No.', 'Name', 'Age', 'Sex', 'Service', 'Status', 'Date Registered']],
+      body: rows.map((p, i) => [i + 1, p.id || p.mrn || '—', formatTitleCase(p.name || '—'), p.age || '—', p.sex || '—', p.service || '—', derivePatientStatus(p).toUpperCase(), p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString('en-PH') : (p.date || '—')]),
+      headStyles: { fillColor: [15, 23, 42], textColor: 255, fontSize: 8, fontStyle: 'bold' },
       styles: { fontSize: 8, cellPadding: 3 },
       alternateRowStyles: { fillColor: [250, 250, 252] },
     });
 
     doc.setFontSize(8);
     doc.setTextColor(148, 163, 184);
-    doc.text(`K&A Clinic — Confidential Patient Report — ${new Date().getFullYear()}`, 14, doc.internal.pageSize.getHeight() - 10);
+    doc.text(`K&A Anti-Rabies Vaccine Clinic · Confidential Clinical Report · ${new Date().getFullYear()}`, pageWidth / 2, doc.internal.pageSize.getHeight() - 10, { align: 'center' });
     return doc;
   }
 
@@ -2325,22 +2530,6 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
     else exportBulkPdf();
   }
 
-  // ── Single-patient documents — two distinct document types, selectable
-  // independently or together:
-  //   • Medical Record — the complete health history (demographics, service/
-  //     exposure, clinical history, wound log, dose timeline). This is the
-  //     same rich content that used to live behind a separate "Print" button
-  //     on the patient detail page — consolidated here so record/print/email
-  //     for a patient has one home instead of two.
-  //   • Medical Certificate — a short, formal note certifying treatment
-  //     status (what a patient would actually present as proof), refactored
-  //     from the old standalone "Certification" feature: fixed to work for
-  //     any service (was hard-restricted to Dog/Cat bites only), emoji
-  //     removed, and content now derived straight from the patient record
-  //     instead of a manually re-typed form.
-  // Two independent checkboxes rather than a 3-way record/certificate/both
-  // choice — checking both is how you get "both". At least one must stay
-  // checked, so unchecking the last one is a no-op.
   const [includeRecord, setIncludeRecord] = useState(true);
   const [includeCertificate, setIncludeCertificate] = useState(false);
   const docType = includeRecord && includeCertificate ? 'both' : includeCertificate ? 'certificate' : 'record';
@@ -2360,78 +2549,132 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
     return `${p.service || 'Vaccination'} treatment`;
   }
 
-  // `audience` decides whether wound location/depth appear. The same generators
-  // back three different deliverables — the admin's own PDF download, the
-  // admin's print view, and the PDF emailed to the patient — so the audience
-  // has to be an argument rather than a blanket edit:
-  //   'clinic'  — staff-held clinical record. Full detail, wound site included.
-  //   'patient' — copy the patient receives. Wound location/depth omitted, per
-  //               the same rule applied to the patient app's vaccination card
-  //               and Medical Records screen. Exposure Category stays.
   const PATIENT_HIDDEN_NOTE = 'Wound assessment details are held in your clinical file at K&A Clinic.';
 
   function medicalRecordBodyHtml(p, audience = 'clinic') {
     const showWoundDetail = audience !== 'patient';
     const doses = p.doses || [];
-    const doseRows = doses.map(d => `
+    const doseRows = doses.map(d => {
+      const st = d.s || d.status || 'pending';
+      const stColor = st === 'done' ? '#15803D' : st === 'miss' ? '#C8151A' : '#D97706';
+      const stBg = st === 'done' ? '#DCFCE7' : st === 'miss' ? '#FEE2E2' : '#FEF3C7';
+      return `
       <tr>
-        <td style="padding:8px 12px;border:1px solid #ddd;font-weight:bold;">${d.n || d.label || ''}</td>
-        <td style="padding:8px 12px;border:1px solid #ddd;">${d.date || '—'}</td>
-        <td style="padding:8px 12px;border:1px solid #ddd;text-transform:capitalize;font-weight:bold;color:${d.s === 'done' || d.status === 'done' ? '#15803D' : d.s === 'miss' || d.status === 'miss' ? '#DC2626' : '#D97706'}">${d.s || d.status || 'pending'}</td>
-      </tr>`).join('');
+        <td style="padding:8px 10px;border:1px solid #CBD5E1;font-weight:700;color:#0F172A;">${d.n || d.label || ''}</td>
+        <td style="padding:8px 10px;border:1px solid #CBD5E1;color:#334155;">${d.date || '—'}</td>
+        <td style="padding:8px 10px;border:1px solid #CBD5E1;text-align:center;">
+          <span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:9px;font-weight:700;text-transform:uppercase;background:${stBg};color:${stColor};">${st === 'miss' ? 'Overdue' : st}</span>
+        </td>
+      </tr>`;
+    }).join('');
     const registered = p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString('en-PH') : (p.date || '—');
+    const st = derivePatientStatus(p);
+
     return `
-      <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#111;font-size:13px;line-height:1.5;">
-        <div style="border-bottom:2px solid #C8151A;padding-bottom:12px;margin-bottom:20px;">
-          <h1 style="margin:0;color:#C8151A;font-size:20px;">K&amp;A Anti-Rabies Vaccination Clinic</h1>
-          <p style="margin:2px 0 0;color:#666;font-size:11px;">CONFIDENTIAL PATIENT MEDICAL RECORD &bull; Generated ${new Date().toLocaleString('en-PH')}</p>
+      <div style="font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,sans-serif;color:#0F172A;font-size:11.5px;line-height:1.5;padding:24px 28px;background:#FFFFFF;border:1px solid #0F172A;">
+        ${letterhead()}
+        
+        <!-- Inline Metadata Row -->
+        <div style="text-align:center;margin-bottom:14px;font-size:11px;color:#0F172A;line-height:1.8;">
+          <strong>Name:</strong> <span style="text-decoration:underline;margin-right:16px;font-weight:700;">${formatTitleCase(p.name)}</span>
+          <strong>Case No:</strong> <span style="text-decoration:underline;margin-right:16px;">${p.id || p.mrn || '—'}</span>
+          <strong>Service:</strong> <span style="text-decoration:underline;margin-right:16px;">${p.service || '—'}</span>
+          <strong>Status:</strong> <span style="text-decoration:underline;font-weight:700;color:${st === 'completed' ? '#15803D' : '#1D4ED8'};">${st.toUpperCase()}</span>
         </div>
-        <div style="font-size:18px;font-weight:bold;margin-bottom:4px;">${formatTitleCase(p.name)}</div>
-        <div style="color:#666;font-size:12px;margin-bottom:16px;">Patient ID: <strong>${p.id || p.mrn || '—'}</strong> &nbsp;|&nbsp; Registered: <strong>${registered}</strong> &nbsp;|&nbsp; Service: <strong>${p.service || '—'}</strong></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
-          <div style="background:#fafafa;border:1px solid #e5e5e5;border-radius:6px;padding:12px 14px;">
-            <div style="font-weight:bold;text-transform:uppercase;font-size:11px;color:#666;margin-bottom:8px;border-bottom:1px solid #eee;padding-bottom:4px;">Patient Demographics</div>
-            <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:#666;font-size:11px;">Age / Gender</span><span style="font-weight:bold;">${p.age || '—'} yrs &bull; ${p.sex || '—'}</span></div>
-            <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:#666;font-size:11px;">Address</span><span style="font-weight:bold;">${p.address || '—'}</span></div>
-            <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:#666;font-size:11px;">Contact</span><span style="font-weight:bold;">${p.contact || '—'}</span></div>
-            <div style="display:flex;justify-content:space-between;"><span style="color:#666;font-size:11px;">Email</span><span style="font-weight:bold;">${p.email || '—'}</span></div>
-          </div>
-          <div style="background:#fafafa;border:1px solid #e5e5e5;border-radius:6px;padding:12px 14px;">
-            <div style="font-weight:bold;text-transform:uppercase;font-size:11px;color:#666;margin-bottom:8px;border-bottom:1px solid #eee;padding-bottom:4px;">Service &amp; Exposure Details</div>
-            <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:#666;font-size:11px;">Service Type</span><span style="font-weight:bold;">${p.service || '—'}</span></div>
-            <div style="display:flex;justify-content:space-between;${p.service === 'PEP' ? 'margin-bottom:4px;' : ''}"><span style="color:#666;font-size:11px;">Vaccine Brand</span><span style="font-weight:bold;">${p.vaccineBrand || '—'}</span></div>
-            ${p.service === 'PEP' ? `
-              <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:#666;font-size:11px;">Biting Animal</span><span style="font-weight:bold;">${p.animal || '—'}</span></div>
-              <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:#666;font-size:11px;">Category</span><span style="font-weight:bold;">Category ${p.cat || '—'}</span></div>
-              <div style="display:flex;justify-content:space-between;"><span style="color:#666;font-size:11px;">Date of Exposure</span><span style="font-weight:bold;">${fmtDate(p.date)}</span></div>
-            ` : ''}
-          </div>
+
+        <!-- Centered Document Title -->
+        <div style="text-align:center;font-size:14px;font-weight:800;color:#0F172A;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:18px;text-decoration:underline;">
+          OFFICIAL PATIENT CLINICAL MEDICAL RECORD
         </div>
-        <div style="background:#fff5f5;border:1px solid #ffd6d7;border-radius:6px;padding:12px 14px;margin-bottom:20px;">
-          <div style="font-weight:bold;text-transform:uppercase;font-size:11px;color:#b91c1c;margin-bottom:8px;border-bottom:1px solid #eee;padding-bottom:4px;">Clinical History &amp; Details</div>
+
+        <!-- Section I: Patient Profile & Demographics -->
+        <div style="font-size:10.5px;font-weight:800;color:#0F172A;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">I. Patient Profile &amp; Demographics</div>
+        <table style="width:100%;border-collapse:collapse;margin-bottom:20px;border:1px solid #CBD5E1;">
+          <tr>
+            <td style="padding:7px 10px;background:#F1F5F9;font-weight:700;color:#334155;width:20%;border:1px solid #CBD5E1;">Full Name</td>
+            <td style="padding:7px 10px;font-weight:700;color:#0F172A;width:30%;border:1px solid #CBD5E1;">${formatTitleCase(p.name)}</td>
+            <td style="padding:7px 10px;background:#F1F5F9;font-weight:700;color:#334155;width:20%;border:1px solid #CBD5E1;">Age / Sex</td>
+            <td style="padding:7px 10px;font-weight:700;color:#0F172A;width:30%;border:1px solid #CBD5E1;">${p.age || '—'} yrs &bull; ${(p.sex || '—').toUpperCase()}</td>
+          </tr>
+          <tr>
+            <td style="padding:7px 10px;background:#F1F5F9;font-weight:700;color:#334155;border:1px solid #CBD5E1;">Address</td>
+            <td style="padding:7px 10px;border:1px solid #CBD5E1;">${p.address || '—'}</td>
+            <td style="padding:7px 10px;background:#F1F5F9;font-weight:700;color:#334155;border:1px solid #CBD5E1;">Contact No.</td>
+            <td style="padding:7px 10px;border:1px solid #CBD5E1;">${p.contact || '—'}</td>
+          </tr>
+          <tr>
+            <td style="padding:7px 10px;background:#F1F5F9;font-weight:700;color:#334155;border:1px solid #CBD5E1;">Email Address</td>
+            <td style="padding:7px 10px;border:1px solid #CBD5E1;">${p.email || '—'}</td>
+            <td style="padding:7px 10px;background:#F1F5F9;font-weight:700;color:#334155;border:1px solid #CBD5E1;">Registration Date</td>
+            <td style="padding:7px 10px;border:1px solid #CBD5E1;">${registered}</td>
+          </tr>
+        </table>
+
+        <!-- Section II: Service & Exposure Assessment -->
+        <div style="font-size:10.5px;font-weight:800;color:#0F172A;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">II. Service &amp; Clinical Details</div>
+        <table style="width:100%;border-collapse:collapse;margin-bottom:20px;border:1px solid #CBD5E1;">
+          <tr>
+            <td style="padding:7px 10px;background:#F1F5F9;font-weight:700;color:#334155;width:20%;border:1px solid #CBD5E1;">Service Type</td>
+            <td style="padding:7px 10px;font-weight:700;color:#0F172A;width:30%;border:1px solid #CBD5E1;">${p.service || '—'}</td>
+            <td style="padding:7px 10px;background:#F1F5F9;font-weight:700;color:#334155;width:20%;border:1px solid #CBD5E1;">Vaccine Brand</td>
+            <td style="padding:7px 10px;font-weight:700;color:#0F172A;width:30%;border:1px solid #CBD5E1;">${p.vaccineBrand || '—'}</td>
+          </tr>
           ${p.service === 'PEP' ? `
+          <tr>
+            <td style="padding:7px 10px;background:#F1F5F9;font-weight:700;color:#334155;border:1px solid #CBD5E1;">Biting Animal</td>
+            <td style="padding:7px 10px;border:1px solid #CBD5E1;">${p.animal || '—'}</td>
+            <td style="padding:7px 10px;background:#F1F5F9;font-weight:700;color:#334155;border:1px solid #CBD5E1;">Exposure Category</td>
+            <td style="padding:7px 10px;font-weight:800;color:#B91C1C;border:1px solid #CBD5E1;">Category ${p.cat || '—'}</td>
+          </tr>
+          <tr>
             ${showWoundDetail ? `
-              <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:#666;font-size:11px;">Wound Location</span><span style="font-weight:bold;">${p.woundLocation || '—'}</span></div>
-              <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:#666;font-size:11px;">Wound Depth</span><span style="font-weight:bold;">${p.woundDepth || '—'}</span></div>
-            ` : ''}
-            <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:#666;font-size:11px;">No. of Bites</span><span style="font-weight:bold;">${p.numberOfBites || '—'}</span></div>
+              <td style="padding:7px 10px;background:#F1F5F9;font-weight:700;color:#334155;border:1px solid #CBD5E1;">Wound Details</td>
+              <td style="padding:7px 10px;border:1px solid #CBD5E1;">${p.woundLocation || '—'} (${p.woundDepth || '—'})</td>
+            ` : `
+              <td style="padding:7px 10px;background:#F1F5F9;font-weight:700;color:#334155;border:1px solid #CBD5E1;">Exposure Date</td>
+              <td style="padding:7px 10px;border:1px solid #CBD5E1;">${fmtDate(p.date)}</td>
+            `}
+            <td style="padding:7px 10px;background:#F1F5F9;font-weight:700;color:#334155;border:1px solid #CBD5E1;">No. of Bites</td>
+            <td style="padding:7px 10px;border:1px solid #CBD5E1;">${p.numberOfBites || '—'}</td>
+          </tr>
           ` : ''}
-          <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:#666;font-size:11px;">Past Vaccines</span><span style="font-weight:bold;">${p.pastVaccines || '—'}</span></div>
-          <div style="display:flex;justify-content:space-between;"><span style="color:#666;font-size:11px;">Allergies</span><span style="font-weight:bold;">${p.allergies || '—'}</span></div>
-          ${!showWoundDetail && p.service === 'PEP' ? `<div style="margin-top:8px;color:#888;font-size:10px;font-style:italic;">${PATIENT_HIDDEN_NOTE}</div>` : ''}
+          <tr>
+            <td style="padding:7px 10px;background:#F1F5F9;font-weight:700;color:#334155;border:1px solid #CBD5E1;">Past Vaccines</td>
+            <td style="padding:7px 10px;border:1px solid #CBD5E1;">${p.pastVaccines || '—'}</td>
+            <td style="padding:7px 10px;background:#F1F5F9;font-weight:700;color:#334155;border:1px solid #CBD5E1;">Allergies</td>
+            <td style="padding:7px 10px;border:1px solid #CBD5E1;">${p.allergies || 'None recorded'}</td>
+          </tr>
+        </table>
+
+        <!-- Section III: Dose Schedule & Status -->
+        <div style="font-size:10.5px;font-weight:800;color:#0F172A;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">III. Dose Schedule &amp; Vaccination Status</div>
+        <table style="width:100%;border-collapse:collapse;margin-bottom:24px;border:1px solid #CBD5E1;">
+          <thead><tr>
+            <th style="background:#F1F5F9;padding:8px 10px;text-align:left;border:1px solid #CBD5E1;font-size:9px;text-transform:uppercase;">Dose Designation</th>
+            <th style="background:#F1F5F9;padding:8px 10px;text-align:left;border:1px solid #CBD5E1;font-size:9px;text-transform:uppercase;">Scheduled Administration Date</th>
+            <th style="background:#F1F5F9;padding:8px 10px;text-align:center;border:1px solid #CBD5E1;font-size:9px;text-transform:uppercase;">Status</th>
+          </tr></thead>
+          <tbody>${doseRows || '<tr><td colspan="3" style="padding:10px;border:1px solid #CBD5E1;text-align:center;color:#64748B;">No dose schedule recorded</td></tr>'}</tbody>
+        </table>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:36px;padding-top:20px;">
+          <div style="text-align:center;">
+            <div style="border-top:1.5px solid #0F172A;padding-top:6px;font-size:11px;width:80%;margin:0 auto;">
+              <strong>MARIA F. JOHNSON, RN</strong><br>
+              <span style="font-size:9.5px;color:#64748B;">Attending Clinic Nurse &bull; PRC Lic. No. 0654321</span>
+            </div>
+          </div>
+          <div style="text-align:center;">
+            <div style="border-top:1.5px solid #0F172A;padding-top:6px;font-size:11px;width:80%;margin:0 auto;">
+              <strong>DR. FRANCIS R. REYES, MD</strong><br>
+              <span style="font-size:9.5px;color:#64748B;">Medical Officer &bull; PRC Lic. No. 0123456</span>
+            </div>
+          </div>
         </div>
-        <div>
-          <div style="font-weight:bold;font-size:12px;margin-bottom:6px;text-transform:uppercase;color:#444;">Treatment Timeline</div>
-          <table style="width:100%;border-collapse:collapse;">
-            <thead><tr>
-              <th style="background:#f3f3f3;padding:8px 12px;text-align:left;border:1px solid #ddd;font-size:11px;text-transform:uppercase;">Dose Label</th>
-              <th style="background:#f3f3f3;padding:8px 12px;text-align:left;border:1px solid #ddd;font-size:11px;text-transform:uppercase;">Scheduled Date</th>
-              <th style="background:#f3f3f3;padding:8px 12px;text-align:left;border:1px solid #ddd;font-size:11px;text-transform:uppercase;">Status</th>
-            </tr></thead>
-            <tbody>${doseRows || '<tr><td colspan="3" style="padding:8px 12px;border:1px solid #ddd;">No doses recorded</td></tr>'}</tbody>
-          </table>
+
+        <div style="margin-top:30px;border-top:1px solid #E2E8F0;padding-top:10px;font-size:9px;color:#94A3B8;text-align:center;">
+          K&amp;A Anti-Rabies Vaccine Clinic &bull; Official Confidential Patient Record &bull; ${new Date().getFullYear()}
         </div>
-        <div style="margin-top:20px;border-top:1px solid #eee;padding-top:10px;font-size:10px;color:#888;text-align:center;">K&amp;A Anti-Rabies Vaccine Clinic &bull; Official Confidential Record &bull; Page 1 of 1</div>
       </div>`;
   }
 
@@ -2440,45 +2683,89 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
     const protocol = getProtocolLabel(p);
     const registered = p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString('en-PH') : (p.date || '—');
     const issuedDate = new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
-    const title = p.service === 'PEP'
-      ? `CERTIFICATE OF ${isCompleted ? 'COMPLETED' : 'ONGOING'} ANTI-RABIES VACCINATION`
-      : `CERTIFICATE OF ${isCompleted ? 'COMPLETED' : 'ONGOING'} ${(p.service || 'VACCINATION').toUpperCase()} TREATMENT`;
+
     return `
-      <div style="font-family:Georgia,'Times New Roman',serif;color:#111;font-size:13px;line-height:1.8;">
-        <div style="text-align:center;margin-bottom:20px;padding-bottom:16px;border-bottom:2px solid #C8151A">
-          <div style="font-size:9px;font-weight:600;color:#888;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px">Republic of the Philippines</div>
-          <div style="font-size:14px;font-weight:700;color:#C8151A">K&amp;A Anti-Rabies Vaccine Clinic</div>
-          <div style="font-size:9px;color:#888;margin-top:2px">Animal Bite Treatment Center</div>
-          <div style="margin-top:14px;font-size:13px;font-weight:700;letter-spacing:.5px;line-height:1.4">${title}</div>
+      <div style="font-family:'Times New Roman',Times,Georgia,serif;color:#0F172A;font-size:12.5px;line-height:1.8;background:#FFFFFF;padding:28px 36px;border:2px solid #0F172A;position:relative;">
+        ${letterhead()}
+        
+        <div style="text-align:center;margin:22px 0 20px;">
+          <h2 style="font-family:'Times New Roman',Georgia,serif;font-size:18px;font-weight:800;color:#0F172A;text-transform:uppercase;letter-spacing:1px;margin:0 0 4px;text-decoration:underline;">
+            MEDICAL CERTIFICATE
+          </h2>
+          <div style="font-size:10px;font-weight:700;color:#64748B;letter-spacing:0.5px;text-transform:uppercase;font-family:'Segoe UI',sans-serif;">
+            OFFICIAL CLINICAL CERTIFICATION
+          </div>
         </div>
-        <p style="margin-bottom:14px">This is to certify that <strong>${formatTitleCase(p.name)}</strong>, <strong>${p.age || '—'}</strong> years old, <strong>${p.sex || '—'}</strong>, residing at <strong>${p.address || '—'}</strong>, ${isCompleted ? 'has successfully completed' : 'is currently undergoing'} the prescribed <strong>${protocol}</strong> at K&amp;A Anti-Rabies Vaccine Clinic.</p>
-        <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:14px">
-          <tr><td style="padding:5px 8px;background:#fafafa;border:1px solid #eee;font-weight:600;width:40%">Patient ID</td><td style="padding:5px 8px;border:1px solid #eee">${p.id || p.mrn || '—'}</td></tr>
-          ${p.service === 'PEP' ? `
-          <tr><td style="padding:5px 8px;background:#fafafa;border:1px solid #eee;font-weight:600">Exposure Type</td><td style="padding:5px 8px;border:1px solid #eee">${p.animal || 'Dog'} Bite</td></tr>
-          <tr><td style="padding:5px 8px;background:#fafafa;border:1px solid #eee;font-weight:600">Wound Category</td><td style="padding:5px 8px;border:1px solid #eee">Category ${p.cat || '—'}</td></tr>
-          ` : ''}
-          <tr><td style="padding:5px 8px;background:#fafafa;border:1px solid #eee;font-weight:600">Date Registered</td><td style="padding:5px 8px;border:1px solid #eee">${registered}</td></tr>
-          <tr><td style="padding:5px 8px;background:#fafafa;border:1px solid #eee;font-weight:600">Date Issued</td><td style="padding:5px 8px;border:1px solid #eee">${issuedDate}</td></tr>
-          <tr><td style="padding:5px 8px;background:#fafafa;border:1px solid #eee;font-weight:600">Attending Nurse</td><td style="padding:5px 8px;border:1px solid #eee">Maria F. Johnson, RN</td></tr>
-          <tr><td style="padding:5px 8px;background:#fafafa;border:1px solid #eee;font-weight:600">Physician / Med. Officer</td><td style="padding:5px 8px;border:1px solid #eee">___________</td></tr>
+
+        <div style="margin-bottom:18px;font-weight:700;font-size:12px;color:#0F172A;">
+          TO WHOM IT MAY CONCERN:
+        </div>
+
+        <p style="text-align:justify;text-indent:36px;margin-bottom:16px;">
+          THIS IS TO CERTIFY that <strong style="text-decoration:underline;text-transform:uppercase;">${formatTitleCase(p.name)}</strong>, 
+          <strong>${p.age || '___'}</strong> years old, <strong>${(p.sex || '___').toUpperCase()}</strong>, 
+          residing at <strong>${p.address || '___'}</strong>, has been officially examined, evaluated, and administered 
+          medical treatment at <strong>K&amp;A Anti-Rabies Vaccine Clinic</strong> from 
+          <strong>${registered}</strong> to <strong>${issuedDate}</strong>.
+        </p>
+
+        <p style="text-align:justify;text-indent:36px;margin-bottom:18px;">
+          Clinical evaluation indicates treatment for <strong>${p.service === 'PEP' ? `Category ${p.cat || 'III'} Exposure (${p.animal || 'Animal'} Bite)` : (p.service || 'Vaccination')}</strong> 
+          under the prescribed protocol: <strong style="text-decoration:underline;">${protocol}</strong>. 
+          ${isCompleted ? 'The patient has successfully COMPLETED the full course of post-exposure prophylaxis with no adverse systemic reactions observed.' : 'The patient is currently adhering to the scheduled vaccination dosage protocol.'}
+        </p>
+
+        <!-- Formal Assessment Table -->
+        <table style="width:100%;border-collapse:collapse;margin:20px 0 24px;font-size:11px;font-family:'Segoe UI',sans-serif;border:1px solid #CBD5E1;">
+          <tr style="background:#F8FAFC;">
+            <td style="padding:8px 12px;font-weight:700;color:#334155;border:1px solid #CBD5E1;width:30%;">Clinical Diagnosis</td>
+            <td style="padding:8px 12px;font-weight:700;color:#0F172A;border:1px solid #CBD5E1;">${p.service === 'PEP' ? `Rabies Exposure (Category ${p.cat || 'III'}), ${p.animal || 'Animal'} Bite` : `${p.service || 'Vaccination'} Protocol`}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 12px;font-weight:700;color:#334155;border:1px solid #CBD5E1;">Vaccine Regimen</td>
+            <td style="padding:8px 12px;color:#0F172A;border:1px solid #CBD5E1;">${p.vaccineBrand || 'Purified Chick Embryo Cell Vaccine (PCECV)'} (${protocol})</td>
+          </tr>
+          <tr style="background:#F8FAFC;">
+            <td style="padding:8px 12px;font-weight:700;color:#334155;border:1px solid #CBD5E1;">Fitness Status</td>
+            <td style="padding:8px 12px;font-weight:700;color:${isCompleted ? '#15803D' : '#D97706'};border:1px solid #CBD5E1;">${isCompleted ? 'CLEARED &amp; FIT TO RESUME REGULAR ACTIVITIES' : 'UNDER ONGOING TREATMENT &amp; OBSERVATION'}</td>
+          </tr>
         </table>
-        <p style="font-size:11px;color:#555;margin-bottom:20px">This certificate is issued for official purposes.</p>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:30px">
-          <div style="text-align:center"><div style="border-top:1.5px solid #333;padding-top:6px;font-size:11px"><strong>Maria F. Johnson, RN</strong><br><span style="font-size:10px;color:#666">Attending Nurse &middot; RN</span></div></div>
-          <div style="text-align:center"><div style="border-top:1.5px solid #333;padding-top:6px;font-size:11px"><strong>___________</strong><br><span style="font-size:10px;color:#666">Physician / Medical Officer</span></div></div>
+
+        <p style="text-indent:36px;margin-bottom:32px;">
+          This certification is issued upon the request of the above-named patient for whatever legal, medical, or administrative purpose it may serve.
+        </p>
+
+        <!-- Signatures Block -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:36px;font-family:'Segoe UI',sans-serif;">
+          <div style="text-align:center;">
+            <div style="border-top:1.5px solid #0F172A;padding-top:6px;font-size:11px;width:80%;margin:0 auto;">
+              <strong>MARIA F. JOHNSON, RN</strong><br>
+              <span style="font-size:9.5px;color:#64748B;">Attending Clinic Nurse</span><br>
+              <span style="font-size:9px;color:#94A3B8;">PRC Lic. No. 0654321</span>
+            </div>
+          </div>
+          <div style="text-align:center;">
+            <div style="border-top:1.5px solid #0F172A;padding-top:6px;font-size:11px;width:80%;margin:0 auto;">
+              <strong>DR. FRANCIS R. REYES, MD</strong><br>
+              <span style="font-size:9.5px;color:#64748B;">Attending Physician / Medical Officer</span><br>
+              <span style="font-size:9px;color:#94A3B8;">PRC Lic. No. 0123456 &bull; PTR No. 9876543</span>
+            </div>
+          </div>
         </div>
-        <div style="margin-top:20px;padding-top:10px;border-top:1px solid #eee;text-align:center;font-size:9px;color:#999">K&amp;A Anti-Rabies Vaccine Clinic &nbsp;&middot;&nbsp; Issued: ${issuedDate} &nbsp;&middot;&nbsp; Patient ID: ${p.id || p.mrn || '—'}</div>
+
+        <div style="margin-top:24px;padding-top:10px;border-top:1px solid #E2E8F0;text-align:center;font-size:9px;color:#94A3B8;font-family:'Segoe UI',sans-serif;">
+          K&amp;A Anti-Rabies Vaccine Clinic &bull; Official Medical Certificate &bull; Issued: ${issuedDate} &bull; Ref ID: ${p.id || p.mrn || '—'}
+        </div>
       </div>`;
   }
 
   function buildDocumentHtml(p, type, audience = 'clinic') {
     const sections = [];
-    if (type !== 'certificate') sections.push(`<div style="padding:30px 30px 10px;">${medicalRecordBodyHtml(p, audience)}</div>`);
-    if (type !== 'record') sections.push(`<div style="padding:${type === 'both' ? '0' : '30px'} 30px 30px;${type === 'both' ? 'page-break-before:always;' : ''}">${certificateBodyHtml(p)}</div>`);
+    if (type !== 'certificate') sections.push(`<div>${medicalRecordBodyHtml(p, audience)}</div>`);
+    if (type !== 'record') sections.push(`<div style="${type === 'both' ? 'page-break-before:always;margin-top:20px;' : ''}">${certificateBodyHtml(p)}</div>`);
     const titleMap = { record: 'Medical Record', certificate: 'Medical Certificate', both: 'Medical Record & Certificate' };
     return `<!DOCTYPE html><html><head><title>${titleMap[type]} — ${formatTitleCase(p.name)}</title>
-    <style>*{box-sizing:border-box;} @media print{@page{margin:15mm 20mm;}}</style>
+    <style>*{box-sizing:border-box;} body{margin:0;padding:0;background:#FFFFFF;} @media print{@page{margin:10mm 15mm;}}</style>
     </head><body>${sections.join('')}</body></html>`;
   }
 
@@ -2639,7 +2926,7 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
     doc.setTextColor(17, 17, 17);
     doc.setFont('times', 'bold');
     doc.text('Maria F. Johnson, RN', 20 + colWidth / 2, y + 6, { align: 'center' });
-    doc.text('___________', pageWidth - 20 - colWidth / 2, y + 6, { align: 'center' });
+doc.text('___________', pageWidth - 20 - colWidth / 2, y + 6, { align: 'center' });
     doc.setFont('times', 'normal');
     doc.setFontSize(8.5);
     doc.setTextColor(102, 102, 102);
@@ -2666,14 +2953,11 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
     return type === 'record' ? 'Medical Record' : type === 'certificate' ? 'Medical Certificate' : 'Medical Record & Certificate';
   }
 
-  // Admin-internal: the file lands on the staff member's own machine, so it is
-  // the full clinical record — wound location/depth included.
   function exportSinglePatientPdf(p) {
     buildDocumentPdf(p, docType, 'clinic').save(`${docType}-${p.id || p.firestoreId}-${new Date().toISOString().slice(0, 10)}.pdf`);
     onToast(`${docTypeLabel(docType)} exported for ${formatTitleCase(p.name)}`, 'success');
   }
 
-  // Admin-internal: printed for the clinic's own files. Full clinical record.
   function printSinglePatientReport(p) {
     const w = window.open('', '_blank');
     w.document.write(buildDocumentHtml(p, docType, 'clinic'));
@@ -2682,8 +2966,6 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
     onToast(`${docTypeLabel(docType)} opened for printing — ${formatTitleCase(p.name)}`, 'success');
   }
 
-  // PATIENT-FACING: this PDF is emailed to the patient, so it is built with the
-  // 'patient' audience and omits wound location/depth.
   async function emailSinglePatientPdf(p, to) {
     const base64 = buildDocumentPdf(p, docType, 'patient').output('base64');
     const label = docTypeLabel(docType);
@@ -2695,68 +2977,56 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
     );
   }
 
+  function handleDocTypeChange(val) {
+    if (val === 'record') { setIncludeRecord(true); setIncludeCertificate(false); }
+    else if (val === 'certificate') { setIncludeRecord(false); setIncludeCertificate(true); }
+    else if (val === 'both') { setIncludeRecord(true); setIncludeCertificate(true); }
+  }
+
+  const [zoomLevel, setZoomLevel] = useState(0.85);
+  const [rotation, setRotation] = useState(0);
+
   const preview = getFilteredPatients();
 
   function switchMode(next) {
     setMode(next);
-    setStep('form');
     setShowEmailInput(false);
     setEmailTo('');
   }
 
-  // Reusable preview pane — renders the exact HTML that will be printed or
-  // emailed, inside a sandboxed iframe so the report's own CSS can't leak
-  // into the admin UI. `patientCopy` flags that what is shown is the reduced
-  // copy the patient receives, not the full clinical record.
-  const previewPane = (html, patientCopy = false) => (
-    <div style={{ marginBottom: 18 }}>
-      <div style={{ fontSize: '.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: 'var(--muted-2)', marginBottom: 8 }}>
-        Report Preview{patientCopy ? ' — Patient Copy' : ''}
-      </div>
-      <div style={{ border: '1.5px solid var(--border)', borderRadius: 'var(--r-lg)', overflow: 'hidden', background: '#fff' }}>
-        <iframe
-          title="Report preview"
-          sandbox=""
-          srcDoc={html}
-          style={{ display: 'block', width: '100%', height: 380, border: 'none', background: '#fff' }}
-        />
-      </div>
-      <div style={{ fontSize: '.6875rem', color: 'var(--muted)', marginTop: 6 }}>
-        {patientCopy
-          ? 'This is the copy the patient receives — wound location and depth are omitted. Export or Print gives you the full clinical record.'
-          : 'Review the report above before exporting, printing, or emailing.'}
-      </div>
-    </div>
-  );
-
-  const emailRow = (onSend) => showEmailInput && (
-    <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-      <input
-        type="email"
-        placeholder="recipient@email.com"
-        value={emailTo}
-        onChange={e => setEmailTo(e.target.value)}
-        style={{ flex: 1, padding: '8px 10px', fontSize: '.8125rem', border: '1.5px solid var(--border-2)', borderRadius: 'var(--r-md)', background: '#fff', color: 'var(--text)', outline: 'none' }}
+  const previewPane = (html) => (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}>
+      <iframe
+        title="Report preview"
+        sandbox=""
+        srcDoc={html}
+        style={{ display: 'block', width: '100%', height: '100%', border: 'none', background: '#FFFFFF' }}
       />
-      <button className="btn btn-primary" disabled={sending} onClick={onSend}>
-        {sending ? 'Sending…' : 'Send'}
-      </button>
     </div>
   );
 
   return (
     <div className="modal-overlay" style={{ alignItems: 'center' }} onClick={e => { if (e.target.classList.contains('modal-overlay')) onClose(); }}>
-      <div className="modal" style={{ width: '760px', padding: 0, overflow: 'hidden' }}>
+      <div className="modal" style={{ width: '1360px', maxWidth: '98vw', height: '92vh', maxHeight: '960px', padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         
         {/* Dark Navy Header Bar */}
         <div style={{
           background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)',
-          padding: '18px 24px',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+          padding: '16px 24px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          flexShrink: 0
         }}>
-          <div>
-            <h3 style={{ fontSize: '1.0625rem', fontWeight: 800, color: '#FFFFFF', margin: 0, letterSpacing: '-0.01em' }}>Export Report</h3>
-            <p style={{ fontSize: '.75rem', color: 'rgba(255,255,255,0.65)', margin: '3px 0 0' }}>Download, print, or email a clinic report</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                <path d="M12 8v8M8 12h8"/>
+              </svg>
+            </div>
+            <div>
+              <h3 style={{ fontSize: '1.0625rem', fontWeight: 800, color: '#FFFFFF', margin: 0, letterSpacing: '-0.01em' }}>Export Patient Record</h3>
+              <p style={{ fontSize: '.75rem', color: 'rgba(255,255,255,0.65)', margin: '2px 0 0' }}>Download, print, or email official clinic records</p>
+            </div>
           </div>
           <button
             type="button"
@@ -2775,220 +3045,300 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
           </button>
         </div>
 
-        {/* Modal Body */}
-        <div style={{ padding: 24 }}>
+        {/* Modal 2-Column Split Body */}
+        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
-        {/* Mode Tabs */}
-        <div style={{ display: 'flex', gap: 22, borderBottom: '1px solid var(--border)', marginBottom: 18 }}>
-          {[{ key: 'bulk', label: 'Clinic Report' }, { key: 'single', label: 'Patient Record' }].map(t => (
-            <button key={t.key} type="button" onClick={() => switchMode(t.key)}
-              style={{
-                padding: '0 0 10px', background: 'none', border: 'none',
-                borderBottom: mode === t.key ? '2px solid #C8151A' : '2px solid transparent',
-                color: mode === t.key ? '#C8151A' : 'var(--muted)',
-                fontWeight: mode === t.key ? 700 : 500, fontSize: '.8125rem',
-                fontFamily: 'inherit', cursor: 'pointer', marginBottom: -1,
-              }}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        {mode === 'bulk' ? (
-          <>
-            {/* Period selector + Export format, side by side (landscape) */}
-            <div style={{ display: step === 'form' ? 'flex' : 'none', gap: 20, marginBottom: 18 }}>
-              <div style={{ flex: '1.5 1 0' }}>
-                <div style={{ fontSize: '.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: 'var(--muted-2)', marginBottom: 8 }}>Report Period</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                  {PERIODS.map(p => (
-                    <button key={p.key} type="button"
-                      onClick={() => setPeriod(p.key)}
-                      style={{
-                        padding: '12px 14px', borderRadius: 'var(--r-lg)', border: `1.5px solid ${period === p.key ? '#C8151A' : 'var(--border)'}`,
-                        background: 'var(--bg)', boxShadow: period === p.key ? '0 0 0 3px rgba(200,21,26,0.08)' : 'none', cursor: 'pointer',
-                        fontFamily: 'inherit', textAlign: 'left', transition: 'all .15s',
-                        display: 'flex', alignItems: 'center', gap: 10,
-                      }}
-                    >
-                      <span style={{ display: 'inline-flex', flexShrink: 0, color: period === p.key ? '#C8151A' : '#94A3B8' }}>{p.icon}</span>
-                      <div>
-                        <div style={{ fontSize: '.8125rem', fontWeight: period === p.key ? 700 : 600, color: 'var(--text)' }}>{p.label}</div>
-                        <div style={{ fontSize: '.6875rem', color: 'var(--muted)', marginTop: 1 }}>{p.desc}</div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--border)', flexShrink: 0 }} />
-
-              <div style={{ flex: '1 1 0' }}>
-                <div style={{ fontSize: '.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: 'var(--muted-2)', marginBottom: 8 }}>Export Format</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {FORMATS.map(f => (
-                    <button key={f.key} type="button" onClick={() => setExportFormat(f.key)}
-                      style={{
-                        padding: '10px 12px', borderRadius: 'var(--r-lg)', border: `1.5px solid ${exportFormat === f.key ? '#C8151A' : 'var(--border)'}`,
-                        background: 'var(--bg)', boxShadow: exportFormat === f.key ? '0 0 0 3px rgba(200,21,26,0.08)' : 'none', cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', gap: 8,
-                      }}
-                    >
-                      <span style={{ display: 'inline-flex', flexShrink: 0, color: exportFormat === f.key ? '#C8151A' : '#94A3B8' }}>{fileIcon}</span>
-                      <span style={{ fontSize: '.75rem', fontWeight: exportFormat === f.key ? 700 : 600, color: 'var(--text)' }}>{f.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
+          {/* LEFT PANEL: Settings Controls */}
+          <div style={{
+            width: '330px', flexShrink: 0, background: '#F8FAFC',
+            borderRight: '1px solid #E2E8F0', padding: '20px 20px',
+            display: 'flex', flexDirection: 'column', gap: 18, overflowY: 'auto'
+          }}>
+            {/* Mode Selector Tabs (No 'EXPORT MODE' text label) */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, background: '#E2E8F0', padding: 3, borderRadius: 8 }}>
+              {[
+                { key: 'bulk', label: 'Clinic Report' },
+                { key: 'single', label: 'Patient Record' }
+              ].map(t => (
+                <button key={t.key} type="button" onClick={() => switchMode(t.key)}
+                  style={{
+                    padding: '8px 10px', border: 'none', borderRadius: 6,
+                    background: mode === t.key ? '#FFFFFF' : 'transparent',
+                    color: mode === t.key ? '#0F172A' : '#64748B',
+                    fontWeight: mode === t.key ? 700 : 600, fontSize: '.78125rem',
+                    boxShadow: mode === t.key ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                    cursor: 'pointer', fontFamily: 'inherit', transition: 'all .15s'
+                  }}
+                >
+                  {t.label}
+                </button>
+              ))}
             </div>
 
-            {step === 'preview' && previewPane(buildBulkReportHtml(preview))}
+            {mode === 'bulk' ? (
+              <>
+                {/* Report Period Selector */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '.71875rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 6 }}>
+                    REPORT PERIOD:
+                  </label>
+                  <select
+                    value={period}
+                    onChange={e => setPeriod(e.target.value)}
+                    style={{
+                      width: '100%', padding: '9px 12px', fontSize: '.8125rem', fontWeight: 600, color: '#0F172A',
+                      border: '1px solid #CBD5E1', borderRadius: 8, background: '#FFFFFF', outline: 'none', cursor: 'pointer',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+                    }}
+                  >
+                    <option value="daily">Daily (Today)</option>
+                    <option value="weekly">Weekly (Last 7 Days)</option>
+                    <option value="monthly">Monthly (This Month)</option>
+                    <option value="yearly">Yearly (This Year)</option>
+                  </select>
+                </div>
 
-            {step === 'form' ? (
-              <div className="modal-footer" style={{ flexWrap: 'wrap' }}>
-                <button className="btn btn-outline" onClick={onClose}>Cancel</button>
-                <button className="btn btn-primary" onClick={() => setStep('preview')} disabled={preview.length === 0}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
-                  Preview Report
-                </button>
-              </div>
+                {/* Export Format Selector */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '.71875rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 6 }}>
+                    EXPORT FORMAT:
+                  </label>
+                  <select
+                    value={exportFormat}
+                    onChange={e => setExportFormat(e.target.value)}
+                    style={{
+                      width: '100%', padding: '9px 12px', fontSize: '.8125rem', fontWeight: 600, color: '#0F172A',
+                      border: '1px solid #CBD5E1', borderRadius: 8, background: '#FFFFFF', outline: 'none', cursor: 'pointer',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+                    }}
+                  >
+                    <option value="pdf">PDF Document</option>
+                    <option value="xls">Excel Spreadsheet (XLS)</option>
+                  </select>
+                </div>
+              </>
             ) : (
               <>
-                <div className="modal-footer" style={{ flexWrap: 'wrap' }}>
-                  <button className="btn btn-outline" onClick={() => { setStep('form'); setShowEmailInput(false); }}>Back</button>
-                  <button className="btn btn-outline" onClick={runBulkExport} disabled={preview.length === 0}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-                    Export {FORMATS.find(f => f.key === exportFormat)?.label}
+                {/* Search Patient */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '.71875rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 6 }}>
+                    PATIENT SELECTION:
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="text"
+                      placeholder="Search patient by name or MRN..."
+                      value={patientQuery}
+                      onChange={e => { setPatientQuery(e.target.value); setSelectedPatient(null); }}
+                      style={{ width: '100%', padding: '9px 12px', fontSize: '.8125rem', border: '1px solid #CBD5E1', borderRadius: 8, background: '#fff', color: '#0F172A', outline: 'none' }}
+                    />
+                    {matchingPatients.length > 0 && (
+                      <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: '#fff', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 10, maxHeight: 200, overflowY: 'auto' }}>
+                        {matchingPatients.map(p => (
+                          <button key={p.firestoreId || p.id} type="button"
+                            onClick={() => { setSelectedPatient(p); setPatientQuery(formatTitleCase(p.name)); }}
+                            style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', border: 'none', borderBottom: '1px solid var(--border)', background: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}
+                          >
+                            <div style={{ fontSize: '.8125rem', fontWeight: 600, color: 'var(--text)' }}>{formatTitleCase(p.name)}</div>
+                            <div style={{ fontSize: '.6875rem', color: 'var(--muted)', marginTop: 1 }}>{p.id || p.mrn || '—'}</div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Document Type Selector */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '.71875rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 6 }}>
+                    DOCUMENT TYPE:
+                  </label>
+                  <select
+                    value={docType}
+                    onChange={e => handleDocTypeChange(e.target.value)}
+                    style={{
+                      width: '100%', padding: '9px 12px', fontSize: '.8125rem', fontWeight: 600, color: '#0F172A',
+                      border: '1px solid #CBD5E1', borderRadius: 8, background: '#FFFFFF', outline: 'none', cursor: 'pointer',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+                    }}
+                  >
+                    <option value="record">Medical Record</option>
+                    <option value="certificate">Medical Certificate</option>
+                    <option value="both">Medical Record &amp; Certificate</option>
+                  </select>
+                </div>
+              </>
+            )}
+
+            {/* Action Buttons Section (Uniform Dark Navy & Clean Outline Buttons) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 'auto', paddingTop: 16, borderTop: '1px solid #E2E8F0' }}>
+              {mode === 'bulk' ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={runBulkExport}
+                    disabled={preview.length === 0}
+                    style={{
+                      width: '100%', height: 42, padding: '0 16px', borderRadius: 8, border: 'none',
+                      background: '#0F172A', color: '#FFFFFF', fontSize: '.8125rem', fontWeight: 700,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer',
+                      opacity: preview.length === 0 ? 0.5 : 1
+                    }}
+                  >
+                    Export {exportFormat === 'xls' ? 'Excel (XLS)' : 'PDF'}
                   </button>
-                  <button className="btn btn-outline" onClick={exportPrint} disabled={preview.length === 0}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></svg>
+                  <button
+                    type="button"
+                    onClick={exportPrint}
+                    disabled={preview.length === 0}
+                    style={{
+                      width: '100%', height: 42, padding: '0 16px', borderRadius: 8, border: '1px solid #CBD5E1',
+                      background: '#FFFFFF', color: '#0F172A', fontSize: '.8125rem', fontWeight: 700,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer',
+                      opacity: preview.length === 0 ? 0.5 : 1
+                    }}
+                  >
                     Print Report
                   </button>
-                  <button className="btn btn-primary" onClick={() => setShowEmailInput(v => !v)} disabled={preview.length === 0}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16v16H4z" /><path d="M22 6l-10 7L2 6" /></svg>
-                    Email Report
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => exportSinglePatientPdf(selectedPatient)}
+                    disabled={!selectedPatient}
+                    style={{
+                      width: '100%', height: 42, padding: '0 16px', borderRadius: 8, border: 'none',
+                      background: '#0F172A', color: '#FFFFFF', fontSize: '.8125rem', fontWeight: 700,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer',
+                      opacity: !selectedPatient ? 0.5 : 1
+                    }}
+                  >
+                    Export PDF Document
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => printSinglePatientReport(selectedPatient)}
+                    disabled={!selectedPatient}
+                    style={{
+                      width: '100%', height: 42, padding: '0 16px', borderRadius: 8, border: '1px solid #CBD5E1',
+                      background: '#FFFFFF', color: '#0F172A', fontSize: '.8125rem', fontWeight: 700,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer',
+                      opacity: !selectedPatient ? 0.5 : 1
+                    }}
+                  >
+                    Print Patient Record
+                  </button>
+                </>
+              )}
+
+              {/* Uniform Email Report Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEmailInput(v => !v);
+                  if (mode === 'single' && selectedPatient && !emailTo) {
+                    setEmailTo(selectedPatient.email || '');
+                  }
+                }}
+                disabled={mode === 'bulk' ? preview.length === 0 : !selectedPatient}
+                style={{
+                  width: '100%', height: 42, padding: '0 16px', borderRadius: 8,
+                  border: showEmailInput ? '1px solid #0F172A' : '1px solid #CBD5E1',
+                  background: showEmailInput ? '#F1F5F9' : '#FFFFFF',
+                  color: '#0F172A',
+                  fontSize: '.8125rem', fontWeight: 700,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer',
+                  opacity: (mode === 'bulk' ? preview.length === 0 : !selectedPatient) ? 0.5 : 1
+                }}
+              >
+                <span>✉️ Email Report</span>
+              </button>
+
+              {/* Inline Email Input Panel */}
+              {showEmailInput && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px', background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 8, marginTop: 2 }}>
+                  <input
+                    type="email"
+                    placeholder="Enter recipient email..."
+                    value={emailTo}
+                    onChange={e => setEmailTo(e.target.value)}
+                    style={{ width: '100%', padding: '8px 10px', fontSize: '.8125rem', border: '1px solid #CBD5E1', borderRadius: 6, outline: 'none', background: '#fff' }}
+                  />
+                  <button
+                    type="button"
+                    disabled={sending}
+                    onClick={() =>
+                      mode === 'bulk'
+                        ? sendReportEmail(emailTo, `K&A Clinic — ${period.charAt(0).toUpperCase() + period.slice(1)} Report (${periodLabel()})`, buildBulkReportHtml(preview))
+                        : emailSinglePatientPdf(selectedPatient, emailTo)
+                    }
+                    style={{ width: '100%', height: 38, background: '#0F172A', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: '.8125rem', cursor: 'pointer' }}
+                  >
+                    {sending ? 'Sending…' : 'Send via Email'}
                   </button>
                 </div>
-                {emailRow(() => sendReportEmail(emailTo, `K&A Clinic — ${period.charAt(0).toUpperCase() + period.slice(1)} Report (${periodLabel()})`, buildBulkReportHtml(preview)))}
-              </>
-            )}
-          </>
-        ) : (
-          <>
-            {/* Patient search */}
-            <div style={{ position: 'relative', marginBottom: selectedPatient ? 14 : 4, display: step === 'form' ? 'block' : 'none' }}>
-              <input
-                type="text"
-                placeholder="Search by patient name or MRN..."
-                value={patientQuery}
-                onChange={e => { setPatientQuery(e.target.value); setSelectedPatient(null); setStep('form'); }}
-                style={{ width: '100%', padding: '9px 12px', fontSize: '.8125rem', border: '1.5px solid var(--border-2)', borderRadius: 'var(--r-md)', background: '#fff', color: 'var(--text)', outline: 'none' }}
-              />
-              {matchingPatients.length > 0 && (
-                <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: '#fff', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 10, maxHeight: 220, overflowY: 'auto' }}>
-                  {matchingPatients.map(p => (
-                    <button key={p.firestoreId || p.id} type="button"
-                      onClick={() => { setSelectedPatient(p); setPatientQuery(formatTitleCase(p.name)); }}
-                      style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 12px', border: 'none', borderBottom: '1px solid var(--border)', background: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}
-                    >
-                      <div style={{ fontSize: '.8125rem', fontWeight: 600, color: 'var(--text)' }}>{formatTitleCase(p.name)}</div>
-                      <div style={{ fontSize: '.6875rem', color: 'var(--muted)', marginTop: 1 }}>{p.id || p.mrn || '—'}</div>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {patientQuery && !selectedPatient && matchingPatients.length === 0 && (
-                <div style={{ fontSize: '.75rem', color: 'var(--muted)', marginTop: 6 }}>No matching patients found.</div>
               )}
             </div>
 
-            {selectedPatient ? (
-              <>
-                <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', padding: '12px 14px', marginBottom: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div>
-                    <div style={{ fontSize: '.8125rem', fontWeight: 600, color: 'var(--text)' }}>{formatTitleCase(selectedPatient.name)}</div>
-                    <div style={{ fontSize: '.75rem', color: 'var(--muted)', marginTop: 2 }}>{selectedPatient.id || selectedPatient.mrn || '—'} · {selectedPatient.email || 'no email on file'}</div>
-                  </div>
-                  <span style={{
-                    display: 'inline-block', padding: '4px 10px', borderRadius: '9999px', fontSize: '.6875rem', fontWeight: 600, textTransform: 'capitalize',
-                    background: derivePatientStatus(selectedPatient) === 'completed' ? '#ECFDF5' : '#EFF6FF',
-                    color: derivePatientStatus(selectedPatient) === 'completed' ? '#059669' : '#1D4ED8',
-                  }}>
-                    {derivePatientStatus(selectedPatient)}
-                  </span>
+          </div>
+
+          {/* RIGHT PANEL: Live Paper Document Preview Workspace (Matches PDF Viewer Reference) */}
+          <div style={{ flex: 1, background: '#1E293B', padding: '16px 24px 24px', overflow: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            
+            {/* Top Centered Dark PDF Viewer Toolbar */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+              background: '#1E293B', padding: '6px 16px', borderRadius: 8,
+              color: '#FFFFFF', fontSize: '.8125rem', fontWeight: 600,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.3)', marginBottom: 16, flexShrink: 0,
+              position: 'sticky', top: 0, zIndex: 10
+            }}>
+              {/* Page indicator */}
+              <span style={{ fontSize: '.78125rem', color: '#CBD5E1' }}>1 / 1</span>
+              
+              <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.2)', margin: '0 4px' }} />
+              
+              {/* Zoom controls */}
+              <button type="button" onClick={() => setZoomLevel(z => Math.max(0.4, Math.round((z - 0.1) * 100) / 100))} style={{ background: 'transparent', border: 'none', color: '#FFF', fontSize: '1.1rem', fontWeight: 800, cursor: 'pointer', padding: '0 6px' }} title="Zoom Out">-</button>
+              
+              <span style={{ minWidth: 46, textAlign: 'center', fontWeight: 700, color: '#FFFFFF', background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: 4, fontSize: '.78125rem' }}>
+                {Math.round(zoomLevel * 100)}%
+              </span>
+              
+              <button type="button" onClick={() => setZoomLevel(z => Math.min(1.6, Math.round((z + 0.1) * 100) / 100))} style={{ background: 'transparent', border: 'none', color: '#FFF', fontSize: '1.1rem', fontWeight: 800, cursor: 'pointer', padding: '0 6px' }} title="Zoom In">+</button>
+              
+              <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.2)', margin: '0 4px' }} />
+              
+              {/* Fit to Page */}
+              <button type="button" onClick={() => setZoomLevel(0.85)} style={{ background: 'transparent', border: 'none', color: '#FFF', fontSize: '.9rem', cursor: 'pointer', padding: '0 4px' }} title="Fit to Page">↕</button>
+              
+              {/* Rotate Page */}
+              <button type="button" onClick={() => setRotation(r => (r + 90) % 360)} style={{ background: 'transparent', border: 'none', color: '#FFF', fontSize: '1rem', cursor: 'pointer', padding: '0 4px' }} title="Rotate Page">↻</button>
+            </div>
+
+            {/* Paper Sheet Preview Container (Scales as a whole paper sheet!) */}
+            <div style={{
+              width: '820px', height: '1060px',
+              background: '#FFFFFF', borderRadius: 4, boxShadow: '0 8px 30px rgba(0,0,0,0.5)',
+              overflow: 'hidden', display: 'flex', flexDirection: 'column', flexShrink: 0,
+              transform: `scale(${zoomLevel}) ${rotation ? `rotate(${rotation}deg)` : ''}`,
+              transformOrigin: 'top center',
+              transition: 'transform 0.15s ease',
+              marginBottom: zoomLevel < 1 ? `-${(1 - zoomLevel) * 1060}px` : `${(zoomLevel - 1) * 200}px`
+            }}>
+              {mode === 'bulk' ? (
+                previewPane(exportFormat === 'xls' ? buildExcelPreviewHtml(preview, periodLabel()) : buildBulkReportHtml(preview))
+              ) : selectedPatient ? (
+                previewPane(buildDocumentHtml(selectedPatient, docType, showEmailInput ? 'patient' : 'clinic'))
+              ) : (
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC', color: '#64748B', fontSize: '.875rem' }}>
+                  Search and select a patient on the left panel to preview document.
                 </div>
+              )}
+            </div>
+          </div>
 
-                {/* Document — check one or both; at least one stays checked */}
-                <div style={{ marginBottom: 18, display: step === 'form' ? 'block' : 'none' }}>
-                  <div style={{ fontSize: '.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: 'var(--muted-2)', marginBottom: 8 }}>Document</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {[
-                      { checked: includeRecord, onToggle: toggleIncludeRecord, label: 'Medical Record', desc: 'Complete health history & dose schedule' },
-                      { checked: includeCertificate, onToggle: toggleIncludeCertificate, label: 'Medical Certificate', desc: 'Short proof-of-treatment note' },
-                    ].map(d => (
-                      <label key={d.label}
-                        style={{
-                          display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 'var(--r-lg)',
-                          border: `1.5px solid ${d.checked ? '#C8151A' : 'var(--border)'}`,
-                          background: 'var(--bg)', boxShadow: d.checked ? '0 0 0 3px rgba(200,21,26,0.08)' : 'none', cursor: 'pointer',
-                        }}
-                      >
-                        <input type="checkbox" checked={d.checked} onChange={d.onToggle} style={{ marginTop: 3, accentColor: '#C8151A', cursor: 'pointer' }} />
-                        <div>
-                          <div style={{ fontSize: '.78125rem', fontWeight: d.checked ? 700 : 600, color: 'var(--text)' }}>{d.label}</div>
-                          <div style={{ fontSize: '.65625rem', color: 'var(--muted)', marginTop: 2, lineHeight: 1.3 }}>{d.desc}</div>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                {/* The emailed copy is the patient-facing variant (no wound
-                    location/depth), so once the Email field is open the preview
-                    switches to that variant — otherwise it would promise the
-                    admin a document the patient never receives. */}
-                {step === 'preview' && previewPane(
-                  buildDocumentHtml(selectedPatient, docType, showEmailInput ? 'patient' : 'clinic'),
-                  showEmailInput,
-                )}
-
-                {step === 'form' ? (
-                  <div className="modal-footer" style={{ flexWrap: 'wrap' }}>
-                    <button className="btn btn-outline" onClick={onClose}>Cancel</button>
-                    <button className="btn btn-primary" onClick={() => setStep('preview')}>
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
-                      Preview {docTypeLabel(docType)}
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <div className="modal-footer" style={{ flexWrap: 'wrap' }}>
-                      <button className="btn btn-outline" onClick={() => { setStep('form'); setShowEmailInput(false); }}>Back</button>
-                      <button className="btn btn-outline" onClick={() => exportSinglePatientPdf(selectedPatient)}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-                        Export PDF
-                      </button>
-                      <button className="btn btn-outline" onClick={() => printSinglePatientReport(selectedPatient)}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></svg>
-                        Print
-                      </button>
-                      <button className="btn btn-primary" onClick={() => { setShowEmailInput(v => !v); if (!emailTo) setEmailTo(selectedPatient.email || ''); }}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16v16H4z" /><path d="M22 6l-10 7L2 6" /></svg>
-                        Email
-                      </button>
-                    </div>
-                    {emailRow(() => emailSinglePatientPdf(selectedPatient, emailTo))}
-                  </>
-                )}
-              </>
-            ) : (
-              <p style={{ fontSize: '.75rem', color: 'var(--muted)', textAlign: 'center', padding: '28px 0' }}>
-                Search for a patient above to export, print, or email their individual record.
-              </p>
-            )}
-          </>
-        )}
         </div>
       </div>
     </div>
@@ -3073,7 +3423,7 @@ function FollowUpModal({ patient, onClose, onToast }) {
               <button key={x.key} type="button" onClick={() => pickPreset(x.key)}
                 style={{
                   padding: '10px 12px', borderRadius: 'var(--r-lg)', textAlign: 'left',
-                  border: `1.5px solid ${preset === x.key ? '#C8151A' : 'var(--border)'}`,
+                  border: `1px solid ${preset === x.key ? '#7C3AED' : 'var(--border)'}`,
                   background: 'var(--bg)', boxShadow: preset === x.key ? '0 0 0 3px rgba(200,21,26,0.08)' : 'none',
                   cursor: 'pointer', fontFamily: 'inherit',
                   fontSize: '.78125rem', fontWeight: preset === x.key ? 700 : 600, color: 'var(--text)',
@@ -3889,7 +4239,7 @@ export default function App() {
           <div style={{ padding: '14px 20px', borderTop: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#FAFAFA' }}>
             <div style={{ fontSize: '.75rem', color: '#64748B', fontWeight: 600 }}>
               Showing {totalItems === 0 ? 0 : (safePage - 1) * itemsPerPage + 1}–{Math.min(safePage * itemsPerPage, totalItems)} of {totalItems} patients
-              {selectedRows.size > 0 && <span style={{ marginLeft: 10, color: '#C8151A', fontWeight: 800 }}>({selectedRows.size} selected)</span>}
+              {selectedRows.size > 0 && <span style={{ marginLeft: 10, color: '#7C3AED', fontWeight: 800 }}>({selectedRows.size} selected)</span>}
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

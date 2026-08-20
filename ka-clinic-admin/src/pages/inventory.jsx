@@ -123,52 +123,77 @@ const INVENTORY_HEADERS = ['Item Name', 'Category', 'Stock', 'Unit', 'Expiry', '
 
 const statusLabel = r => liveStatus(r) === 'in-stock' ? 'In Stock' : 'Out of Stock';
 
-// One source of truth for the report body — the same markup is shown in the
-// in-app preview and written to the print window.
+// One source of truth for the report body — official Philippine institutional letterhead format
 const buildInventoryReportHtml = (rows, periodLabel) => {
   const tableRows = rows.map((r, i) => `<tr>
-    <td>${i + 1}</td><td>${r.name}</td><td>${r.category}</td><td>${r.stock} ${fmtUnit(r.unit)}</td>
-    <td>${r.expiry || '—'}</td><td>${statusLabel(r)}</td>
+    <td style="text-align:center;color:#64748B;">${i + 1}</td>
+    <td style="font-weight:700;color:#0F172A;">${r.name}</td>
+    <td style="text-align:center;font-weight:600;">${r.category}</td>
+    <td style="text-align:center;font-weight:700;color:#0F172A;">${r.stock} ${fmtUnit(r.unit)}</td>
+    <td style="text-align:center;">${r.expiry || '—'}</td>
+    <td style="text-align:center;font-weight:700;color:${liveStatus(r) === 'in-stock' ? '#15803D' : '#C8151A'};">${statusLabel(r).toUpperCase()}</td>
   </tr>`).join('');
+
   return `<!DOCTYPE html><html><head><title>Inventory Stock Report</title>
   <style>
     *{box-sizing:border-box;}
-    body{font-family:'Work Sans','Roboto',-apple-system,'Segoe UI',sans-serif;color:#1E293B;padding:0;margin:0;font-size:12.5px;}
-    .letterhead{background:#0F172A;color:#fff;padding:20px 40px;}
-    .letterhead .brand{font-size:16px;font-weight:700;letter-spacing:.2px;}
-    .letterhead .brand em{color:#F87171;font-style:normal;}
-    .letterhead .tagline{font-size:9.5px;color:#CBD5E1;margin-top:2px;text-transform:uppercase;letter-spacing:.5px;}
-    .body-pad{padding:26px 40px 36px;}
-    h1{font-size:16px;font-weight:700;margin:0 0 3px;color:#0F172A;}
-    .sub{font-size:11px;color:#64748B;margin-bottom:20px;}
-    table{width:100%;border-collapse:collapse;font-size:11px;}
-    th{background:#F1F5F9;border:1px solid #E2E8F0;padding:8px 10px;text-align:left;color:#475569;font-size:9.5px;text-transform:uppercase;letter-spacing:.3px;}
+    body{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,sans-serif;color:#0F172A;padding:28px 36px;margin:0;font-size:11.5px;line-height:1.5;background:#FFFFFF;}
+    table{width:100%;border-collapse:collapse;font-size:11px;border:1px solid #CBD5E1;margin-bottom:20px;}
+    th{background:#F1F5F9;border:1px solid #CBD5E1;padding:8px 10px;text-align:left;color:#334155;font-size:9px;text-transform:uppercase;letter-spacing:.5px;font-weight:700;}
     td{border:1px solid #E2E8F0;padding:7px 10px;}
-    tr:nth-child(even) td{background:#FAFAFC;}
-    .footer{font-size:9.5px;color:#94A3B8;margin-top:20px;border-top:1px solid #E2E8F0;padding-top:12px;}
-    @media print{@page{margin:12mm 14mm;}}
+    tr:nth-child(even) td{background:#FAFAFA;}
+    .footer{font-size:9px;color:#94A3B8;margin-top:24px;border-top:1px solid #E2E8F0;padding-top:10px;display:flex;justify-content:space-between;align-items:center;}
+    @media print{@page{margin:10mm 15mm;}}
   </style></head><body>
-  <div class="letterhead">
-    <div class="brand">K&amp;A <em>Clinic</em></div>
-    <div class="tagline">Anti-Rabies &amp; Animal Bite Center</div>
+
+  <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:14px;border-bottom:2px solid #0F172A;margin-bottom:16px;">
+    <div style="width:58px;height:58px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:#FAFAFA;border:1px solid #CBD5E1;flex-shrink:0;">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#C8151A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 6v12M6 12h12"/>
+      </svg>
+    </div>
+    <div style="text-align:center;flex:1;padding:0 16px;">
+      <div style="font-family:'Times New Roman',Georgia,serif;font-size:10px;font-weight:600;color:#475569;letter-spacing:1.2px;text-transform:uppercase;">Republic of the Philippines</div>
+      <div style="font-family:'Times New Roman',Georgia,serif;font-size:18px;font-weight:800;color:#C8151A;margin:2px 0 1px;letter-spacing:-0.01em;">K&amp;A Anti-Rabies Vaccine Clinic</div>
+      <div style="font-family:'Segoe UI',sans-serif;font-size:10.5px;font-weight:700;color:#0F172A;text-transform:uppercase;letter-spacing:0.5px;">Animal Bite Treatment Center</div>
+      <div style="font-size:9px;color:#64748B;margin-top:3px;font-family:'Segoe UI',sans-serif;">Polangui, Albay &bull; Contact: (052) 486-1220 &bull; Email: knaclinic.ph@gmail.com</div>
+    </div>
+    <div style="width:58px;height:58px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:#0F172A;border:1px solid #0F172A;flex-shrink:0;">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        <path d="M12 8v8M8 12h8"/>
+      </svg>
+    </div>
   </div>
-  <div class="body-pad">
-    <h1>Inventory Stock Report</h1>
-    <div class="sub">Period: ${periodLabel} &nbsp;|&nbsp; Generated: ${new Date().toLocaleString('en-PH')} &nbsp;|&nbsp; Total Items: ${rows.length}</div>
-    <table><thead><tr><th>#</th><th>Item Name</th><th>Category</th><th>Stock</th><th>Expiry</th><th>Status</th></tr></thead>
-    <tbody>${tableRows}</tbody></table>
-    <div class="footer">K&amp;A Clinic &mdash; Inventory Stock Report &mdash; ${new Date().getFullYear()}</div>
+
+  <div style="text-align:center;margin-bottom:14px;font-size:11px;color:#0F172A;line-height:1.8;">
+    <strong>Reporting Period:</strong> <span style="text-decoration:underline;margin-right:16px;">${periodLabel}</span>
+    <strong>Date Exported:</strong> <span style="text-decoration:underline;margin-right:16px;">${new Date().toLocaleString('en-PH')}</span>
+    <strong>Total Items:</strong> <span style="text-decoration:underline;">${rows.length} Items</span>
+  </div>
+
+  <div style="text-align:center;font-size:13.5px;font-weight:800;color:#0F172A;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:18px;">
+    OFFICIAL INVENTORY STOCK REPORT
+  </div>
+
+  <table>
+    <thead><tr><th style="text-align:center;">#</th><th>Item Name</th><th style="text-align:center;">Category</th><th style="text-align:center;">Stock Level</th><th style="text-align:center;">Expiration Date</th><th style="text-align:center;">Stock Status</th></tr></thead>
+    <tbody>${tableRows}</tbody>
+  </table>
+
+  <div class="footer">
+    <span>K&amp;A Clinic &bull; Official Inventory Stock Report</span>
+    <span>Page 1 of 1</span>
   </div>
   </body></html>`;
 };
 
-// Excel has no page-header concept in an HTML table, so the letterhead rides
-// in as merged title rows above the column headings — same information the
-// printed report carries.
+// Excel HTML export helper
 const exportXLS = (rows, filename, periodLabel) => {
   const cols = INVENTORY_HEADERS.length;
-  const tableRows = rows.map(r => `<tr>
-    <td>${r.name}</td><td>${r.category}</td><td>${r.stock}</td><td>${fmtUnit(r.unit)}</td>
+  const tableRows = rows.map((r, i) => `<tr>
+    <td>${i + 1}</td><td>${r.name}</td><td>${r.category}</td><td>${r.stock} ${fmtUnit(r.unit)}</td>
     <td>${r.expiry || ''}</td><td>${statusLabel(r)}</td>
   </tr>`).join('');
   const html = `<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8">
@@ -188,7 +213,7 @@ const exportXLS = (rows, filename, periodLabel) => {
     </table>
     <table border="1"><thead><tr>${INVENTORY_HEADERS.map(h => `<th class="col">${h}</th>`).join('')}</tr></thead><tbody>${tableRows}</tbody></table>
     </body></html>`;
-  const blob = new Blob(['﻿' + html], { type: 'application/vnd.ms-excel' });
+  const blob = new Blob(['\uFEFF' + html], { type: 'application/vnd.ms-excel' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -213,6 +238,8 @@ export default function VaccineInventoryPage() {
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportPeriod, setExportPeriod] = useState('all');
   const [exportFormat, setExportFormat] = useState('pdf'); // 'xls' | 'pdf'
+  const [exportZoomLevel, setExportZoomLevel] = useState(0.85);
+  const [exportRotation, setExportRotation] = useState(0);
   // Preview gate — the report is shown in-app before anything is downloaded
   // or sent to the printer. 'form' = pick period/format, 'preview' = review.
   const [exportStep, setExportStep] = useState('form');
@@ -844,20 +871,21 @@ export default function VaccineInventoryPage() {
         </div>
       )}
 
-      {/* ── Export Report Modal (Landscape Pop-up Card with Dark Header) ── */}
+      {/* ── Export Report Modal (Print Preview Split Layout) ── */}
       {showExportModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(4px)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div style={{ background: '#FFFFFF', borderRadius: 16, width: '100%', maxWidth: 700, boxShadow: '0 20px 40px rgba(0,0,0,0.25)', overflow: 'hidden' }}>
+          <div style={{ background: '#FFFFFF', borderRadius: 16, width: '1360px', maxWidth: '98vw', height: '92vh', maxHeight: '960px', boxShadow: '0 20px 40px rgba(0,0,0,0.25)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             
             {/* Dark Navy Header Bar */}
             <div style={{
               background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)',
-              padding: '18px 24px',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+              padding: '16px 24px',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              flexShrink: 0
             }}>
               <div>
                 <h3 style={{ fontSize: '1.0625rem', fontWeight: 800, color: '#FFFFFF', margin: 0, letterSpacing: '-0.01em' }}>Export Inventory Report</h3>
-                <p style={{ fontSize: '.75rem', color: 'rgba(255,255,255,0.65)', margin: '3px 0 0' }}>Generate and download inventory stock reports</p>
+                <p style={{ fontSize: '.75rem', color: 'rgba(255,255,255,0.65)', margin: '3px 0 0' }}>Generate, print, and download inventory stock reports</p>
               </div>
               <button
                 type="button"
@@ -876,140 +904,130 @@ export default function VaccineInventoryPage() {
               </button>
             </div>
 
-            {/* Modal Body */}
-            <div style={{ padding: 24 }}>
+            {/* Modal 2-Column Split Body */}
+            <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
-            {/* Selection Grid (Landscape side-by-side) */}
-            <div style={{ display: exportStep === 'form' ? 'flex' : 'none', gap: 20, marginBottom: 20 }}>
-              {/* Period selection in 2-column grid */}
-              <div style={{ flex: '1.4 1 0' }}>
-                <div style={{ fontSize: '.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: '#64748B', marginBottom: 8 }}>Reporting Period</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                  {[
-                    { key: 'all', label: 'All Items', desc: 'Full database' },
-                    { key: 'daily', label: 'Daily', desc: 'Added today' },
-                    { key: 'weekly', label: 'Weekly', desc: 'Last 7 days' },
-                    { key: 'monthly', label: 'Monthly', desc: 'This month' },
-                    { key: 'yearly', label: 'Yearly', desc: 'This year' },
-                  ].map(p => (
-                    <button key={p.key} type="button"
-                      onClick={() => setExportPeriod(p.key)}
-                      style={{
-                        padding: '10px 12px', borderRadius: 8, border: `1.5px solid ${exportPeriod === p.key ? '#C8151A' : '#E2E8F0'}`,
-                        background: exportPeriod === p.key ? 'rgba(200,21,26,0.03)' : '#FFFFFF',
-                        boxShadow: exportPeriod === p.key ? '0 0 0 3px rgba(200,21,26,0.08)' : 'none',
-                        cursor: 'pointer', textAlign: 'left',
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontFamily: 'inherit'
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontSize: '.8125rem', fontWeight: exportPeriod === p.key ? 700 : 600, color: '#0F172A' }}>{p.label}</div>
-                        <div style={{ fontSize: '.6875rem', color: '#64748B', marginTop: 1 }}>{p.desc}</div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Divider */}
-              <div style={{ width: 1, background: '#E2E8F0' }} />
-
-              {/* Format selection */}
-              <div style={{ flex: '1 1 0' }}>
-                <div style={{ fontSize: '.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: '#64748B', marginBottom: 8 }}>Export Format</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {[
-                    { key: 'xls', label: 'Excel (XLS)' },
-                    { key: 'pdf', label: 'PDF Document' },
-                  ].map(f => (
-                    <button key={f.key} type="button"
-                      onClick={() => setExportFormat(f.key)}
-                      style={{
-                        padding: '10px 12px', borderRadius: 8, border: `1.5px solid ${exportFormat === f.key ? '#C8151A' : '#E2E8F0'}`,
-                        background: exportFormat === f.key ? 'rgba(200,21,26,0.03)' : '#FFFFFF',
-                        boxShadow: exportFormat === f.key ? '0 0 0 3px rgba(200,21,26,0.08)' : 'none',
-                        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'inherit'
-                      }}
-                    >
-                      <FileText size={14} color={exportFormat === f.key ? '#C8151A' : '#94A3B8'} />
-                      <span style={{ fontSize: '.78125rem', fontWeight: exportFormat === f.key ? 700 : 600, color: '#0F172A' }}>{f.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Preview — the exact report that will be exported or printed */}
-            {exportStep === 'preview' && (
-              <div style={{ marginBottom: 20 }}>
-                <div style={{ fontSize: '.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: '#64748B', marginBottom: 8 }}>Report Preview</div>
-                <div style={{ border: '1.5px solid #E2E8F0', borderRadius: 8, overflow: 'hidden', background: '#FFFFFF' }}>
-                  <iframe
-                    title="Inventory report preview"
-                    sandbox=""
-                    srcDoc={buildInventoryReportHtml(getExportRows(), exportPeriodLabel())}
-                    style={{ display: 'block', width: '100%', height: 380, border: 'none', background: '#FFFFFF' }}
-                  />
-                </div>
-                <div style={{ fontSize: '.6875rem', color: '#64748B', marginTop: 6 }}>
-                  Review the report above before exporting or printing.
-                </div>
-              </div>
-            )}
-
-            {/* Footer */}
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              {exportStep === 'form' ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={closeExportModal}
-                    style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #CBD5E1', background: '#FFFFFF', color: '#475569', fontSize: '.78125rem', fontWeight: 600, cursor: 'pointer' }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setExportStep('preview')}
-                    disabled={exportRowCount === 0}
+              {/* LEFT PANEL: Settings Controls */}
+              <div style={{
+                width: '330px', flexShrink: 0, background: '#FAFAFA',
+                borderRight: '1px solid #E2E8F0', padding: '20px 20px',
+                display: 'flex', flexDirection: 'column', gap: 18, overflowY: 'auto'
+              }}>
+                {/* Period selection */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '.71875rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 6 }}>
+                    REPORT PERIOD:
+                  </label>
+                  <select
+                    value={exportPeriod}
+                    onChange={e => setExportPeriod(e.target.value)}
                     style={{
-                      padding: '8px 18px', borderRadius: 8, border: 'none', background: '#6366F1', color: '#FFFFFF',
-                      fontSize: '.78125rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer',
-                      boxShadow: '0 2px 4px rgba(99,102,241,0.2)', opacity: exportRowCount === 0 ? 0.5 : 1
+                      width: '100%', padding: '9px 12px', fontSize: '.8125rem', fontWeight: 600, color: '#0F172A',
+                      border: '1px solid #CBD5E1', borderRadius: 8, background: '#FFFFFF', outline: 'none', cursor: 'pointer',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
                     }}
                   >
-                    <FileText size={14} />
-                    Preview Report
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setExportStep('form')}
-                    style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #CBD5E1', background: '#FFFFFF', color: '#475569', fontSize: '.78125rem', fontWeight: 600, cursor: 'pointer' }}
+                    <option value="all">All Items (Full Database)</option>
+                    <option value="daily">Daily (Added Today)</option>
+                    <option value="weekly">Weekly (Last 7 Days)</option>
+                    <option value="monthly">Monthly (This Month)</option>
+                    <option value="yearly">Yearly (This Year)</option>
+                  </select>
+                </div>
+
+                {/* Format selection */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '.71875rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 6 }}>
+                    EXPORT FORMAT:
+                  </label>
+                  <select
+                    value={exportFormat}
+                    onChange={e => setExportFormat(e.target.value)}
+                    style={{
+                      width: '100%', padding: '9px 12px', fontSize: '.8125rem', fontWeight: 600, color: '#0F172A',
+                      border: '1px solid #CBD5E1', borderRadius: 8, background: '#FFFFFF', outline: 'none', cursor: 'pointer',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+                    }}
                   >
-                    Back
-                  </button>
+                    <option value="pdf">PDF Document</option>
+                    <option value="xls">Excel Spreadsheet (XLS)</option>
+                  </select>
+                </div>
+
+                {/* Left Sidebar Action Buttons (No Red, No Cancel Button) */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 'auto', paddingTop: 16, borderTop: '1px solid #E2E8F0' }}>
                   <button
                     type="button"
                     onClick={handleExport}
                     disabled={exportRowCount === 0}
                     style={{
-                      padding: '8px 18px', borderRadius: 8, border: 'none', background: '#6366F1', color: '#FFFFFF',
-                      fontSize: '.78125rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer',
-                      boxShadow: '0 2px 4px rgba(99,102,241,0.2)', opacity: exportRowCount === 0 ? 0.5 : 1
+                      width: '100%', height: 42, padding: '0 16px', borderRadius: 8, border: 'none', background: '#0F172A', color: '#FFFFFF',
+                      fontSize: '.8125rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer',
+                      opacity: exportRowCount === 0 ? 0.5 : 1
                     }}
                   >
-                    <Download size={14} />
-                    {exportFormat === 'pdf' ? 'Print / Save PDF' : 'Export XLS'}
+                    <Download size={15} />
+                    {exportFormat === 'pdf' ? 'Print / Export PDF' : 'Export XLS'}
                   </button>
-                </>
-              )}
+                </div>
+              </div>
+
+              {/* RIGHT PANEL: Live Paper Document Preview Workspace (Matches PDF Viewer Reference) */}
+              <div style={{ flex: 1, background: '#1E293B', padding: '16px 24px 24px', overflow: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                
+                {/* Top Centered Dark PDF Viewer Toolbar */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+                  background: '#1E293B', padding: '6px 16px', borderRadius: 8,
+                  color: '#FFFFFF', fontSize: '.8125rem', fontWeight: 600,
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)', marginBottom: 16, flexShrink: 0,
+                  position: 'sticky', top: 0, zIndex: 10
+                }}>
+                  {/* Page indicator */}
+                  <span style={{ fontSize: '.78125rem', color: '#CBD5E1' }}>1 / 1</span>
+                  
+                  <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.2)', margin: '0 4px' }} />
+                  
+                  {/* Zoom controls */}
+                  <button type="button" onClick={() => setExportZoomLevel(z => Math.max(0.4, Math.round((z - 0.1) * 100) / 100))} style={{ background: 'transparent', border: 'none', color: '#FFF', fontSize: '1.1rem', fontWeight: 800, cursor: 'pointer', padding: '0 6px' }} title="Zoom Out">-</button>
+                  
+                  <span style={{ minWidth: 46, textAlign: 'center', fontWeight: 700, color: '#FFFFFF', background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: 4, fontSize: '.78125rem' }}>
+                    {Math.round(exportZoomLevel * 100)}%
+                  </span>
+                  
+                  <button type="button" onClick={() => setExportZoomLevel(z => Math.min(1.6, Math.round((z + 0.1) * 100) / 100))} style={{ background: 'transparent', border: 'none', color: '#FFF', fontSize: '1.1rem', fontWeight: 800, cursor: 'pointer', padding: '0 6px' }} title="Zoom In">+</button>
+                  
+                  <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.2)', margin: '0 4px' }} />
+                  
+                  {/* Fit to Page */}
+                  <button type="button" onClick={() => setExportZoomLevel(0.85)} style={{ background: 'transparent', border: 'none', color: '#FFF', fontSize: '.9rem', cursor: 'pointer', padding: '0 4px' }} title="Fit to Page">↕</button>
+                  
+                  {/* Rotate Page */}
+                  <button type="button" onClick={() => setExportRotation(r => (r + 90) % 360)} style={{ background: 'transparent', border: 'none', color: '#FFF', fontSize: '1rem', cursor: 'pointer', padding: '0 4px' }} title="Rotate Page">↻</button>
+                </div>
+
+                {/* Paper Sheet Preview Container (Scales as a whole paper sheet!) */}
+                <div style={{
+                  width: '820px', height: '1060px',
+                  background: '#FFFFFF', borderRadius: 4, boxShadow: '0 8px 30px rgba(0,0,0,0.5)',
+                  overflow: 'hidden', display: 'flex', flexDirection: 'column', flexShrink: 0,
+                  transform: `scale(${exportZoomLevel}) ${exportRotation ? `rotate(${exportRotation}deg)` : ''}`,
+                  transformOrigin: 'top center',
+                  transition: 'transform 0.15s ease',
+                  marginBottom: exportZoomLevel < 1 ? `-${(1 - exportZoomLevel) * 1060}px` : `${(exportZoomLevel - 1) * 200}px`
+                }}>
+                  <iframe
+                    title="Inventory report preview"
+                    sandbox=""
+                    srcDoc={buildInventoryReportHtml(getExportRows(), exportPeriodLabel())}
+                    style={{ display: 'block', width: '100%', height: '100%', border: 'none', background: '#FFFFFF' }}
+                  />
+                </div>
+              </div>
+
             </div>
           </div>
         </div>
-      </div>
       )}
 
     </div>

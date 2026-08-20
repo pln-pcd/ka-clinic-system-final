@@ -142,7 +142,7 @@ const nextDose = (p) => {
 /* ─────────────────────────────────────────────────────────── */
 /* COMPONENT                                                   */
 /* ─────────────────────────────────────────────────────────── */
-export default function VaccinationTrackerPage() {
+export default function VaccinationTrackerPage({ selectedPatientId }) {
   const [patients,     setPatients]     = useState([]);
   const [loading,      setLoading]      = useState(true);
   const [searchQuery,  setSearchQuery]  = useState('');
@@ -151,6 +151,21 @@ export default function VaccinationTrackerPage() {
   const [detailPt,     setDetailPt]     = useState(null);
   const [saving,       setSaving]       = useState({});
   const itemsPerPage = 10;
+
+  // Auto-select patient when opened from Overdue Dose Tracker or direct link
+  useEffect(() => {
+    if (selectedPatientId && patients.length > 0) {
+      const match = patients.find(p =>
+        p.firestoreId === selectedPatientId ||
+        p.id === selectedPatientId ||
+        (p.name && p.name.toLowerCase() === String(selectedPatientId).toLowerCase()) ||
+        getName(p).toLowerCase().includes(String(selectedPatientId).toLowerCase())
+      );
+      if (match) {
+        setDetailPt(match);
+      }
+    }
+  }, [selectedPatientId, patients]);
 
   // Filter and Sort — two independent dropdowns (filter was previously a
   // segmented tab row; converted to a dropdown to match the pattern used on
