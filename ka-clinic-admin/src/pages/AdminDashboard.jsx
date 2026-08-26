@@ -199,6 +199,7 @@ function PageTransition({ children, pageKey }) {
       filter:     visible ? 'none' : 'blur(2px)',
       transition: 'opacity 0.32s cubic-bezier(0.22,1,0.36,1), transform 0.32s cubic-bezier(0.22,1,0.36,1), filter 0.28s ease',
       height: '100%',
+      backgroundColor: '#F4F5F7',
     }}>
       {content}
     </div>
@@ -278,6 +279,7 @@ export default function AdminDashboard({ onLogout }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [selectedOverduePatientId, setSelectedOverduePatientId] = useState(null);
+  const [notifTab, setNotifTab] = useState('Today');
   const searchRef = useRef(null);
   const searchContainerRef = useRef(null);
   const [activeToast, setActiveToast] = useState(null);
@@ -297,8 +299,15 @@ export default function AdminDashboard({ onLogout }) {
         searchRef.current?.focus();
       }
     };
+    const handleOpenPatientRecord = () => {
+      setActivePage('patients');
+    };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('open-patient-record', handleOpenPatientRecord);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('open-patient-record', handleOpenPatientRecord);
+    };
   }, []);
 
   // Click outside search container to close results popover
@@ -802,30 +811,30 @@ export default function AdminDashboard({ onLogout }) {
           {/* Nav List */}
           <nav className="pl-3 pr-0 py-4 space-y-4 overflow-y-auto flex-1 custom-scrollbar">
             <div>
-              {sidebarOpen && (
-                <div className="px-3 pb-2 text-[10.5px] font-bold uppercase tracking-widest text-slate-400">
+              <div className="px-3 pb-2 text-[10.5px] font-bold uppercase tracking-widest text-slate-400 h-6 flex items-center overflow-hidden">
+                <span className={`whitespace-nowrap transition-opacity duration-200 ${sidebarOpen ? 'opacity-100' : 'opacity-0'}`}>
                   Clinical Management
-                </div>
-              )}
+                </span>
+              </div>
               <div className="space-y-1">
                 {menuItems.slice(0, 7).map((item) => {
                   const isActive = activePage === item.id;
                   return (
-                    <button key={item.id} onClick={() => setActivePage(item.id)}
-                      className={`group w-full flex items-center gap-3 relative cursor-pointer text-sm leading-snug transition-all ${
+                    <button key={item.id} onClick={() => { setSelectedOverduePatientId(null); setActivePage(item.id); }}
+                      className={`group w-full flex items-center gap-3 relative cursor-pointer text-sm leading-snug transition-colors duration-150 ${
                         isActive
-                          ? 'bg-[#F2F5FA] text-[#0F172A] font-extrabold rounded-l-2xl pl-3.5 pr-3 py-3 shadow-2xs relative z-10'
-                          : 'text-slate-300/90 font-medium hover:bg-white/10 hover:text-white pl-3.5 pr-3 py-2.5 rounded-xl mr-3'
+                          ? 'bg-[#F4F5F7] text-[#0F172A] font-extrabold rounded-l-2xl pl-3.5 pr-3 py-3 shadow-2xs relative z-10'
+                          : 'text-slate-300/90 font-medium hover:bg-white/10 hover:text-white pl-3.5 pr-3 py-2.5 rounded-xl mr-4'
                       }`}
                       title={!sidebarOpen ? item.label : ''}>
 
                       {/* PERFECT SVG CONCAVE CURVED NOTCHES */}
                       {isActive && (
                         <>
-                          <svg className="absolute right-0 -top-4 w-4 h-4 text-[#F2F5FA] pointer-events-none z-20" viewBox="0 0 16 16" fill="currentColor">
+                          <svg className="absolute right-0 -top-4 w-4 h-4 text-[#F4F5F7] pointer-events-none z-20" viewBox="0 0 16 16" fill="currentColor">
                             <path d="M16 16V0C16 8.83656 8.83656 16 0 16H16Z" />
                           </svg>
-                          <svg className="absolute right-0 -bottom-4 w-4 h-4 text-[#F2F5FA] pointer-events-none z-20" viewBox="0 0 16 16" fill="currentColor">
+                          <svg className="absolute right-0 -bottom-4 w-4 h-4 text-[#F4F5F7] pointer-events-none z-20" viewBox="0 0 16 16" fill="currentColor">
                             <path d="M16 0V16C16 7.16344 8.83656 0 0 0H16Z" />
                           </svg>
                         </>
@@ -847,30 +856,30 @@ export default function AdminDashboard({ onLogout }) {
             </div>
 
             <div>
-              {sidebarOpen && (
-                <div className="px-3 pb-2 text-[10.5px] font-bold uppercase tracking-widest text-slate-400">
+              <div className="px-3 pb-2 text-[10.5px] font-bold uppercase tracking-widest text-slate-400 h-6 flex items-center overflow-hidden">
+                <span className={`whitespace-nowrap transition-opacity duration-200 ${sidebarOpen ? 'opacity-100' : 'opacity-0'}`}>
                   System & Logistics
-                </div>
-              )}
+                </span>
+              </div>
               <div className="space-y-1">
                 {menuItems.slice(7).map((item) => {
                   const isActive = activePage === item.id;
                   return (
-                    <button key={item.id} onClick={() => setActivePage(item.id)}
-                      className={`group w-full flex items-center gap-3 relative cursor-pointer text-sm leading-snug transition-all ${
+                    <button key={item.id} onClick={() => { setSelectedOverduePatientId(null); setActivePage(item.id); }}
+                      className={`group w-full flex items-center gap-3 relative cursor-pointer text-sm leading-snug transition-colors duration-150 ${
                         isActive
-                          ? 'bg-[#F2F5FA] text-[#0F172A] font-extrabold rounded-l-2xl pl-3.5 pr-3 py-3 shadow-2xs relative z-10'
-                          : 'text-slate-300/90 font-medium hover:bg-white/10 hover:text-white pl-3.5 pr-3 py-2.5 rounded-xl mr-3'
+                          ? 'bg-[#F4F5F7] text-[#0F172A] font-extrabold rounded-l-2xl pl-3.5 pr-3 py-3 shadow-2xs relative z-10'
+                          : 'text-slate-300/90 font-medium hover:bg-white/10 hover:text-white pl-3.5 pr-3 py-2.5 rounded-xl mr-4'
                       }`}
                       title={!sidebarOpen ? item.label : ''}>
 
                       {/* PERFECT SVG CONCAVE CURVED NOTCHES */}
                       {isActive && (
                         <>
-                          <svg className="absolute right-0 -top-4 w-4 h-4 text-[#F2F5FA] pointer-events-none z-20" viewBox="0 0 16 16" fill="currentColor">
+                          <svg className="absolute right-0 -top-4 w-4 h-4 text-[#F4F5F7] pointer-events-none z-20" viewBox="0 0 16 16" fill="currentColor">
                             <path d="M16 16V0C16 8.83656 8.83656 16 0 16H16Z" />
                           </svg>
-                          <svg className="absolute right-0 -bottom-4 w-4 h-4 text-[#F2F5FA] pointer-events-none z-20" viewBox="0 0 16 16" fill="currentColor">
+                          <svg className="absolute right-0 -bottom-4 w-4 h-4 text-[#F4F5F7] pointer-events-none z-20" viewBox="0 0 16 16" fill="currentColor">
                             <path d="M16 0V16C16 7.16344 8.83656 0 0 0H16Z" />
                           </svg>
                         </>
@@ -901,11 +910,11 @@ export default function AdminDashboard({ onLogout }) {
       </div>
 
       {/* ── MAIN CONTENT AREA ── */}
-      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden"
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden bg-[#F4F5F7]"
         style={{ marginLeft: sidebarOpen ? 256 : 76, transition: 'margin-left 0.4s cubic-bezier(0.22,1,0.36,1)' }}>
 
         {/* ── STICKY TOP HEADER (FROSTED GLASS MODERN DESIGN) ── */}
-        <header className="border-b sticky top-0 z-30 h-20 flex items-center px-7 justify-between flex-shrink-0 shadow-2xs transition-all bg-white/85 backdrop-blur-md border-slate-200/80 text-slate-900 gap-4">
+        <header className="border-b sticky top-0 z-30 h-20 flex items-center px-7 justify-between flex-shrink-0 shadow-2xs transition-all bg-[#F4F5F7]/95 backdrop-blur-md border-slate-200/80 text-slate-900 gap-4">
           <div className="flex items-center gap-3 shrink-0">
             <div className="h-6 w-1 rounded-full bg-[#3B50DF]"/>
             <div>
@@ -1029,62 +1038,99 @@ export default function AdminDashboard({ onLogout }) {
                 {unreadNotifCount > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-[20px] h-[20px] bg-rose-500 text-white text-[11px] font-bold rounded-full flex items-center justify-center px-1" style={{ animation: 'kna-badge-pop 0.3s cubic-bezier(0.22,1,0.36,1) both' }}>{unreadNotifCount > 9 ? '9+' : unreadNotifCount}</span>}
               </button>
 
-              {/* ── NOTIFICATION DROPDOWN ── */}
+              {/* ── NOTIFICATION CENTER CARD (MATCHES DESIGN SPEC WITHOUT AI) ── */}
               {notifOpen && (
-                <div className="absolute right-0 top-13 w-[min(380px,calc(100vw-2rem))] rounded-2xl shadow-xl border border-slate-200/90 bg-[#F8FAFC] z-50 overflow-hidden p-2.5 text-slate-900" style={{ animation: 'kna-notif-in 0.22s cubic-bezier(0.22,1,0.36,1) both' }}>
-                  <div className="px-1.5 pb-2 flex items-center justify-between">
+                <div
+                  className="absolute right-0 top-13 w-[min(400px,calc(100vw-2rem))] rounded-3xl shadow-2xl border border-slate-200/90 bg-white z-50 overflow-hidden p-5 text-slate-900"
+                  style={{ animation: 'kna-notif-in 0.22s cubic-bezier(0.22,1,0.36,1) both' }}
+                >
+                  {/* TOP HEADER ROW: TITLE + SEE ALL BUTTON */}
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-base font-bold text-slate-900 tracking-tight">Notification Center</h3>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-slate-900 tracking-tight">Notifications</span>
-                      {filteredNotifications.length > 0 && (
-                        <span className="bg-slate-200/90 text-slate-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">
-                          {filteredNotifications.length}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2.5">
-                      {filteredNotifications.length > 0 && (
-                        <button onClick={clearAllNotifs} className="text-xs font-medium text-slate-400 hover:text-slate-700 transition-colors cursor-pointer">
-                          Clear
-                        </button>
-                      )}
-                      <button onClick={markAllRead} className="text-xs font-bold text-rose-600 hover:text-rose-700 transition-colors cursor-pointer">
-                        Mark read
+                      <button
+                        onClick={markAllRead}
+                        className="px-3.5 py-1 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-600 shadow-2xs transition-all cursor-pointer"
+                      >
+                        See All
                       </button>
                     </div>
                   </div>
 
-                  {/* Notifications List Container */}
-                  <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm max-h-[22rem] overflow-y-auto custom-scrollbar divide-y divide-slate-100">
+                  {/* SEGMENTED TAB PILL CONTAINER (Today | This Week | Earlier) */}
+                  <div className="bg-slate-100/90 p-1 rounded-2xl flex items-center mb-4 text-xs font-semibold text-slate-500">
+                    {['Today', 'This Week', 'Earlier'].map((tab) => {
+                      const isSelected = notifTab === tab;
+                      return (
+                        <button
+                          key={tab}
+                          onClick={() => setNotifTab(tab)}
+                          className={`flex-1 py-1.5 px-3 rounded-xl text-center transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-white text-slate-900 font-bold shadow-2xs'
+                              : 'text-slate-500 hover:text-slate-800'
+                          }`}
+                        >
+                          {tab}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* NOTIFICATIONS LIST CONTAINER */}
+                  <div className="max-h-[340px] overflow-y-auto custom-scrollbar divide-y divide-slate-100">
                     {filteredNotifications.length === 0 ? (
                       <div className="py-10 text-center px-4">
-                        <Bell size={24} className="text-slate-300 mx-auto mb-1.5" />
-                        <p className="text-xs font-semibold text-slate-500">No Notifications</p>
-                        <p className="text-[11px] text-slate-400 mt-0.5">All caught up!</p>
+                        <Bell size={24} className="text-slate-300 mx-auto mb-2" />
+                        <p className="text-xs font-bold text-slate-700">No Notifications</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5 font-normal">All clear for today!</p>
                       </div>
                     ) : (
                       filteredNotifications.map((n, idx) => {
-                        const style = notifTypeStyle(n.type);
                         const isUnread = !readNotifIds.has(n.id);
+                        const IconComponent = n.id.startsWith('inv-')
+                          ? Package
+                          : n.id.startsWith('apt-')
+                          ? Calendar
+                          : n.id.startsWith('msg-')
+                          ? MessageSquare
+                          : n.id.startsWith('inc-')
+                          ? AlertCircle
+                          : Wrench;
+
                         return (
                           <div
                             key={n.id}
                             onClick={() => handleNotifClick(n)}
-                            className="px-3 py-2.5 flex items-start gap-2 hover:bg-slate-50 transition-colors cursor-pointer group relative"
-                            style={{ animation: `kna-notif-item 0.18s ease-out ${idx * 0.02}s both` }}
+                            className="py-3 px-1 flex items-start gap-3 hover:bg-slate-50/80 transition-all cursor-pointer group relative"
+                            style={{ animation: `kna-notif-item 0.18s ease-out ${idx * 0.03}s both` }}
                           >
-                            <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                              <div className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${style.dot}`}/>
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-baseline justify-between gap-2">
-                                  <p className={`text-[13px] ${isUnread ? 'font-bold text-slate-900' : 'font-semibold text-slate-700'} truncate`}>{n.title}</p>
-                                  <span className="text-[10px] font-medium text-slate-400 flex-shrink-0 tabular-nums">{n.time}</span>
-                                </div>
-                                <p className="text-[11.5px] text-slate-500 leading-snug mt-0.5 line-clamp-2">{n.message}</p>
-                              </div>
+                            {/* Left Light Circular Icon Chip */}
+                            <div className="w-10 h-10 rounded-full bg-slate-100/90 border border-slate-200/70 flex items-center justify-center text-slate-700 shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
+                              <IconComponent size={17} strokeWidth={2} className="text-slate-700" />
                             </div>
+
+                            {/* Notification Item Details */}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-purple-500 shrink-0 inline-block" />
+                                  <p className={`text-xs ${isUnread ? 'font-bold text-slate-900' : 'font-semibold text-slate-700'} truncate`}>
+                                    {n.title}
+                                  </p>
+                                </div>
+                                <span className="text-[10.5px] font-normal text-slate-400 shrink-0 tabular-nums">{n.time}</span>
+                              </div>
+
+                              <p className="text-[11.5px] text-slate-500 leading-snug mt-1 pl-3 font-normal line-clamp-2">
+                                {n.message}
+                              </p>
+                            </div>
+
+                            {/* Dismiss Button */}
                             <button
                               onClick={(e) => { e.stopPropagation(); dismissNotif(n.id); }}
-                              className="text-slate-400 hover:text-slate-700 p-1 -mr-0.5 rounded-full hover:bg-slate-200/70 transition-colors flex-shrink-0 cursor-pointer"
+                              className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-slate-700 p-1 rounded-full hover:bg-slate-200/60 transition-all shrink-0 cursor-pointer -mr-1 -mt-1"
                               title="Dismiss"
                             >
                               <X size={14}/>
@@ -1100,12 +1146,12 @@ export default function AdminDashboard({ onLogout }) {
 
             <div className="w-px h-6 bg-slate-200/80 mx-1"/>
 
-            {/* Admin Profile Pill (ENLARGED) */}
-            <div className="flex items-center gap-3 p-1.5 px-4 rounded-full cursor-pointer transition-all bg-slate-100/90 hover:bg-white hover:shadow-xs border border-slate-200/90 text-slate-900" onClick={() => setActivePage('settings')}>
-              <div className="w-9 h-9 rounded-full bg-[#3B50DF] flex items-center justify-center text-white font-extrabold text-xs sm:text-sm shadow-2xs">
+            {/* Admin Profile Pill (BALANCED COMPACT SIZE) */}
+            <div className="flex items-center gap-2 p-1 pl-1 pr-3.5 rounded-full cursor-pointer transition-all bg-slate-100/90 hover:bg-white hover:shadow-2xs border border-slate-200/80 text-slate-900" onClick={() => setActivePage('settings')}>
+              <div className="w-8 h-8 rounded-full bg-[#3B50DF] flex items-center justify-center text-white font-extrabold text-xs shadow-2xs">
                 {adminProfile.initials}
               </div>
-              <span className="text-xs sm:text-sm font-bold hidden sm:block text-slate-900">{adminProfile.name}</span>
+              <span className="text-xs font-bold hidden sm:block text-slate-800">{adminProfile.name}</span>
             </div>
           </div>
         </header>
@@ -1124,11 +1170,11 @@ export default function AdminDashboard({ onLogout }) {
         )}
 
         {/* ── PAGE CONTENT ── */}
-        <main className="flex-1 overflow-hidden">
+        <main className="flex-1 overflow-hidden bg-[#F4F5F7]">
           <PageTransition pageKey={activePage}>
 
             {activePage === 'dashboard' && (
-              <div className="h-full overflow-y-auto bg-[#F2F5FA]">
+              <div className="h-full overflow-y-auto bg-[#F4F5F7]">
                 <div className="px-4 sm:px-6 md:px-8 py-6 w-full max-w-[1700px] mx-auto space-y-6">
 
                   {/* ── TOP HERO ROW: WELCOME BANNER + QUICK CLINIC OPERATIONS ── */}
@@ -1204,31 +1250,33 @@ export default function AdminDashboard({ onLogout }) {
                     </div>
                   </div>
 
-                  {/* ── STAT CARDS ROW — CLEAN ORGANIZED TYPOGRAPHY & GENEROUS CARD SPACING ── */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
-                    {dashboardStatWidgets.map((w, i) => (
-                      <div key={i} onClick={() => setActivePage(w.page)}
-                        className="group rounded-3xl border p-5 sm:p-6 cursor-pointer flex items-center justify-between transition-all duration-200 bg-white border-slate-200/70 shadow-2xs hover:shadow-md hover:border-indigo-200/80 hover:-translate-y-0.5 w-full"
-                        style={{ animation: `kna-card-in 0.42s cubic-bezier(0.22,1,0.36,1) ${0.04 + i * 0.06}s both` }}>
-                        <div className="min-w-0 pr-3">
-                          <p className="text-3xl font-extrabold leading-none tabular-nums text-slate-900 group-hover:text-[#3B50DF] transition-colors">
-                            {w.value}
-                          </p>
-                          <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mt-2 truncate">{w.label}</p>
-                          <p className="text-[11px] font-normal text-slate-400 mt-0.5 truncate">{w.sub}</p>
+                  {/* ── STAT BAR — ONE CARD, THE FOUR FIGURES SEPARATED BY DIVIDERS ── */}
+                  <div className="rounded-3xl border bg-white border-slate-200/70 shadow-2xs overflow-hidden"
+                    style={{ animation: 'kna-card-in 0.42s cubic-bezier(0.22,1,0.36,1) 0.04s both' }}>
+                    <div className="flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-slate-200">
+                      {dashboardStatWidgets.map((w, i) => (
+                        <div key={i} onClick={() => setActivePage(w.page)}
+                          className="group flex-1 min-w-0 p-5 sm:p-6 cursor-pointer flex items-center justify-between transition-colors duration-200 hover:bg-slate-50">
+                          <div className="min-w-0 pr-3">
+                            <p className="text-3xl font-extrabold leading-none tabular-nums text-slate-900 group-hover:text-[#3B50DF] transition-colors">
+                              {w.value}
+                            </p>
+                            <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mt-2 truncate">{w.label}</p>
+                            <p className="text-[11px] font-normal text-slate-400 mt-0.5 truncate">{w.sub}</p>
+                          </div>
+                          {w.progress === null ? (
+                            <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-105 shadow-2xs"
+                              style={{ background: w.tint, border: `1px solid ${w.border}`, color: w.color }}>
+                              <w.Icon size={20} strokeWidth={2} />
+                            </div>
+                          ) : (
+                            <div className="transition-transform group-hover:scale-105 shrink-0">
+                              <CircularProgress percentage={w.progress} size={48} strokeWidth={4} color={w.color === '#C8151A' ? '#C8151A' : '#3B50DF'} trackColor="#E2E8F0" />
+                            </div>
+                          )}
                         </div>
-                        {w.progress === null ? (
-                          <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-105 shadow-2xs"
-                            style={{ background: w.tint, border: `1px solid ${w.border}`, color: w.color }}>
-                            <w.Icon size={20} strokeWidth={2} />
-                          </div>
-                        ) : (
-                          <div className="transition-transform group-hover:scale-105 shrink-0">
-                            <CircularProgress percentage={w.progress} size={48} strokeWidth={4} color={w.color === '#C8151A' ? '#C8151A' : '#3B50DF'} trackColor="#E2E8F0" />
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
 
                   {/* ── MAIN DASHBOARD GRID: LEFT 5 COLS (LONGER OVERDUE TRACKER), RIGHT 7 COLS (TODAY'S SCHED + CALENDAR, VACCINE INVENTORY BELOW) ── */}
@@ -1453,6 +1501,9 @@ export default function AdminDashboard({ onLogout }) {
       </div>
 
       <style>{`
+        *, html, body, button, input, select, textarea, span, div, p, a, h1, h2, h3, h4, h5, h6, nav, header, aside, section, main {
+          font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+        }
         @keyframes kna-banner-in {
           from{opacity:0;transform:translateY(-16px) scale(0.98);}
           to  {opacity:1;transform:translateY(0)      scale(1);}

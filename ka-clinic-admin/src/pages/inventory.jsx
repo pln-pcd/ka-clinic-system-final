@@ -599,44 +599,38 @@ export default function VaccineInventoryPage() {
 
       {/* ── Add Item Modal (Bigger 580px card + Dark Navy Header Banner + Simple X Icon) ── */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowAddModal(false); setFormData({ name: '', category: 'Vaccine', unit: 'Vials', stock: '', minStock: '10', expiry: '' }); }}>
-          <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl border border-slate-200" onClick={e => e.stopPropagation()}>
-            {/* Dark Navy Header Banner */}
-            <div style={{ background: '#1E293B', padding: '18px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-white shrink-0">
-                  <Plus size={20} />
-                </div>
-                <div>
-                  <h2 className="text-base font-extrabold text-white margin-0 leading-tight">Add Inventory Item</h2>
-                  <p className="text-[11px] text-slate-300 font-medium mt-0.5">Fill in the details for the new vaccine or supply item</p>
-                </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }} onClick={() => { setShowAddModal(false); setFormData({ name: '', category: 'Vaccine', unit: 'Vials', stock: '', minStock: '10', expiry: '' }); }}>
+          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-slate-200" onClick={e => e.stopPropagation()}>
+            {/* Card head — same light header as the Add Report pop-up */}
+            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Add Inventory Item</h3>
+                <p className="text-[11px] text-slate-400 font-normal mt-0.5">Fill in the details for the new vaccine or supply item</p>
               </div>
-              {/* Simple X Icon (No background circle) */}
-              <button onClick={() => { setShowAddModal(false); setFormData({ name: '', category: 'Vaccine', unit: 'Vials', stock: '', minStock: '10', expiry: '' }); }} className="text-slate-400 hover:text-white p-1 transition-colors cursor-pointer" title="Close">
-                <X size={20} />
+              <button onClick={() => { setShowAddModal(false); setFormData({ name: '', category: 'Vaccine', unit: 'Vials', stock: '', minStock: '10', expiry: '' }); }} className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer" title="Close" aria-label="Close">
+                <X size={16} />
               </button>
             </div>
 
             {/* Form Body (Smaller text) */}
             <div className="p-6 space-y-4">
               <div>
-                <label className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider block mb-1.5">Item Name <span className="text-red-500">*</span></label>
+                <label className="text-[11px] font-semibold text-slate-500 block mb-1.5">Item Name <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   placeholder="e.g. BCG Vaccine"
                   value={formData.name}
                   onChange={e => setFormData(f => ({ ...f, name: e.target.value }))}
-                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-4 focus:ring-red-600/10 focus:border-red-600 outline-none transition-all"
+                  className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:border-[#3B50DF] outline-none transition-all"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider block mb-1.5">Category</label>
+                  <label className="text-[11px] font-semibold text-slate-500 block mb-1.5">Category</label>
                   <select
                     value={formData.category}
                     onChange={e => setFormData(f => ({ ...f, category: e.target.value }))}
-                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-4 focus:ring-red-600/10 focus:border-red-600 outline-none"
+                    className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:border-[#3B50DF] outline-none"
                   >
                     <option value="Vaccine">Vaccine</option>
                     <option value="Medicine">Medicine</option>
@@ -644,11 +638,11 @@ export default function VaccineInventoryPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider block mb-1.5">Unit</label>
+                  <label className="text-[11px] font-semibold text-slate-500 block mb-1.5">Unit</label>
                   <select
                     value={formData.unit}
                     onChange={e => setFormData(f => ({ ...f, unit: e.target.value }))}
-                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-4 focus:ring-red-600/10 focus:border-red-600 outline-none"
+                    className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:border-[#3B50DF] outline-none"
                   >
                     <option value="Vials">Vials</option>
                     <option value="Tablets">Tablets</option>
@@ -660,52 +654,52 @@ export default function VaccineInventoryPage() {
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider block mb-1.5">Stock <span className="text-red-500">*</span></label>
+                  <label className="text-[11px] font-semibold text-slate-500 block mb-1.5">Stock <span className="text-red-500">*</span></label>
                   <input
                     type="number"
                     min="0"
                     placeholder="0"
                     value={formData.stock}
                     onChange={e => setFormData(f => ({ ...f, stock: e.target.value }))}
-                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-4 focus:ring-red-600/10 focus:border-red-600 outline-none"
+                    className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:border-[#3B50DF] outline-none"
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider block mb-1.5">Min Threshold</label>
+                  <label className="text-[11px] font-semibold text-slate-500 block mb-1.5">Min Threshold</label>
                   <input
                     type="number"
                     min="1"
                     placeholder="10"
                     value={formData.minStock || ''}
                     onChange={e => setFormData(f => ({ ...f, minStock: e.target.value }))}
-                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-4 focus:ring-red-600/10 focus:border-red-600 outline-none"
+                    className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:border-[#3B50DF] outline-none"
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider block mb-1.5">Expiry Date</label>
+                  <label className="text-[11px] font-semibold text-slate-500 block mb-1.5">Expiry Date</label>
                   <input
                     type="date"
                     value={formData.expiry}
                     onChange={e => setFormData(f => ({ ...f, expiry: e.target.value }))}
-                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-4 focus:ring-red-600/10 focus:border-red-600 outline-none"
+                    className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:border-[#3B50DF] outline-none"
                   />
                 </div>
               </div>
             </div>
 
             {/* Footer */}
-            <div className="px-6 pb-6 pt-2 bg-white flex items-center justify-end gap-3">
+            <div className="px-6 pb-6 pt-2 bg-white flex items-center gap-3">
               <button
                 onClick={() => { setShowAddModal(false); setFormData({ name: '', category: 'Vaccine', unit: 'Vials', stock: '', minStock: '10', expiry: '' }); }}
                 disabled={saving}
-                className="px-4 py-2 border border-slate-300 bg-white text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-100 transition-all cursor-pointer disabled:opacity-50"
+                className="flex-1 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs cursor-pointer hover:bg-slate-50 transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving || !formData.name || !formData.stock}
-                className="px-5 py-2 text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-xs"
+                className="flex-1 py-2.5 rounded-xl bg-[#3B50DF] text-white font-bold text-xs cursor-pointer hover:bg-indigo-700 shadow-xs transition-colors flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Plus size={14} /> {saving ? 'Saving Item…' : 'Save Item'}
               </button>
@@ -716,44 +710,39 @@ export default function VaccineInventoryPage() {
 
       {/* ── Edit Item Modal (Bigger 580px card + Dark Navy Header Banner + Simple X Icon) ── */}
       {showEditModal && selectedItem && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowEditModal(false); setSelectedItem(null); }}>
-          <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl border border-slate-200" onClick={e => e.stopPropagation()}>
-            {/* Dark Navy Header Banner */}
-            <div style={{ background: '#1E293B', padding: '18px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-white shrink-0">
-                  <Edit3 size={20} />
-                </div>
-                <div>
-                  <h2 className="text-base font-extrabold text-white margin-0 leading-tight">Edit Inventory Item</h2>
-                  <p className="text-[11px] text-slate-300 font-medium mt-0.5">Update details for <span className="font-bold text-white">{selectedItem.name}</span></p>
-                </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }} onClick={() => { setShowEditModal(false); setSelectedItem(null); }}>
+          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-slate-200" onClick={e => e.stopPropagation()}>
+            {/* Card head — same light header as the Add Report pop-up */}
+            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Edit Inventory Item</h3>
+                <p className="text-[11px] text-slate-400 font-normal mt-0.5">Update details for <span className="font-bold text-slate-600">{selectedItem.name}</span></p>
               </div>
-              {/* Simple X Icon (No background circle) */}
-              <button onClick={() => { setShowEditModal(false); setSelectedItem(null); }} className="text-slate-400 hover:text-white p-1 transition-colors cursor-pointer" title="Close">
-                <X size={20} />
+              
+              <button onClick={() => { setShowEditModal(false); setSelectedItem(null); }} className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer" title="Close" aria-label="Close">
+                <X size={16} />
               </button>
             </div>
 
             {/* Form Body (Smaller text) */}
             <div className="p-6 space-y-4">
               <div>
-                <label className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider block mb-1.5">Item Name <span className="text-red-500">*</span></label>
+                <label className="text-[11px] font-semibold text-slate-500 block mb-1.5">Item Name <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   placeholder="e.g. BCG Vaccine"
                   value={editFormData.name}
                   onChange={e => setEditFormData(f => ({ ...f, name: e.target.value }))}
-                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-4 focus:ring-red-600/10 focus:border-red-600 outline-none transition-all"
+                  className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:border-[#3B50DF] outline-none transition-all"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider block mb-1.5">Category</label>
+                  <label className="text-[11px] font-semibold text-slate-500 block mb-1.5">Category</label>
                   <select
                     value={editFormData.category}
                     onChange={e => setEditFormData(f => ({ ...f, category: e.target.value }))}
-                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-4 focus:ring-red-600/10 focus:border-red-600 outline-none"
+                    className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:border-[#3B50DF] outline-none"
                   >
                     <option value="Vaccine">Vaccine</option>
                     <option value="Medicine">Medicine</option>
@@ -761,11 +750,11 @@ export default function VaccineInventoryPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider block mb-1.5">Unit</label>
+                  <label className="text-[11px] font-semibold text-slate-500 block mb-1.5">Unit</label>
                   <select
                     value={editFormData.unit}
                     onChange={e => setEditFormData(f => ({ ...f, unit: e.target.value }))}
-                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-4 focus:ring-red-600/10 focus:border-red-600 outline-none"
+                    className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:border-[#3B50DF] outline-none"
                   >
                     <option value="Vials">Vials</option>
                     <option value="Tablets">Tablets</option>
@@ -777,40 +766,40 @@ export default function VaccineInventoryPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider block mb-1.5">Stock Quantity <span className="text-red-500">*</span></label>
+                  <label className="text-[11px] font-semibold text-slate-500 block mb-1.5">Stock Quantity <span className="text-red-500">*</span></label>
                   <input
                     type="number"
                     min="0"
                     placeholder="0"
                     value={editFormData.stock}
                     onChange={e => setEditFormData(f => ({ ...f, stock: e.target.value }))}
-                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-4 focus:ring-red-600/10 focus:border-red-600 outline-none"
+                    className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:border-[#3B50DF] outline-none"
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider block mb-1.5">Expiry Date</label>
+                  <label className="text-[11px] font-semibold text-slate-500 block mb-1.5">Expiry Date</label>
                   <input
                     type="date"
                     value={editFormData.expiry}
                     onChange={e => setEditFormData(f => ({ ...f, expiry: e.target.value }))}
-                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:ring-4 focus:ring-red-600/10 focus:border-red-600 outline-none"
+                    className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:border-[#3B50DF] outline-none"
                   />
                 </div>
               </div>
             </div>
 
             {/* Footer — No border divider line */}
-            <div className="px-6 pb-6 pt-2 bg-white flex items-center justify-end gap-3">
+            <div className="px-6 pb-6 pt-2 bg-white flex items-center gap-3">
               <button
                 onClick={() => { setShowEditModal(false); setSelectedItem(null); }}
-                className="px-4 py-2 border border-slate-300 bg-white text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-100 transition-all cursor-pointer"
+                className="flex-1 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs cursor-pointer hover:bg-slate-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleEditSave}
                 disabled={!editFormData.name || !editFormData.stock}
-                className="px-5 py-2 text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-xs"
+                className="flex-1 py-2.5 rounded-xl bg-[#3B50DF] text-white font-bold text-xs cursor-pointer hover:bg-indigo-700 shadow-xs transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
               >
                 <Check size={14} /> Save Changes
               </button>

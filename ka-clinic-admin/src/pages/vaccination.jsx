@@ -5,7 +5,7 @@ import {
 } from 'firebase/firestore';
 import {
   AlertCircle, Bell, CheckCircle, ChevronDown, ChevronLeft,
-  ChevronRight, Clock, MessageSquare,
+  ChevronRight, Clock, FileText, MessageSquare,
   Search, Users, X
 } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
@@ -13,6 +13,7 @@ import Toast from '../components/Toast';
 import { authedPostJson } from '../lib/apiClient';
 import { db } from '../lib/firebase';
 import { formatDateShort as fmtDate } from '../lib/dates';
+import { createPortal } from 'react-dom';
 
 /* ─────────────────────────────────────────────────────────── */
 /* CONSTANTS                                                   */
@@ -164,6 +165,8 @@ export default function VaccinationTrackerPage({ selectedPatientId }) {
       if (match) {
         setDetailPt(match);
       }
+    } else if (!selectedPatientId) {
+      setDetailPt(null);
     }
   }, [selectedPatientId, patients]);
 
@@ -659,27 +662,28 @@ export default function VaccinationTrackerPage({ selectedPatientId }) {
               <thead>
                 <tr style={{ background: '#FAFAFA', borderBottom: '1px solid #E2E8F0', color: '#64748B', fontSize: '.6875rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.5px' }}>
                   <th style={{ padding: '16px 12px 16px 20px', width: '10%', textAlign: 'left', fontWeight: 600, color: '#64748B' }}>Patient ID</th>
-                  <th style={{ padding: '16px 12px', width: '26%', textAlign: 'left', fontWeight: 600, color: '#64748B' }}>Patient Name</th>
+                  <th style={{ padding: '16px 12px', width: '22%', textAlign: 'left', fontWeight: 600, color: '#64748B' }}>Patient Name</th>
                   <th style={{ padding: '16px 12px', width: '8%', textAlign: 'left', fontWeight: 600, color: '#64748B' }}>Service</th>
-                  <th style={{ padding: '16px 12px', width: '28%', textAlign: 'left', fontWeight: 600, color: '#64748B' }}>
+                  <th style={{ padding: '16px 12px', width: '12%', textAlign: 'left', fontWeight: 600, color: '#64748B' }}>Status</th>
+                  <th style={{ padding: '16px 12px', width: '23%', textAlign: 'left', fontWeight: 600, color: '#64748B' }}>
                     {/* Matches the progress bar's own max width so the label centers over the bar, not the wider cell */}
                     <div style={{ maxWidth: 230, textAlign: 'center' }}>Dose Progress</div>
                   </th>
-                  <th style={{ padding: '16px 12px', width: '13%', textAlign: 'left', fontWeight: 600, color: '#64748B' }}>Next Dose</th>
-                  <th style={{ padding: '16px 12px', width: '15%', textAlign: 'center', fontWeight: 600, color: '#64748B' }}>Actions</th>
+                  <th style={{ padding: '16px 12px', width: '12%', textAlign: 'left', fontWeight: 600, color: '#64748B' }}>Next Dose</th>
+                  <th style={{ padding: '16px 12px', width: '13%', textAlign: 'center', fontWeight: 600, color: '#64748B' }}>Actions</th>
                 </tr>
               </thead>
 
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan="6" style={{ textAlign: 'center', padding: 36, color: '#64748B', fontWeight: 500 }}>
+                    <td colSpan="7" style={{ textAlign: 'center', padding: 36, color: '#64748B', fontWeight: 500 }}>
                       Loading vaccination tracker records…
                     </td>
                   </tr>
                 ) : paginated.length === 0 ? (
                   <tr>
-                    <td colSpan="6" style={{ textAlign: 'center', padding: 36, color: '#64748B', fontWeight: 500 }}>
+                    <td colSpan="7" style={{ textAlign: 'center', padding: 36, color: '#64748B', fontWeight: 500 }}>
                       No matching vaccination records found
                     </td>
                   </tr>
@@ -688,6 +692,7 @@ export default function VaccinationTrackerPage({ selectedPatientId }) {
                   const doses    = buildDoses(p);
                   const doneNum  = doses.filter(d => d.status === 'done').length;
                   const pct      = Math.round((doneNum / doses.length) * 100);
+                  const status   = deriveStatus(p);
                   const nextDose = doses.find(d => d.status !== 'done');
 
                   return (
@@ -706,6 +711,7 @@ export default function VaccinationTrackerPage({ selectedPatientId }) {
                         <div style={{ fontSize: '.75rem', color: '#64748B', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.email || p.contact || ''}>{p.email || (p.contact || '—')}</div>
                       </td>
                       <td style={{ padding: '16px 12px' }}>{serviceBadge(p.service)}</td>
+                      <td style={{ padding: '16px 12px' }}>{statusBadge(status)}</td>
                       <td style={{ padding: '16px 12px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxWidth: 230, margin: '0 auto 0 0' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.75rem', fontWeight: 600 }}>
@@ -828,8 +834,8 @@ export default function VaccinationTrackerPage({ selectedPatientId }) {
         </div>
       </div>
 
-      {/* ── PATIENT VACCINATION DETAIL MODAL (Spacious Landscape Layout) ── */}
-      {detailPt && (() => {
+      {/* ── PATIENT VACCINATION DETAIL MODAL (Spacious Landscape Layout, Portaled to Body) ── */}
+      {detailPt && createPortal((() => {
         const p      = detailPt;
         const name   = formatTitleCase(getName(p));
         const doses  = buildDoses(p);
@@ -839,45 +845,35 @@ export default function VaccinationTrackerPage({ selectedPatientId }) {
 
         return (
           <div
-            className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4"
-            style={{ backdropFilter: 'blur(8px)' }}
+            className="fixed inset-0 bg-slate-900/50 z-[9999] flex items-center justify-center p-4 transition-all duration-200"
+            style={{ backdropFilter: 'blur(6px)' }}
             onClick={e => e.target === e.currentTarget && setDetailPt(null)}
           >
             <div
-              className="bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
-              style={{ width: '920px', maxWidth: '96vw', maxHeight: '88vh', border: 'none' }}
+              className="bg-white rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-slate-200/90 transition-all transform duration-200 scale-100"
+              style={{ width: '920px', maxWidth: '96vw', maxHeight: '88vh' }}
             >
-              {/* ── Dark Navy Header Bar ── */}
-              <div style={{
-                padding: '18px 24px',
-                background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)',
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16
-              }}>
+              {/* ── Light Clean Header Bar (Matching AddReportModal Design Style) ── */}
+              <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/90 flex items-center justify-between gap-4">
                 <div>
-                  <div style={{ fontSize: '1.0625rem', fontWeight: 800, color: '#FFFFFF', display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span>{name}</span>
-                    <span style={{ fontSize: '.71875rem', fontWeight: 700, color: 'rgba(255,255,255,0.85)', background: 'rgba(255,255,255,0.12)', padding: '2px 8px', borderRadius: 6 }}>
+                  <div className="flex items-center gap-2.5">
+                    <h3 className="text-base font-extrabold text-slate-900">{name}</h3>
+                    <span className="text-xs font-bold text-[#3B50DF] bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-100/90">
                       ID: {p.id || p.caseNo || '—'}
                     </span>
                   </div>
-                  <div style={{ fontSize: '.75rem', color: 'rgba(255,255,255,0.65)', marginTop: 3 }}>
-                    Registered Record · Service: <strong style={{ color: '#FFFFFF' }}>{p.service || 'PEP'}</strong>
-                  </div>
+                  <p className="text-xs text-slate-400 font-medium mt-0.5">
+                    Registered Record &middot; Service: <span className="font-bold text-slate-700">{p.service || 'PEP'}</span>
+                  </p>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div className="flex items-center gap-2.5">
                   {statusBadge(status)}
                   <button
                     type="button"
                     onClick={(e) => handleSendFollowup(p, e)}
                     disabled={!!sendingFollowup[p.firestoreId]}
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 6,
-                      padding: '6px 14px', borderRadius: 8, border: 'none',
-                      background: '#6366F1', color: '#FFFFFF', fontSize: '.78125rem',
-                      fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 6px rgba(99,102,241,0.3)',
-                      transition: 'all 0.15s'
-                    }}
+                    className="inline-flex items-center gap-1.5 bg-[#3B50DF] hover:bg-indigo-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-2xs transition-all cursor-pointer disabled:opacity-50"
                   >
                     <Bell size={13} />
                     {sendingFollowup[p.firestoreId] ? 'Sending…' : 'Send Follow-up'}
@@ -885,66 +881,91 @@ export default function VaccinationTrackerPage({ selectedPatientId }) {
                   <button
                     type="button"
                     onClick={() => setDetailPt(null)}
-                    style={{
-                      width: 32, height: 32, borderRadius: 8, border: 'none',
-                      background: 'rgba(255,255,255,0.12)', color: '#FFFFFF',
-                      fontSize: '1rem', fontWeight: 700, cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      transition: 'background .15s'
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.22)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.12)'}
+                    className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-xl transition-all cursor-pointer"
+                    aria-label="Close modal"
                   >
-                    ✕
+                    <X size={18} />
                   </button>
                 </div>
               </div>
 
-              {/* ── Landscape 2-Column Body (Left: Bigger Identity Summary, Right: Compact Checklist) ── */}
-              <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+              {/* ── Landscape 2-Column Body (Matching AddReportModal Card Style) ── */}
+              <div className="flex flex-1 min-h-0 overflow-hidden">
                 
-                {/* Left Column: Expanded Demographics & Exposure Record */}
-                <div style={{ flex: 1.35, borderRight: '1px solid #E2E8F0', padding: '24px', overflowY: 'auto', background: '#FAFAFA' }}>
-                  <div style={{ fontSize: '.71875rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.5px', color: '#475569', marginBottom: 14 }}>
-                    Patient Identity & Exposure Summary
+                {/* Left Column: Demographics & Exposure Summary */}
+                <div className="flex-1 bg-slate-50/40 border-r border-slate-100 p-6 overflow-y-auto">
+                  <div className="flex items-center justify-between mb-3 gap-2">
+                    <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                      Patient Identity & Exposure Summary
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDetailPt(null);
+                        window.dispatchEvent(new CustomEvent('open-patient-record', { detail: p }));
+                      }}
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-[#3B50DF] bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/90 px-3 py-1 rounded-xl transition-all cursor-pointer shadow-2xs"
+                    >
+                      <FileText size={13} />
+                      View Medical Record
+                    </button>
                   </div>
 
-                  <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 12, padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div className="bg-white border border-slate-300/90 rounded-2xl p-3.5 shadow-2xs space-y-1">
                     {[
-                      ['Full Name', name],
-                      ['Age / Sex', `${p.age ? p.age + ' yrs' : '—'} · ${p.sex || p.gender || '—'}`],
-                      ['Contact Number', p.phone || p.contact || '—'],
-                      ['Barangay / Address', p.address || p.barangay || '—'],
-                      ['Selected Service', p.service || 'PEP'],
+                      { key: 'Full Name', val: name, color: 'text-slate-900 font-extrabold' },
+                      { key: 'Age / Sex', val: `${p.age ? p.age + ' yrs' : '—'} · ${p.sex || p.gender || '—'}`, color: 'text-slate-800 font-bold' },
+                      { key: 'Contact Number', val: p.phone || p.contact || '—', color: 'text-slate-800 font-bold tracking-tight' },
+                      { key: 'Barangay / Address', val: p.address || p.barangay || '—', color: 'text-slate-800 font-bold' },
+                      {
+                        key: 'Selected Service',
+                        val: p.service || 'PEP',
+                        badge: 'bg-indigo-50 text-[#3B50DF] border border-indigo-200/90 px-2.5 py-0.5 rounded-full font-extrabold text-[11px]'
+                      },
                       ...((!p.service || p.service === 'PEP' || p.service === 'PrEP') ? [
-                        ['Animal Type', p.animal || '—'],
-                        ['Exposure Category', p.cat ? `Cat ${String(p.cat).replace('Category ', '').trim()}` : '—'],
-                        ['Date of Exposure', p.date || '—'],
+                        { key: 'Animal Type', val: p.animal || '—', badge: 'bg-emerald-50 text-emerald-700 border border-emerald-200/90 px-2.5 py-0.5 rounded-full font-extrabold text-[11px]' },
+                        {
+                          key: 'Exposure Category',
+                          val: p.cat ? `Cat ${String(p.cat).replace('Category ', '').trim()}` : '—',
+                          badge: 'bg-amber-50 text-amber-700 border border-amber-200/90 px-2.5 py-0.5 rounded-full font-extrabold text-[11px]'
+                        },
+                        { key: 'Date of Exposure', val: p.date || '—', color: 'text-slate-700 font-bold' },
                       ] : [
-                        ['Registration Date', p.date || '—'],
+                        { key: 'Registration Date', val: p.date || '—', color: 'text-slate-700 font-bold' },
                       ]),
-                    ].map(([k, v]) => (
-                      <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '.8125rem', paddingBottom: 6, borderBottom: '1px solid #F1F5F9' }}>
-                        <span style={{ color: '#64748B', fontWeight: 600 }}>{k}</span>
-                        <span style={{ color: '#0F172A', fontWeight: 700, textAlign: 'right', fontSize: '.8125rem' }}>{v}</span>
+                    ].map((item, idx, arr) => (
+                      <div
+                        key={item.key}
+                        className={`flex items-center justify-between px-2.5 py-2 text-xs rounded-xl transition-colors hover:bg-slate-50/70 ${
+                          idx < arr.length - 1 ? 'border-b border-slate-200/80' : ''
+                        }`}
+                      >
+                        <span className="text-slate-500 font-semibold shrink-0 pr-3">{item.key}</span>
+                        <div className="min-w-0 text-right">
+                          {item.badge ? (
+                            <span className={`inline-block ${item.badge}`}>
+                              {item.val}
+                            </span>
+                          ) : (
+                            <span className={`break-words ${item.color || 'text-slate-900 font-bold'}`}>
+                              {item.val}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
 
                   {/* Inventory Vaccine Brand Allocation */}
-                  <div style={{ marginTop: 16, background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 12, padding: '16px 18px' }}>
-                    <div style={{ fontSize: '.71875rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.5px', color: '#475569', marginBottom: 8 }}>
+                  <div className="mt-4 bg-white border border-slate-300/90 rounded-2xl p-4 shadow-2xs">
+                    <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 mb-2">
                       Assigned Vaccine Brand (Stock Sync)
                     </div>
-                    <div style={{ position: 'relative' }}>
+                    <div className="relative">
                       <select
                         value={p.vaccineBrand || ''}
                         onChange={e => handleAssignBrand(p, e.target.value)}
-                        style={{
-                          width: '100%', padding: '9px 36px 9px 12px', fontSize: '.8125rem', fontWeight: 700,
-                          border: '1.5px solid #CBD5E1', borderRadius: 8, background: '#FFFFFF', color: '#0F172A',
-                          outline: 'none', cursor: 'pointer', appearance: 'none', WebkitAppearance: 'none'
-                        }}
+                        className="w-full py-2.5 pl-3 pr-9 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-bold text-xs text-slate-800 cursor-pointer appearance-none"
                       >
                         <option value="">— Select Vaccine Stock Brand —</option>
                         {inventoryItems.filter(i => i.category === 'Vaccine').map(item => (
@@ -953,35 +974,31 @@ export default function VaccinationTrackerPage({ selectedPatientId }) {
                       </select>
                       <ChevronDown
                         size={16}
-                        color="#64748B"
-                        style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
                       />
                     </div>
                     {!p.vaccineBrand && (
-                      <p style={{ fontSize: '.71875rem', color: '#D97706', fontWeight: 600, marginTop: 6 }}>
+                      <p className="text-[11px] font-semibold text-amber-600 mt-2">
                         Select a brand to auto-deduct stock upon dose completion.
                       </p>
                     )}
                   </div>
                 </div>
 
-                {/* Right Column: Compact Sequential Dose Checklist */}
-                <div style={{ width: '350px', padding: '20px 20px', overflowY: 'auto', background: '#FFFFFF' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                {/* Right Column: Dose Checklist */}
+                <div className="w-[350px] p-6 bg-white overflow-y-auto">
+                  <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
                     <div>
-                      <div style={{ fontSize: '.6875rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.5px', color: '#475569' }}>
+                      <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
                         Dose Checklist
                       </div>
-                      <div style={{ fontSize: '.71875rem', color: '#64748B', marginTop: 1, fontWeight: 500 }}>
+                      <div className="text-[11px] text-slate-400 font-medium mt-0.5">
                         Sequential check-off
                       </div>
                     </div>
-                    <span style={{ fontSize: '.75rem', fontWeight: 800, color: '#334155', background: '#F1F5F9', padding: '3px 10px', borderRadius: 9999, border: '1px solid #CBD5E1' }}>
-                      {done}/{doses.length} ({pct}%)
-                    </span>
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div className="space-y-2">
                     {(() => {
                       const nextDoseIndex = doses.findIndex(d => d.status !== 'done');
                       const lastDoneIndex = doses.reduce((last, d, idx) => d.status === 'done' ? idx : last, -1);
@@ -991,48 +1008,46 @@ export default function VaccinationTrackerPage({ selectedPatientId }) {
                         const isNext = (!isDone && di === nextDoseIndex);
                         const canToggle = isDone ? (di === lastDoneIndex) : isNext;
 
+                        const cardBg = isDone
+                          ? 'bg-emerald-50/40 border-emerald-200/90'
+                          : isNext
+                          ? 'bg-indigo-50/50 border-[#3B50DF] shadow-2xs'
+                          : 'bg-slate-50/50 border-slate-200/80';
+
+                        const badgeBg = isDone
+                          ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                          : isNext
+                          ? 'bg-[#3B50DF] text-white border-indigo-600'
+                          : 'bg-slate-200/80 text-slate-600 border-slate-300';
+
                         return (
-                          <div key={di} style={{
-                            padding: '10px 12px', borderRadius: 10, transition: 'all .15s ease',
-                            border: isNext ? '1.5px solid #C8151A' : '1px solid #E2E8F0',
-                            background: isDone ? '#F8FAFC' : isNext ? '#FFFFFF' : '#FAFAFA',
-                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                            opacity: canToggle || isDone ? 1 : 0.45
-                          }}>
+                          <div
+                            key={di}
+                            className={`p-2.5 rounded-xl border transition-all flex items-center justify-between gap-3 ${cardBg} ${!canToggle && !isDone ? 'opacity-50' : 'opacity-100'}`}
+                          >
                             {/* Left Side: Dose Label & Target Date */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                              <div style={{
-                                width: 28, height: 28, borderRadius: 6,
-                                background: isDone ? '#059669' : isNext ? '#FEF2F2' : '#F1F5F9',
-                                color: isDone ? '#FFFFFF' : isNext ? '#C8151A' : '#475569',
-                                border: isNext ? '1px solid #FCA5A5' : '1px solid #CBD5E1',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                fontWeight: 800, fontSize: '.71875rem'
-                              }}>
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-extrabold text-xs shrink-0 shadow-2xs border ${badgeBg}`}>
                                 D{di + 1}
                               </div>
-                              <div>
-                                <div style={{ fontWeight: 700, color: isDone ? '#475569' : '#0F172A', fontSize: '.78125rem' }}>
+                              <div className="min-w-0">
+                                <div className={`text-xs font-bold truncate leading-tight ${isDone ? 'text-slate-700 line-through decoration-emerald-500/60' : 'text-slate-900'}`}>
                                   {d.label}
                                 </div>
-                                <div style={{ fontSize: '.6875rem', color: '#64748B', marginTop: 1, fontWeight: 500 }}>
+                                <div className="text-[11px] text-slate-500 font-medium mt-0.5">
                                   {fmtDate(d.date)}
                                 </div>
                               </div>
                             </div>
 
-                            {/* Right Side: Clean Right-Aligned Checkbox Only */}
-                            <div style={{ display: 'flex', alignItems: 'center' }}>
+                            {/* Right Side: Checkbox */}
+                            <div className="flex items-center">
                               <input
                                 type="checkbox"
                                 checked={isDone}
                                 disabled={!canToggle || !!saving[`${p.firestoreId}_${d.key}`]}
                                 onChange={() => cycleStatus(p, d.key)}
-                                style={{
-                                  width: 18, height: 18, borderRadius: 4, accentColor: '#C8151A',
-                                  cursor: canToggle ? 'pointer' : 'not-allowed',
-                                  opacity: canToggle ? 1 : 0.35
-                                }}
+                                className="w-4.5 h-4.5 rounded accent-[#3B50DF] cursor-pointer disabled:cursor-not-allowed"
                                 title={
                                   !canToggle
                                     ? (isDone ? 'Only the latest completed dose can be unchecked' : `Complete Dose ${nextDoseIndex + 1} first`)
@@ -1049,12 +1064,12 @@ export default function VaccinationTrackerPage({ selectedPatientId }) {
 
               </div>
 
-              {/* ── Footer ── */}
-              <div style={{ padding: '14px 24px', background: '#FAFAFA', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'flex-end' }}>
+              {/* ── Footer Bar (Matching AddReportModal Design Style) ── */}
+              <div className="px-6 py-3.5 border-t border-slate-100 bg-slate-50/90 flex items-center justify-end">
                 <button
                   type="button"
                   onClick={() => setDetailPt(null)}
-                  style={{ padding: '8px 24px', borderRadius: 8, background: '#C8151A', color: '#FFFFFF', fontSize: '.8125rem', fontWeight: 800, border: 'none', cursor: 'pointer' }}
+                  className="bg-[#0F172A] hover:bg-[#1E293B] text-white font-bold text-xs py-2.5 px-5 rounded-xl shadow-2xs transition-all cursor-pointer"
                 >
                   Close Record
                 </button>
@@ -1063,7 +1078,7 @@ export default function VaccinationTrackerPage({ selectedPatientId }) {
             </div>
           </div>
         );
-      })()}
+      })(), document.body)}
 
       {/* ── Toast notification banner ── */}
       <Toast

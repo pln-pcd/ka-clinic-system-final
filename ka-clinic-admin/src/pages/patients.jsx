@@ -12,7 +12,7 @@ import Toast from "../components/Toast";
 const globalCSS = `
   :root {
     --blue:#C8151A; --blue-light:#FFF0F0; --blue-soft:#FFD6D7;
-    --white:#FFFFFF; --bg:#FAF9F9; --bg-2:#F4F1F1;
+    --white:#FFFFFF; --bg:#F4F5F7; --bg-2:#EAECEF;
     --text:#1C1C1E; --text-2:#3D3535;
     --muted:#7A6E6E; --muted-2:#A89E9E;
     --border:#E8E2E2; --border-2:#D4CBCB;
@@ -24,7 +24,8 @@ const globalCSS = `
     --r-xs:3px;--r-sm:5px;--r-md:7px;--r-lg:10px;
   }
   *{box-sizing:border-box;margin:0;padding:0;}
-  body{font-family:'Roboto',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);}
+  body, button, input, select, textarea, table, td, th, div, span, p, h1, h2, h3, h4 { font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+  body{background:#F4F5F7;color:var(--text);}
 
   /* Table */
   .table-wrap{overflow-x:auto;}
@@ -696,7 +697,7 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [] }) {
           {icon}
           {title}
         </div>
-        <button type="button" onClick={onEdit} style={{ background: 'none', border: 'none', color: '#C8151A', fontSize: '.75rem', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}>
+        <button type="button" onClick={onEdit} style={{ background: 'none', border: 'none', color: '#3B50DF', fontSize: '.75rem', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}>
           Edit Section
         </button>
       </div>
@@ -709,48 +710,38 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [] }) {
   const fullDisplayName = [form.fname, form.mname, form.lname].filter(Boolean).join(' ') + (form.suffix ? `, ${form.suffix}` : '');
 
   return (
-    <div className="modal-overlay" onClick={e => { if (e.target.classList.contains('modal-overlay')) onClose(); }}>
-      <div style={{
-        background: 'var(--white)',
-        borderRadius: '1.25rem',
+    <div
+      className="modal-overlay"
+      style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }}
+      onClick={e => { if (e.target.classList.contains('modal-overlay')) onClose(); }}
+    >
+      <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden" style={{
         width: '64rem',
         maxWidth: '95vw',
         height: '680px',
         maxHeight: '90vh',
         display: 'flex',
         flexDirection: 'column',
-        boxShadow: '0 24px 64px rgba(26,34,64,.22)',
-        overflow: 'hidden',
       }}>
 
-        {/* ── Modal Top Header — dark navy banner, matches Add Inventory Item ── */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', background: '#1E293B', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255,255,255,0.1)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-            </div>
-            <div>
-              <h2 style={{ fontSize: '1rem', fontWeight: 800, color: '#fff', margin: 0, lineHeight: 1.25 }}>Register New Patient</h2>
-              <p style={{ fontSize: '.6875rem', fontWeight: 500, color: '#CBD5E1', margin: '2px 0 0' }}>Fill out patient registration details step-by-step</p>
-            </div>
+        {/* ── Modal Top Header — same light card head as the Add Report pop-up ── */}
+        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between" style={{ flexShrink: 0 }}>
+          <div>
+            <h3 className="text-sm font-bold text-slate-900">Register New Patient</h3>
+            <p className="text-[11px] text-slate-400 font-normal mt-0.5">Fill out patient registration details step-by-step</p>
           </div>
           <button
             onClick={onClose}
             title="Close"
-            style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', color: '#94A3B8', display: 'flex', alignItems: 'center' }}
+            aria-label="Close"
+            className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
+            <X size={16} />
           </button>
         </div>
 
         {/* ── Persistent Step Indicator Bar ── */}
-        <div style={{ padding: '16px 24px 14px', background: '#F8FAFC', borderBottom: '1px solid var(--border, #E2E8F0)', flexShrink: 0 }}>
+        <div style={{ padding: '16px 24px 14px', background: '#FFFFFF', borderBottom: '1px solid #F1F5F9', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', maxWidth: '56rem', margin: '0 auto' }}>
             {/* Progress line background */}
             <div style={{ position: 'absolute', top: 16, left: 24, right: 24, height: 3, background: '#E2E8F0', zIndex: 1 }} />
@@ -758,7 +749,7 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [] }) {
             <div style={{
               position: 'absolute', top: 16, left: 24,
               width: `${(safeStepIndex / (steps.length - 1)) * 100}%`,
-              height: 3, background: '#059669', zIndex: 1, transition: 'width .25s ease'
+              height: 3, background: '#3B50DF', zIndex: 1, transition: 'width .25s ease'
             }} />
 
             {steps.map((s, idx) => {
@@ -771,10 +762,10 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [] }) {
                     width: 32, height: 32, borderRadius: '50%',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontSize: '.8125rem', fontWeight: 800,
-                    background: isCurrent ? '#C8151A' : (isCompleted ? '#059669' : '#FFFFFF'),
+                    background: isCurrent ? '#3B50DF' : (isCompleted ? '#3B50DF' : '#FFFFFF'),
                     color: (isCurrent || isCompleted) ? '#FFFFFF' : '#64748B',
-                    border: isCurrent ? '2.5px solid #C8151A' : (isCompleted ? '2.5px solid #059669' : '2px solid #CBD5E1'),
-                    boxShadow: isCurrent ? '0 0 0 4px rgba(200, 21, 26, 0.16)' : '0 2px 4px rgba(0,0,0,0.04)',
+                    border: isCurrent ? '2.5px solid #3B50DF' : (isCompleted ? '2.5px solid #3B50DF' : '2px solid #CBD5E1'),
+                    boxShadow: isCurrent ? '0 0 0 4px rgba(59, 80, 223, 0.16)' : '0 2px 4px rgba(0,0,0,0.04)',
                     transition: 'all .2s ease',
                   }}>
                     {isCompleted ? (
@@ -785,7 +776,7 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [] }) {
                   </div>
                   <div style={{
                     fontSize: '.65rem', fontWeight: isCurrent ? 800 : 600,
-                    color: isCurrent ? '#C8151A' : (isCompleted ? '#0F172A' : '#94A3B8'),
+                    color: isCurrent ? '#3B50DF' : (isCompleted ? '#0F172A' : '#94A3B8'),
                     marginTop: 6, textAlign: 'center', whiteSpace: 'nowrap',
                     letterSpacing: '-0.01em'
                   }}>
@@ -1154,7 +1145,7 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [] }) {
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
                       Calculated Schedule
                     </div>
-                    <button type="button" onClick={() => jumpToStepId('schedule')} style={{ background: 'none', border: 'none', color: '#C8151A', fontSize: '.75rem', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}>
+                    <button type="button" onClick={() => jumpToStepId('schedule')} style={{ background: 'none', border: 'none', color: '#3B50DF', fontSize: '.75rem', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}>
                       Edit Section
                     </button>
                   </div>
@@ -1168,38 +1159,33 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [] }) {
         </div>
 
         {/* ── Sticky Wizard Navigation Footer ── */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 24px', borderTop: '1px solid var(--border)', background: '#FAFAFA', flexShrink: 0 }}>
+        <div className="px-6 py-4 border-t border-slate-100 bg-white flex items-center justify-between gap-3" style={{ flexShrink: 0 }}>
           <button
             type="button"
-            className="btn btn-outline"
             onClick={safeStepIndex === 0 ? onClose : handleBack}
-            style={{ fontWeight: 600, padding: '9px 18px' }}
+            className="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 text-xs font-bold cursor-pointer hover:bg-slate-50 transition-colors"
           >
             {safeStepIndex === 0 ? 'Cancel' : '← Back'}
           </button>
 
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            {currentStep.id !== 'review' ? (
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={handleNext}
-                style={{ background: '#C8151A', padding: '9px 24px', fontWeight: 700 }}
-              >
-                Next Step →
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={saving}
-                onClick={() => onAdd(form, setSaving)}
-                style={{ background: '#059669', padding: '9px 26px', fontWeight: 800 }}
-              >
-                {saving ? 'Saving Patient Record…' : 'Confirm & Register Patient'}
-              </button>
-            )}
-          </div>
+          {currentStep.id !== 'review' ? (
+            <button
+              type="button"
+              onClick={handleNext}
+              className="px-6 py-2.5 rounded-xl bg-[#3B50DF] text-white text-xs font-bold cursor-pointer hover:bg-indigo-700 shadow-xs transition-colors"
+            >
+              Next Step →
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => onAdd(form, setSaving)}
+              className="px-6 py-2.5 rounded-xl bg-[#3B50DF] text-white text-xs font-bold cursor-pointer hover:bg-indigo-700 shadow-xs transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {saving ? 'Saving Patient Record…' : 'Confirm & Register Patient'}
+            </button>
+          )}
         </div>
 
       </div>
@@ -1657,8 +1643,6 @@ function VaccineModal({ patientName, patientId, onClose, onSave }) {
           <div>
             <p style={{ fontSize: '.8125rem', color: 'var(--muted)', marginBottom: 14 }}>Review the vaccination record before saving.</p>
             <div className="summary-block">
-              <h4>Patient</h4>
-              <div className="summary-row"><span className="s-key">Name</span><span className="s-val">{patientName}</span></div>
               <div className="summary-row"><span className="s-key">Patient No.</span><span className="s-val">{patientId || '—'}</span></div>
             </div>
             <div className="summary-block">
@@ -1693,328 +1677,1171 @@ function VaccineModal({ patientName, patientId, onClose, onSave }) {
   );
 }
 
-
-/* ─────────────────────────── MEDICAL RECORD DETAIL ─────────────────────────── */
-function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onExport, onEdit }) {
-  const [vaccineModal, setVaccineModal] = useState(false);
+/* ─────────────────────────── MEDICAL RECORD DETAIL (DOC-CENTER LAYOUT + DOSE SCHEDULE) ─────────────────────────── */
+function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEdit }) {
+  const [patientApts, setPatientApts] = useState([]);
+  const [aptsLoading, setAptsLoading] = useState(true);
+  const [aptTab, setAptTab] = useState('all'); // 'all' | 'upcoming' | 'completed'
+  const [showAddReportModal, setShowAddReportModal] = useState(false);
+  const [viewingReport, setViewingReport] = useState(null);
+  const [showExportModal, setShowExportModal] = useState(false);
 
   const r = records.find(x => x.firestoreId === patient.firestoreId || x.name === patient.name);
+  const rec = r || { doses: [], reports: [], address: '—', date: patient.date, id: patient.id, age: patient.age, animal: patient.animal, cat: patient.cat };
+  const reportsList = r?.reports || patient.reports || [];
 
-  async function handleAddVaccine(newDoses) {
-    if (!patient.firestoreId) { onToast('Cannot save — patient has no Firestore ID', 'error'); return; }
+  // Sync patient appointments real-time from Firestore /appointments
+  useEffect(() => {
+    if (!db) { setAptsLoading(false); return; }
     try {
-      const existingDoses = r?.doses || [];
-      const mergedDoses = [...existingDoses, ...newDoses];
-      const allDone = mergedDoses.length > 0 && mergedDoses.every(d => (d.s || d.status) === 'done');
-      const newStatus = allDone ? 'completed' : 'ongoing';
-      await updateDoc(doc(db, 'vaccinations', patient.firestoreId), { doses: mergedDoses, status: newStatus });
-      onToast(`Vaccine record saved for ${patient.name}`, 'success');
+      const q = query(collection(db, 'appointments'));
+      const unsub = onSnapshot(q, (snap) => {
+        const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const pEmail = (patient.email || '').toLowerCase().trim();
+        const pName = (patient.name || '').toLowerCase().trim();
+        const pMrn = (patient.id || '').toLowerCase().trim();
+        const pId = (patient.firestoreId || '').toLowerCase().trim();
+
+        const filtered = list.filter(a => {
+          const aEmail = (a.email || '').toLowerCase().trim();
+          const aName = (a.name || a.patient || '').toLowerCase().trim();
+          const aMrn = (a.mrn || a.patientId || '').toLowerCase().trim();
+          return (pEmail && aEmail && aEmail === pEmail) ||
+                 (pName && aName && aName === pName) ||
+                 (pMrn && aMrn && aMrn === pMrn) ||
+                 (pId && aMrn && aMrn === pId);
+        });
+        setPatientApts(filtered);
+        setAptsLoading(false);
+      }, (err) => {
+        console.error('Error fetching patient appointments:', err);
+        setAptsLoading(false);
+      });
+      return () => unsub();
+    } catch (e) {
+      console.error(e);
+      setAptsLoading(false);
+    }
+  }, [patient]);
+
+  // Save new clinical report with BP, Vitals & Nurse Notes to Firestore
+  async function handleSaveReport(newReport) {
+    if (!patient.firestoreId) {
+      onToast('Cannot save report — patient has no Firestore ID', 'error');
+      return;
+    }
+    try {
+      const updatedReports = [newReport, ...reportsList];
+      await updateDoc(doc(db, 'vaccinations', patient.firestoreId), { reports: updatedReports });
+      onToast('Clinical report saved successfully', 'success');
+      setShowAddReportModal(false);
     } catch (err) {
-      console.error('handleAddVaccine error:', err);
-      onToast('Failed to save vaccine record', 'error');
+      console.error('handleSaveReport error:', err);
+      onToast('Failed to save clinical report', 'error');
     }
   }
 
-  const rec = r || { doses: [], address: '—', date: patient.date, id: patient.id, age: patient.age, animal: patient.animal, cat: patient.cat };
+  // Delete clinical report
+  async function handleDeleteReport(reportId) {
+    if (!patient.firestoreId) return;
+    try {
+      const updatedReports = reportsList.filter(rep => rep.id !== reportId);
+      await updateDoc(doc(db, 'vaccinations', patient.firestoreId), { reports: updatedReports });
+      onToast('Report deleted', 'success');
+    } catch (err) {
+      console.error(err);
+      onToast('Failed to delete report', 'error');
+    }
+  }
+
+  const liveStatus = derivePatientStatus(rec);
+
+  const filteredApts = patientApts.filter(a => {
+    const st = (a.status || '').toLowerCase();
+    if (aptTab === 'upcoming') return st !== 'completed' && st !== 'done';
+    if (aptTab === 'completed') return st === 'completed' || st === 'done';
+    return true;
+  });
+
+  const patientPhoto = patient.photoUrl || patient.avatarUrl || patient.profileImage || patient.imageUrl || patient.photo || patient.image || rec.photoUrl || rec.avatarUrl;
 
   return (
-    <div style={{ padding: '22px 24px 32px' }}>
+    <div style={{ padding: '20px 24px 36px', maxWidth: '1600px', margin: '0 auto' }}>
 
-      {/* ── Dark Navy Gradient Header Bar (Same style as Export Modal) ── */}
-      <div style={{
-        background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)',
-        borderRadius: 12,
-        padding: '16px 24px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        flexWrap: 'wrap',
-        marginBottom: 16,
-        boxShadow: '0 8px 24px rgba(15,23,42,0.2)',
-      }}>
-        {/* Tab-style nav group */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 1, background: 'rgba(255,255,255,0.1)', borderRadius: 8, padding: 3 }}>
+      {/* ── TOP ACTION BAR (BACK BUTTON | EXPORT & EDIT BUTTONS) ── */}
+      <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
+        <button
+          onClick={onBack}
+          className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white border border-slate-200/90 hover:bg-slate-50 hover:text-[#3B50DF] hover:border-indigo-200 shadow-2xs transition-all cursor-pointer flex items-center gap-2"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+          Back to Patients List
+        </button>
+
+        <div className="flex items-center gap-3">
           <button
-            onClick={onBack}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 5,
-              padding: '6px 12px', borderRadius: 6, border: 'none',
-              background: 'transparent', color: 'rgba(255,255,255,0.7)',
-              fontFamily: 'inherit', fontSize: '.78125rem', fontWeight: 600,
-              cursor: 'pointer', transition: 'all .13s',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; e.currentTarget.style.color = '#fff'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.7)'; }}
+            className="px-4 py-2 rounded-xl text-xs font-bold text-[#0F172A] bg-white border border-slate-300 hover:bg-slate-50 shadow-2xs transition-all cursor-pointer flex items-center gap-2"
+            onClick={() => setShowExportModal(true)}
           >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
-            Patients
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16v16H4z" /><path d="M22 6l-10 7L2 6" /></svg>
+            Export Patient Record
           </button>
-          <div style={{ width: 1, height: 14, background: 'rgba(255,255,255,0.2)' }} />
           <button
-            style={{
-              display: 'flex', alignItems: 'center', gap: 5,
-              padding: '6px 12px', borderRadius: 6, border: 'none',
-              background: '#FFFFFF', color: '#0F172A',
-              fontFamily: 'inherit', fontSize: '.78125rem', fontWeight: 700,
-              cursor: 'default',
-            }}
+            className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-[#3B50DF] hover:bg-indigo-700 shadow-xs transition-all cursor-pointer flex items-center gap-2"
+            onClick={() => onEdit?.(r || patient)}
           >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
-            Medical Record
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+            Edit Record
           </button>
         </div>
-
-        <div style={{ flex: 1 }} />
-
-        {/* Action buttons */}
-        <button
-          className="btn btn-sm"
-          style={{ background: '#C8151A', color: '#FFFFFF', border: 'none', fontFamily: 'inherit', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', padding: '7px 14px', borderRadius: 8, boxShadow: '0 2px 6px rgba(200,21,26,0.25)' }}
-          onClick={() => onExport?.(r || patient)}
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16v16H4z" /><path d="M22 6l-10 7L2 6" /></svg>
-          Export / Email Report
-        </button>
-        <button
-          className="btn btn-sm"
-          style={{ background: '#6366F1', color: '#FFFFFF', border: 'none', fontFamily: 'inherit', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', padding: '7px 14px', borderRadius: 8, boxShadow: '0 2px 6px rgba(99,102,241,0.25)' }}
-          onClick={() => onEdit?.(r || patient)}
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
-          Edit Record
-        </button>
       </div>
 
-      {/* ── Main Detail Container Card ── */}
-      <div style={{ background: 'var(--white)', borderRadius: '1rem', border: '1px solid var(--border)', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
+      {/* ── TOP ROW: CARD 1 (PROFILE & GENERAL INFO WITH DIVIDER) & CARD 2 (STANDALONE MEDICAL HISTORY) ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6 items-stretch">
 
-        {/* ── Patient Identity Banner ── */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20, paddingBottom: 16, borderBottom: '1px solid #E2E8F0' }}>
-          <div style={{
-            width: 44, height: 44, borderRadius: '50%',
-            background: 'linear-gradient(135deg,#6366F1 0%,#4338CA 100%)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '.9375rem', fontWeight: 800, color: '#fff', flexShrink: 0,
-            boxShadow: '0 2px 8px rgba(99,102,241,0.25)',
-          }}>
-            {getInitials(patient.name || '?')}
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: '1.0625rem', fontWeight: 700, color: '#0F172A', lineHeight: 1.25 }}>{patient.name}</div>
-            <div style={{ fontSize: '.75rem', color: '#64748B', marginTop: 3, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span>ID: <strong style={{ color: '#0F172A' }}>{rec.id}</strong></span>
-              <span style={{ width: 3, height: 3, borderRadius: '50%', background: '#CBD5E1' }} />
-              <span>Registered <strong style={{ color: '#0F172A' }}>{fmtDate(rec.date)}</strong></span>
-            </div>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-            <ServiceBadge service={patient.service} />
-            {(() => {
-              const liveStatus = derivePatientStatus(rec);
-              return <span className={`badge ${statusBadgeClass[liveStatus] || 'badge-blue'}`}>{liveStatus.charAt(0).toUpperCase() + liveStatus.slice(1)}</span>;
-            })()}
-          </div>
-        </div>
+        {/* ── CARD 1 (LEFT 7 COLS): PROFILE SUMMARY & GENERAL INFORMATION WITH VERTICAL DIVIDER ── */}
+        <div className="lg:col-span-7 bg-white rounded-3xl p-6 border border-slate-200/80 shadow-2xs flex flex-col justify-between">
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-6 items-stretch divide-y sm:divide-y-0 sm:divide-x divide-slate-100 h-full">
 
-        {/* ── Modern 2-Column Info Grid ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
+            {/* Profile Side (5 cols) */}
+            <div className="sm:col-span-5 pr-0 sm:pr-6 flex flex-col justify-between items-center text-center">
+              <div className="w-full flex flex-col items-center">
+                <div className="w-24 h-24 rounded-full bg-slate-100 border-2 border-slate-200/80 flex items-center justify-center shadow-xs overflow-hidden shrink-0 mb-3 relative">
+                  {patientPhoto ? (
+                    <img
+                      src={patientPhoto}
+                      alt={patient.name}
+                      className="w-full h-full object-cover"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                  ) : (
+                    <span className="text-xl font-black text-[#0F172A] tracking-tight">{getInitials(patient.name || '?')}</span>
+                  )}
+                </div>
 
-          {/* Card 1: Patient Demographics Card */}
-          <div style={{ background: '#FFFFFF', borderRadius: 'var(--r-lg)', border: '1px solid #E2E8F0', overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
-            <div style={{ padding: '10px 16px', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', fontSize: '.71875rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.6px', color: '#475569', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
-              Patient Information
-            </div>
-            <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 5, borderBottom: '1px solid #F1F5F9' }}>
-                <span style={{ fontSize: '.78125rem', color: '#64748B', fontWeight: 500 }}>Age / Gender</span>
-                <span style={{ fontSize: '.8125rem', fontWeight: 600, color: '#0F172A' }}>{rec.age} yrs · {patient.sex || '—'}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 5, borderBottom: '1px solid #F1F5F9', gap: 8 }}>
-                <span style={{ fontSize: '.78125rem', color: '#64748B', fontWeight: 500, flexShrink: 0 }}>Address</span>
-                <span style={{ fontSize: '.78125rem', fontWeight: 600, color: '#0F172A', textAlign: 'right' }}>{rec.address || '—'}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 5, borderBottom: '1px solid #F1F5F9' }}>
-                <span style={{ fontSize: '.78125rem', color: '#64748B', fontWeight: 500 }}>Contact</span>
-                <span style={{ fontSize: '.8125rem', fontWeight: 600, color: '#0F172A' }}>{patient.contact || '—'}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: '.78125rem', color: '#64748B', fontWeight: 500, flexShrink: 0 }}>Email</span>
-                <span style={{ fontSize: '.78125rem', fontWeight: 600, color: '#0F172A', textAlign: 'right', wordBreak: 'break-all' }}>{patient.email || '—'}</span>
-              </div>
-            </div>
-          </div>
+                <h2 className="text-base font-extrabold text-slate-900 leading-tight">{patient.name}</h2>
+                <p className="text-xs text-slate-400 font-medium mt-1 truncate max-w-full">{patient.email || 'No email registered'}</p>
 
-          {/* Card 2: Service & Exposure Card */}
-          <div style={{ background: '#FFFFFF', borderRadius: 'var(--r-lg)', border: '1px solid #E2E8F0', overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
-            <div style={{ padding: '10px 16px', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', fontSize: '.71875rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.6px', color: '#475569', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>
-              Service & Exposure Details
-            </div>
-            <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 5, borderBottom: '1px solid #F1F5F9' }}>
-                <span style={{ fontSize: '.78125rem', color: '#64748B', fontWeight: 500 }}>Service Type</span>
-                <ServiceBadge service={patient.service} />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 5, borderBottom: '1px solid #F1F5F9' }}>
-                <span style={{ fontSize: '.78125rem', color: '#64748B', fontWeight: 500 }}>Vaccine Brand</span>
-                <span style={{ fontSize: '.8125rem', fontWeight: 600, color: patient.vaccineBrand ? '#0F172A' : '#94A3B8' }}>{patient.vaccineBrand || '—'}</span>
-              </div>
-              {(patient.service === 'PEP' || patient.service === 'PrEP') && <>
-                {patient.service === 'PEP' && (
-                  <>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 5, borderBottom: '1px solid #F1F5F9' }}>
-                      <span style={{ fontSize: '.78125rem', color: '#64748B', fontWeight: 500 }}>Biting Animal</span>
-                      <span style={{ fontSize: '.8125rem', fontWeight: 600, color: '#0F172A' }}>{patient.animal || '—'}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 5, borderBottom: '1px solid #F1F5F9' }}>
-                      <span style={{ fontSize: '.78125rem', color: '#64748B', fontWeight: 500 }}>Exposure Category</span>
-                      <span className="badge badge-red">Category {patient.cat || '—'}</span>
-                    </div>
-                  </>
-                )}
-                {patient.date && <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '.78125rem', color: '#64748B', fontWeight: 500 }}>{patient.service === 'PEP' ? 'Date of Exposure' : 'Date of Consult'}</span>
-                  <span style={{ fontSize: '.8125rem', fontWeight: 600, color: '#0F172A' }}>{fmtDate(patient.date)}</span>
-                </div>}
-              </>}
-              {patient.service === 'Tetanus' && <>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 5, borderBottom: '1px solid #F1F5F9' }}>
-                  <span style={{ fontSize: '.78125rem', color: '#64748B', fontWeight: 500 }}>Wound Type</span>
-                  <span style={{ fontSize: '.8125rem', fontWeight: 600, color: '#0F172A' }}>{patient.woundType || '—'}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '.78125rem', color: '#64748B', fontWeight: 500 }}>Last Tetanus</span>
-                  <span style={{ fontSize: '.8125rem', fontWeight: 600, color: '#0F172A' }}>{patient.lastTetanus || '—'}</span>
-                </div>
-              </>}
-              {patient.service === 'Hepatitis' && <>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 5, borderBottom: '1px solid #F1F5F9' }}>
-                  <span style={{ fontSize: '.78125rem', color: '#64748B', fontWeight: 500 }}>Variant</span>
-                  <span style={{ fontSize: '.8125rem', fontWeight: 600, color: '#0F172A' }}>{patient.hepaVariant || '—'}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '.78125rem', color: '#64748B', fontWeight: 500 }}>Risk Factor</span>
-                  <span style={{ fontSize: '.8125rem', fontWeight: 600, color: '#0F172A' }}>{patient.riskFactor || '—'}</span>
-                </div>
-              </>}
-              {patient.service === 'Pneumonia' && <>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 5, borderBottom: '1px solid #F1F5F9' }}>
-                  <span style={{ fontSize: '.78125rem', color: '#64748B', fontWeight: 500 }}>Vaccine Type</span>
-                  <span style={{ fontSize: '.8125rem', fontWeight: 600, color: '#0F172A' }}>{patient.pneumoVaccine || '—'}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '.78125rem', color: '#64748B', fontWeight: 500 }}>Risk Condition</span>
-                  <span style={{ fontSize: '.8125rem', fontWeight: 600, color: '#0F172A' }}>{patient.riskCondition || '—'}</span>
-                </div>
-              </>}
-            </div>
-          </div>
-
-          {/* Card 3: Clinical Details & History Card */}
-          <div style={{ background: '#FFFFFF', borderRadius: 'var(--r-lg)', border: '1px solid #E2E8F0', overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
-            <div style={{ padding: '10px 16px', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', fontSize: '.71875rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.6px', color: '#475569', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
-              Clinical Details & History
-            </div>
-            <div style={{ padding: '14px 16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              {patient.service === 'PEP' && (
-                <>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '.78125rem', color: '#64748B', fontWeight: 500 }}>Wound Location</span>
-                    <span style={{ fontSize: '.8125rem', fontWeight: 600, color: '#0F172A' }}>{patient.woundLocation || patient.biteLocation || '—'}</span>
+                <div className="grid grid-cols-2 gap-3 w-full mt-4 pt-3 border-t border-slate-100">
+                  <div className="bg-slate-50/80 rounded-2xl p-2.5 text-center border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Appointments</span>
+                    <span className="text-sm font-extrabold text-slate-900 mt-0.5 block">{patientApts.length}</span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '.78125rem', color: '#64748B', fontWeight: 500 }}>Wound Depth</span>
-                    <span style={{ fontSize: '.8125rem', fontWeight: 600, color: '#0F172A' }}>{patient.woundDepth || '—'}</span>
+                  <div className="bg-slate-50/80 rounded-2xl p-2.5 text-center border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">MRN Code</span>
+                    <span className="text-xs font-bold text-[#3B50DF] mt-1 block truncate">{rec.id}</span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '.78125rem', color: '#64748B', fontWeight: 500 }}>No. of Bites</span>
-                    <span style={{ fontSize: '.8125rem', fontWeight: 600, color: '#0F172A' }}>{patient.numberOfBites || '—'}</span>
-                  </div>
-                </>
-              )}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '.78125rem', color: '#64748B', fontWeight: 500 }}>Past Vaccines</span>
-                <span style={{ fontSize: '.8125rem', fontWeight: 600, color: '#0F172A' }}>{patient.pastVaccines || '—'}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gridColumn: patient.service === 'PEP' ? 'span 2' : 'span 1' }}>
-                <span style={{ fontSize: '.78125rem', color: '#64748B', fontWeight: 500 }}>Allergies</span>
-                <span style={{ fontSize: '.8125rem', fontWeight: 600, color: '#0F172A' }}>{patient.allergies || '—'}</span>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Card 4: Clinical Notes Card */}
-          <div style={{ background: '#FFFFFF', borderRadius: 'var(--r-lg)', border: '1px solid #E2E8F0', overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
-            <div style={{ padding: '10px 16px', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', fontSize: '.71875rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.6px', color: '#475569', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
-              Clinical Notes
-            </div>
-            <div style={{ padding: '14px 16px' }}>
-              {rec.notes ? (
-                <div style={{ fontSize: '.8125rem', color: '#334155', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{rec.notes}</div>
-              ) : (
-                <div style={{ fontSize: '.8125rem', color: '#94A3B8', fontStyle: 'italic' }}>No clinical notes recorded.</div>
-              )}
-            </div>
-          </div>
-
-        </div>
-
-        {/* ── Treatment Timeline ── */}
-        <div style={{ background: 'var(--white)', borderRadius: 'var(--r-lg)', border: '1px solid #E2E8F0', overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
-          <div style={{ padding: '10px 16px', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', fontSize: '.71875rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.6px', color: '#475569', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8v4l3 3" /><circle cx="12" cy="12" r="9" /></svg>
-            Treatment Timeline
-          </div>
-          <div style={{ padding: '18px 20px' }}>
-          {rec.doses.length === 0
-            ? <div style={{ fontSize: '.8125rem', color: 'var(--muted)', fontStyle: 'italic', padding: '12px 0' }}>No doses recorded yet.</div>
-            : <div className="dose-timeline">
-              {rec.doses.map((d, i) => {
-                const isLast = i === rec.doses.length - 1;
-                const circleClass = d.s === 'done' ? 'done' : d.s === 'miss' ? 'miss' : i === 0 || rec.doses[i - 1]?.s === 'done' || rec.doses[i - 1]?.s === 'miss' ? 'active' : '';
-                const lineClass = d.s === 'done' ? 'done' : '';
-                return (
-                  <div key={i} className="dose-track-item">
-                    <div className="dose-track-left">
-                      <div className={`dose-track-circle ${circleClass}`}>
-                        {d.s === 'done'
-                          ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                          : d.s === 'miss'
-                            ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                            : <span style={{ fontSize: '.625rem', fontWeight: 800 }}>{i + 1}</span>
-                        }
-                      </div>
-                      {!isLast && <div className={`dose-track-line ${lineClass}`} />}
-                    </div>
-                    <div className="dose-track-content">
-                      <div className={`dose-track-name ${d.s === 'done' ? 'done' : d.s === 'miss' ? 'miss' : ''}`}>{d.n}</div>
-                      <div className={`dose-track-date ${d.s === 'done' ? 'done' : ''}`}>{d.date}</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          }
-          {rec.doses.length > 0 && derivePatientStatus(rec) === 'completed' && (
-            <div style={{ marginTop: 14, background: '#F0FDF4', border: '1px solid #86EFAC', borderRadius: 'var(--r-lg)', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16A34A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>
+            {/* General Info Side (7 cols) */}
+            <div className="sm:col-span-7 sm:pl-6 pt-6 sm:pt-0 flex flex-col justify-between">
               <div>
-                <div style={{ fontSize: '.8125rem', fontWeight: 700, color: '#15803D' }}>All doses completed!</div>
-                <div style={{ fontSize: '.6875rem', color: '#16A34A', marginTop: 2 }}>Patient status has been updated to <strong>Completed</strong>.</div>
+                <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
+                  <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider">General Information</h3>
+                  <button
+                    onClick={() => onEdit?.(r || patient)}
+                    className="w-6 h-6 rounded-full bg-slate-50 text-slate-500 hover:text-[#3B50DF] hover:bg-indigo-50 flex items-center justify-center transition-colors cursor-pointer"
+                    title="Edit Patient Info"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-x-5 gap-y-3 text-xs font-semibold">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Gender / Sex</span>
+                    <span className="text-xs font-bold text-slate-800 mt-0.5 block">{patient.sex || 'Female'}</span>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Birth Date / Age</span>
+                    <span className="text-xs font-bold text-slate-800 mt-0.5 block">{rec.age ? `${rec.age} yrs old` : '—'}</span>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Mobile Number</span>
+                    <span className="text-xs font-bold text-slate-800 mt-0.5 block">{patient.contact || '—'}</span>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Address</span>
+                    <span className="text-xs font-bold text-slate-800 mt-0.5 block truncate">{rec.address || '—'}</span>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Service Category</span>
+                    <div className="mt-0.5"><ServiceBadge service={patient.service} /></div>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Registration Date</span>
+                    <span className="text-xs font-bold text-slate-800 mt-0.5 block">{fmtDate(rec.date)}</span>
+                  </div>
+
+                  <div className="col-span-2">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Live Status</span>
+                    <span className="mt-0.5 inline-block">
+                      <span className={`badge ${statusBadgeClass[liveStatus] || 'badge-blue'}`}>
+                        {liveStatus.charAt(0).toUpperCase() + liveStatus.slice(1)}
+                      </span>
+                    </span>
+                  </div>
+                </div>
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── CARD 2 (RIGHT 5 COLS): STANDALONE MEDICAL HISTORY & EXPOSURE DETAILS CARD ── */}
+        <div className="lg:col-span-5 bg-white rounded-3xl p-6 border border-slate-200/80 shadow-2xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
+              <h3 className="text-sm font-extrabold text-slate-900">Medical History & Exposure Details</h3>
+              <span className="text-[11px] font-bold text-[#3B50DF] bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-100">Clinical Data</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-xs font-semibold text-slate-700">
+              <div>
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Exposure Category</span>
+                <span className="text-xs font-bold text-slate-900 mt-1 block">Cat {patient.cat || '—'}</span>
+              </div>
+
+              <div>
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Biting Animal</span>
+                <span className="text-xs font-bold text-slate-900 mt-1 block">{patient.animal || 'Bite / Scratch'}</span>
+              </div>
+
+              <div>
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Wound Location</span>
+                <span className="text-xs font-bold text-slate-900 mt-1 block">{patient.woundLocation || patient.biteLocation || '—'}</span>
+              </div>
+
+              <div>
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Vaccine Brand</span>
+                <span className="text-xs font-bold text-[#3B50DF] mt-1 block">{patient.vaccineBrand || 'Rabipur'}</span>
+              </div>
+
+              <div>
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Known Allergies</span>
+                <span className="text-xs font-bold text-slate-800 mt-1 block">{patient.allergies || 'None'}</span>
+              </div>
+
+              <div>
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Past Vaccines</span>
+                <span className="text-xs font-bold text-slate-800 mt-1 block">{patient.pastVaccines || 'None'}</span>
+              </div>
+
+              <div className="col-span-2 pt-2 border-t border-slate-100">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Doctor / Nurse Remarks</span>
+                <p className="text-slate-600 font-normal leading-relaxed text-[11.5px] bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                  {rec.notes || 'No custom clinical remarks noted.'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── MIDDLE ROW: VACCINATION DOSES (LEFT 6 COLS) & APPOINTMENTS (RIGHT 6 COLS) SIDE-BY-SIDE ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6 items-start">
+
+        {/* ── LEFT COLUMN (6 COLS): COMPACT VACCINATION DOSES TRACKER ── */}
+        <div className="lg:col-span-6 bg-white rounded-3xl border border-slate-200/80 shadow-2xs p-4 flex flex-col justify-between">
+          <div>
+            {/* Clean Compact Header */}
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2 mb-2">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3B50DF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8v4l3 3" /><circle cx="12" cy="12" r="9" /></svg>
+                    Vaccination Doses
+                  </h3>
+                  <span className="text-[9.5px] font-bold text-[#3B50DF] bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100/90">
+                    {patient.service || 'PEP'} Protocol
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 font-medium mt-0.5">Dose schedule timeline for {patient.name}</p>
+              </div>
+            </div>
+
+            {/* Compact Dose Timeline List */}
+            {rec.doses.length === 0 ? (
+              <div className="py-5 text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 p-3">
+                <p className="text-xs font-bold text-slate-700">No vaccination doses recorded yet</p>
+                <p className="text-[11px] text-slate-400 font-normal mt-0.5">Doses appear here once the vaccination schedule is recorded.</p>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {rec.doses.map((d, i) => {
+                  const isDone = d.s === 'done';
+                  const isMiss = d.s === 'miss';
+                  const isNext = !isDone && !isMiss && (i === 0 || rec.doses[i - 1]?.s === 'done' || rec.doses[i - 1]?.s === 'miss');
+
+                  const cardBg = isDone
+                    ? 'bg-emerald-50/30 border-emerald-200/70'
+                    : isMiss
+                    ? 'bg-rose-50/30 border-rose-200/70'
+                    : isNext
+                    ? 'bg-indigo-50/40 border-[#3B50DF] shadow-2xs'
+                    : 'bg-slate-50/40 border-slate-200/60';
+
+                  const badgeBg = isDone
+                    ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                    : isMiss
+                    ? 'bg-rose-100 text-rose-800 border-rose-300'
+                    : isNext
+                    ? 'bg-[#3B50DF] text-white border-indigo-600'
+                    : 'bg-slate-200/80 text-slate-600 border-slate-300';
+
+                  const statusLabel = isDone ? 'Completed' : isMiss ? 'Missed' : isNext ? 'Next Due' : 'Scheduled';
+
+                  return (
+                    <div
+                      key={i}
+                      className={`py-1.5 px-3 rounded-xl border transition-all flex items-center justify-between gap-2.5 ${cardBg}`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        {/* Circle Badge Number or Icon */}
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center font-extrabold text-[10.5px] shrink-0 shadow-2xs border ${badgeBg}`}>
+                          {isDone ? (
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                          ) : isMiss ? (
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                          ) : (
+                            <span>{i + 1}</span>
+                          )}
+                        </div>
+
+                        {/* Dose Name & Date */}
+                        <div className="min-w-0">
+                          <p className={`text-[11.5px] font-bold truncate leading-tight ${isDone ? 'text-slate-900 line-through decoration-emerald-500/60' : 'text-slate-900'}`}>
+                            {d.n}
+                          </p>
+                          <div className="flex items-center gap-1 text-[10.5px] text-slate-500 font-medium">
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+                            <span>{d.date}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Status Badge */}
+                      <span className={`text-[9.5px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wide shrink-0 ${
+                        isDone
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/80'
+                          : isMiss
+                          ? 'bg-rose-50 text-rose-700 border border-rose-200/80'
+                          : isNext
+                          ? 'bg-indigo-50 text-[#3B50DF] border border-indigo-200/80'
+                          : 'bg-slate-100/80 text-slate-500 border border-slate-200/70'
+                      }`}>
+                        {statusLabel}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Status Legend Footer */}
+          {rec.doses.length > 0 && (
+            <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] font-semibold text-slate-500">
+              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Completed</span>
+              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#3B50DF]" /> Next Due</span>
+              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-slate-300" /> Scheduled</span>
+              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-rose-500" /> Missed</span>
             </div>
           )}
+        </div>
+
+        {/* ── RIGHT COLUMN (6 COLS): SYNCED APPOINTMENTS CARD ── */}
+        <div className="lg:col-span-6 bg-white rounded-3xl border border-slate-200/80 shadow-2xs overflow-hidden h-full flex flex-col justify-between">
+          <div>
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-900">Appointment</h3>
+                <p className="text-[11px] text-slate-400 font-medium">Booked for {patient.name}</p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-xl border border-slate-200/60 text-[11px]">
+                  <button
+                    onClick={() => setAptTab('all')}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                      aptTab === 'all' ? 'bg-white text-[#3B50DF] shadow-2xs' : 'text-slate-500'
+                    }`}
+                  >
+                    All
+                  </button>
+                  <button
+                    onClick={() => setAptTab('upcoming')}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                      aptTab === 'upcoming' ? 'bg-white text-[#3B50DF] shadow-2xs' : 'text-slate-500'
+                    }`}
+                  >
+                    Upcoming
+                  </button>
+                  <button
+                    onClick={() => setAptTab('completed')}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                      aptTab === 'completed' ? 'bg-white text-[#3B50DF] shadow-2xs' : 'text-slate-500'
+                    }`}
+                  >
+                    Completed
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Appointments Table */}
+            <div className="overflow-x-auto">
+              {aptsLoading ? (
+                <div className="py-8 text-center text-xs font-semibold text-slate-400">Loading appointments...</div>
+              ) : filteredApts.length === 0 ? (
+                <div className="py-8 text-center p-4">
+                  <p className="text-xs font-bold text-slate-700">No appointments found</p>
+                  <p className="text-[11px] text-slate-400 font-normal mt-0.5">Appointments booked for this patient appear here.</p>
+                </div>
+              ) : (
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50/50 text-[10.5px] font-bold text-slate-400 uppercase tracking-wider">
+                      <th className="px-4 py-3">Date</th>
+                      <th className="px-4 py-3">Type</th>
+                      <th className="px-4 py-3">Time</th>
+                      <th className="px-4 py-3">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
+                    {filteredApts.map((apt) => {
+                      const statusStr = (apt.status || 'Pending').toLowerCase();
+                      const isDone = statusStr === 'completed' || statusStr === 'done';
+                      const isPending = statusStr === 'pending';
+                      const badgeClass = isDone
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : isPending
+                        ? 'bg-amber-50 text-amber-700 border-amber-200'
+                        : 'bg-indigo-50 text-[#3B50DF] border-indigo-200';
+
+                      return (
+                        <tr key={apt.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="px-4 py-3 font-bold text-slate-900">{fmtDate(apt.date)}</td>
+                          <td className="px-4 py-3 font-semibold text-slate-800 truncate max-w-[120px]">{apt.type || apt.purpose || 'Vaccination'}</td>
+                          <td className="px-4 py-3 text-slate-600 font-medium">{apt.time || '10:00 am'}</td>
+                          <td className="px-4 py-3">
+                            <span className={`text-[9.5px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider inline-block ${badgeClass}`}>
+                              {apt.status || 'Scheduled'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {vaccineModal && <VaccineModal patientName={patient.name} patientId={patient.id} onClose={() => setVaccineModal(false)} onSave={handleAddVaccine} />}
+      {/* ── BOTTOM SECTION: REPORTS (DOCTOR/NURSE DOSES VITALS & NOTES) ── */}
+      <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-2xs">
+        <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 flex-wrap gap-2">
+          <div>
+            <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3B50DF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
+              Clinical Reports & Nurse Notes
+            </h3>
+          </div>
+
+          <button
+            onClick={() => setShowAddReportModal(true)}
+            className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-[#3B50DF] hover:bg-indigo-700 shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+          >
+            + Add Reports
+          </button>
+        </div>
+
+        {reportsList.length === 0 ? (
+          <div className="py-10 text-center bg-slate-50/60 rounded-2xl border border-dashed border-slate-200 p-6">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mx-auto mb-2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
+            <p className="text-sm font-bold text-slate-700">No clinical reports logged</p>
+            <p className="text-xs text-slate-400 font-normal mt-0.5">Click + Add Reports to log BP, Vitals, Injection Route & Observations.</p>
+          </div>
+        ) : (
+          <div style={{ border: '1px solid #E2E8F0', borderRadius: 'var(--r-lg)', overflow: 'hidden' }}>
+            {reportsList.map((rep, idx) => (
+              <div
+                key={rep.id || idx}
+                onClick={() => setViewingReport(rep)}
+                className="flex items-center gap-4 px-4 py-3 bg-white hover:bg-slate-50 transition-colors cursor-pointer"
+                style={{ borderTop: idx === 0 ? 'none' : '1px solid #E2E8F0' }}
+              >
+                {/* Date column */}
+                <div className="w-[86px] shrink-0">
+                  <p className="text-[11px] font-bold text-slate-900 tabular-nums leading-tight">{fmtDate(rep.date || rep.createdAt)}</p>
+                  <p className="text-[10px] text-slate-400 font-medium mt-0.5 truncate">{rep.author || 'Clinical Nurse'}</p>
+                </div>
+
+                {/* Title + notes */}
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-extrabold text-slate-900 truncate">{rep.title || 'Clinical Assessment'}</p>
+                  <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                    {rep.notes ? rep.notes : (rep.injectionSite || rep.woundCondition || 'No notes recorded')}
+                  </p>
+                </div>
+
+                {/* Vitals column */}
+                <div className="hidden md:flex items-center gap-4 shrink-0 text-[11px] font-semibold text-slate-600 tabular-nums">
+                  {rep.bp && <span><span className="text-slate-400 font-medium">BP</span> {rep.bp}</span>}
+                  {rep.pulse && <span><span className="text-slate-400 font-medium">Pulse</span> {rep.pulse}</span>}
+                  {rep.temp && <span><span className="text-slate-400 font-medium">Temp</span> {rep.temp}°C</span>}
+                </div>
+
+                {/* Row actions */}
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={e => { e.stopPropagation(); setViewingReport(rep); }}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-[#3B50DF] hover:bg-indigo-50 transition-colors cursor-pointer"
+                    title="View full report"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── MODAL 1: ENHANCED ADD REPORT POP-UP CARD ── */}
+      {showAddReportModal && (
+        <AddReportModal
+          patient={patient}
+          doses={rec.doses}
+          existingReports={reportsList}
+          onClose={() => setShowAddReportModal(false)}
+          onSave={handleSaveReport}
+        />
+      )}
+
+      {/* ── MODAL 2: VIEW REPORT DETAIL MODAL ── */}
+      {viewingReport && (
+        <ViewReportModal
+          report={viewingReport}
+          patientName={patient.name}
+          onClose={() => setViewingReport(null)}
+        />
+      )}
+
+      {/* ── MODAL 3: EXPORT PATIENT RECORD MODAL (WITH LIVE PREVIEW AUTO-BOUND TO THIS PATIENT) ── */}
+      {showExportModal && (
+        <ExportReportModal
+          patients={patients || records}
+          initialPatient={r || patient}
+          onClose={() => setShowExportModal(false)}
+          onToast={onToast}
+        />
+      )}
     </div>
   );
 }
+
+/* ─────────────────────────── CLOSE ICON ───────────────────────────
+   The modals below all render <X/>; this file uses inline SVGs rather than
+   an icon package, so the close glyph is defined here. */
+function X({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M18 6L6 18" /><path d="M6 6l12 12" />
+    </svg>
+  );
+}
+
+/* ─────────────────────────── VITALS ASSESSMENT ───────────────────────────
+   Adult reference ranges, used only to surface a reading for a second look
+   before it is written to the patient's record. Advisory, never blocking —
+   an out-of-range value is often exactly what the nurse means to record. */
+function assessVitals({ bp, pulse, temp, woundCondition, adverseEvent }) {
+  const flags = [];
+
+  const bpMatch = /^\s*(\d{2,3})\s*\/\s*(\d{2,3})\s*$/.exec(bp || '');
+  if (bp && !bpMatch) {
+    flags.push({ level: 'warn', field: 'Blood pressure', text: 'Not in systolic/diastolic format (e.g. 120/80)' });
+  } else if (bpMatch) {
+    const sys = Number(bpMatch[1]), dia = Number(bpMatch[2]);
+    if (sys >= 180 || dia >= 120) flags.push({ level: 'high', field: 'Blood pressure', text: 'Hypertensive crisis range — escalate to attending physician' });
+    else if (sys >= 140 || dia >= 90) flags.push({ level: 'high', field: 'Blood pressure', text: 'Stage 2 hypertension range (≥140/90)' });
+    else if (sys < 90 || dia < 60) flags.push({ level: 'warn', field: 'Blood pressure', text: 'Below normal (<90/60)' });
+    else if (sys >= 130 || dia >= 80) flags.push({ level: 'warn', field: 'Blood pressure', text: 'Above normal (≥130/80)' });
+  }
+
+  const p = parseFloat(pulse);
+  if (pulse && Number.isNaN(p)) {
+    flags.push({ level: 'warn', field: 'Pulse', text: 'Not a number' });
+  } else if (!Number.isNaN(p)) {
+    if (p > 120) flags.push({ level: 'high', field: 'Pulse', text: 'Marked tachycardia (>120 bpm)' });
+    else if (p < 50) flags.push({ level: 'high', field: 'Pulse', text: 'Marked bradycardia (<50 bpm)' });
+    else if (p > 100) flags.push({ level: 'warn', field: 'Pulse', text: 'Tachycardia (>100 bpm)' });
+    else if (p < 60) flags.push({ level: 'warn', field: 'Pulse', text: 'Bradycardia (<60 bpm)' });
+  }
+
+  const t = parseFloat(temp);
+  if (temp && Number.isNaN(t)) {
+    flags.push({ level: 'warn', field: 'Temperature', text: 'Not a number' });
+  } else if (!Number.isNaN(t)) {
+    if (t >= 39) flags.push({ level: 'high', field: 'Temperature', text: 'High fever (≥39 °C)' });
+    else if (t < 35) flags.push({ level: 'high', field: 'Temperature', text: 'Hypothermia (<35 °C)' });
+    else if (t >= 37.5) flags.push({ level: 'warn', field: 'Temperature', text: 'Febrile (≥37.5 °C)' });
+  }
+
+  if (adverseEvent === 'Severe Reaction (Requires MD Review)') {
+    flags.push({ level: 'high', field: 'Adverse event', text: 'Severe reaction logged — requires MD review' });
+  }
+  if (woundCondition === 'Infected / Purulent Drainage') {
+    flags.push({ level: 'high', field: 'Wound condition', text: 'Infected with purulent drainage' });
+  }
+
+  return flags;
+}
+
+/* ─────────────────────────── CONFIRM REPORT CARD ───────────────────────────
+   Review step between the Add Report form and the write to Firestore. A
+   clinical report is part of the patient's permanent record, so the whole
+   entry is shown back before it is committed. */
+function ConfirmReportCard({ patient, report, saving, onBack, onConfirm }) {
+  const flags = assessVitals(report);
+  const highCount = flags.filter(f => f.level === 'high').length;
+
+  const vitals = [
+    { label: 'BP (mmHg)', value: report.bp },
+    { label: 'Pulse (bpm)', value: report.pulse },
+    { label: 'Temp (°C)', value: report.temp },
+    { label: 'Weight (kg)', value: report.weight }
+  ];
+
+  const details = [
+    { label: 'Where the shot was given', value: report.injectionSite },
+    { label: 'Wound condition', value: report.woundCondition },
+    { label: 'Adverse event', value: report.adverseEvent },
+    { label: 'Attending', value: report.author }
+  ];
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center p-4 overflow-y-auto"
+      style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }}
+      onClick={saving ? undefined : onBack}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Confirm clinical report"
+    >
+      <div
+        className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden border border-slate-200 my-8"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900">Confirm Clinical Report</h3>
+            <p className="text-[11px] text-slate-400 font-normal mt-0.5">
+              Review before this is written to {patient.name}&rsquo;s permanent record
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onBack}
+            disabled={saving}
+            className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer disabled:opacity-40"
+            aria-label="Back to edit"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4 text-xs font-semibold text-slate-700">
+          {/* Report identity */}
+          <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '.75rem', padding: '12px 14px' }}>
+            <p className="text-[13px] font-bold text-slate-900 leading-snug">{report.title}</p>
+            <p className="text-[11px] text-slate-500 font-medium mt-1">
+              {patient.name} &middot; {fmtDate(report.date)}
+            </p>
+          </div>
+
+          {/* Vitals */}
+          <div>
+            <p className="text-[10.5px] uppercase tracking-wider text-slate-400 mb-2">Vitals</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              {vitals.map(v => (
+                <div key={v.label} style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '.625rem', padding: '9px 11px' }}>
+                  <p className="text-[10px] text-slate-500 font-medium">{v.label}</p>
+                  <p className="text-[13px] font-bold text-slate-900 mt-0.5 tabular-nums">{v.value || '—'}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Administration detail */}
+          <div>
+            <p className="text-[10.5px] uppercase tracking-wider text-slate-400 mb-2">Administration</p>
+            <div style={{ border: '1px solid #E2E8F0', borderRadius: '.625rem', overflow: 'hidden' }}>
+              {details.map((d, i) => (
+                <div
+                  key={d.label}
+                  className="flex items-start justify-between gap-4 px-3 py-2"
+                  style={{ borderTop: i === 0 ? 'none' : '1px solid #E2E8F0' }}
+                >
+                  <span className="text-[11px] text-slate-500 font-medium shrink-0">{d.label}</span>
+                  <span className="text-[11.5px] font-bold text-slate-800 text-right">{d.value || '—'}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <p className="text-[10.5px] uppercase tracking-wider text-slate-400 mb-2">Observations &amp; notes</p>
+            <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '.625rem', padding: '10px 12px' }}>
+              {report.notes
+                ? <p className="text-[11.5px] font-medium text-slate-700 leading-relaxed whitespace-pre-wrap">{report.notes}</p>
+                : <p className="text-[11.5px] font-medium text-slate-400">No notes recorded for this entry.</p>}
+            </div>
+          </div>
+
+          {/* Advisory flags */}
+          {flags.length === 0 ? (
+            <div style={{ background: 'var(--green-soft)', border: '1px solid #86EFAC', borderRadius: '.625rem', padding: '10px 12px' }}>
+              <p className="text-[11.5px] font-bold" style={{ color: '#15803D' }}>
+                All recorded vitals fall within normal adult ranges.
+              </p>
+            </div>
+          ) : (
+            <div>
+              <p className="text-[10.5px] uppercase tracking-wider text-slate-400 mb-2">
+                Needs a second look ({flags.length})
+              </p>
+              <div className="space-y-1.5">
+                {flags.map((f, i) => {
+                  const high = f.level === 'high';
+                  return (
+                    <div
+                      key={i}
+                      style={{
+                        background: high ? 'var(--red-soft)' : 'var(--orange-soft)',
+                        border: `1px solid ${high ? '#FCA5A5' : '#FDE68A'}`,
+                        borderRadius: '.625rem',
+                        padding: '9px 12px'
+                      }}
+                    >
+                      <p className="text-[11.5px] font-bold" style={{ color: high ? '#B91C1C' : '#B45309' }}>
+                        {f.field}: {f.text}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-[10.5px] font-medium text-slate-400 mt-2">
+                {highCount > 0
+                  ? 'These readings are unusual. Confirm they are correct — the report saves exactly as shown.'
+                  : 'Advisory only. The report saves exactly as shown.'}
+              </p>
+            </div>
+          )}
+
+          <div className="pt-2 flex gap-3">
+            <button
+              type="button"
+              onClick={onBack}
+              disabled={saving}
+              className="flex-1 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold cursor-pointer hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Back to edit
+            </button>
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={saving}
+              className="flex-1 py-2.5 rounded-xl bg-[#3B50DF] text-white font-bold cursor-pointer hover:bg-indigo-700 shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {saving ? 'Saving…' : 'Confirm & Save'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Report stages. doseIndex ties a stage to its position in the patient's dose
+   schedule so a stage can be closed off once that dose is finished. */
+const REPORT_STAGES = [
+  { value: 'Dose 1 (Day 0) Initial Assessment', doseIndex: 0 },
+  { value: 'Dose 2 (Day 3) Follow-up', doseIndex: 1 },
+  { value: 'Dose 3 (Day 7) Assessment', doseIndex: 2 },
+  { value: 'Dose 4 (Day 14) Follow-up', doseIndex: 3 },
+  { value: 'Dose 5 (Day 28) Completion', doseIndex: 4 },
+  { value: 'Wound Inspection & RIG Admin', doseIndex: null },
+  { value: 'General Consultation & Booster', doseIndex: null }
+];
+
+const INJECTION_SITES = ['Right arm', 'Left arm', 'Right thigh', 'Left thigh', 'Around the wound', 'Other'];
+
+/* ─────────────────────────── ENHANCED ADD REPORT POP-UP CARD ─────────────────────────── */
+function AddReportModal({ patient, doses = [], existingReports = [], onClose, onSave }) {
+  // A stage closes once its dose is finished or a report for it already exists,
+  // so the same visit cannot be logged twice.
+  const stages = REPORT_STAGES.map(s => {
+    const alreadyLogged = existingReports.some(rep => rep.title === s.value);
+    const dose = s.doseIndex !== null ? doses[s.doseIndex] : null;
+    const doseDone = !!dose && (dose.s || dose.status) === 'done';
+    return {
+      ...s,
+      disabled: alreadyLogged || doseDone,
+      reason: alreadyLogged ? 'already logged' : doseDone ? 'dose completed' : ''
+    };
+  });
+  const firstOpen = stages.find(s => !s.disabled);
+
+  const [reportType, setReportType] = useState(firstOpen ? firstOpen.value : '');
+  const [bp, setBp] = useState('120/80');
+  const [pulse, setPulse] = useState('78');
+  const [temp, setTemp] = useState('36.6');
+  const [weight, setWeight] = useState('');
+  const [woundCondition, setWoundCondition] = useState('Clean / Healing Well');
+  const [injectionSite, setInjectionSite] = useState('Right arm');
+  const [injectionSiteOther, setInjectionSiteOther] = useState('');
+  const [adverseEvent, setAdverseEvent] = useState('None / Normal Response');
+  const [author, setAuthor] = useState('');
+  const [notes, setNotes] = useState('');
+
+  const resolvedSite = injectionSite === 'Other' ? injectionSiteOther.trim() : injectionSite;
+  // Submitting the form no longer writes straight to Firestore — it stages the
+  // entry for the confirm card, which owns the actual save.
+  const [pending, setPending] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    setPending({
+      id: 'rep-' + Date.now(),
+      title: reportType,
+      bp: bp.trim(),
+      pulse: pulse.trim(),
+      temp: temp.trim(),
+      weight: weight.trim(),
+      woundCondition,
+      injectionSite: resolvedSite,
+      adverseEvent,
+      notes: notes.trim(),
+      author: author.trim(),
+      date: new Date().toISOString().split('T')[0],
+      createdAt: Date.now()
+    });
+  }
+
+  async function handleConfirm() {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await onSave(pending);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto" style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }} onClick={onClose}>
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden border border-slate-200 my-8" onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900">Add Clinical Report / Dose Vitals</h3>
+            <p className="text-[11px] text-slate-400 font-normal mt-0.5">Log vitals, injection route, and clinical observations for {patient.name}</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"><X size={16}/></button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs font-semibold text-slate-700">
+          {/* Report Stage / Type Dropdown */}
+          <div>
+            <label className="block mb-1.5 text-slate-500">Report Stage / Assessment Type</label>
+            <select
+              value={reportType}
+              onChange={e => setReportType(e.target.value)}
+              required
+              className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+            >
+              {!firstOpen && <option value="">No stage available to log</option>}
+              {stages.map(s => (
+                <option key={s.value} value={s.value} disabled={s.disabled}>
+                  {s.value}{s.reason ? ` — ${s.reason}` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Vitals Grid (4 Inputs) */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div>
+              <label className="block mb-1 text-slate-500">BP (mmHg)</label>
+              <input type="text" value={bp} onChange={e => setBp(e.target.value)} placeholder="120/80" className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF]" />
+            </div>
+            <div>
+              <label className="block mb-1 text-slate-500">Pulse (bpm)</label>
+              <input type="text" value={pulse} onChange={e => setPulse(e.target.value)} placeholder="78" className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF]" />
+            </div>
+            <div>
+              <label className="block mb-1 text-slate-500">Temp (°C)</label>
+              <input type="text" value={temp} onChange={e => setTemp(e.target.value)} placeholder="36.6" className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF]" />
+            </div>
+            <div>
+              <label className="block mb-1 text-slate-500">Weight (kg)</label>
+              <input type="text" value={weight} onChange={e => setWeight(e.target.value)} placeholder="60" className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF]" />
+            </div>
+          </div>
+
+          {/* Injection Site & Wound Condition Dropdowns */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block mb-1.5 text-slate-500">Where the shot was given</label>
+              <select
+                value={injectionSite}
+                onChange={e => setInjectionSite(e.target.value)}
+                className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+              >
+                {INJECTION_SITES.map(site => (
+                  <option key={site} value={site}>{site}</option>
+                ))}
+              </select>
+              {injectionSite === 'Other' && (
+                <input
+                  type="text"
+                  value={injectionSiteOther}
+                  onChange={e => setInjectionSiteOther(e.target.value)}
+                  required
+                  autoFocus
+                  placeholder="Type where the shot was given"
+                  className="w-full mt-2 py-2 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF]"
+                />
+              )}
+            </div>
+
+            <div>
+              <label className="block mb-1.5 text-slate-500">Wound Condition</label>
+              <select
+                value={woundCondition}
+                onChange={e => setWoundCondition(e.target.value)}
+                className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+              >
+                <option value="Clean / Healing Well">Clean / Healing Well</option>
+                <option value="Slight Erythema (Redness)">Slight Erythema (Redness)</option>
+                <option value="Swollen / Inflamed">Swollen / Inflamed</option>
+                <option value="Infected / Purulent Drainage">Infected / Purulent Drainage</option>
+                <option value="No Active Wound / Intact Skin">No Active Wound / Intact Skin</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Adverse Event Dropdown & Attending */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block mb-1.5 text-slate-500">Adverse Event / Reaction</label>
+              <select
+                value={adverseEvent}
+                onChange={e => setAdverseEvent(e.target.value)}
+                className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+              >
+                <option value="None / Normal Response">None / Normal Response</option>
+                <option value="Mild Local Pain & Swelling">Mild Local Pain & Swelling</option>
+                <option value="Low-grade Fever / Fatigue">Low-grade Fever / Fatigue</option>
+                <option value="Mild Skin Rash / Allergy">Mild Skin Rash / Allergy</option>
+                <option value="Severe Reaction (Requires MD Review)">Severe Reaction (Requires MD Review)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block mb-1.5 text-slate-500">Attending Doctor / Nurse</label>
+              <input type="text" value={author} onChange={e => setAuthor(e.target.value)} required placeholder="Name of doctor or nurse" className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF]" />
+            </div>
+          </div>
+
+          {/* Clinical Notes & Observations */}
+          <div>
+            <label className="block mb-1 text-slate-500">Doctor / Nurse Observations & Notes</label>
+            <textarea
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              rows={3}
+              placeholder="Record clinical observations, wound dressing details, prescription recommendations, or patient instructions..."
+              className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF]"
+            />
+          </div>
+
+          <div className="pt-3 flex gap-3">
+            <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold cursor-pointer hover:bg-slate-50">Cancel</button>
+            <button type="submit" className="flex-1 py-2.5 rounded-xl bg-[#3B50DF] text-white font-bold cursor-pointer hover:bg-indigo-700 shadow-xs">Review &amp; Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    {pending && (
+      <ConfirmReportCard
+        patient={patient}
+        report={pending}
+        saving={saving}
+        onBack={() => setPending(null)}
+        onConfirm={handleConfirm}
+      />
+    )}
+    </>
+  );
+}
+
+/* ─────────────────────────── ADD APPOINTMENT MODAL ─────────────────────────── */
+function AddAptModal({ patient, onClose, onSave }) {
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [time, setTime] = useState('10:00 AM');
+  const [type, setType] = useState(patient.service ? `${patient.service} Follow-up Dose` : 'Anti-Rabies Vaccination');
+  const [notes, setNotes] = useState('');
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    onSave({
+      date,
+      time,
+      type,
+      purpose: type,
+      notes,
+      comments: notes,
+      status: 'Confirmed'
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }} onClick={onClose}>
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200" onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+          <h3 className="text-sm font-bold text-slate-900">Add Appointment for {patient.name}</h3>
+          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"><X size={16}/></button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs font-semibold text-slate-700">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block mb-1 text-slate-500">Date</label>
+              <input type="date" value={date} onChange={e => setDate(e.target.value)} required className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF]" />
+            </div>
+            <div>
+              <label className="block mb-1 text-slate-500">Time</label>
+              <input type="text" value={time} onChange={e => setTime(e.target.value)} required placeholder="10:00 AM" className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF]" />
+            </div>
+          </div>
+
+          <div>
+            <label className="block mb-1 text-slate-500">Treatment / Service Type</label>
+            <input type="text" value={type} onChange={e => setType(e.target.value)} required className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF]" />
+          </div>
+
+          <div>
+            <label className="block mb-1 text-slate-500">Appointment Note / Comments</label>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Add comments or instructions for the patient..." className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF]" />
+          </div>
+
+          <div className="pt-3 flex gap-3">
+            <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold cursor-pointer hover:bg-slate-50">Cancel</button>
+            <button type="submit" className="flex-1 py-2.5 rounded-xl bg-[#3B50DF] text-white font-bold cursor-pointer hover:bg-indigo-700 shadow-xs">Book Appointment</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────── VIEW REPORT MODAL ─────────────────────────── */
+function ViewReportModal({ report, patientName, onClose }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }} onClick={onClose}>
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200" onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+          <h3 className="text-sm font-bold text-slate-900">{report.title || 'Clinical Report'}</h3>
+          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"><X size={16}/></button>
+        </div>
+        <div className="p-6 space-y-4 text-xs font-medium text-slate-700">
+          <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-2">
+            <p className="text-slate-500"><strong className="text-slate-800">Patient:</strong> {patientName}</p>
+            <p className="text-slate-500"><strong className="text-slate-800">Date:</strong> {fmtDate(report.date || report.createdAt)}</p>
+            <p className="text-slate-500"><strong className="text-slate-800">Attending:</strong> {report.author || 'Clinical Nurse'}</p>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="p-2.5 bg-indigo-50/70 border border-indigo-100 rounded-2xl">
+              <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider block">BP</span>
+              <span className="text-xs font-extrabold text-[#3B50DF] mt-0.5 block">{report.bp || '—'}</span>
+            </div>
+            <div className="p-2.5 bg-emerald-50/70 border border-emerald-100 rounded-2xl">
+              <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider block">Weight</span>
+              <span className="text-xs font-extrabold text-emerald-700 mt-0.5 block">{report.weight ? `${report.weight} kg` : '—'}</span>
+            </div>
+            <div className="p-2.5 bg-amber-50/70 border border-amber-100 rounded-2xl">
+              <span className="text-[10px] font-bold text-amber-500 uppercase tracking-wider block">Temp</span>
+              <span className="text-xs font-extrabold text-amber-700 mt-0.5 block">{report.temp ? `${report.temp} °C` : '—'}</span>
+            </div>
+          </div>
+
+          <div>
+            <span className="block font-bold text-slate-800 mb-1">Clinical Notes & Observations:</span>
+            <p className="text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-2xl border border-slate-100 whitespace-pre-wrap">
+              {report.notes || 'No detailed clinical notes attached.'}
+            </p>
+          </div>
+
+          <button onClick={onClose} className="w-full py-2.5 rounded-xl bg-slate-900 text-white font-bold cursor-pointer hover:bg-slate-800">Close Report</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────── SEND MESSAGE MODAL ─────────────────────────── */
+function SendMessageModal({ patient, onClose, onToast }) {
+  const [msg, setMsg] = useState(`Hello ${patient.name}, this is a friendly reminder regarding your upcoming vaccination appointment at K&A Anti-Rabies Clinic.`);
+
+  function handleSend(e) {
+    e.preventDefault();
+    onToast(`Message sent to ${patient.name} (${patient.contact || patient.email || 'SMS'})`, 'success');
+    onClose();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }} onClick={onClose}>
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200" onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+          <h3 className="text-sm font-bold text-slate-900">Send Message to {patient.name}</h3>
+          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"><X size={16}/></button>
+        </div>
+        <form onSubmit={handleSend} className="p-6 space-y-4 text-xs font-semibold text-slate-700">
+          <div>
+            <label className="block mb-1 text-slate-500">Recipient</label>
+            <input type="text" disabled value={`${patient.name} (${patient.contact || patient.email || 'Mobile SMS'})`} className="w-full py-2 px-3 bg-slate-100 border border-slate-200 rounded-xl text-slate-600" />
+          </div>
+
+          <div>
+            <label className="block mb-1 text-slate-500">Message Content</label>
+            <textarea value={msg} onChange={e => setMsg(e.target.value)} rows={4} required className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF]" />
+          </div>
+
+          <div className="pt-2 flex gap-3">
+            <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold cursor-pointer hover:bg-slate-50">Cancel</button>
+            <button type="submit" className="flex-1 py-2.5 rounded-xl bg-[#3B50DF] text-white font-bold cursor-pointer hover:bg-indigo-700 shadow-xs">Send Follow-up</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 
 /* ─────────────────────────── EXPORT REPORT MODAL ─────────────────────────── */
 function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
@@ -2994,6 +3821,10 @@ doc.text('___________', pageWidth - 20 - colWidth / 2, y + 6, { align: 'center' 
     setEmailTo('');
   }
 
+  // The clinic report exported as Excel is set up landscape, so the preview
+  // sheet turns with it.
+  const isLandscapeSheet = mode === 'bulk' && exportFormat === 'xls';
+
   const previewPane = (html) => (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}>
       <iframe
@@ -3006,42 +3837,44 @@ doc.text('___________', pageWidth - 20 - colWidth / 2, y + 6, { align: 'center' 
   );
 
   return (
-    <div className="modal-overlay" style={{ alignItems: 'center' }} onClick={e => { if (e.target.classList.contains('modal-overlay')) onClose(); }}>
-      <div className="modal" style={{ width: '1360px', maxWidth: '98vw', height: '92vh', maxHeight: '960px', padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        
-        {/* Dark Navy Header Bar */}
-        <div style={{
-          background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)',
-          padding: '16px 24px',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          flexShrink: 0
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                <path d="M12 8v8M8 12h8"/>
+    <div
+      className="modal-overlay"
+      style={{ alignItems: 'center', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }}
+      onClick={e => { if (e.target.classList.contains('modal-overlay')) onClose(); }}
+    >
+      <div
+        className="modal bg-white rounded-3xl shadow-2xl border border-slate-200"
+        style={{ width: '1360px', maxWidth: '98vw', height: '92vh', maxHeight: '960px', padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+      >
+
+        {/* Card head — Add Report's shape, carrying a light brand wash so the
+            all-white card has somewhere for the eye to land. */}
+        <div
+          className="px-6 py-4 flex items-center justify-between"
+          style={{ flexShrink: 0, background: '#F4F6FE', borderBottom: '1px solid #E0E5FA' }}
+        >
+          <div className="flex items-center gap-3">
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: '#3B50DF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
               </svg>
             </div>
             <div>
-              <h3 style={{ fontSize: '1.0625rem', fontWeight: 800, color: '#FFFFFF', margin: 0, letterSpacing: '-0.01em' }}>Export Patient Record</h3>
-              <p style={{ fontSize: '.75rem', color: 'rgba(255,255,255,0.65)', margin: '2px 0 0' }}>Download, print, or email official clinic records</p>
+              <h3 className="text-sm font-bold text-slate-900">
+                {initialPatient ? `Export Patient Record — ${formatTitleCase(initialPatient.name)}` : 'Export Clinic Report'}
+              </h3>
+              <p className="text-[11px] text-slate-500 font-normal mt-0.5">
+                {initialPatient ? `Official medical record & certificate for ${formatTitleCase(initialPatient.name)}` : 'Download, print, or email official clinic registry reports'}
+              </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            style={{
-              width: 32, height: 32, borderRadius: 8, border: 'none',
-              background: 'rgba(255,255,255,0.12)', color: '#FFFFFF',
-              fontSize: '1rem', fontWeight: 700, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'background .15s'
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.22)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.12)'}
+            className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
+            aria-label="Close"
           >
-            ✕
+            <X size={16} />
           </button>
         </div>
 
@@ -3050,31 +3883,10 @@ doc.text('___________', pageWidth - 20 - colWidth / 2, y + 6, { align: 'center' 
 
           {/* LEFT PANEL: Settings Controls */}
           <div style={{
-            width: '330px', flexShrink: 0, background: '#F8FAFC',
-            borderRight: '1px solid #E2E8F0', padding: '20px 20px',
+            width: '330px', flexShrink: 0, background: '#F7F8FD',
+            borderRight: '1px solid #E3E7F5', padding: '20px 20px',
             display: 'flex', flexDirection: 'column', gap: 18, overflowY: 'auto'
           }}>
-            {/* Mode Selector Tabs (No 'EXPORT MODE' text label) */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, background: '#E2E8F0', padding: 3, borderRadius: 8 }}>
-              {[
-                { key: 'bulk', label: 'Clinic Report' },
-                { key: 'single', label: 'Patient Record' }
-              ].map(t => (
-                <button key={t.key} type="button" onClick={() => switchMode(t.key)}
-                  style={{
-                    padding: '8px 10px', border: 'none', borderRadius: 6,
-                    background: mode === t.key ? '#FFFFFF' : 'transparent',
-                    color: mode === t.key ? '#0F172A' : '#64748B',
-                    fontWeight: mode === t.key ? 700 : 600, fontSize: '.78125rem',
-                    boxShadow: mode === t.key ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                    cursor: 'pointer', fontFamily: 'inherit', transition: 'all .15s'
-                  }}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-
             {mode === 'bulk' ? (
               <>
                 {/* Report Period Selector */}
@@ -3087,7 +3899,7 @@ doc.text('___________', pageWidth - 20 - colWidth / 2, y + 6, { align: 'center' 
                     onChange={e => setPeriod(e.target.value)}
                     style={{
                       width: '100%', padding: '9px 12px', fontSize: '.8125rem', fontWeight: 600, color: '#0F172A',
-                      border: '1px solid #CBD5E1', borderRadius: 8, background: '#FFFFFF', outline: 'none', cursor: 'pointer',
+                      border: '1px solid #CBD5E1', borderRadius: 12, background: '#FFFFFF', outline: 'none', cursor: 'pointer',
                       boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
                     }}
                   >
@@ -3108,7 +3920,7 @@ doc.text('___________', pageWidth - 20 - colWidth / 2, y + 6, { align: 'center' 
                     onChange={e => setExportFormat(e.target.value)}
                     style={{
                       width: '100%', padding: '9px 12px', fontSize: '.8125rem', fontWeight: 600, color: '#0F172A',
-                      border: '1px solid #CBD5E1', borderRadius: 8, background: '#FFFFFF', outline: 'none', cursor: 'pointer',
+                      border: '1px solid #CBD5E1', borderRadius: 12, background: '#FFFFFF', outline: 'none', cursor: 'pointer',
                       boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
                     }}
                   >
@@ -3119,32 +3931,18 @@ doc.text('___________', pageWidth - 20 - colWidth / 2, y + 6, { align: 'center' 
               </>
             ) : (
               <>
-                {/* Search Patient */}
+                {/* Active Patient Info Card (Fixed to current patient) */}
                 <div>
                   <label style={{ display: 'block', fontSize: '.71875rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 6 }}>
-                    PATIENT SELECTION:
+                    TARGET PATIENT RECORD:
                   </label>
-                  <div style={{ position: 'relative' }}>
-                    <input
-                      type="text"
-                      placeholder="Search patient by name or MRN..."
-                      value={patientQuery}
-                      onChange={e => { setPatientQuery(e.target.value); setSelectedPatient(null); }}
-                      style={{ width: '100%', padding: '9px 12px', fontSize: '.8125rem', border: '1px solid #CBD5E1', borderRadius: 8, background: '#fff', color: '#0F172A', outline: 'none' }}
-                    />
-                    {matchingPatients.length > 0 && (
-                      <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: '#fff', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 10, maxHeight: 200, overflowY: 'auto' }}>
-                        {matchingPatients.map(p => (
-                          <button key={p.firestoreId || p.id} type="button"
-                            onClick={() => { setSelectedPatient(p); setPatientQuery(formatTitleCase(p.name)); }}
-                            style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', border: 'none', borderBottom: '1px solid var(--border)', background: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}
-                          >
-                            <div style={{ fontSize: '.8125rem', fontWeight: 600, color: 'var(--text)' }}>{formatTitleCase(p.name)}</div>
-                            <div style={{ fontSize: '.6875rem', color: 'var(--muted)', marginTop: 1 }}>{p.id || p.mrn || '—'}</div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                  <div style={{ background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 12, padding: '10px 14px', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+                    <div style={{ fontSize: '.8125rem', fontWeight: 800, color: '#0F172A' }}>
+                      {formatTitleCase(selectedPatient?.name || '—')}
+                    </div>
+                    <div style={{ fontSize: '.71875rem', color: '#64748B', marginTop: 2 }}>
+                      MRN: <strong style={{ color: '#3B50DF' }}>{selectedPatient?.id || selectedPatient?.mrn || '—'}</strong> · {selectedPatient?.age ? `${selectedPatient.age} yrs` : ''} · {selectedPatient?.sex || '—'}
+                    </div>
                   </div>
                 </div>
 
@@ -3158,7 +3956,7 @@ doc.text('___________', pageWidth - 20 - colWidth / 2, y + 6, { align: 'center' 
                     onChange={e => handleDocTypeChange(e.target.value)}
                     style={{
                       width: '100%', padding: '9px 12px', fontSize: '.8125rem', fontWeight: 600, color: '#0F172A',
-                      border: '1px solid #CBD5E1', borderRadius: 8, background: '#FFFFFF', outline: 'none', cursor: 'pointer',
+                      border: '1px solid #CBD5E1', borderRadius: 12, background: '#FFFFFF', outline: 'none', cursor: 'pointer',
                       boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
                     }}
                   >
@@ -3179,8 +3977,8 @@ doc.text('___________', pageWidth - 20 - colWidth / 2, y + 6, { align: 'center' 
                     onClick={runBulkExport}
                     disabled={preview.length === 0}
                     style={{
-                      width: '100%', height: 42, padding: '0 16px', borderRadius: 8, border: 'none',
-                      background: '#0F172A', color: '#FFFFFF', fontSize: '.8125rem', fontWeight: 700,
+                      width: '100%', height: 42, padding: '0 16px', borderRadius: 12, border: '1px solid transparent',
+                      background: '#3B50DF', color: '#FFFFFF', fontSize: '.8125rem', fontWeight: 700,
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer',
                       opacity: preview.length === 0 ? 0.5 : 1
                     }}
@@ -3192,7 +3990,7 @@ doc.text('___________', pageWidth - 20 - colWidth / 2, y + 6, { align: 'center' 
                     onClick={exportPrint}
                     disabled={preview.length === 0}
                     style={{
-                      width: '100%', height: 42, padding: '0 16px', borderRadius: 8, border: '1px solid #CBD5E1',
+                      width: '100%', height: 42, padding: '0 16px', borderRadius: 12, border: '1px solid #CBD5E1',
                       background: '#FFFFFF', color: '#0F172A', fontSize: '.8125rem', fontWeight: 700,
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer',
                       opacity: preview.length === 0 ? 0.5 : 1
@@ -3208,8 +4006,8 @@ doc.text('___________', pageWidth - 20 - colWidth / 2, y + 6, { align: 'center' 
                     onClick={() => exportSinglePatientPdf(selectedPatient)}
                     disabled={!selectedPatient}
                     style={{
-                      width: '100%', height: 42, padding: '0 16px', borderRadius: 8, border: 'none',
-                      background: '#0F172A', color: '#FFFFFF', fontSize: '.8125rem', fontWeight: 700,
+                      width: '100%', height: 42, padding: '0 16px', borderRadius: 12, border: '1px solid transparent',
+                      background: '#3B50DF', color: '#FFFFFF', fontSize: '.8125rem', fontWeight: 700,
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer',
                       opacity: !selectedPatient ? 0.5 : 1
                     }}
@@ -3221,7 +4019,7 @@ doc.text('___________', pageWidth - 20 - colWidth / 2, y + 6, { align: 'center' 
                     onClick={() => printSinglePatientReport(selectedPatient)}
                     disabled={!selectedPatient}
                     style={{
-                      width: '100%', height: 42, padding: '0 16px', borderRadius: 8, border: '1px solid #CBD5E1',
+                      width: '100%', height: 42, padding: '0 16px', borderRadius: 12, border: '1px solid #CBD5E1',
                       background: '#FFFFFF', color: '#0F172A', fontSize: '.8125rem', fontWeight: 700,
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer',
                       opacity: !selectedPatient ? 0.5 : 1
@@ -3243,10 +4041,10 @@ doc.text('___________', pageWidth - 20 - colWidth / 2, y + 6, { align: 'center' 
                 }}
                 disabled={mode === 'bulk' ? preview.length === 0 : !selectedPatient}
                 style={{
-                  width: '100%', height: 42, padding: '0 16px', borderRadius: 8,
-                  border: showEmailInput ? '1px solid #0F172A' : '1px solid #CBD5E1',
-                  background: showEmailInput ? '#F1F5F9' : '#FFFFFF',
-                  color: '#0F172A',
+                  width: '100%', height: 42, padding: '0 16px', borderRadius: 12,
+                  border: showEmailInput ? '1px solid #3B50DF' : '1px solid #CBD5E1',
+                  background: showEmailInput ? '#EEF2FF' : '#FFFFFF',
+                  color: showEmailInput ? '#3B50DF' : '#0F172A',
                   fontSize: '.8125rem', fontWeight: 700,
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer',
                   opacity: (mode === 'bulk' ? preview.length === 0 : !selectedPatient) ? 0.5 : 1
@@ -3273,7 +4071,7 @@ doc.text('___________', pageWidth - 20 - colWidth / 2, y + 6, { align: 'center' 
                         ? sendReportEmail(emailTo, `K&A Clinic — ${period.charAt(0).toUpperCase() + period.slice(1)} Report (${periodLabel()})`, buildBulkReportHtml(preview))
                         : emailSinglePatientPdf(selectedPatient, emailTo)
                     }
-                    style={{ width: '100%', height: 38, background: '#0F172A', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: '.8125rem', cursor: 'pointer' }}
+                    style={{ width: '100%', height: 38, background: '#3B50DF', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: '.8125rem', cursor: 'pointer' }}
                   >
                     {sending ? 'Sending…' : 'Send via Email'}
                   </button>
@@ -3284,48 +4082,56 @@ doc.text('___________', pageWidth - 20 - colWidth / 2, y + 6, { align: 'center' 
           </div>
 
           {/* RIGHT PANEL: Live Paper Document Preview Workspace (Matches PDF Viewer Reference) */}
-          <div style={{ flex: 1, background: '#1E293B', padding: '16px 24px 24px', overflow: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            
-            {/* Top Centered Dark PDF Viewer Toolbar */}
+          <div style={{ flex: 1, background: '#EDF0FA', padding: '16px 24px 24px', overflow: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+
+            {/* Top Centered Viewer Toolbar — light, to match the card */}
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-              background: '#1E293B', padding: '6px 16px', borderRadius: 8,
-              color: '#FFFFFF', fontSize: '.8125rem', fontWeight: 600,
-              boxShadow: '0 4px 12px rgba(0,0,0,0.3)', marginBottom: 16, flexShrink: 0,
+              background: '#FFFFFF', padding: '6px 16px', borderRadius: 12,
+              border: '1px solid #E2E8F0',
+              color: '#334155', fontSize: '.8125rem', fontWeight: 600,
+              boxShadow: '0 2px 8px rgba(15,23,42,0.06)', marginBottom: 16, flexShrink: 0,
               position: 'sticky', top: 0, zIndex: 10
             }}>
               {/* Page indicator */}
-              <span style={{ fontSize: '.78125rem', color: '#CBD5E1' }}>1 / 1</span>
-              
-              <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.2)', margin: '0 4px' }} />
-              
+              <span style={{ fontSize: '.78125rem', color: '#64748B' }}>1 / 1</span>
+
+              <div style={{ width: 1, height: 16, background: '#E2E8F0', margin: '0 4px' }} />
+
               {/* Zoom controls */}
-              <button type="button" onClick={() => setZoomLevel(z => Math.max(0.4, Math.round((z - 0.1) * 100) / 100))} style={{ background: 'transparent', border: 'none', color: '#FFF', fontSize: '1.1rem', fontWeight: 800, cursor: 'pointer', padding: '0 6px' }} title="Zoom Out">-</button>
-              
-              <span style={{ minWidth: 46, textAlign: 'center', fontWeight: 700, color: '#FFFFFF', background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: 4, fontSize: '.78125rem' }}>
+              <button type="button" onClick={() => setZoomLevel(z => Math.max(0.4, Math.round((z - 0.1) * 100) / 100))} style={{ background: 'transparent', border: 'none', color: '#334155', fontSize: '1.1rem', fontWeight: 800, cursor: 'pointer', padding: '0 6px' }} title="Zoom Out">-</button>
+
+              <span style={{ minWidth: 46, textAlign: 'center', fontWeight: 700, color: '#0F172A', background: '#F1F5F9', padding: '2px 8px', borderRadius: 6, fontSize: '.78125rem' }}>
                 {Math.round(zoomLevel * 100)}%
               </span>
-              
-              <button type="button" onClick={() => setZoomLevel(z => Math.min(1.6, Math.round((z + 0.1) * 100) / 100))} style={{ background: 'transparent', border: 'none', color: '#FFF', fontSize: '1.1rem', fontWeight: 800, cursor: 'pointer', padding: '0 6px' }} title="Zoom In">+</button>
-              
-              <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.2)', margin: '0 4px' }} />
-              
+
+              <button type="button" onClick={() => setZoomLevel(z => Math.min(1.6, Math.round((z + 0.1) * 100) / 100))} style={{ background: 'transparent', border: 'none', color: '#334155', fontSize: '1.1rem', fontWeight: 800, cursor: 'pointer', padding: '0 6px' }} title="Zoom In">+</button>
+
+              <div style={{ width: 1, height: 16, background: '#E2E8F0', margin: '0 4px' }} />
+
               {/* Fit to Page */}
-              <button type="button" onClick={() => setZoomLevel(0.85)} style={{ background: 'transparent', border: 'none', color: '#FFF', fontSize: '.9rem', cursor: 'pointer', padding: '0 4px' }} title="Fit to Page">↕</button>
-              
+              <button type="button" onClick={() => setZoomLevel(0.85)} style={{ background: 'transparent', border: 'none', color: '#334155', fontSize: '.9rem', cursor: 'pointer', padding: '0 4px' }} title="Fit to Page">↕</button>
+
               {/* Rotate Page */}
-              <button type="button" onClick={() => setRotation(r => (r + 90) % 360)} style={{ background: 'transparent', border: 'none', color: '#FFF', fontSize: '1rem', cursor: 'pointer', padding: '0 4px' }} title="Rotate Page">↻</button>
+              <button type="button" onClick={() => setRotation(r => (r + 90) % 360)} style={{ background: 'transparent', border: 'none', color: '#334155', fontSize: '1rem', cursor: 'pointer', padding: '0 4px' }} title="Rotate Page">↻</button>
             </div>
 
-            {/* Paper Sheet Preview Container (Scales as a whole paper sheet!) */}
+            {/* Paper Sheet Preview Container (Scales as a whole paper sheet!)
+                The sheet turns landscape for the Excel export, matching the
+                page setup the .xls actually carries. */}
             <div style={{
-              width: '820px', height: '1060px',
-              background: '#FFFFFF', borderRadius: 4, boxShadow: '0 8px 30px rgba(0,0,0,0.5)',
+              width: isLandscapeSheet ? '1060px' : '820px',
+              height: isLandscapeSheet ? '760px' : '1060px',
+              background: '#FFFFFF', borderRadius: 6,
+              border: '1px solid #D8DEF0',
+              boxShadow: '0 6px 24px rgba(15,23,42,0.14)',
               overflow: 'hidden', display: 'flex', flexDirection: 'column', flexShrink: 0,
               transform: `scale(${zoomLevel}) ${rotation ? `rotate(${rotation}deg)` : ''}`,
               transformOrigin: 'top center',
               transition: 'transform 0.15s ease',
-              marginBottom: zoomLevel < 1 ? `-${(1 - zoomLevel) * 1060}px` : `${(zoomLevel - 1) * 200}px`
+              marginBottom: zoomLevel < 1
+                ? `-${(1 - zoomLevel) * (isLandscapeSheet ? 760 : 1060)}px`
+                : `${(zoomLevel - 1) * 200}px`
             }}>
               {mode === 'bulk' ? (
                 previewPane(exportFormat === 'xls' ? buildExcelPreviewHtml(preview, periodLabel()) : buildBulkReportHtml(preview))
@@ -3898,6 +4704,7 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
+  const [searchFocused, setSearchFocused] = useState(false);
   const [debouncedSearch, setDebouncedSearch] = useState('');
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
@@ -3936,6 +4743,14 @@ export default function App() {
             onClose={() => setEditPatient(null)}
             onSave={handleEditSave}
             inventoryItems={inventoryItems}
+          />
+        )}
+        {exportModal && (
+          <ExportReportModal
+            patients={patients}
+            initialPatient={typeof exportModal === 'object' ? exportModal : livePatient}
+            onClose={() => setExportModal(false)}
+            onToast={showToast}
           />
         )}
         {pinTarget && (
@@ -4030,13 +4845,30 @@ export default function App() {
             {/* Search */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', flex: 1, minWidth: 280 }}>
               <div style={{ position: 'relative', flex: 1, maxWidth: '22rem', minWidth: '16rem' }}>
-                <svg style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', opacity: .4, pointerEvents: 'none' }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0F172A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+                <svg
+                  style={{
+                    position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)',
+                    opacity: searchFocused ? 1 : .4, stroke: searchFocused ? '#3B50DF' : '#0F172A',
+                    pointerEvents: 'none', transition: 'all 0.15s ease'
+                  }}
+                  width="14" height="14" viewBox="0 0 24 24" fill="none" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
+                >
+                  <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
                 <input
                   type="text"
                   placeholder="Search by name, email, MRN, contact..."
                   value={search}
+                  onFocus={() => setSearchFocused(true)}
+                  onBlur={() => setSearchFocused(false)}
                   onChange={e => { setSearch(e.target.value); setCurrentPage(1); }}
-                  style={{ width: '100%', padding: '8px 12px 8px 34px', fontSize: '.8125rem', border: '1.5px solid #CBD5E1', borderRadius: '.5rem', background: '#FFFFFF', color: '#0F172A', outline: 'none' }}
+                  style={{
+                    width: '100%', padding: '8px 12px 8px 34px', fontSize: '.8125rem',
+                    border: searchFocused ? '1.5px solid #3B50DF' : '1.5px solid #CBD5E1',
+                    borderRadius: '.5rem', background: '#FFFFFF', color: '#0F172A', outline: 'none',
+                    boxShadow: searchFocused ? '0 0 0 3.5px rgba(59,80,223,0.18)' : 'none',
+                    transition: 'all 0.15s ease'
+                  }}
                 />
               </div>
             </div>
@@ -4095,25 +4927,30 @@ export default function App() {
                 )}
               </div>
 
+              {/* Export Clinic Report Button — Clean White Background */}
               <button
                 type="button"
                 className="btn btn-outline btn-sm"
                 onClick={() => setExportModal(true)}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '.78125rem', fontWeight: 600, padding: '7px 12px' }}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '.78125rem', fontWeight: 600,
+                  padding: '7px 14px', background: '#FFFFFF', border: '1.5px solid #CBD5E1', color: '#0F172A',
+                  borderRadius: '.5rem', cursor: 'pointer', transition: 'all 0.15s ease'
+                }}
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-                Export Report
+                Export Clinic Report
               </button>
 
-              {/* Add Patient Button — Tight inline placement */}
+              {/* Add Patient Button — Royal Blue (#3B50DF) */}
               <button
                 type="button"
                 className="btn"
                 onClick={() => setModal(true)}
                 style={{
-                  background: '#C8151A', color: '#fff', border: 'none', padding: '7px 16px', borderRadius: '.5rem',
+                  background: '#3B50DF', color: '#FFFFFF', border: 'none', padding: '7px 16px', borderRadius: '.5rem',
                   fontWeight: 700, fontSize: '.78125rem', display: 'inline-flex', alignItems: 'center', gap: 6,
-                  boxShadow: '0 2px 4px rgba(200,21,26,0.18)', cursor: 'pointer'
+                  boxShadow: '0 2px 8px rgba(59,80,223,0.25)', cursor: 'pointer', transition: 'all 0.15s ease'
                 }}
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
