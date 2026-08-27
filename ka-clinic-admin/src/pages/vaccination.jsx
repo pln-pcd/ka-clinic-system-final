@@ -504,10 +504,10 @@ export default function VaccinationTrackerPage({ selectedPatientId }) {
   const paginated  = filtered.slice((safePage - 1) * itemsPerPage, safePage * itemsPerPage);
 
   const stats = [
-    { label: 'Total Patients',     value: patients.length,                                                icon: Users,       sub: 'Active & Master Records', color: '#475569', tint: '#F1F5F9', border: '#E2E8F0' },
-    { label: 'Completed',          value: patients.filter(p => deriveStatus(p) === 'completed').length,   icon: CheckCircle, sub: 'Fully Vaccinated',         color: '#475569', tint: '#F1F5F9', border: '#E2E8F0' },
-    { label: 'In Progress',        value: patients.filter(p => deriveStatus(p) === 'in-progress').length, icon: Clock,       sub: 'Ongoing Doses',            color: '#475569', tint: '#F1F5F9', border: '#E2E8F0' },
-    { label: 'Overdue Follow-ups', value: patients.filter(p => deriveStatus(p) === 'overdue').length,     icon: AlertCircle, sub: 'Attention Required',       color: '#475569', tint: '#F1F5F9', border: '#E2E8F0' },
+    { label: 'Total Patients',     value: patients.length,                                                icon: Users,       sub: 'Active & Master Records', color: '#3B50DF', tint: '#EEF2FF', border: '#E0E7FF' },
+    { label: 'Completed',          value: patients.filter(p => deriveStatus(p) === 'completed').length,   icon: CheckCircle, sub: 'Fully Vaccinated',         color: '#059669', tint: '#ECFDF5', border: '#A7F3D0' },
+    { label: 'In Progress',        value: patients.filter(p => deriveStatus(p) === 'in-progress').length, icon: Clock,       sub: 'Ongoing Doses',            color: '#2563EB', tint: '#EFF6FF', border: '#BFDBFE' },
+    { label: 'Overdue Follow-ups', value: patients.filter(p => deriveStatus(p) === 'overdue').length,     icon: AlertCircle, sub: 'Attention Required',       color: '#DC2626', tint: '#FEF2F2', border: '#FECACA' },
   ];
 
   const statusBadge = (s) => {
@@ -557,25 +557,23 @@ export default function VaccinationTrackerPage({ selectedPatientId }) {
     <div style={{ padding: '20px 28px 36px', maxWidth: '1400px', margin: '0 auto' }}>
       <div className="space-y-5">
         
-        {/* ── Summary Metric Cards — white cards with a tinted icon chip.
-             Color is reserved for the two metrics where it means something
-             (green = completed, red = overdue); the two plain running
-             counts stay neutral slate rather than dressing every card in
-             saturated color. ── */}
+        {/* ── Summary Metric Cards ── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {stats.map((s, i) => (
-            <div key={i} style={{
-              background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '1rem',
-              padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 14,
-              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-            }}>
-              <div style={{ width: 42, height: 42, borderRadius: 11, background: s.tint, border: `1px solid ${s.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <s.icon size={20} strokeWidth={2.1} color={s.color} />
+            <div
+              key={i}
+              className="bg-white border border-slate-200/80 rounded-2xl p-4 sm:p-5 flex items-center gap-4 shadow-2xs hover:shadow-xs transition-all"
+            >
+              <div
+                className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 shadow-2xs"
+                style={{ background: s.tint, border: `1px solid ${s.border}`, color: s.color }}
+              >
+                <s.icon size={20} strokeWidth={2.2} />
               </div>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#0F172A', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{s.value}</div>
-                <div style={{ fontSize: '.75rem', fontWeight: 700, color: '#334155', marginTop: 3 }}>{s.label}</div>
-                <div style={{ fontSize: '.6875rem', color: '#94A3B8', fontWeight: 600, marginTop: 1 }}>{s.sub}</div>
+              <div className="min-w-0">
+                <div className="text-2xl font-extrabold text-slate-900 leading-none tabular-nums">{s.value}</div>
+                <div className="text-xs font-bold text-slate-700 mt-1.5 truncate">{s.label}</div>
+                <div className="text-[11px] font-medium text-slate-400 mt-0.5 truncate">{s.sub}</div>
               </div>
             </div>
           ))}
@@ -809,7 +807,7 @@ export default function VaccinationTrackerPage({ selectedPatientId }) {
                   onClick={() => setCurrentPage(pg)}
                   style={{
                     width: 28, height: 28, borderRadius: '.375rem', border: '1px solid #CBD5E1',
-                    background: safePage === pg ? '#C8151A' : '#FFFFFF',
+                    background: safePage === pg ? '#3B50DF' : '#FFFFFF',
                     color: safePage === pg ? '#FFFFFF' : '#334155',
                     fontSize: '.75rem', fontWeight: safePage === pg ? 800 : 600,
                     cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'

@@ -289,10 +289,10 @@ export default function AdminLogin({ onSuccess, onBack }) {
   const busy = loading;
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 sm:p-6 bg-slate-100 font-sans selection:bg-red-600 selection:text-white relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center p-4 sm:p-6 bg-slate-100 font-sans selection:bg-indigo-600 selection:text-white relative overflow-hidden">
 
       {/* Light Dominant Background Aura Glows */}
-      <div className="absolute top-[-10%] left-[-5%] w-[45vw] h-[45vw] bg-red-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-[-10%] left-[-5%] w-[45vw] h-[45vw] bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-5%] w-[45vw] h-[45vw] bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
 
       {/* ── LANDSCAPE EXPANDED MODAL CARD (Larger Landscape Layout) ── */}
@@ -313,18 +313,18 @@ export default function AdminLogin({ onSuccess, onBack }) {
             )}
 
             <div className="flex flex-col items-center text-center pt-1">
-              <div className="w-16 h-16 rounded-2xl bg-white border border-slate-100 shadow-[0_10px_30px_rgba(227,24,55,0.16)] flex items-center justify-center p-2.5 mb-2.5">
+              <div className="w-16 h-16 rounded-2xl bg-white border border-slate-100 shadow-[0_10px_30px_rgba(59,80,223,0.16)] flex items-center justify-center p-2.5 mb-2.5">
                 <img src="/assets/dashboard/logo-white-nobg.png" alt="K&A Clinic" className="w-full h-full object-contain" />
               </div>
               <div className="font-display font-extrabold text-2xl tracking-tight text-slate-900 leading-none">K&A Clinic</div>
-              <div className="text-[10px] font-bold text-red-600 uppercase tracking-widest mt-1.5">Anti-Rabies &amp; Animal Bite Center</div>
+              <div className="text-[10px] font-bold text-[#3B50DF] uppercase tracking-widest mt-1.5">Anti-Rabies &amp; Animal Bite Center</div>
             </div>
           </div>
 
           {otpStep ? (
             /* ── Email-OTP Verification Step (Batch 3) ── */
             <div className="my-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="text-xs font-bold text-red-600 uppercase tracking-widest mb-1.5 flex items-center gap-2">
+              <div className="text-xs font-bold text-[#3B50DF] uppercase tracking-widest mb-1.5 flex items-center gap-2">
                 <Key className="w-4 h-4" /> — Verification
               </div>
               <h2 className="font-display text-2xl font-extrabold text-slate-900 mb-1.5">Enter Verification Code</h2>
@@ -333,7 +333,7 @@ export default function AdminLogin({ onSuccess, onBack }) {
               </p>
 
               {otpError && (
-                <div className="flex items-start gap-2 bg-red-50 text-red-600 text-xs p-3 rounded-xl border border-red-100 mb-4 animate-in slide-in-from-top-2">
+                <div className="flex items-start gap-2 bg-rose-50 text-rose-600 text-xs p-3 rounded-xl border border-rose-100 mb-4 animate-in slide-in-from-top-2">
                   <Info className="w-4 h-4 mt-0.5 shrink-0" />
                   <p className="font-semibold">{otpError}</p>
                 </div>
@@ -592,11 +592,11 @@ export default function AdminLogin({ onSuccess, onBack }) {
         </div>
 
         {/* ── RIGHT PANEL: Dose-Schedule Dashboard Illustration (dark) ── */}
-        <div className="w-full md:w-1/2 p-8 sm:p-10 md:p-12 bg-gradient-to-br from-slate-900 via-slate-950 to-[#1a0509] flex flex-col justify-between relative overflow-hidden border-l border-white/5 h-full">
+        <div className="w-full md:w-1/2 p-8 sm:p-10 md:p-12 bg-gradient-to-br from-slate-900 via-slate-950 to-[#0c1222] flex flex-col justify-between relative overflow-hidden border-l border-white/5 h-full">
 
           {/* Ambient glow + texture */}
-          <div className="absolute -top-16 -right-10 w-72 h-72 bg-red-600/25 rounded-full blur-[90px] pointer-events-none animate-drift-slow" />
-          <div className="absolute -bottom-24 -left-16 w-80 h-80 bg-red-900/30 rounded-full blur-[100px] pointer-events-none animate-drift-slower" />
+          <div className="absolute -top-16 -right-10 w-72 h-72 bg-indigo-600/25 rounded-full blur-[90px] pointer-events-none animate-drift-slow" />
+          <div className="absolute -bottom-24 -left-16 w-80 h-80 bg-blue-900/30 rounded-full blur-[100px] pointer-events-none animate-drift-slower" />
           <div className="absolute inset-0 opacity-[0.05] [background-image:radial-gradient(circle,white_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none" />
 
           {/* Illustration: changes with the active slide below */}
@@ -614,11 +614,11 @@ export default function AdminLogin({ onSuccess, onBack }) {
                   </div>
 
                   <div className="relative bg-white rounded-3xl border border-white/60 shadow-[0_30px_80px_rgba(0,0,0,0.5)] p-6 overflow-hidden transition-transform duration-500 hover:-translate-y-1.5">
-                    <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-red-500 via-rose-400 to-red-600" />
-                    <Heart className="absolute -right-6 -top-5 w-32 h-32 text-red-50 rotate-12 pointer-events-none" fill="currentColor" strokeWidth={0} />
+                    <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-indigo-500 via-blue-400 to-indigo-600" />
+                    <Heart className="absolute -right-6 -top-5 w-32 h-32 text-indigo-50 rotate-12 pointer-events-none" fill="currentColor" strokeWidth={0} />
 
                     <div className="relative flex items-center gap-1.5 mb-5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-indigo-400" />
                       <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
                       <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
                       <span className="ml-auto text-[10px] font-bold text-slate-400 tracking-wide">MRN-00214</span>
@@ -626,7 +626,7 @@ export default function AdminLogin({ onSuccess, onBack }) {
 
                     <div className="relative flex items-center gap-3 mb-5">
                       <div className="relative shrink-0">
-                        <div className="w-11 h-11 rounded-full bg-gradient-to-br from-red-500 to-red-700 text-white flex items-center justify-center font-extrabold text-sm ring-4 ring-red-50">
+                        <div className="w-11 h-11 rounded-full bg-gradient-to-br from-indigo-600 to-[#3B50DF] text-white flex items-center justify-center font-extrabold text-sm ring-4 ring-indigo-50">
                           JD
                         </div>
                         <span className="absolute -right-0.5 -bottom-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white" />
@@ -670,11 +670,11 @@ export default function AdminLogin({ onSuccess, onBack }) {
                   </div>
 
                   <div className="relative bg-white rounded-3xl border border-white/60 shadow-[0_30px_80px_rgba(0,0,0,0.5)] p-6 overflow-hidden transition-transform duration-500 hover:-translate-y-1.5">
-                    <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-red-500 via-rose-400 to-red-600" />
-                    <Syringe className="absolute -right-4 -bottom-6 w-32 h-32 text-red-50 -rotate-12 pointer-events-none" strokeWidth={1.25} />
+                    <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-indigo-500 via-blue-400 to-indigo-600" />
+                    <Syringe className="absolute -right-4 -bottom-6 w-32 h-32 text-indigo-50 -rotate-12 pointer-events-none" strokeWidth={1.25} />
 
                     <div className="relative flex items-center gap-1.5 mb-5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-indigo-400" />
                       <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
                       <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
                       <span className="ml-auto text-[10px] font-bold text-slate-400 tracking-wide">MRN-00214</span>
@@ -686,7 +686,7 @@ export default function AdminLogin({ onSuccess, onBack }) {
 
                     <div className="relative flex items-center justify-between mb-1 px-1">
                       <div className="absolute left-0 right-0 top-[13px] h-0.5 bg-slate-200" />
-                      <div className="absolute left-0 top-[13px] h-0.5 bg-gradient-to-r from-red-600 to-red-400" style={{ width: '78%' }} />
+                      <div className="absolute left-0 top-[13px] h-0.5 bg-gradient-to-r from-indigo-600 to-indigo-400" style={{ width: '78%' }} />
                       {[
                         { label: 'Day 0', done: true },
                         { label: 'Day 3', done: true },
@@ -695,17 +695,17 @@ export default function AdminLogin({ onSuccess, onBack }) {
                       ].map((step) => (
                         <div key={step.label} className="relative z-10 flex flex-col items-center gap-2">
                           {!step.done && (
-                            <span className="absolute top-0 w-7 h-7 rounded-full bg-red-400/60 animate-ping" />
+                            <span className="absolute top-0 w-7 h-7 rounded-full bg-indigo-400/60 animate-ping" />
                           )}
-                          <div className={`relative w-7 h-7 rounded-full flex items-center justify-center border-2 ${step.done ? 'bg-red-500 border-red-500' : 'bg-white border-red-500'}`}>
+                          <div className={`relative w-7 h-7 rounded-full flex items-center justify-center border-2 ${step.done ? 'bg-[#3B50DF] border-[#3B50DF]' : 'bg-white border-[#3B50DF]'}`}>
                             {step.done
                               ? <CheckCircle2 className="w-4 h-4 text-white" strokeWidth={2.5} />
-                              : <Clock className="w-3.5 h-3.5 text-red-500" />}
+                              : <Clock className="w-3.5 h-3.5 text-[#3B50DF]" />}
                           </div>
                           <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
                             {step.label}
                             {!step.done && (
-                              <span className="text-[8px] font-extrabold text-red-600 bg-red-50 px-1 py-0.5 rounded leading-none">DUE</span>
+                              <span className="text-[8px] font-extrabold text-[#3B50DF] bg-indigo-50 px-1 py-0.5 rounded leading-none">DUE</span>
                             )}
                           </span>
                         </div>
@@ -714,8 +714,8 @@ export default function AdminLogin({ onSuccess, onBack }) {
 
                     <div className="relative mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center shrink-0">
-                          <Syringe className="w-4 h-4 text-red-600" />
+                        <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
+                          <Syringe className="w-4 h-4 text-[#3B50DF]" />
                         </div>
                         <div>
                           <div className="text-xs font-bold text-slate-800 leading-none">Rabies Vaccine</div>
@@ -738,19 +738,19 @@ export default function AdminLogin({ onSuccess, onBack }) {
                   </div>
 
                   <div className="relative bg-white rounded-3xl border border-white/60 shadow-[0_30px_80px_rgba(0,0,0,0.5)] p-6 overflow-hidden transition-transform duration-500 hover:-translate-y-1.5">
-                    <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-red-500 via-rose-400 to-red-600" />
-                    <AlertTriangle className="absolute -right-5 -top-5 w-32 h-32 text-red-50 rotate-12 pointer-events-none" fill="currentColor" strokeWidth={0} />
+                    <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-indigo-500 via-blue-400 to-indigo-600" />
+                    <AlertTriangle className="absolute -right-5 -top-5 w-32 h-32 text-indigo-50 rotate-12 pointer-events-none" fill="currentColor" strokeWidth={0} />
 
                     <div className="relative flex items-center gap-1.5 mb-5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-indigo-400" />
                       <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
                       <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
                       <span className="ml-auto text-[10px] font-bold text-slate-400 tracking-wide">INC-00532</span>
                     </div>
 
                     <div className="relative flex items-center gap-3 mb-5">
-                      <div className="w-11 h-11 rounded-xl bg-red-50 flex items-center justify-center shrink-0">
-                        <AlertTriangle className="w-5 h-5 text-red-600" />
+                      <div className="w-11 h-11 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
+                        <AlertTriangle className="w-5 h-5 text-[#3B50DF]" />
                       </div>
                       <div>
                         <div className="text-sm font-bold text-slate-800 leading-none">New Bite Incident</div>
@@ -808,7 +808,7 @@ export default function AdminLogin({ onSuccess, onBack }) {
             <h2 className="font-display text-2xl font-extrabold text-white mb-2 tracking-tight">
               {SLIDES[slide].title}
             </h2>
-            <p className="text-rose-100/60 text-sm leading-relaxed mb-6 font-medium max-w-md">
+            <p className="text-slate-300 text-sm leading-relaxed mb-6 font-medium max-w-md">
               {SLIDES[slide].desc}
             </p>
 
@@ -821,7 +821,7 @@ export default function AdminLogin({ onSuccess, onBack }) {
                   onClick={() => setSlide(i)}
                   aria-label={`Show slide ${i + 1}: ${s.title}`}
                   aria-current={slide === i}
-                  className={`h-2 rounded-full transition-all duration-300 ${slide === i ? 'w-9 bg-red-500' : 'w-6 bg-white/15 hover:bg-white/30'}`}
+                  className={`h-2 rounded-full transition-all duration-300 ${slide === i ? 'w-9 bg-[#3B50DF]' : 'w-6 bg-white/15 hover:bg-white/30'}`}
                 />
               ))}
             </div>
@@ -836,7 +836,7 @@ export default function AdminLogin({ onSuccess, onBack }) {
         <div className="fixed inset-0 z-50 bg-white/95 backdrop-blur-md flex flex-col items-center justify-center animate-in fade-in zoom-in-95 duration-300">
           <div className="relative w-32 h-32 mb-5">
             {/* continuous processing ring */}
-            <div className="absolute inset-0 rounded-full border-2 border-dashed border-red-200 animate-spin-slow" />
+            <div className="absolute inset-0 rounded-full border-2 border-dashed border-indigo-200 animate-spin-slow" />
 
             {/* center success badge */}
             <div className="absolute inset-3 bg-emerald-50 rounded-full flex items-center justify-center border border-emerald-100 animate-pop-in">
@@ -846,17 +846,17 @@ export default function AdminLogin({ onSuccess, onBack }) {
             {/* orbiting sticker icons, staggered pop-in + gentle float */}
             <div className="absolute -top-1 -right-2 animate-pop-in" style={{ animationDelay: '180ms' }}>
               <div className="w-9 h-9 bg-white rounded-xl shadow-lg shadow-slate-900/10 border border-slate-100 flex items-center justify-center animate-float">
-                <ShieldCheck className="w-4 h-4 text-red-600" />
+                <ShieldCheck className="w-4 h-4 text-[#3B50DF]" />
               </div>
             </div>
             <div className="absolute bottom-0 -left-3 animate-pop-in" style={{ animationDelay: '340ms' }}>
               <div className="w-9 h-9 bg-white rounded-xl shadow-lg shadow-slate-900/10 border border-slate-100 flex items-center justify-center animate-float">
-                <Syringe className="w-4 h-4 text-red-600" />
+                <Syringe className="w-4 h-4 text-[#3B50DF]" />
               </div>
             </div>
             <div className="absolute top-8 -left-5 animate-pop-in" style={{ animationDelay: '500ms' }}>
               <div className="w-7 h-7 bg-white rounded-full shadow-lg shadow-slate-900/10 border border-slate-100 flex items-center justify-center animate-float">
-                <Heart className="w-3.5 h-3.5 text-red-500" fill="currentColor" strokeWidth={0} />
+                <Heart className="w-3.5 h-3.5 text-[#3B50DF]" fill="currentColor" strokeWidth={0} />
               </div>
             </div>
           </div>

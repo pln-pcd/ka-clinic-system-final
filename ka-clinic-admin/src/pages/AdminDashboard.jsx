@@ -210,6 +210,7 @@ function PageTransition({ children, pageKey }) {
 export default function AdminDashboard({ onLogout }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activePage,  setActivePage]  = useState('dashboard');
+  const [openAddPatientModal, setOpenAddPatientModal] = useState(false);
   const [currentMonth,setCurrentMonth]= useState(new Date());
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
@@ -302,11 +303,17 @@ export default function AdminDashboard({ onLogout }) {
     const handleOpenPatientRecord = () => {
       setActivePage('patients');
     };
+    const handleOpenAddPatientModal = () => {
+      setActivePage('patients');
+      setOpenAddPatientModal(true);
+    };
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('open-patient-record', handleOpenPatientRecord);
+    window.addEventListener('open-add-patient-modal', handleOpenAddPatientModal);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('open-patient-record', handleOpenPatientRecord);
+      window.removeEventListener('open-add-patient-modal', handleOpenAddPatientModal);
     };
   }, []);
 
@@ -1194,7 +1201,10 @@ export default function AdminDashboard({ onLogout }) {
                           {/* 2-Column responsive action grid filling card height evenly */}
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-3 flex-1">
                             <button
-                              onClick={() => setActivePage('patients')}
+                              onClick={() => {
+                                setActivePage('patients');
+                                setOpenAddPatientModal(true);
+                              }}
                               className="group flex items-center justify-between p-3.5 px-4 rounded-2xl text-xs font-semibold border border-slate-200/70 transition-all cursor-pointer bg-slate-50/60 hover:bg-white hover:border-rose-200 text-slate-800 hover:text-rose-900 shadow-2xs hover:shadow-xs hover:-translate-y-0.5 h-full"
                             >
                               <span className="flex items-center gap-2.5 truncate">
@@ -1488,7 +1498,14 @@ export default function AdminDashboard({ onLogout }) {
             )}
 
             {activePage === 'appointments' && <div className="h-full overflow-y-auto"><AppointmentPage/></div>}
-            {activePage === 'patients'     && <div className="h-full overflow-y-auto"><PatientRecordsPage/></div>}
+            {activePage === 'patients'     && (
+              <div className="h-full overflow-y-auto">
+                <PatientRecordsPage
+                  initialOpenAddModal={openAddPatientModal}
+                  onAddModalClosed={() => setOpenAddPatientModal(false)}
+                />
+              </div>
+            )}
             {activePage === 'vaccination'  && <div className="h-full overflow-y-auto"><VaccinationTrackerPage selectedPatientId={selectedOverduePatientId}/></div>}
             {activePage === 'inventory'    && <div className="h-full overflow-y-auto"><VaccineInventoryPage/></div>}
             {activePage === 'incidents'    && <div className="h-full overflow-y-auto"><IncidentMapPage/></div>}

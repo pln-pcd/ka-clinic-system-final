@@ -33,6 +33,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { db } from '../../config/firebase';
 import { moderateScale, scale, verticalScale } from '../../constants/scale';
 import { usePatientAuth } from '../../context/PatientAuthContext';
+import CustomAlertModal, { CustomAlertConfig } from '../../components/CustomAlertModal';
 const { width } = Dimensions.get('window');
 
 const C = {
@@ -241,6 +242,21 @@ export default function AppointmentsScreen() {
   const [vaccineType,        setVaccineType]        = useState<string>('');
   const [vaccineDropdownOpen,setVaccineDropdownOpen] = useState(false);
 
+  // ── Custom Alert Modal State ──────────────────────────────────────────────
+  const [alertConfig, setAlertConfig] = useState<CustomAlertConfig>({
+    visible: false,
+    title: '',
+    message: '',
+  });
+
+  const showAlert = (config: Omit<CustomAlertConfig, 'visible'>) => {
+    setAlertConfig({ ...config, visible: true });
+  };
+
+  const hideAlert = () => {
+    setAlertConfig(prev => ({ ...prev, visible: false }));
+  };
+
   const GENDER_OPTIONS = ['Male', 'Female', 'Other'];
 
   // ── Firestore: live appointments for this patient ─────────────────────────
@@ -345,8 +361,19 @@ export default function AppointmentsScreen() {
   const handleDayPress = (day: number) => {
     // Guests have no clinic record to attach an appointment to — clinic staff
     // can't act on a booking that isn't tied to a real patient.
-    if (user?.isAnonymous) {
-      alert('Guest accounts can\'t book appointments. Please sign up with your Medical Record Number (MRN) first.');
+    if (user?.isAnonymous || !mrn) {
+      showAlert({
+        type: 'guest',
+        title: 'Guest Account',
+        message: "Guest accounts can't book appointments. Please sign up with your Medical Record Number (MRN) first.",
+        primaryButtonText: 'Sign In / Register',
+        onPrimaryPress: () => {
+          hideAlert();
+          router.push('/auth/login');
+        },
+        secondaryButtonText: 'Dismiss',
+        onSecondaryPress: hideAlert,
+      });
       return;
     }
     const key  = toKey(viewYear, viewMonth, day);
@@ -387,13 +414,33 @@ export default function AppointmentsScreen() {
     if (!selectedKey || !selectedTime) return;
 
     if (!user) {
-      alert('Session expired. Please log in again.');
+      showAlert({
+        type: 'error',
+        title: 'Session Expired',
+        message: 'Your session has expired. Please log in again to continue.',
+        primaryButtonText: 'Log In',
+        onPrimaryPress: () => {
+          hideAlert();
+          router.replace('/auth/login');
+        },
+      });
       return;
     }
     // Firestore rules require a valid clinic MRN (patientId) to create an
     // appointment — guest sessions have no authorizedPatients record yet.
     if (!mrn) {
-      alert('Please sign in with your Medical Record Number (MRN) to book an appointment. Guest booking is not available yet — visit the clinic front desk to get registered.');
+      showAlert({
+        type: 'guest',
+        title: 'Registration Required',
+        message: 'Please sign in with your Medical Record Number (MRN) to book an appointment. Guest booking is not available yet — visit the clinic front desk to get registered.',
+        primaryButtonText: 'Sign In / Register',
+        onPrimaryPress: () => {
+          hideAlert();
+          router.push('/auth/login');
+        },
+        secondaryButtonText: 'Dismiss',
+        onSecondaryPress: hideAlert,
+      });
       return;
     }
 
@@ -454,11 +501,23 @@ export default function AppointmentsScreen() {
         setSelectedTime(null);
         setShowDetailsForm(false);
         setShowSlotModal(true);
-        alert('Sorry — another patient just booked this time slot. Please choose a different time.');
+        showAlert({
+          type: 'warning',
+          title: 'Time Slot Taken',
+          message: 'Sorry — another patient just booked this time slot. Please choose a different time.',
+          primaryButtonText: 'Choose Another Time',
+          onPrimaryPress: hideAlert,
+        });
       } else {
-        alert(e?.code === 'permission-denied'
-          ? 'Booking failed: you do not have permission to book. Please make sure you are signed in with a valid MRN.'
-          : `Booking failed: ${e?.message || 'Unknown error. Please try again.'}`);
+        showAlert({
+          type: 'error',
+          title: 'Booking Failed',
+          message: e?.code === 'permission-denied'
+            ? 'Booking failed: you do not have permission to book. Please make sure you are signed in with a valid MRN.'
+            : `Booking failed: ${e?.message || 'Unknown error. Please try again.'}`,
+          primaryButtonText: 'OK',
+          onPrimaryPress: hideAlert,
+        });
       }
     } finally {
       setSaving(false);
@@ -472,10 +531,23 @@ export default function AppointmentsScreen() {
         status: 'cancelled',
         updatedAt: Date.now(),
       });
+      showAlert({
+        type: 'info',
+        title: 'Appointment Cancelled',
+        message: 'Your appointment has been cancelled successfully.',
+        primaryButtonText: 'OK',
+        onPrimaryPress: hideAlert,
+      });
     } catch (e: any) {
-      alert(e?.code === 'permission-denied'
-        ? 'You do not have permission to cancel this appointment. Please contact the clinic front desk.'
-        : 'Could not cancel this appointment. Please try again.');
+      showAlert({
+        type: 'error',
+        title: 'Cancellation Failed',
+        message: e?.code === 'permission-denied'
+          ? 'You do not have permission to cancel this appointment. Please contact the clinic front desk.'
+          : 'Could not cancel this appointment. Please try again.',
+        primaryButtonText: 'OK',
+        onPrimaryPress: hideAlert,
+      });
     }
   };
 
@@ -1296,17 +1368,7 @@ export default function AppointmentsScreen() {
           <Text style={nav.label}>Chat</Text>
         </TouchableOpacity>
 
-        {/* Tab 4: Records */}
-        <TouchableOpacity
-          style={nav.tab}
-          activeOpacity={0.7}
-          onPress={() => router.navigate('/records')}
-        >
-          <Ionicons name="id-card-outline" size={24} color="#64748B" />
-          <Text style={nav.label}>Records</Text>
-        </TouchableOpacity>
-
-        {/* Tab 5: Account */}
+        {/* Tab 4: Account */}
         <TouchableOpacity
           style={nav.tab}
           activeOpacity={0.7}
@@ -1316,6 +1378,9 @@ export default function AppointmentsScreen() {
           <Text style={nav.label}>Account</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Custom Alert Modal */}
+      <CustomAlertModal config={alertConfig} onClose={hideAlert} />
     </View>
   );
 }

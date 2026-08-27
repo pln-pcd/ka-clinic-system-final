@@ -32,13 +32,13 @@ const EMPTY_FORM = {
 };
 
 const inputCls =
-  'w-full text-sm px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-gray-800 ' +
-  'outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100 focus:bg-white font-normal';
+  'w-full text-xs font-medium px-3 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-800 ' +
+  'outline-none transition focus:border-[#3B50DF] focus:ring-1 focus:ring-[#3B50DF]';
 
 function Field({ label, children, full }) {
   return (
-    <div className={`flex flex-col gap-1.5${full ? ' col-span-2' : ''}`}>
-      <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">{label}</label>
+    <div className={`flex flex-col gap-1.5${full ? ' sm:col-span-2' : ''}`}>
+      <label className="text-xs font-semibold text-slate-500">{label}</label>
       {children}
     </div>
   );
@@ -426,7 +426,7 @@ export default function IncidentMapPage() {
                   key={opt.key}
                   onClick={() => { setLayerFilter(opt.key); setLayerMenuOpen(false); }}
                   className={`flex items-center justify-between w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                    layerFilter === opt.key ? 'bg-red-50 text-red-700' : 'text-gray-600 hover:bg-gray-50'
+                    layerFilter === opt.key ? 'bg-indigo-50 text-[#3B50DF]' : 'text-gray-600 hover:bg-gray-50'
                   }`}
                 >
                   {opt.label}
@@ -534,109 +534,115 @@ export default function IncidentMapPage() {
       {/* ── Manual Pin Incident Modal ── */}
       {showModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto"
+          style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }}
           onClick={e => { if (e.target === e.currentTarget) closeModal(); }}
         >
-          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden">
+          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden border border-slate-200 my-8 max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
 
             {/* Modal header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800 bg-gray-900 text-white rounded-t-2xl">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-red-600 rounded-lg flex items-center justify-center text-white">
-                  <MapPin size={15} />
+            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-indigo-50 text-[#3B50DF] border border-indigo-100/90 flex items-center justify-center shrink-0 shadow-2xs">
+                  <MapPin size={16} />
                 </div>
                 <div>
-                  <h2 className="text-[15px] font-bold text-white">Pin Anonymized Incident (Libon)</h2>
-                  <p className="text-[11px] text-gray-400">Public health surveillance entry</p>
+                  <h3 className="text-sm font-bold text-slate-900">Pin Anonymized Incident (Libon)</h3>
+                  <p className="text-[11px] text-slate-400 font-normal mt-0.5">Public health surveillance entry</p>
                 </div>
               </div>
               <button
                 onClick={closeModal}
-                className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-800 text-gray-300 hover:bg-red-600 hover:text-white transition-colors"
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors"
+                title="Close"
               >
-                <X size={14} />
+                <X size={16} />
               </button>
             </div>
 
             {/* Modal fields */}
-            <div className="px-6 py-5 grid grid-cols-2 gap-4">
+            <div className="p-6 space-y-4 text-xs font-semibold text-slate-700 overflow-y-auto flex-1">
               {pendingLatLng && (
-                <div className="col-span-2 text-xs font-medium text-blue-600 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2.5 flex items-center gap-1.5">
-                  <MapPin size={12} className="flex-shrink-0" /> Clicked Location: {pendingLatLng.lat.toFixed(5)}, {pendingLatLng.lng.toFixed(5)} (Libon, Albay)
+                <div className="text-xs font-semibold text-[#3B50DF] bg-indigo-50/70 border border-indigo-100 rounded-xl px-3.5 py-2.5 flex items-center gap-2">
+                  <MapPin size={13} className="flex-shrink-0" /> Clicked Location: {pendingLatLng.lat.toFixed(5)}, {pendingLatLng.lng.toFixed(5)} (Libon, Albay)
                 </div>
               )}
 
-              <Field label="Barangay (Libon) *">
-                <select
-                  value={form.barangay || 'San Juan'}
-                  onChange={e => {
-                    const b = e.target.value;
-                    const z = form.zone || '';
-                    setF('barangay', b);
-                    setF('location', `${z ? z + ', ' : ''}Brgy. ${b}, Libon`);
-                  }}
-                  className={inputCls}
-                >
-                  {LIBON_BARANGAYS.map(b => <option key={b} value={b}>{b}</option>)}
-                </select>
-              </Field>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field label="Barangay (Libon) *">
+                  <select
+                    value={form.barangay || 'San Juan'}
+                    onChange={e => {
+                      const b = e.target.value;
+                      const z = form.zone || '';
+                      setF('barangay', b);
+                      setF('location', `${z ? z + ', ' : ''}Brgy. ${b}, Libon`);
+                    }}
+                    className={inputCls}
+                  >
+                    {LIBON_BARANGAYS.map(b => <option key={b} value={b}>{b}</option>)}
+                  </select>
+                </Field>
 
-              <Field label="Zone / Street / Purok">
-                <input
-                  type="text"
-                  placeholder="e.g. Zone 2, Purok 4"
-                  value={form.zone || ''}
-                  onChange={e => {
-                    const z = e.target.value;
-                    const b = form.barangay || 'San Juan';
-                    setF('zone', z);
-                    setF('location', `${z ? z + ', ' : ''}Brgy. ${b}, Libon`);
-                  }}
-                  className={inputCls}
-                />
-              </Field>
+                <Field label="Zone / Street / Purok">
+                  <input
+                    type="text"
+                    placeholder="e.g. Zone 2, Purok 4"
+                    value={form.zone || ''}
+                    onChange={e => {
+                      const z = e.target.value;
+                      const b = form.barangay || 'San Juan';
+                      setF('zone', z);
+                      setF('location', `${z ? z + ', ' : ''}Brgy. ${b}, Libon`);
+                    }}
+                    className={inputCls}
+                  />
+                </Field>
 
-              <Field label="Exposure Type" full>
-                <select value={form.type} onChange={e => setF('type', e.target.value)} className={inputCls}>
-                  {INCIDENT_TYPES.map(o => <option key={o}>{o}</option>)}
-                </select>
-              </Field>
+                <Field label="Exposure Type" full>
+                  <select value={form.type} onChange={e => setF('type', e.target.value)} className={inputCls}>
+                    {INCIDENT_TYPES.map(o => <option key={o}>{o}</option>)}
+                  </select>
+                </Field>
 
-              <Field label="Category">
-                <select value={form.category || 'Category III'} onChange={e => setF('category', e.target.value)} className={inputCls}>
-                  <option value="Category I">Category I</option>
-                  <option value="Category II">Category II</option>
-                  <option value="Category III">Category III</option>
-                </select>
-              </Field>
+                <Field label="Category">
+                  <select value={form.category || 'Category III'} onChange={e => setF('category', e.target.value)} className={inputCls}>
+                    <option value="Category I">Category I</option>
+                    <option value="Category II">Category II</option>
+                    <option value="Category III">Category III</option>
+                  </select>
+                </Field>
 
-              <Field label="Date of Exposure">
-                <input
-                  type="date"
-                  value={form.date}
-                  onChange={e => setF('date', e.target.value)}
-                  className={inputCls}
-                />
-              </Field>
+                <Field label="Date of Exposure">
+                  <input
+                    type="date"
+                    value={form.date}
+                    onChange={e => setF('date', e.target.value)}
+                    className={inputCls}
+                  />
+                </Field>
+              </div>
 
-              <div className="col-span-2 bg-rose-50 border border-rose-200 rounded-xl p-3 flex gap-2.5 items-center text-xs text-rose-800 font-medium">
-                <Lock size={16} className="text-rose-600 flex-shrink-0" />
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex gap-2.5 items-center text-xs text-slate-700 font-medium">
+                <Lock size={15} className="text-[#3B50DF] shrink-0" />
                 <span><strong>Data Privacy Guarantee:</strong> Zero personal patient data is stored or exposed.</span>
               </div>
             </div>
 
             {/* Modal footer */}
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
+            <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3 flex-shrink-0">
               <button
+                type="button"
                 onClick={closeModal}
-                className="px-5 py-2.5 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-100 transition-colors"
+                className="px-3.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 text-slate-700 cursor-pointer hover:bg-slate-100 transition-colors"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleSave}
                 disabled={saving}
-                className="px-6 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+                className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-[#3B50DF] hover:bg-[#2F40B5] text-white cursor-pointer shadow-xs transition-colors disabled:opacity-50 inline-flex items-center gap-1.5"
               >
                 {saving ? 'Pinning…' : <><MapPin size={13} /> Confirm & Pin</>}
               </button>

@@ -303,7 +303,7 @@ export default function MessagesPage() {
                   {view === VIEW_ARCHIVE ? 'Archive' : 'Patient Messages'}
                 </h1>
                 {view === VIEW_ACTIVE && unreadCount > 0 && (
-                  <span className="text-[11px] font-bold bg-red-600 text-white px-2 py-0.5 rounded-full">
+                  <span className="text-[11px] font-bold bg-[#3B50DF] text-white px-2 py-0.5 rounded-full">
                     {unreadCount} new
                   </span>
                 )}
@@ -339,7 +339,7 @@ export default function MessagesPage() {
                 placeholder="Search patient or message..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                className="w-full pl-11 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:border-red-500 focus:bg-white transition-all"
+                className="w-full pl-11 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:border-[#3B50DF] focus:bg-white transition-all"
               />
             </div>
 
@@ -381,7 +381,7 @@ export default function MessagesPage() {
                   <div
                     key={t.id}
                     className={`w-full transition-all flex items-start gap-3 relative ${
-                      selected ? 'bg-red-50/50 border-l-4 border-red-600' : 'hover:bg-gray-50'
+                      selected ? 'bg-indigo-50/50 border-l-4 border-[#3B50DF]' : 'hover:bg-gray-50'
                     }`}
                   >
                     <button
@@ -399,7 +399,7 @@ export default function MessagesPage() {
                           {initials(t.patientName)}
                         </div>
                         {t.unread && !isArchived && (
-                          <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-red-600 ring-2 ring-white" />
+                          <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-[#3B50DF] ring-2 ring-white" />
                         )}
                       </div>
 
@@ -438,12 +438,12 @@ export default function MessagesPage() {
                             </span>
                           )}
                           {t.escalationReason && (
-                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 ring-1 ring-red-200">
-                              🚨 {t.escalationReason}
+                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                              ⚠️ {t.escalationReason}
                             </span>
                           )}
                           {t.unread && !isArchived && (
-                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-red-600 text-white ml-auto">
+                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-[#3B50DF] text-white ml-auto">
                               Unread
                             </span>
                           )}
@@ -482,9 +482,9 @@ export default function MessagesPage() {
 
                 <div className="flex items-center gap-2">
                   {selectedThread.escalationReason && (
-                    <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-1.5 flex items-center gap-2">
-                      <AlertCircle size={14} className="text-red-600" />
-                      <span className="text-xs font-bold text-red-700">
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-1.5 flex items-center gap-2">
+                      <AlertCircle size={14} className="text-amber-600" />
+                      <span className="text-xs font-bold text-amber-800">
                         Escalation: {selectedThread.escalationReason}
                       </span>
                     </div>
@@ -522,7 +522,7 @@ export default function MessagesPage() {
                         <div
                           className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-xs shadow-xs leading-relaxed ${
                             isAdmin
-                              ? 'bg-red-600 text-white rounded-br-xs'
+                              ? 'bg-[#3B50DF] text-white rounded-br-xs'
                               : 'bg-white text-gray-800 border border-gray-200 rounded-bl-xs'
                           }`}
                         >
@@ -541,9 +541,7 @@ export default function MessagesPage() {
                 <div ref={bottomRef} />
               </div>
 
-              {/* Reply Box — read-only once archived. Replying would revive a
-                  conversation the patient can no longer see: their app only
-                  tracks unresolved threads, so the message would go nowhere. */}
+              {/* Reply Box */}
               {selectedThread.archived ? (
                 <div className="p-3 border-t border-gray-100 bg-gray-50 flex-shrink-0 text-center">
                   <p className="text-[11px] text-gray-500">
@@ -553,7 +551,7 @@ export default function MessagesPage() {
                 </div>
               ) : (
                 <div className="p-3 border-t border-gray-100 bg-white flex-shrink-0">
-                  <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl p-2 focus-within:border-red-500 focus-within:bg-white transition-all">
+                  <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl p-2 focus-within:border-[#3B50DF] focus-within:bg-white transition-all">
                     <textarea
                       ref={textareaRef}
                       rows={2}
@@ -571,7 +569,7 @@ export default function MessagesPage() {
                     <button
                       onClick={handleSend}
                       disabled={!reply.trim() || sending}
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+                      className="px-4 py-2 bg-[#3B50DF] hover:bg-[#2F40B5] text-white rounded-lg text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer shadow-xs"
                     >
                       <Send size={13} />
                       <span>Send</span>

@@ -67,7 +67,7 @@ export default function Chatbot() {
       setBadge(false);
       setMessages(m => {
         if (m.length === 0) {
-          return [{ role: 'bot', text: "👋 Hello! I'm the K&A Clinic assistant. I can help with clinic hours, booking an appointment, how to reach us, and using the app. For anything medical, please contact clinic staff directly. How can I help?", time: now() }];
+          return [{ role: 'bot', text: "👋 Hello! I'm KAI, the K&A Clinic assistant. I can help with clinic hours, booking an appointment, how to reach us, and using the app. For anything medical, please contact clinic staff directly. How can I help?", time: now() }];
         }
         return m;
       });
@@ -98,55 +98,78 @@ export default function Chatbot() {
   // the assistant now hands all three to clinic staff, so offering them as
   // one-tap shortcuts would advertise an answer that never arrives.
   const QUICK = [
-    ['🕒 Operating Hours', 'What are the clinic\'s operating hours?'],
-    ['📅 Book Appointment', 'How do I book an appointment at K&A Clinic?'],
-    ['📍 Location', 'Where is K&A Clinic located?'],
-    ['📱 Mobile App', 'How do I download the K&A Clinic app?']
+    ['🕒 Clinic Hours', 'What are your clinic hours and days?'],
+    ['📅 Book an Appointment', 'How do I book an appointment?'],
+    ['📍 Clinic Location', 'Where is K&A Clinic located?'],
+    ['📱 How to Use the App', 'How do I use the patient mobile app?'],
   ];
 
   return (
     <>
-      {/* ── FAB — Hidden when chat is open ── */}
-      {!open && (
-        <button
-          onClick={toggle}
-          aria-label="Open Chat Assistant"
-          style={{
-            position: 'fixed', bottom: 24, right: 24, zIndex: 850,
-            width: 56, height: 56, borderRadius: '50%',
-            background: 'linear-gradient(135deg, #DC2626 0%, #991B1B 100%)',
-            border: 'none', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 8px 24px rgba(220,38,38,0.4), 0 2px 8px rgba(0,0,0,0.1)',
-            transition: 'all 0.2s cubic-bezier(.34,1.2,.64,1)',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.08)'; e.currentTarget.style.boxShadow = '0 12px 32px rgba(220,38,38,0.5), 0 4px 12px rgba(0,0,0,0.15)'; }}
-          onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(220,38,38,0.4), 0 2px 8px rgba(0,0,0,0.1)'; }}
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+      {/* ── Floating Action Button ── */}
+      <button
+        onClick={toggle}
+        aria-label="Open K&A Helpdesk Chatbot"
+        className="cb-chip"
+        style={{
+          position: 'fixed',
+          bottom: 28,
+          right: 28,
+          zIndex: 9999,
+          width: 60,
+          height: 60,
+          borderRadius: '50%',
+          background: 'linear-gradient(135deg, #DC2626 0%, #B91C1C 100%)',
+          border: '2px solid rgba(255,255,255,0.2)',
+          boxShadow: '0 8px 24px rgba(220,38,38,0.35), 0 2px 6px rgba(0,0,0,0.1)',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#FFFFFF',
+          transition: 'all 0.25s cubic-bezier(.34,1.2,.64,1)',
+          transform: open ? 'scale(0.9) rotate(90deg)' : 'scale(1) rotate(0deg)',
+        }}
+      >
+        {open ? (
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
           </svg>
-          {badge && (
-            <div style={{
-              position: 'absolute', top: -2, right: -2, width: 18, height: 18,
-              background: '#10B981', borderRadius: '50%', border: '2.5px solid #FFFFFF',
-              fontSize: '0.6rem', color: 'white', fontWeight: 800,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>1</div>
-          )}
-        </button>
-      )}
+        ) : (
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+            {badge && (
+              <span style={{
+                position: 'absolute', top: -4, right: -4,
+                width: 12, height: 12, borderRadius: '50%',
+                background: '#34D399', border: '2px solid #DC2626',
+                animation: 'cbPulseGlow 2s ease infinite',
+              }} />
+            )}
+          </div>
+        )}
+      </button>
 
-      {/* ── Chat Window ── */}
+      {/* ── Chat Panel ── */}
       <div style={{
-        position: 'fixed', bottom: 24, right: 24, zIndex: 900,
-        width: 380, maxWidth: '92vw', height: 540,
-        background: '#FFFFFF',
-        border: '1px solid #F1F5F9',
+        position: 'fixed',
+        bottom: 100,
+        right: 28,
+        zIndex: 9998,
+        width: 380,
+        maxWidth: 'calc(100vw - 40px)',
+        height: 540,
+        maxHeight: 'calc(100vh - 140px)',
         borderRadius: 24,
-        boxShadow: '0 25px 60px rgba(0,0,0,0.15), 0 8px 20px rgba(0,0,0,0.06)',
-        display: 'flex', flexDirection: 'column', overflow: 'hidden',
-        transform: open ? 'translateY(0) scale(1)' : 'translateY(20px) scale(0.95)',
+        background: '#FFFFFF',
+        boxShadow: '0 20px 48px rgba(0,0,0,0.18), 0 4px 12px rgba(0,0,0,0.08)',
+        border: '1px solid #E2E8F0',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        transform: open ? 'scale(1) translateY(0)' : 'scale(0.92) translateY(20px)',
         opacity: open ? 1 : 0,
         pointerEvents: open ? 'all' : 'none',
         transition: 'all 0.25s cubic-bezier(.34,1.2,.64,1)',
@@ -176,14 +199,14 @@ export default function Chatbot() {
               </svg>
             </div>
             <div>
-              <div style={{ fontSize: '0.9375rem', fontWeight: 800, color: '#FFFFFF', letterSpacing: '-0.01em' }}>K&A Health Assistant</div>
+              <div style={{ fontSize: '0.9375rem', fontWeight: 800, color: '#FFFFFF', letterSpacing: '-0.01em' }}>KAI · K&A Assistant</div>
               <div style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.75)', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500, letterSpacing: '0.02em' }}>
                 <span style={{
                   width: 8, height: 8, borderRadius: '50%', background: '#34D399',
                   display: 'inline-block', flexShrink: 0,
                   animation: 'cbPulseGlow 2s ease infinite',
                 }} />
-                Online · Health Assistant
+                Online · Virtual Assistant
               </div>
             </div>
           </div>

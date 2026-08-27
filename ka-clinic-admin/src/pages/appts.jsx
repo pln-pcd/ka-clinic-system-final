@@ -1137,13 +1137,13 @@ export default function AppointmentPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <button
                   onClick={() => { setCurrentViewDate(new Date()); setSelectedDate(todayStr); setDatePreviewModalOpen(true); }}
-                  style={{ fontSize: '.75rem', fontWeight: 700, color: '#C8151A', background: '#FFF0F0', border: '1px solid #FFD6D7', borderRadius: 8, padding: '3px 8px', cursor: 'pointer' }}
+                  style={{ fontSize: '.75rem', fontWeight: 700, color: '#3B50DF', background: '#EEF2FF', border: '1px solid #E0E7FF', borderRadius: 8, padding: '3px 8px', cursor: 'pointer' }}
                 >
                   Today
                 </button>
 
                 <span style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: 600 }}>
-                  Selected: <strong style={{ color: '#C8151A' }}>{selectedDate}</strong>
+                  Selected: <strong style={{ color: '#3B50DF' }}>{selectedDate}</strong>
                 </span>
               </div>
             </div>
@@ -1481,60 +1481,66 @@ export default function AppointmentPage() {
 
       {/* Add Appointment Modal */}
       {addModalOpen && (
-        <div className="modal-overlay">
-          <div className="modal-card has-banner">
-            <div className="modal-banner">
-              <div className="modal-banner-left">
-                <div className="modal-banner-icon"><Plus size={20} /></div>
-                <div>
-                  <h2 className="modal-banner-title">Add Appointment</h2>
-                  <p className="modal-banner-sub">Fill in the details for the new appointment</p>
-                </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto" style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }} onClick={() => setAddModalOpen(false)}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200 my-8 max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            {/* Light Clean Header Bar */}
+            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between flex-shrink-0">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Add Appointment</h3>
+                <p className="text-[11px] text-slate-400 font-normal mt-0.5">Fill in the details for the new appointment</p>
               </div>
-              <button className="modal-banner-close" onClick={() => setAddModalOpen(false)} title="Close"><X size={20} /></button>
+              <button
+                type="button"
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors"
+                onClick={() => setAddModalOpen(false)}
+                title="Close"
+              >
+                <X size={16} />
+              </button>
             </div>
 
-            <div className="form-grid">
-              <div className="form-group">
-                <label className="form-label">Full Name *</label>
+            {/* Scrollable Form Body */}
+            <div className="p-6 space-y-4 text-xs font-semibold text-slate-700 overflow-y-auto flex-1">
+              <div>
+                <label className="block mb-1.5 text-slate-500">Full Name *</label>
                 <input
                   type="text"
-                  className="form-input"
+                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800 text-xs transition-all"
                   placeholder="e.g. Juan Dela Cruz"
                   value={addForm.name}
                   onChange={e => setAddForm({ ...addForm, name: e.target.value })}
                 />
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Contact Number *</label>
+              <div>
+                <label className="block mb-1.5 text-slate-500">Contact Number *</label>
                 <input
                   type="text"
-                  className="form-input"
+                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800 text-xs transition-all"
                   placeholder="e.g. +639123456789"
                   value={addForm.contactNumber}
                   onChange={e => setAddForm({ ...addForm, contactNumber: e.target.value })}
                 />
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Date</label>
+              <div>
+                <label className="block mb-1.5 text-slate-500">Date</label>
                 <input
                   type="date"
-                  className="form-input"
+                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800 text-xs transition-all"
                   value={addForm.date}
                   onChange={e => setAddForm({ ...addForm, date: e.target.value })}
                   style={!isWeekendDate(addForm.date) ? { borderColor: '#FCA5A5', background: '#FFF5F5' } : undefined}
                 />
-                <span style={{ fontSize: '.6875rem', fontWeight: 600, color: isWeekendDate(addForm.date) ? 'var(--text-muted)' : '#B91C1C' }}>
+                <span className="block mt-1 text-[11px] font-semibold" style={{ color: isWeekendDate(addForm.date) ? '#64748B' : '#B91C1C' }}>
                   {isWeekendDate(addForm.date) ? 'Available Saturdays & Sundays only.' : 'This date is a weekday — appointments are only available Saturdays & Sundays.'}
                 </span>
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Time Slot</label>
+              <div>
+                <label className="block mb-1.5 text-slate-500">Time Slot</label>
                 <select
-                  className="form-select"
+                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800 text-xs transition-all"
                   value={addForm.time}
                   onChange={e => setAddForm({ ...addForm, time: e.target.value })}
                 >
@@ -1548,10 +1554,10 @@ export default function AppointmentPage() {
                 </select>
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Purpose / Service</label>
+              <div>
+                <label className="block mb-1.5 text-slate-500">Purpose / Service</label>
                 <select
-                  className="form-select"
+                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800 text-xs transition-all"
                   value={addForm.type}
                   onChange={e => setAddForm({ ...addForm, type: e.target.value })}
                 >
@@ -1559,10 +1565,10 @@ export default function AppointmentPage() {
                 </select>
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Notes <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(optional)</span></label>
+              <div>
+                <label className="block mb-1.5 text-slate-500">Notes <span className="font-normal text-slate-400">(optional)</span></label>
                 <textarea
-                  className="form-input"
+                  className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800 text-xs transition-all"
                   rows={3}
                   placeholder="Any relevant details for this visit…"
                   value={addForm.notes}
@@ -1572,13 +1578,23 @@ export default function AppointmentPage() {
               </div>
             </div>
 
-            <div className="modal-footer">
-              <div className="modal-footer-right">
-                <button className="btn-secondary" onClick={() => setAddModalOpen(false)}>Cancel</button>
-                <button className="btn-add-primary" onClick={handleSaveAdd} disabled={saving}>
-                  {saving ? 'Saving...' : 'Save Appointment'}
-                </button>
-              </div>
+            {/* Footer Bar */}
+            <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3 flex-shrink-0">
+              <button
+                type="button"
+                className="px-3.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 text-slate-700 cursor-pointer hover:bg-slate-100 transition-colors"
+                onClick={() => setAddModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-[#3B50DF] hover:bg-[#2F40B5] text-white cursor-pointer shadow-xs transition-colors disabled:opacity-50"
+                onClick={handleSaveAdd}
+                disabled={saving}
+              >
+                {saving ? 'Saving...' : 'Save Appointment'}
+              </button>
             </div>
           </div>
         </div>

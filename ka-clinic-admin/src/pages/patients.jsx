@@ -11,14 +11,14 @@ import Toast from "../components/Toast";
 /* ─────────────────────────── CSS ─────────────────────────── */
 const globalCSS = `
   :root {
-    --blue:#C8151A; --blue-light:#FFF0F0; --blue-soft:#FFD6D7;
+    --blue:#3B50DF; --blue-light:#EEF2FF; --blue-soft:#E0E7FF;
     --white:#FFFFFF; --bg:#F4F5F7; --bg-2:#EAECEF;
     --text:#1C1C1E; --text-2:#3D3535;
     --muted:#7A6E6E; --muted-2:#A89E9E;
     --border:#E8E2E2; --border-2:#D4CBCB;
     --green:#16A34A; --green-soft:#DCFCE7;
     --orange:#D97706; --orange-soft:#FEF3C7;
-    --red:#C8151A; --red-soft:#FFD6D7;
+    --red:#DC2626; --red-soft:#FEE2E2;
     --shadow-sm:0 1px 3px rgba(0,0,0,0.06);
     --shadow-md:0 4px 12px rgba(0,0,0,0.08);
     --r-xs:3px;--r-sm:5px;--r-md:7px;--r-lg:10px;
@@ -48,7 +48,7 @@ const globalCSS = `
 
   /* Service type pills */
   .service-pill{display:inline-flex;align-items:center;gap:4px;font-size:.625rem;font-weight:700;padding:3px 9px;border-radius:var(--r-xs);letter-spacing:.3px;text-transform:uppercase;white-space:nowrap;}
-  .service-pep{background:#FFF0F0;color:#C8151A;border:1px solid #FFD6D7;}
+  .service-pep{background:#EEF2FF;color:#3B50DF;border:1px solid #E0E7FF;}
   .service-prep{background:#EEF1FD;color:#3D5AFE;border:1px solid #C7D2FE;}
   .service-tetanus{background:#FEF3C7;color:#B45309;border:1px solid #FDE68A;}
   .service-hepa{background:#ECFDF5;color:#065F46;border:1px solid #A7F3D0;}
@@ -58,7 +58,7 @@ const globalCSS = `
   .service-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
   .service-select-btn{padding:10px 8px;border-radius:var(--r-lg);border:2px solid var(--border);background:var(--bg);cursor:pointer;font-family:inherit;text-align:center;transition:all .15s;}
   .service-select-btn:hover{border-color:var(--blue);background:var(--blue-light);}
-  .service-select-btn.sel-pep{border-color:#C8151A;background:#FFF0F0;}
+  .service-select-btn.sel-pep{border-color:#3B50DF;background:#EEF2FF;}
   .service-select-btn.sel-prep{border-color:#3D5AFE;background:#EEF1FD;}
   .service-select-btn.sel-tetanus{border-color:#D97706;background:#FEF3C7;}
   .service-select-btn.sel-hepa{border-color:#059669;background:#ECFDF5;}
@@ -364,11 +364,21 @@ const statusBadgeClass = { ongoing: 'badge-blue', completed: 'badge-green' };
 const doseBadgeClass = { done: 'badge-green', miss: 'badge-red', pending: 'badge-orange' };
 const today = () => new Date().toISOString().slice(0, 10);
 const derivePatientStatus = (patient) => {
-  const doses = patient.doses || [];
-  if (doses.length > 0 && patient.status) return patient.status;
-  if (doses.length === 0) return patient.status || 'ongoing';
+  if (patient?.isArchived || patient?.status === 'archived') return 'completed';
+  const doses = patient?.doses || [];
+  if (doses.length > 0 && patient?.status) return patient.status;
+  if (doses.length === 0) return patient?.status || 'ongoing';
   const allDone = doses.every(d => (d.s || d.status) === 'done');
   return allDone ? 'completed' : 'ongoing';
+};
+
+const getDOHRetentionYear = (patient) => {
+  if (!patient) return new Date().getFullYear() + 10;
+  if (patient.retentionExpiryYear) return patient.retentionExpiryYear;
+  const dStr = patient.completedDate || patient.date || (patient.createdAt?.toDate ? patient.createdAt.toDate().toISOString().slice(0, 10) : today());
+  const d = new Date(dStr);
+  const yr = isNaN(d.getTime()) ? new Date().getFullYear() : d.getFullYear();
+  return yr + 10;
 };
 
 /* ─────────────────────────── SERVICE CONFIG ─────────────────────────── */
@@ -1219,211 +1229,345 @@ function EditPatientModal({ patient, onClose, onSave, inventoryItems = [] }) {
   }
 
   return (
-    <div className="modal-overlay" style={{ alignItems: 'flex-start', paddingTop: '4vh' }} onClick={e => { if (e.target.classList.contains('modal-overlay')) onClose(); }}>
-      <div style={{
-        background: 'var(--white)', borderRadius: '1.25rem', width: '60rem', maxWidth: '95vw',
-        height: '660px', maxHeight: '90vh', display: 'flex', flexDirection: 'column',
-        boxShadow: '0 24px 64px rgba(26,34,64,.22)', overflow: 'hidden',
-      }}>
-        {/* Dark Navy Header Bar */}
-        <div style={{
-          padding: '18px 24px',
-          background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          flexShrink: 0
-        }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto" style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }} onClick={onClose}>
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-200 my-8 max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        {/* Light Clean Header Bar (Matching Add Report Style) */}
+        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between flex-shrink-0">
           <div>
-            <h3 style={{ fontSize: '1.0625rem', fontWeight: 800, color: '#FFFFFF', margin: 0, letterSpacing: '-0.01em' }}>Edit Patient Record</h3>
-            <p style={{ fontSize: '.75rem', color: 'rgba(255,255,255,0.65)', margin: '3px 0 0' }}>{formatTitleCase(patient.name)} · ID: {patient.mrn || patient.id || 'N/A'}</p>
+            <h3 className="text-sm font-bold text-slate-900">Edit Patient Record</h3>
+            <p className="text-[11px] text-slate-400 font-normal mt-0.5">{formatTitleCase(patient.name)} · ID: {patient.mrn || patient.id || 'N/A'}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            style={{
-              width: 32, height: 32, borderRadius: 8, border: 'none',
-              background: 'rgba(255,255,255,0.12)', color: '#FFFFFF',
-              fontSize: '1rem', fontWeight: 700, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'background .15s'
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.22)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.12)'}
+            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors"
           >
-            ✕
+            <X size={16} />
           </button>
         </div>
 
         {/* Scrollable Form Body */}
-        <div style={{ flex: 1, minHeight: 0, padding: '24px 28px', overflowY: 'auto', background: '#FFFFFF' }}>
-          <div style={{ maxWidth: '48rem', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 22 }}>
-
-            {/* Patient Identity */}
-            <div>
-              <h3 style={{ fontSize: '.9375rem', fontWeight: 800, color: 'var(--navy, #1A2240)', margin: '0 0 12px' }}>Patient Identity</h3>
-              <div className="form-grid" style={{ gap: 14 }}>
-                <div className="form-field full"><label>Full Name <span style={{ color: '#C8151A' }}>*</span></label>
-                  <input type="text" value={form.name} onChange={e => set('name', e.target.value)} placeholder="e.g. Juan Dela Cruz" />
-                </div>
-                <div className="form-field"><label>Age <span style={{ color: '#C8151A' }}>*</span></label>
-                  <input type="text" inputMode="numeric" value={form.age} onChange={e => set('age', e.target.value.replace(/\D/g, '').slice(0, 3))} placeholder="e.g. 25" />
-                </div>
-                <div className="form-field"><label>Sex</label>
-                  <select value={form.sex} onChange={e => set('sex', e.target.value)}><option>Male</option><option>Female</option></select>
-                </div>
-                <div className="form-field full"><label>Email Address</label>
-                  <input type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="patient@gmail.com" />
-                </div>
-                <div className="form-field">
-                  <label>Contact Number</label>
-                  <input type="text" inputMode="numeric" value={form.contact} onChange={e => set('contact', e.target.value.replace(/[^\d+\s-]/g, ''))} placeholder="+63 9XX XXX XXXX" />
-                  {form.contact && !isValidPHPhone(form.contact) && (
-                    <span style={{ fontSize: '.6875rem', color: '#C8151A', marginTop: 4, display: 'block' }}>Enter a valid Philippine mobile number</span>
-                  )}
-                </div>
-                <div className="form-field"><label>Address</label>
-                  <input type="text" value={form.address} onChange={e => set('address', e.target.value)} placeholder="Zone, Brgy., Libon, Albay" />
-                </div>
-              </div>
+        <div className="p-6 space-y-5 text-xs font-semibold text-slate-700 overflow-y-auto flex-1">
+          {/* Patient Identity */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 pb-1 border-b border-slate-100">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Patient Identity</span>
             </div>
-
-            {/* Service & Vaccine Brand */}
-            <div>
-              <h3 style={{ fontSize: '.9375rem', fontWeight: 800, color: 'var(--navy, #1A2240)', margin: '0 0 12px' }}>Service & Vaccine Brand</h3>
-              <div className="form-grid" style={{ gap: 14 }}>
-                <div className="form-field"><label>Service</label>
-                  <select value={form.service} onChange={e => set('service', e.target.value)}>
-                    <option>PEP</option><option>Tetanus</option><option>Hepatitis</option><option>Pneumonia</option>
-                  </select>
-                </div>
-                <div className="form-field"><label>Vaccine Brand</label>
-                  <select value={form.vaccineBrand} onChange={e => set('vaccineBrand', e.target.value)}>
-                    <option value="">— Select brand —</option>
-                    {vaccineItems.map(item => (
-                      <option key={item.id} value={item.name}>{item.name} ({item.stock} {item.unit || 'pcs'} available)</option>
-                    ))}
-                  </select>
-                </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="sm:col-span-2">
+                <label className="block mb-1.5 text-slate-500">Full Name <span style={{ color: '#C8151A' }}>*</span></label>
+                <input
+                  type="text"
+                  value={form.name}
+                  onChange={e => set('name', e.target.value)}
+                  placeholder="e.g. Juan Dela Cruz"
+                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                />
               </div>
-            </div>
-
-            {/* PEP-specific exposure fields */}
-            {isPep && (
               <div>
-                <h3 style={{ fontSize: '.9375rem', fontWeight: 800, color: 'var(--navy, #1A2240)', margin: '0 0 12px' }}>Exposure Details</h3>
-                <div className="form-grid" style={{ gap: 14 }}>
-                  <div className="form-field"><label>Date of Exposure</label>
-                    <input type="date" value={form.date} onChange={e => set('date', e.target.value)} />
-                  </div>
-                  <div className="form-field"><label>Biting Animal</label>
-                    <select value={form.animal} onChange={e => set('animal', e.target.value)}>
-                      <option>Dog</option><option>Cat</option><option>Monkey</option><option>Bat</option><option>Rat</option><option>Other</option>
-                    </select>
-                  </div>
-                  <div className="form-field"><label>Exposure Category</label>
-                    <select value={form.cat} onChange={e => set('cat', e.target.value)}>
-                      <option>Category I</option><option>Category II</option><option>Category III</option>
-                    </select>
-                  </div>
-                  <div className="form-field"><label>No. of Bites / Wounds</label>
-                    <select value={form.numberOfBites} onChange={e => set('numberOfBites', e.target.value)}>
-                      <option>1</option><option>2</option><option>3</option><option>4+</option>
-                    </select>
-                  </div>
-                  <div className="form-field"><label>Wound Location</label>
-                    <select value={form.woundLocation || ''} onChange={e => set('woundLocation', e.target.value)}>
-                      <option value="">— Select location —</option>
-                      {WOUND_LOCATION_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                    </select>
-                  </div>
-                  <div className="form-field"><label>Wound Depth</label>
-                    <select value={form.woundDepth} onChange={e => set('woundDepth', e.target.value)}>
-                      <option>Superficial</option><option>Deep / Penetrating</option><option>Multiple</option><option>Unknown</option>
-                    </select>
-                  </div>
-                </div>
+                <label className="block mb-1.5 text-slate-500">Age <span style={{ color: '#C8151A' }}>*</span></label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={form.age}
+                  onChange={e => set('age', e.target.value.replace(/\D/g, '').slice(0, 3))}
+                  placeholder="e.g. 25"
+                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                />
               </div>
-            )}
+              <div>
+                <label className="block mb-1.5 text-slate-500">Sex</label>
+                <select
+                  value={form.sex}
+                  onChange={e => set('sex', e.target.value)}
+                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                >
+                  <option>Male</option>
+                  <option>Female</option>
+                </select>
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block mb-1.5 text-slate-500">Email Address</label>
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={e => set('email', e.target.value)}
+                  placeholder="patient@gmail.com"
+                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                />
+              </div>
+              <div>
+                <label className="block mb-1.5 text-slate-500">Contact Number</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={form.contact}
+                  onChange={e => set('contact', e.target.value.replace(/[^\d+\s-]/g, ''))}
+                  placeholder="+63 9XX XXX XXXX"
+                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                />
+                {form.contact && !isValidPHPhone(form.contact) && (
+                  <span style={{ fontSize: '.6875rem', color: '#C8151A', marginTop: 4, display: 'block' }}>Enter a valid Philippine mobile number</span>
+                )}
+              </div>
+              <div>
+                <label className="block mb-1.5 text-slate-500">Address</label>
+                <input
+                  type="text"
+                  value={form.address}
+                  onChange={e => set('address', e.target.value)}
+                  placeholder="Zone, Brgy., Libon, Albay"
+                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                />
+              </div>
+            </div>
+          </div>
 
-            {/* Medical History */}
-            <div>
-              <h3 style={{ fontSize: '.9375rem', fontWeight: 800, color: 'var(--navy, #1A2240)', margin: '0 0 12px' }}>Medical History & Notes</h3>
-              <div className="form-grid" style={{ gap: 14 }}>
-                <div className="form-field full"><label>Past Vaccination History</label>
-                  <select value={form.pastVaccines || ''} onChange={e => set('pastVaccines', e.target.value)}>
-                    <option value="">— Select history —</option>
-                    {PAST_VACCINE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+          {/* Service & Vaccine Brand */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 pb-1 border-b border-slate-100">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Service & Vaccine Brand</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block mb-1.5 text-slate-500">Service</label>
+                <select
+                  value={form.service}
+                  onChange={e => set('service', e.target.value)}
+                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                >
+                  <option>PEP</option><option>Tetanus</option><option>Hepatitis</option><option>Pneumonia</option>
+                </select>
+              </div>
+              <div>
+                <label className="block mb-1.5 text-slate-500">Vaccine Brand</label>
+                <select
+                  value={form.vaccineBrand}
+                  onChange={e => set('vaccineBrand', e.target.value)}
+                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                >
+                  <option value="">— Select brand —</option>
+                  {vaccineItems.map(item => (
+                    <option key={item.id} value={item.name}>{item.name} ({item.stock} {item.unit || 'pcs'} available)</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* PEP Exposure Details */}
+          {isPep && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 pb-1 border-b border-slate-100">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Exposure Details</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block mb-1.5 text-slate-500">Date of Exposure</label>
+                  <input
+                    type="date"
+                    value={form.date}
+                    onChange={e => set('date', e.target.value)}
+                    className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1.5 text-slate-500">Biting Animal</label>
+                  <select
+                    value={form.animal}
+                    onChange={e => set('animal', e.target.value)}
+                    className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                  >
+                    <option>Dog</option><option>Cat</option><option>Monkey</option><option>Bat</option><option>Rat</option><option>Other</option>
                   </select>
                 </div>
-                <div className="form-field full"><label>Allergies</label>
-                  <select value={form.allergies || ''} onChange={e => set('allergies', e.target.value)}>
-                    <option value="">— Select allergy —</option>
-                    {ALLERGY_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                <div>
+                  <label className="block mb-1.5 text-slate-500">Exposure Category</label>
+                  <select
+                    value={form.cat}
+                    onChange={e => set('cat', e.target.value)}
+                    className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                  >
+                    <option>Category I</option><option>Category II</option><option>Category III</option>
                   </select>
                 </div>
-
-                {form.service === 'Tetanus' && (
-                  <>
-                    <div className="form-field"><label>Wound / Injury Type</label>
-                      <select value={form.woundType} onChange={e => set('woundType', e.target.value)}>
-                        <option>Laceration</option><option>Puncture</option><option>Abrasion</option><option>Burn</option><option>Crush injury</option><option>Other</option>
-                      </select>
-                    </div>
-                    <div className="form-field"><label>Last Tetanus Shot</label>
-                      <select value={form.lastTetanus} onChange={e => set('lastTetanus', e.target.value)}>
-                        <option>Unknown</option><option>Less than 5 years ago</option><option>5–10 years ago</option><option>More than 10 years ago</option><option>Never vaccinated</option>
-                      </select>
-                    </div>
-                  </>
-                )}
-
-                {form.service === 'Hepatitis' && (
-                  <>
-                    <div className="form-field"><label>Hepatitis Variant</label>
-                      <select value={form.hepaVariant} onChange={e => set('hepaVariant', e.target.value)}>
-                        <option>Hepatitis A</option><option>Hepatitis B</option><option>Hepatitis A+B (Combined)</option>
-                      </select>
-                    </div>
-                    <div className="form-field"><label>Risk Factor</label>
-                      <select value={form.riskFactor} onChange={e => set('riskFactor', e.target.value)}>
-                        <option>None stated</option><option>Healthcare worker</option><option>Travel exposure</option><option>Household contact</option><option>Food handler</option><option>IV drug use history</option><option>Other</option>
-                      </select>
-                    </div>
-                    <div className="form-field full"><label>Prior Hepa Vaccination</label>
-                      <select value={form.priorHepa} onChange={e => set('priorHepa', e.target.value)}>
-                        <option>None</option><option>Partially vaccinated</option><option>Fully vaccinated (booster only)</option><option>Unknown</option>
-                      </select>
-                    </div>
-                  </>
-                )}
-
-                {form.service === 'Pneumonia' && (
-                  <>
-                    <div className="form-field"><label>Vaccine Variant</label>
-                      <select value={form.pneumoVaccine} onChange={e => set('pneumoVaccine', e.target.value)}>
-                        <option>PCV13 (Prevnar 13)</option><option>PCV15 (Vaxneuvance)</option><option>PCV20 (Prevnar 20)</option><option>PPSV23 (Pneumovax)</option>
-                      </select>
-                    </div>
-                    <div className="form-field"><label>High-Risk Condition</label>
-                      <select value={form.riskCondition} onChange={e => set('riskCondition', e.target.value)}>
-                        <option>None</option><option>Asthma / COPD</option><option>Diabetes</option><option>Heart disease</option><option>Immunocompromised</option><option>Chronic kidney disease</option><option>Smoker</option><option>Age ≥ 65</option><option>Other</option>
-                      </select>
-                    </div>
-                  </>
-                )}
-
-                <div className="form-field full"><label>Clinical Notes</label>
-                  <textarea value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Add any relevant observations, lab results, or clinical assessment notes..." rows={3} />
+                <div>
+                  <label className="block mb-1.5 text-slate-500">No. of Bites / Wounds</label>
+                  <select
+                    value={form.numberOfBites}
+                    onChange={e => set('numberOfBites', e.target.value)}
+                    className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                  >
+                    <option>1</option><option>2</option><option>3</option><option>4+</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block mb-1.5 text-slate-500">Wound Location</label>
+                  <select
+                    value={form.woundLocation || ''}
+                    onChange={e => set('woundLocation', e.target.value)}
+                    className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                  >
+                    <option value="">— Select location —</option>
+                    {WOUND_LOCATION_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block mb-1.5 text-slate-500">Wound Depth</label>
+                  <select
+                    value={form.woundDepth}
+                    onChange={e => set('woundDepth', e.target.value)}
+                    className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                  >
+                    <option>Superficial</option><option>Deep / Penetrating</option><option>Multiple</option><option>Unknown</option>
+                  </select>
                 </div>
               </div>
             </div>
+          )}
 
+          {/* Medical History & Notes */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 pb-1 border-b border-slate-100">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Medical History & Notes</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="sm:col-span-2">
+                <label className="block mb-1.5 text-slate-500">Past Vaccination History</label>
+                <select
+                  value={form.pastVaccines || ''}
+                  onChange={e => set('pastVaccines', e.target.value)}
+                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                >
+                  <option value="">— Select history —</option>
+                  {PAST_VACCINE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block mb-1.5 text-slate-500">Allergies</label>
+                <select
+                  value={form.allergies || ''}
+                  onChange={e => set('allergies', e.target.value)}
+                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                >
+                  <option value="">— Select allergy —</option>
+                  {ALLERGY_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+
+              {form.service === 'Tetanus' && (
+                <>
+                  <div>
+                    <label className="block mb-1.5 text-slate-500">Wound / Injury Type</label>
+                    <select
+                      value={form.woundType}
+                      onChange={e => set('woundType', e.target.value)}
+                      className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                    >
+                      <option>Laceration</option><option>Puncture</option><option>Abrasion</option><option>Burn</option><option>Crush injury</option><option>Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block mb-1.5 text-slate-500">Last Tetanus Shot</label>
+                    <select
+                      value={form.lastTetanus}
+                      onChange={e => set('lastTetanus', e.target.value)}
+                      className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                    >
+                      <option>Unknown</option><option>Less than 5 years ago</option><option>5–10 years ago</option><option>More than 10 years ago</option><option>Never vaccinated</option>
+                    </select>
+                  </div>
+                </>
+              )}
+
+              {form.service === 'Hepatitis' && (
+                <>
+                  <div>
+                    <label className="block mb-1.5 text-slate-500">Hepatitis Variant</label>
+                    <select
+                      value={form.hepaVariant}
+                      onChange={e => set('hepaVariant', e.target.value)}
+                      className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                    >
+                      <option>Hepatitis A</option><option>Hepatitis B</option><option>Hepatitis A+B (Combined)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block mb-1.5 text-slate-500">Risk Factor</label>
+                    <select
+                      value={form.riskFactor}
+                      onChange={e => set('riskFactor', e.target.value)}
+                      className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                    >
+                      <option>None stated</option><option>Healthcare worker</option><option>Travel exposure</option><option>Household contact</option><option>Food handler</option><option>IV drug use history</option><option>Other</option>
+                    </select>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block mb-1.5 text-slate-500">Prior Hepa Vaccination</label>
+                    <select
+                      value={form.priorHepa}
+                      onChange={e => set('priorHepa', e.target.value)}
+                      className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                    >
+                      <option>None</option><option>Partially vaccinated</option><option>Fully vaccinated (booster only)</option><option>Unknown</option>
+                    </select>
+                  </div>
+                </>
+              )}
+
+              {form.service === 'Pneumonia' && (
+                <>
+                  <div>
+                    <label className="block mb-1.5 text-slate-500">Vaccine Variant</label>
+                    <select
+                      value={form.pneumoVaccine}
+                      onChange={e => set('pneumoVaccine', e.target.value)}
+                      className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                    >
+                      <option>PCV13 (Prevnar 13)</option><option>PCV15 (Vaxneuvance)</option><option>PCV20 (Prevnar 20)</option><option>PPSV23 (Pneumovax)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block mb-1.5 text-slate-500">High-Risk Condition</label>
+                    <select
+                      value={form.riskCondition}
+                      onChange={e => set('riskCondition', e.target.value)}
+                      className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                    >
+                      <option>None</option><option>Asthma / COPD</option><option>Diabetes</option><option>Heart disease</option><option>Immunocompromised</option><option>Chronic kidney disease</option><option>Smoker</option><option>Age ≥ 65</option><option>Other</option>
+                    </select>
+                  </div>
+                </>
+              )}
+
+              <div className="sm:col-span-2">
+                <label className="block mb-1.5 text-slate-500">Clinical Notes</label>
+                <textarea
+                  value={form.notes}
+                  onChange={e => set('notes', e.target.value)}
+                  placeholder="Add any relevant observations, lab results, or clinical assessment notes..."
+                  rows={3}
+                  className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                />
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 24px', borderTop: '1px solid var(--border)', background: '#FAFAFA', flexShrink: 0 }}>
-          <button type="button" className="btn btn-outline" onClick={onClose} style={{ fontWeight: 600 }}>Cancel</button>
-          <button type="button" className="btn btn-primary" onClick={handleSave} style={{ fontWeight: 700, padding: '9px 24px' }}>
+        <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3 flex-shrink-0">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-3.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 text-slate-700 cursor-pointer hover:bg-slate-100 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-[#3B50DF] hover:bg-[#2F40B5] text-white cursor-pointer shadow-xs transition-colors"
+          >
             Save Changes
           </button>
         </div>
@@ -1513,9 +1657,9 @@ function PinMapConfirmModal({ patient, saving, onConfirm, onCancel }) {
             disabled={saving}
             onClick={onConfirm}
             style={{
-              background: '#C8151A', color: '#FFFFFF', fontWeight: 700, padding: '10px 24px',
+              background: '#3B50DF', color: '#FFFFFF', fontWeight: 700, padding: '10px 24px',
               display: 'inline-flex', alignItems: 'center', gap: 8,
-              boxShadow: '0 2px 8px rgba(200,21,26,0.25)', opacity: saving ? 0.75 : 1,
+              boxShadow: '0 2px 8px rgba(59,80,223,0.25)', opacity: saving ? 0.75 : 1,
             }}
           >
             {saving ? 'Pinning Incident…' : (
@@ -1754,7 +1898,29 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
     }
   }
 
+  const [archiving, setArchiving] = useState(false);
+  async function handleArchiveRecord() {
+    if (!patient.firestoreId) return;
+    setArchiving(true);
+    try {
+      const expYear = (new Date().getFullYear()) + 10;
+      await updateDoc(doc(db, 'vaccinations', patient.firestoreId), {
+        status: 'completed',
+        isArchived: true,
+        archivedAt: serverTimestamp(),
+        retentionExpiryYear: expYear,
+      });
+      onToast(`Record archived in DOH Retention Caseload (Valid until ${expYear}) ✓`, 'success');
+    } catch (err) {
+      console.error('Archive error:', err);
+      onToast('Failed to archive record.', 'error');
+    } finally {
+      setArchiving(false);
+    }
+  }
+
   const liveStatus = derivePatientStatus(rec);
+  const isCompletedOrArchived = liveStatus === 'completed' || patient.isArchived;
 
   const filteredApts = patientApts.filter(a => {
     const st = (a.status || '').toLowerCase();
@@ -1769,7 +1935,7 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
     <div style={{ padding: '20px 24px 36px', maxWidth: '1600px', margin: '0 auto' }}>
 
       {/* ── TOP ACTION BAR (BACK BUTTON | EXPORT & EDIT BUTTONS) ── */}
-      <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
+      <div className="flex items-center justify-between gap-4 mb-5 flex-wrap">
         <button
           onClick={onBack}
           className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white border border-slate-200/90 hover:bg-slate-50 hover:text-[#3B50DF] hover:border-indigo-200 shadow-2xs transition-all cursor-pointer flex items-center gap-2"
@@ -1779,6 +1945,22 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
         </button>
 
         <div className="flex items-center gap-3">
+          {isCompletedOrArchived && (
+            <button
+              onClick={handleArchiveRecord}
+              disabled={archiving || patient.isArchived}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold border shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 ${
+                patient.isArchived
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300 cursor-default'
+                  : 'bg-white text-emerald-800 border-emerald-300 hover:bg-emerald-50'
+              }`}
+              title="Archive into DOH 10-Year Statutory Retention Caseload"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>
+              {patient.isArchived ? 'Preserved in Caseload ✓' : 'Archive to Retention Caseload'}
+            </button>
+          )}
+
           <button
             className="px-4 py-2 rounded-xl text-xs font-bold text-[#0F172A] bg-white border border-slate-300 hover:bg-slate-50 shadow-2xs transition-all cursor-pointer flex items-center gap-2"
             onClick={() => setShowExportModal(true)}
@@ -1796,17 +1978,39 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
         </div>
       </div>
 
+      {/* ── DOH RETENTION NOTICE BANNER FOR COMPLETED & RETAINED RECORDS ── */}
+      {isCompletedOrArchived && (
+        <div className="mb-6 p-4 rounded-2xl bg-emerald-50/80 border border-emerald-200/90 flex items-start justify-between gap-4 flex-wrap shadow-2xs">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-200 mt-0.5">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h4 className="text-xs font-extrabold text-emerald-950 uppercase tracking-wide">DOH Statutory Medical Record Retention Compliance</h4>
+                <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                  Preserved in Caseload (10-Year Statutory Period)
+                </span>
+              </div>
+              <p className="text-[11.5px] text-emerald-900/90 mt-1 leading-relaxed max-w-4xl">
+                Pursuant to Philippine DOH Medical Record Retention Guidelines (DOH AO 2012-0012), completed patient post-exposure prophylaxis (PEP) & bite injury encounter records remain preserved intact in the active clinic caseload for a mandatory statutory retention window of at least <strong>10 years</strong> (Preserved active until <strong>{getDOHRetentionYear(rec || patient)}</strong>). Full clinical records remain intact for follow-up review, legal preservation, and medical audits prior to cold-storage archiving.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── TOP ROW: CARD 1 (PROFILE & GENERAL INFO WITH DIVIDER) & CARD 2 (STANDALONE MEDICAL HISTORY) ── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6 items-stretch">
 
         {/* ── CARD 1 (LEFT 7 COLS): PROFILE SUMMARY & GENERAL INFORMATION WITH VERTICAL DIVIDER ── */}
-        <div className="lg:col-span-7 bg-white rounded-3xl p-6 border border-slate-200/80 shadow-2xs flex flex-col justify-between">
+        <div className="lg:col-span-7 bg-white rounded-3xl p-6 border border-indigo-100/90 ring-1 ring-indigo-500/10 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
           <div className="grid grid-cols-1 sm:grid-cols-12 gap-6 items-stretch divide-y sm:divide-y-0 sm:divide-x divide-slate-100 h-full">
 
             {/* Profile Side (5 cols) */}
             <div className="sm:col-span-5 pr-0 sm:pr-6 flex flex-col justify-between items-center text-center">
               <div className="w-full flex flex-col items-center">
-                <div className="w-24 h-24 rounded-full bg-slate-100 border-2 border-slate-200/80 flex items-center justify-center shadow-xs overflow-hidden shrink-0 mb-3 relative">
+                <div className="w-24 h-24 rounded-full bg-gradient-to-br from-indigo-50 to-slate-100 border-2 border-indigo-100 flex items-center justify-center shadow-xs overflow-hidden shrink-0 mb-3 relative">
                   {patientPhoto ? (
                     <img
                       src={patientPhoto}
@@ -1815,7 +2019,7 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
                       onError={(e) => { e.currentTarget.style.display = 'none'; }}
                     />
                   ) : (
-                    <span className="text-xl font-black text-[#0F172A] tracking-tight">{getInitials(patient.name || '?')}</span>
+                    <span className="text-xl font-black text-[#3B50DF] tracking-tight">{getInitials(patient.name || '?')}</span>
                   )}
                 </div>
 
@@ -1823,13 +2027,13 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
                 <p className="text-xs text-slate-400 font-medium mt-1 truncate max-w-full">{patient.email || 'No email registered'}</p>
 
                 <div className="grid grid-cols-2 gap-3 w-full mt-4 pt-3 border-t border-slate-100">
-                  <div className="bg-slate-50/80 rounded-2xl p-2.5 text-center border border-slate-100">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Appointments</span>
+                  <div className="bg-indigo-50/50 rounded-2xl p-2.5 text-center border border-indigo-100/80 shadow-2xs">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Appointments</span>
                     <span className="text-sm font-extrabold text-slate-900 mt-0.5 block">{patientApts.length}</span>
                   </div>
-                  <div className="bg-slate-50/80 rounded-2xl p-2.5 text-center border border-slate-100">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">MRN Code</span>
-                    <span className="text-xs font-bold text-[#3B50DF] mt-1 block truncate">{rec.id}</span>
+                  <div className="bg-indigo-50/50 rounded-2xl p-2.5 text-center border border-indigo-100/80 shadow-2xs">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">MRN Code</span>
+                    <span className="text-xs font-extrabold text-[#3B50DF] mt-1 block truncate">{rec.id}</span>
                   </div>
                 </div>
               </div>
@@ -1838,8 +2042,13 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
             {/* General Info Side (7 cols) */}
             <div className="sm:col-span-7 sm:pl-6 pt-6 sm:pt-0 flex flex-col justify-between">
               <div>
-                <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
-                  <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider">General Information</h3>
+                <div className="flex items-center justify-between mb-3 pb-2.5 border-b border-indigo-50">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-lg bg-indigo-50 text-[#3B50DF] border border-indigo-100 flex items-center justify-center shrink-0 shadow-2xs">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    </div>
+                    <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider">General Information</h3>
+                  </div>
                   <button
                     onClick={() => onEdit?.(r || patient)}
                     className="w-6 h-6 rounded-full bg-slate-50 text-slate-500 hover:text-[#3B50DF] hover:bg-indigo-50 flex items-center justify-center transition-colors cursor-pointer"
@@ -1895,11 +2104,16 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
         </div>
 
         {/* ── CARD 2 (RIGHT 5 COLS): STANDALONE MEDICAL HISTORY & EXPOSURE DETAILS CARD ── */}
-        <div className="lg:col-span-5 bg-white rounded-3xl p-6 border border-slate-200/80 shadow-2xs flex flex-col justify-between">
+        <div className="lg:col-span-5 bg-white rounded-3xl p-6 border border-teal-100/90 ring-1 ring-teal-500/10 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
           <div>
-            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
-              <h3 className="text-sm font-extrabold text-slate-900">Medical History & Exposure Details</h3>
-              <span className="text-[11px] font-bold text-[#3B50DF] bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-100">Clinical Data</span>
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-teal-50">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-teal-50 text-teal-700 border border-teal-100 flex items-center justify-center shrink-0 shadow-2xs">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                </div>
+                <h3 className="text-sm font-extrabold text-slate-900">Medical History & Exposure Details</h3>
+              </div>
+              <span className="text-[11px] font-bold text-teal-700 bg-teal-50 px-2.5 py-1 rounded-full border border-teal-200/80">Clinical Data</span>
             </div>
 
             <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-xs font-semibold text-slate-700">
@@ -1935,7 +2149,7 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
 
               <div className="col-span-2 pt-2 border-t border-slate-100">
                 <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Doctor / Nurse Remarks</span>
-                <p className="text-slate-600 font-normal leading-relaxed text-[11.5px] bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                <p className="text-slate-700 font-normal leading-relaxed text-[11.5px] bg-teal-50/30 p-2.5 rounded-xl border border-teal-100/80 border-l-4 border-l-teal-500">
                   {rec.notes || 'No custom clinical remarks noted.'}
                 </p>
               </div>
@@ -1948,21 +2162,23 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6 items-start">
 
         {/* ── LEFT COLUMN (6 COLS): COMPACT VACCINATION DOSES TRACKER ── */}
-        <div className="lg:col-span-6 bg-white rounded-3xl border border-slate-200/80 shadow-2xs p-4 flex flex-col justify-between">
+        <div className="lg:col-span-6 bg-white rounded-3xl border border-blue-100/90 ring-1 ring-blue-500/10 shadow-xs hover:shadow-sm transition-all p-5 flex flex-col justify-between">
           <div>
             {/* Clean Compact Header */}
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2 mb-2">
+            <div className="flex items-center justify-between pb-3 border-b border-blue-50 flex-wrap gap-2 mb-3">
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3B50DF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8v4l3 3" /><circle cx="12" cy="12" r="9" /></svg>
+                  <div className="w-6 h-6 rounded-lg bg-indigo-50 text-[#3B50DF] border border-indigo-100/90 flex items-center justify-center shrink-0 shadow-2xs">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8v4l3 3" /><circle cx="12" cy="12" r="9" /></svg>
+                  </div>
+                  <h3 className="text-xs font-extrabold text-slate-900">
                     Vaccination Doses
                   </h3>
                   <span className="text-[9.5px] font-bold text-[#3B50DF] bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100/90">
                     {patient.service || 'PEP'} Protocol
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-400 font-medium mt-0.5">Dose schedule timeline for {patient.name}</p>
+                <p className="text-[11px] text-slate-400 font-medium mt-0.5 pl-8">Dose schedule timeline for {patient.name}</p>
               </div>
             </div>
 
@@ -1980,12 +2196,12 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
                   const isNext = !isDone && !isMiss && (i === 0 || rec.doses[i - 1]?.s === 'done' || rec.doses[i - 1]?.s === 'miss');
 
                   const cardBg = isDone
-                    ? 'bg-emerald-50/30 border-emerald-200/70'
+                    ? 'bg-emerald-50/40 border-emerald-200/80'
                     : isMiss
-                    ? 'bg-rose-50/30 border-rose-200/70'
+                    ? 'bg-rose-50/40 border-rose-200/80'
                     : isNext
-                    ? 'bg-indigo-50/40 border-[#3B50DF] shadow-2xs'
-                    : 'bg-slate-50/40 border-slate-200/60';
+                    ? 'bg-indigo-50/60 border-[#3B50DF] shadow-2xs'
+                    : 'bg-slate-50/60 border-slate-200/70';
 
                   const badgeBg = isDone
                     ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
@@ -2057,20 +2273,25 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
         </div>
 
         {/* ── RIGHT COLUMN (6 COLS): SYNCED APPOINTMENTS CARD ── */}
-        <div className="lg:col-span-6 bg-white rounded-3xl border border-slate-200/80 shadow-2xs overflow-hidden h-full flex flex-col justify-between">
+        <div className="lg:col-span-6 bg-white rounded-3xl border border-sky-100/90 ring-1 ring-sky-500/10 shadow-xs hover:shadow-sm transition-all overflow-hidden h-full flex flex-col justify-between">
           <div>
-            <div className="p-5 border-b border-slate-100 flex items-center justify-between flex-wrap gap-2">
-              <div>
-                <h3 className="text-sm font-extrabold text-slate-900">Appointment</h3>
-                <p className="text-[11px] text-slate-400 font-medium">Booked for {patient.name}</p>
+            <div className="p-4 sm:p-5 border-b border-sky-50 bg-sky-50/30 flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-sky-100/80 text-sky-700 border border-sky-200/80 flex items-center justify-center shrink-0 shadow-2xs">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold text-slate-900">Appointment</h3>
+                  <p className="text-[11px] text-slate-400 font-medium">Booked for {patient.name}</p>
+                </div>
               </div>
 
               <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-xl border border-slate-200/60 text-[11px]">
+                <div className="flex items-center gap-1 bg-white p-0.5 rounded-xl border border-slate-200/70 text-[11px] shadow-2xs">
                   <button
                     onClick={() => setAptTab('all')}
                     className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                      aptTab === 'all' ? 'bg-white text-[#3B50DF] shadow-2xs' : 'text-slate-500'
+                      aptTab === 'all' ? 'bg-[#3B50DF] text-white shadow-2xs' : 'text-slate-500 hover:text-slate-900'
                     }`}
                   >
                     All
@@ -2078,7 +2299,7 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
                   <button
                     onClick={() => setAptTab('upcoming')}
                     className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                      aptTab === 'upcoming' ? 'bg-white text-[#3B50DF] shadow-2xs' : 'text-slate-500'
+                      aptTab === 'upcoming' ? 'bg-[#3B50DF] text-white shadow-2xs' : 'text-slate-500 hover:text-slate-900'
                     }`}
                   >
                     Upcoming
@@ -2086,7 +2307,7 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
                   <button
                     onClick={() => setAptTab('completed')}
                     className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                      aptTab === 'completed' ? 'bg-white text-[#3B50DF] shadow-2xs' : 'text-slate-500'
+                      aptTab === 'completed' ? 'bg-[#3B50DF] text-white shadow-2xs' : 'text-slate-500 hover:text-slate-900'
                     }`}
                   >
                     Completed
@@ -2147,13 +2368,18 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
       </div>
 
       {/* ── BOTTOM SECTION: REPORTS (DOCTOR/NURSE DOSES VITALS & NOTES) ── */}
-      <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-2xs">
+      <div className="bg-white rounded-3xl p-6 border border-slate-200/90 ring-1 ring-indigo-500/10 shadow-xs hover:shadow-sm transition-all">
         <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 flex-wrap gap-2">
-          <div>
-            <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3B50DF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
-              Clinical Reports & Nurse Notes
-            </h3>
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-xl bg-indigo-50 text-[#3B50DF] border border-indigo-100/90 flex items-center justify-center shrink-0 shadow-2xs">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
+            </div>
+            <div>
+              <h3 className="text-sm sm:text-base font-extrabold text-slate-900">
+                Clinical Reports & Nurse Notes
+              </h3>
+              <p className="text-[11px] text-slate-400 font-medium">Logged vitals, wound assessments, and doctor/nurse notes</p>
+            </div>
           </div>
 
           <button
@@ -2982,7 +3208,7 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
       <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:14px;border-bottom:2px solid #0F172A;margin-bottom:16px;">
         <!-- Left Accreditation Emblem -->
         <div style="width:58px;height:58px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:#F8FAFC;border:1px solid #CBD5E1;flex-shrink:0;">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#C8151A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#3B50DF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="10"/>
             <path d="M12 6v12M6 12h12"/>
           </svg>
@@ -2991,7 +3217,7 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
         <!-- Center Official Republic Letterhead Text -->
         <div style="text-align:center;flex:1;padding:0 16px;">
           <div style="font-family:'Times New Roman',Georgia,serif;font-size:10px;font-weight:600;color:#475569;letter-spacing:1.2px;text-transform:uppercase;">Republic of the Philippines</div>
-          <div style="font-family:'Times New Roman',Georgia,serif;font-size:18px;font-weight:800;color:#C8151A;margin:2px 0 1px;letter-spacing:-0.01em;">K&amp;A Anti-Rabies Vaccine Clinic</div>
+          <div style="font-family:'Times New Roman',Georgia,serif;font-size:18px;font-weight:800;color:#1E293B;margin:2px 0 1px;letter-spacing:-0.01em;">K&amp;A Anti-Rabies Vaccine Clinic</div>
           <div style="font-family:'Segoe UI',sans-serif;font-size:10.5px;font-weight:700;color:#0F172A;text-transform:uppercase;letter-spacing:0.5px;">Animal Bite Treatment Center</div>
           <div style="font-size:9px;color:#64748B;margin-top:3px;font-family:'Segoe UI',sans-serif;">Polangui, Albay &bull; Contact: (052) 486-1220 &bull; Email: knaclinic.ph@gmail.com</div>
         </div>
@@ -4268,19 +4494,30 @@ function FollowUpModal({ patient, onClose, onToast }) {
 }
 
 /* ─────────────────────────── ROOT APP ─────────────────────────── */
-export default function App() {
+export default function App({ initialOpenAddModal = false, onAddModalClosed } = {}) {
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
-  const [showModal, setModal] = useState(false);
+  const [showModal, setModal] = useState(initialOpenAddModal);
   const [editPatient, setEditPatient] = useState(null);
   const [toast, setToast] = useState({ msg: '', type: '' });
   const [pinTarget, setPinTarget] = useState(null);
   const [pinning, setPinning] = useState(false);
   const [exportModal, setExportModal] = useState(false);
   const [followUpTarget, setFollowUpTarget] = useState(null);
+
+  useEffect(() => {
+    if (initialOpenAddModal) {
+      setModal(true);
+    }
+  }, [initialOpenAddModal]);
+
+  const handleCloseAddModal = () => {
+    setModal(false);
+    if (onAddModalClosed) onAddModalClosed();
+  };
   // Inventory items for vaccine brand dropdown
   const [inventoryItems, setInventoryItems] = useState([]);
 
@@ -4555,7 +4792,7 @@ export default function App() {
       ]);
 
       showToast(`${fullName} registered and authorized for app login`, 'success');
-      setModal(false);
+      handleCloseAddModal();
     } catch (err) {
       console.error('Add patient error:', err);
       const detail = err?.code === 'permission-denied'
@@ -4700,9 +4937,27 @@ export default function App() {
   // whether a row is selected), which is what made clicking a row to view its
   // record crash/fail silently instead of opening the detail view.
   const [selectedRows, setSelectedRows] = useState(new Set());
+  const [caseloadTab, setCaseloadTab] = useState('active'); // 'active' | 'completed' | 'all'
   const [sortBy, setSortBy] = useState('newest');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+
+  async function handleArchivePatient(patient) {
+    if (!patient?.firestoreId) return;
+    try {
+      const expYear = (new Date().getFullYear()) + 10;
+      await updateDoc(doc(db, 'vaccinations', patient.firestoreId), {
+        status: 'completed',
+        isArchived: true,
+        archivedAt: serverTimestamp(),
+        retentionExpiryYear: expYear,
+      });
+      showToast(`${getName(patient)} archived in DOH Retention Caseload (Retained until ${expYear}) ✓`, 'success');
+    } catch (err) {
+      console.error('Archive error:', err);
+      showToast('Failed to archive patient record.', 'error');
+    }
+  }
 
   const [searchFocused, setSearchFocused] = useState(false);
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -4781,8 +5036,18 @@ export default function App() {
     { key: 'mrn_asc', label: 'Patient ID' },
   ];
 
+  const activeCount = patients.filter(p => derivePatientStatus(p) !== 'completed' && !p.isArchived).length;
+  const completedCount = patients.filter(p => derivePatientStatus(p) === 'completed' || p.isArchived).length;
+  const totalCount = patients.length;
+
   // Process filtering and sorting
   const processedPatients = patients
+    .filter(p => {
+      const liveStatus = derivePatientStatus(p);
+      if (caseloadTab === 'active') return liveStatus !== 'completed' && !p.isArchived;
+      if (caseloadTab === 'completed') return liveStatus === 'completed' || p.isArchived;
+      return true;
+    })
     .filter(p => {
       const liveStatus = derivePatientStatus(p);
       return filter === 'all' || liveStatus === filter;
@@ -4835,6 +5100,146 @@ export default function App() {
     <>
       <style>{globalCSS}</style>
       <div style={{ padding: '20px 28px 36px', maxWidth: '1400px', margin: '0 auto' }}>
+
+        {/* ── Caseload Segmented Tabs ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => { setCaseloadTab('active'); setCurrentPage(1); }}
+            style={{
+              padding: '8px 16px',
+              borderRadius: 12,
+              border: caseloadTab === 'active' ? '1.5px solid #3B50DF' : '1px solid #E2E8F0',
+              background: caseloadTab === 'active' ? '#EEF2FF' : '#FFFFFF',
+              color: caseloadTab === 'active' ? '#3B50DF' : '#475569',
+              fontWeight: caseloadTab === 'active' ? 800 : 600,
+              fontSize: '.8125rem',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              cursor: 'pointer',
+              boxShadow: caseloadTab === 'active' ? '0 1px 3px rgba(59,80,223,0.15)' : '0 1px 2px rgba(0,0,0,0.04)',
+              transition: 'all .15s ease'
+            }}
+          >
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#3B50DF', display: 'inline-block' }} />
+            Active Caseload
+            <span style={{
+              fontSize: '.6875rem',
+              fontWeight: 800,
+              padding: '2px 7px',
+              borderRadius: 999,
+              background: caseloadTab === 'active' ? '#3B50DF' : '#F1F5F9',
+              color: caseloadTab === 'active' ? '#FFFFFF' : '#64748B'
+            }}>
+              {activeCount}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setCaseloadTab('completed'); setCurrentPage(1); }}
+            style={{
+              padding: '8px 16px',
+              borderRadius: 12,
+              border: caseloadTab === 'completed' ? '1.5px solid #059669' : '1px solid #E2E8F0',
+              background: caseloadTab === 'completed' ? '#ECFDF5' : '#FFFFFF',
+              color: caseloadTab === 'completed' ? '#059669' : '#475569',
+              fontWeight: caseloadTab === 'completed' ? 800 : 600,
+              fontSize: '.8125rem',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              cursor: 'pointer',
+              boxShadow: caseloadTab === 'completed' ? '0 1px 3px rgba(5,150,105,0.15)' : '0 1px 2px rgba(0,0,0,0.04)',
+              transition: 'all .15s ease'
+            }}
+          >
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10B981', display: 'inline-block' }} />
+            Completed & Retention Caseload (DOH 10-Yr)
+            <span style={{
+              fontSize: '.6875rem',
+              fontWeight: 800,
+              padding: '2px 7px',
+              borderRadius: 999,
+              background: caseloadTab === 'completed' ? '#059669' : '#F1F5F9',
+              color: caseloadTab === 'completed' ? '#FFFFFF' : '#64748B'
+            }}>
+              {completedCount}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setCaseloadTab('all'); setCurrentPage(1); }}
+            style={{
+              padding: '8px 16px',
+              borderRadius: 12,
+              border: caseloadTab === 'all' ? '1.5px solid #64748B' : '1px solid #E2E8F0',
+              background: caseloadTab === 'all' ? '#F8FAFC' : '#FFFFFF',
+              color: caseloadTab === 'all' ? '#0F172A' : '#475569',
+              fontWeight: caseloadTab === 'all' ? 800 : 600,
+              fontSize: '.8125rem',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              cursor: 'pointer',
+              boxShadow: caseloadTab === 'all' ? '0 1px 3px rgba(0,0,0,0.08)' : '0 1px 2px rgba(0,0,0,0.04)',
+              transition: 'all .15s ease'
+            }}
+          >
+            All Registered Patients
+            <span style={{
+              fontSize: '.6875rem',
+              fontWeight: 800,
+              padding: '2px 7px',
+              borderRadius: 999,
+              background: caseloadTab === 'all' ? '#0F172A' : '#F1F5F9',
+              color: caseloadTab === 'all' ? '#FFFFFF' : '#64748B'
+            }}>
+              {totalCount}
+            </span>
+          </button>
+        </div>
+
+        {/* ── DOH Retention Policy Notice for Completed Records ── */}
+        {caseloadTab === 'completed' && (
+          <div style={{
+            background: 'linear-gradient(135deg, #ECFDF5 0%, #F0FDF4 100%)',
+            border: '1px solid #A7F3D0',
+            borderRadius: 14,
+            padding: '12px 16px',
+            marginBottom: 14,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 14,
+            flexWrap: 'wrap'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{
+                width: 32, height: 32, borderRadius: 8, background: '#D1FAE5',
+                color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0, border: '1px solid #A7F3D0'
+              }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <strong style={{ fontSize: '.78125rem', color: '#065F46', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.4px' }}>
+                    DOH Statutory Medical Record Retention Compliance
+                  </strong>
+                  <span style={{ fontSize: '.6875rem', fontWeight: 800, background: '#D1FAE5', color: '#047857', padding: '1px 7px', borderRadius: 999, border: '1px solid #6EE7B7' }}>
+                    10-Year Statutory Period
+                  </span>
+                </div>
+                <p style={{ fontSize: '.71875rem', color: '#065F46', marginTop: 2, lineHeight: 1.4 }}>
+                  Pursuant to Philippine DOH clinical record retention standards (DOH AO 2012-0012), completed patient post-exposure prophylaxis (PEP) encounter records remain preserved intact in the clinic database for a minimum statutory retention window of 10 years before cold-storage archiving.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Main Clean Table Card Container ── */}
         <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
@@ -4966,20 +5371,23 @@ export default function App() {
               <thead>
                 <tr style={{ background: '#FAFAFA', borderBottom: '1px solid #E2E8F0', color: '#64748B', fontSize: '.6875rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.5px' }}>
                   <th style={{ padding: '16px 12px 16px 20px', width: '10%', fontWeight: 600, color: '#64748B' }}>Patient ID</th>
-                  <th style={{ padding: '16px 12px', width: '24%', fontWeight: 600, color: '#64748B' }}>Name</th>
-                  <th style={{ padding: '16px 12px', width: '15%', fontWeight: 600, color: '#64748B' }}>Email</th>
+                  <th style={{ padding: '16px 12px', width: '22%', fontWeight: 600, color: '#64748B' }}>Name</th>
+                  <th style={{ padding: '16px 12px', width: '14%', fontWeight: 600, color: '#64748B' }}>Email</th>
                   <th style={{ padding: '16px 12px', width: '11%', fontWeight: 600, color: '#64748B' }}>Mobile</th>
                   <th style={{ padding: '16px 12px', width: '8%', fontWeight: 600, color: '#64748B' }}>Service</th>
                   <th style={{ padding: '16px 12px', width: '8%', fontWeight: 600, color: '#64748B' }}>Status</th>
+                  {caseloadTab === 'completed' && (
+                    <th style={{ padding: '16px 12px', width: '12%', fontWeight: 600, color: '#047857' }}>DOH Retention (10-Yr)</th>
+                  )}
                   <th style={{ padding: '16px 12px', width: '10%', fontWeight: 600, color: '#64748B' }}>Submitted On</th>
-                  <th style={{ padding: '16px 20px 16px 12px', width: '140px', textAlign: 'center', fontWeight: 600, color: '#64748B' }}>Actions</th>
+                  <th style={{ padding: '16px 20px 16px 12px', width: '150px', textAlign: 'center', fontWeight: 600, color: '#64748B' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={8} style={{ textAlign: 'center', padding: 36, color: '#64748B', fontWeight: 500 }}>Loading patient records…</td></tr>
+                  <tr><td colSpan={caseloadTab === 'completed' ? 9 : 8} style={{ textAlign: 'center', padding: 36, color: '#64748B', fontWeight: 500 }}>Loading patient records…</td></tr>
                 ) : paginatedPatients.length === 0 ? (
-                  <tr><td colSpan={8} style={{ textAlign: 'center', padding: 36, color: '#64748B', fontWeight: 500 }}>No patient records found</td></tr>
+                  <tr><td colSpan={caseloadTab === 'completed' ? 9 : 8} style={{ textAlign: 'center', padding: 36, color: '#64748B', fontWeight: 500 }}>No patient records found in this caseload view</td></tr>
                 ) : (
                   paginatedPatients.map(p => {
                     const rowId = p.firestoreId || p.id;
@@ -5030,11 +5438,33 @@ export default function App() {
                             {liveStatus === 'completed' ? 'Completed' : isOverdue ? 'Overdue' : 'Ongoing'}
                           </span>
                         </td>
+                        {caseloadTab === 'completed' && (
+                          <td style={{ padding: '16px 12px' }}>
+                            <span style={{
+                              display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: '6px', fontSize: '.6875rem', fontWeight: 700,
+                              background: '#ECFDF5', color: '#047857', border: '1px solid #A7F3D0'
+                            }}>
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                              Retained ({getDOHRetentionYear(p)})
+                            </span>
+                          </td>
+                        )}
                         <td style={{ padding: '16px 12px', color: '#64748B', fontWeight: 400, fontSize: '.8125rem' }}>
                           {fmtDate(p.date)}
                         </td>
                         <td style={{ padding: '16px 20px 16px 12px', width: '150px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
                           <div style={{ display: 'flex', gap: 6, justifyContent: 'center', alignItems: 'center' }}>
+                            {liveStatus === 'completed' && !p.isArchived && (
+                              <button
+                                type="button"
+                                className="icon-btn"
+                                title="Archive into DOH Retention Caseload"
+                                onClick={() => handleArchivePatient(p)}
+                                style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid #A7F3D0', background: '#ECFDF5', color: '#047857', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                              >
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>
+                              </button>
+                            )}
                             <button
                               type="button"
                               className="icon-btn"
@@ -5097,7 +5527,7 @@ export default function App() {
                   onClick={() => setCurrentPage(pg)}
                   style={{
                     width: 28, height: 28, borderRadius: '.375rem', border: '1px solid #CBD5E1',
-                    background: safePage === pg ? '#C8151A' : '#FFFFFF',
+                    background: safePage === pg ? '#3B50DF' : '#FFFFFF',
                     color: safePage === pg ? '#FFFFFF' : '#334155',
                     fontSize: '.75rem', fontWeight: safePage === pg ? 800 : 600,
                     cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
@@ -5122,7 +5552,7 @@ export default function App() {
         </div>
       </div>
 
-      {showModal && <AddPatientModal onClose={() => setModal(false)} onAdd={handleAddPatient} inventoryItems={inventoryItems} />}
+      {showModal && <AddPatientModal onClose={handleCloseAddModal} onAdd={handleAddPatient} inventoryItems={inventoryItems} />}
       {editPatient && <EditPatientModal patient={editPatient} onClose={() => setEditPatient(null)} onSave={handleEditSave} inventoryItems={inventoryItems} />}
       {followUpTarget && (
         <FollowUpModal

@@ -30,6 +30,7 @@ import {
 } from '../../config/deviceSessions';
 import { usePatientAuth } from '../../context/PatientAuthContext';
 import { moderateScale, scale, verticalScale } from '../../constants/scale';
+import CustomAlertModal, { CustomAlertConfig } from '../../components/CustomAlertModal';
 
 // "3 hours ago" style stamp for the device list — absolute dates read as noise
 // for something the patient checks to spot an unfamiliar session.
@@ -90,9 +91,9 @@ const EMPTY_PERSONAL_DATA = {
 };
 
 export default function ProfileScreen() {
-  const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user, mrn, deviceId } = usePatientAuth();
+  const router = useRouter();
+  const { user, mrn, isGuest, deviceId } = usePatientAuth();
 
   const [currentView, setCurrentView] = useState<ViewState>('main');
   const [devices, setDevices] = useState<DeviceSession[]>([]);
@@ -103,6 +104,21 @@ export default function ProfileScreen() {
   const [profileImage, setProfileImage] = useState(
     `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.displayName || 'Patient')}&background=E31837&color=fff&size=128`
   );
+
+  // ── Custom Alert Modal State ──────────────────────────────────────────────
+  const [alertConfig, setAlertConfig] = useState<CustomAlertConfig>({
+    visible: false,
+    title: '',
+    message: '',
+  });
+
+  const showAlert = (config: Omit<CustomAlertConfig, 'visible'>) => {
+    setAlertConfig({ ...config, visible: true });
+  };
+
+  const hideAlert = () => {
+    setAlertConfig(prev => ({ ...prev, visible: false }));
+  };
 
   // Admin Dashboard's vaccinations/{mrn} doc is the source of truth for this
   // patient's demographic + PEP record — see ka-clinic-admin/src/patients.jsx vaxDoc.
@@ -174,10 +190,32 @@ export default function ProfileScreen() {
   }, [patientRecord]);
 
   const handleSavePersonalData = async () => {
+    if (isGuest || user?.isAnonymous) {
+      setIsEditingPersonal(false);
+      showAlert({
+        type: 'guest',
+        title: 'Guest Mode',
+        message: 'Guest accounts cannot edit personal details. Please sign in with your Medical Record Number (MRN) or create an account to update your profile.',
+        primaryButtonText: 'Sign In / Register',
+        onPrimaryPress: () => {
+          hideAlert();
+          router.push('/auth/login');
+        },
+        secondaryButtonText: 'Dismiss',
+        onSecondaryPress: hideAlert,
+      });
+      return;
+    }
     setIsEditingPersonal(false);
     const uid = user?.uid || 'guest';
     await AsyncStorage.setItem(`kna:personalData:${uid}`, JSON.stringify(personalData)).catch(() => {});
-    Alert.alert('Personal Info Saved', 'Your personal details have been updated successfully.');
+    showAlert({
+      type: 'success',
+      title: 'Personal Info Saved',
+      message: 'Your personal details have been updated successfully.',
+      primaryButtonText: 'OK',
+      onPrimaryPress: hideAlert,
+    });
   };
 
   const patientDoses: any[] = Array.isArray(patientRecord?.doses) ? patientRecord.doses : [];
@@ -201,67 +239,15 @@ export default function ProfileScreen() {
 
   const confirmLogoutDevice = (target: DeviceSession) => {
     const isThis = target.deviceId === deviceId;
-    Alert.alert(
-      `Sign Out ${isThis ? 'This Device' : target.label}?`,
-      `Are you sure you want to sign out from ${isThis ? 'this device' : target.label}? This session will be disconnected.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign Out',
-          style: 'destructive',
-          onPress: async () => {
-            if (isThis) {
-              try {
-                if (user?.uid) await clearThisDeviceSession(user.uid);
-                await setKeepSignedIn(false);
-                await signOut(auth);
-              } catch (e) {
-                console.log(e);
-              }
-              router.replace('/auth/login');
-            } else {
-              try {
-                if (user?.uid) await revokeDeviceSession(user.uid, target.deviceId);
-              } catch {
-                Alert.alert('Could Not Sign Out Device', 'Please check your connection and try again.');
-              }
-            }
-          },
-        },
-      ],
-    );
-  };
-
-  const handleRevokeAllOthers = () => {
-    const others = devices.filter(d => d.deviceId !== deviceId).length;
-    if (others === 0) return;
-    Alert.alert(
-      'Sign out all other devices?',
-      `${others} other device${others === 1 ? '' : 's'} will be signed out. This device stays signed in.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign Out All',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              if (user?.uid && deviceId) await revokeAllOtherSessions(user.uid, deviceId);
-            } catch {
-              Alert.alert('Could Not Sign Out Devices', 'Please check your connection and try again.');
-            }
-          },
-        },
-      ],
-    );
-  };
-
-  const handleLogout = () => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign Out',
-        style: 'destructive',
-        onPress: async () => {
+    showAlert({
+      type: 'signout',
+      title: `Sign Out ${isThis ? 'This Device' : target.label}?`,
+      message: `Are you sure you want to sign out from ${isThis ? 'this device' : target.label}? This session will be disconnected.`,
+      primaryButtonText: 'Sign Out',
+      isDestructive: true,
+      onPrimaryPress: async () => {
+        hideAlert();
+        if (isThis) {
           try {
             if (user?.uid) await clearThisDeviceSession(user.uid);
             await setKeepSignedIn(false);
@@ -270,17 +256,107 @@ export default function ProfileScreen() {
             console.log(e);
           }
           router.replace('/auth/login');
-        },
+        } else {
+          try {
+            if (user?.uid) await revokeDeviceSession(user.uid, target.deviceId);
+          } catch {
+            showAlert({
+              type: 'error',
+              title: 'Could Not Sign Out Device',
+              message: 'Please check your connection and try again.',
+              primaryButtonText: 'OK',
+              onPrimaryPress: hideAlert,
+            });
+          }
+        }
       },
-    ]);
+      secondaryButtonText: 'Cancel',
+      onSecondaryPress: hideAlert,
+    });
+  };
+
+  const handleRevokeAllOthers = () => {
+    const others = devices.filter(d => d.deviceId !== deviceId).length;
+    if (others === 0) return;
+    showAlert({
+      type: 'signout',
+      title: 'Sign out all other devices?',
+      message: `${others} other device${others === 1 ? '' : 's'} will be signed out. This device stays signed in.`,
+      primaryButtonText: 'Sign Out All',
+      isDestructive: true,
+      onPrimaryPress: async () => {
+        hideAlert();
+        try {
+          if (user?.uid && deviceId) await revokeAllOtherSessions(user.uid, deviceId);
+        } catch {
+          showAlert({
+            type: 'error',
+            title: 'Could Not Sign Out Devices',
+            message: 'Please check your connection and try again.',
+            primaryButtonText: 'OK',
+            onPrimaryPress: hideAlert,
+          });
+        }
+      },
+      secondaryButtonText: 'Cancel',
+      onSecondaryPress: hideAlert,
+    });
+  };
+
+  const handleLogout = () => {
+    showAlert({
+      type: 'signout',
+      title: 'Sign Out',
+      message: 'Are you sure you want to sign out of your account?',
+      primaryButtonText: 'Sign Out',
+      isDestructive: true,
+      onPrimaryPress: async () => {
+        hideAlert();
+        try {
+          if (user?.uid) await clearThisDeviceSession(user.uid);
+          await setKeepSignedIn(false);
+          await signOut(auth);
+        } catch (e) {
+          console.log(e);
+        }
+        router.replace('/auth/login');
+      },
+      secondaryButtonText: 'Cancel',
+      onSecondaryPress: hideAlert,
+    });
   };
 
   const handleAvatarPress = () => {
-    Alert.alert('Update Profile Picture', 'Choose an option to change your profile photo:', [
-      { text: 'Take Photo', onPress: () => pickImage(true) },
-      { text: 'Choose from Gallery', onPress: () => pickImage(false) },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
+    if (isGuest || user?.isAnonymous) {
+      showAlert({
+        type: 'guest',
+        title: 'Guest Mode',
+        message: 'Sign in with your Medical Record Number (MRN) to customize your profile photo.',
+        primaryButtonText: 'Sign In / Register',
+        onPrimaryPress: () => {
+          hideAlert();
+          router.push('/auth/login');
+        },
+        secondaryButtonText: 'Dismiss',
+        onSecondaryPress: hideAlert,
+      });
+      return;
+    }
+    showAlert({
+      type: 'info',
+      title: 'Update Profile Picture',
+      message: 'Choose an option to change your profile photo:',
+      primaryButtonText: 'Take Photo',
+      onPrimaryPress: () => {
+        hideAlert();
+        pickImage(true);
+      },
+      secondaryButtonText: 'Choose from Gallery',
+      onSecondaryPress: () => {
+        hideAlert();
+        pickImage(false);
+      },
+    });
   };
 
   const pickImage = async (useCamera = false) => {
@@ -290,7 +366,13 @@ export default function ProfileScreen() {
         : await ImagePicker.requestMediaLibraryPermissionsAsync();
 
       if (permissionResult.status !== 'granted') {
-        Alert.alert('Permission Required', 'Please grant permission to update your profile photo.');
+        showAlert({
+          type: 'warning',
+          title: 'Permission Required',
+          message: 'Please grant permission to update your profile photo.',
+          primaryButtonText: 'OK',
+          onPrimaryPress: hideAlert,
+        });
         return;
       }
 
@@ -307,7 +389,13 @@ export default function ProfileScreen() {
         if (mrn) {
           doc(db, 'vaccinations', mrn);
         }
-        Alert.alert('Profile Photo Saved', 'Your profile picture has been updated and saved.');
+        showAlert({
+          type: 'success',
+          title: 'Profile Photo Saved',
+          message: 'Your profile picture has been updated and saved.',
+          primaryButtonText: 'OK',
+          onPrimaryPress: hideAlert,
+        });
       }
     } catch (e) {
       console.warn('Profile image error:', e);
@@ -319,9 +407,21 @@ export default function ProfileScreen() {
     const uid = user?.uid || 'guest';
     await AsyncStorage.setItem(`kna:pushNotifs:${uid}`, value ? 'true' : 'false').catch(() => {});
     if (value) {
-      Alert.alert('Push Notifications Active', 'You will receive dose schedules and appointment alerts.');
+      showAlert({
+        type: 'success',
+        title: 'Push Notifications Active',
+        message: 'You will receive dose schedules and appointment alerts.',
+        primaryButtonText: 'OK',
+        onPrimaryPress: hideAlert,
+      });
     } else {
-      Alert.alert('Push Notifications Disabled', 'Notification preferences saved.');
+      showAlert({
+        type: 'info',
+        title: 'Push Notifications Disabled',
+        message: 'Notification preferences saved.',
+        primaryButtonText: 'OK',
+        onPrimaryPress: hideAlert,
+      });
     }
   };
 
@@ -390,6 +490,21 @@ export default function ProfileScreen() {
                 <TouchableOpacity
                   style={[s.editToggleBtn, isEditingPersonal && s.editToggleBtnActive]}
                   onPress={() => {
+                    if (isGuest || user?.isAnonymous) {
+                      showAlert({
+                        type: 'guest',
+                        title: 'Guest Mode',
+                        message: 'Guest accounts cannot edit personal details. Please sign in with your Medical Record Number (MRN) or create an account to update your profile.',
+                        primaryButtonText: 'Sign In / Register',
+                        onPrimaryPress: () => {
+                          hideAlert();
+                          router.push('/auth/login');
+                        },
+                        secondaryButtonText: 'Dismiss',
+                        onSecondaryPress: hideAlert,
+                      });
+                      return;
+                    }
                     if (isEditingPersonal) {
                       handleSavePersonalData();
                     } else {
@@ -410,6 +525,15 @@ export default function ProfileScreen() {
             />
 
             <ScrollView contentContainerStyle={{ paddingHorizontal: scale(20), paddingBottom: verticalScale(120) + insets.bottom }} showsVerticalScrollIndicator={false}>
+
+              {(isGuest || user?.isAnonymous) && (
+                <View style={s.guestNoticeBanner}>
+                  <Ionicons name="lock-closed" size={17} color="#3B50DF" />
+                  <Text style={s.guestNoticeText}>
+                    Guest Mode (View Only) — Personal information cannot be edited in guest mode. Sign in to manage your medical record.
+                  </Text>
+                </View>
+              )}
 
               {/* Basic Info */}
               <SectionLabel title="BASIC INFO" />
@@ -793,21 +917,7 @@ export default function ProfileScreen() {
           <Text style={nav.label}>Chat</Text>
         </TouchableOpacity>
 
-        {/* Tab 4: Records */}
-        <TouchableOpacity
-          style={nav.tab}
-          activeOpacity={0.7}
-          onPress={() => {
-            setCurrentView('main');
-            setIsEditingPersonal(false);
-            router.navigate('/records');
-          }}
-        >
-          <Ionicons name="id-card-outline" size={24} color="#64748B" />
-          <Text style={nav.label}>Records</Text>
-        </TouchableOpacity>
-
-        {/* Tab 5: Account */}
+        {/* Tab 4: Account */}
         <TouchableOpacity
           style={nav.tab}
           activeOpacity={0.7}
@@ -816,6 +926,9 @@ export default function ProfileScreen() {
           <Text style={[nav.label, nav.labelActive]}>Account</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Custom Alert Modal */}
+      <CustomAlertModal config={alertConfig} onClose={hideAlert} />
     </View>
   );
 }
@@ -1063,6 +1176,26 @@ const s = StyleSheet.create({
     backgroundColor: '#EEF2F7', borderRadius: scale(12), padding: scale(13), marginTop: verticalScale(16),
   },
   deviceNoteText: { flex: 1, fontSize: moderateScale(12.5), color: C.slate, lineHeight: moderateScale(18) },
+
+  guestNoticeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(10),
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+    borderRadius: scale(16),
+    paddingHorizontal: scale(14),
+    paddingVertical: verticalScale(12),
+    marginBottom: verticalScale(16),
+  },
+  guestNoticeText: {
+    flex: 1,
+    fontSize: moderateScale(12.5),
+    color: '#3730A3',
+    fontWeight: '600',
+    lineHeight: moderateScale(17),
+  },
 
   versionText: { textAlign: 'center', color: C.muted, fontSize: moderateScale(12), marginTop: verticalScale(32), marginBottom: verticalScale(16) },
 });

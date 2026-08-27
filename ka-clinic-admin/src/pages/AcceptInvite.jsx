@@ -128,8 +128,8 @@ export default function AcceptInvite({ onDone }) {
   }[status];
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 sm:p-6 bg-slate-100 font-sans selection:bg-red-600 selection:text-white relative overflow-hidden">
-      <div className="absolute top-[-10%] left-[-5%] w-[45vw] h-[45vw] bg-red-500/10 rounded-full blur-3xl pointer-events-none" />
+    <div className="min-h-screen flex items-center justify-center p-4 sm:p-6 bg-slate-100 font-sans selection:bg-indigo-600 selection:text-white relative overflow-hidden">
+      <div className="absolute top-[-10%] left-[-5%] w-[45vw] h-[45vw] bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-5%] w-[45vw] h-[45vw] bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
 
       <div className="w-full max-w-[1180px] bg-white rounded-[36px] shadow-[0_30px_90px_rgba(15,23,42,0.15)] border border-slate-200/80 overflow-hidden flex flex-col md:flex-row relative z-10">
@@ -137,11 +137,11 @@ export default function AcceptInvite({ onDone }) {
         {/* ── LEFT PANEL: Form ── */}
         <div className="w-full md:w-1/2 p-8 sm:p-10 md:p-12 bg-white flex flex-col relative z-10 self-stretch">
           <div className="flex flex-col items-center text-center pt-1 mb-5">
-            <div className="w-16 h-16 rounded-2xl bg-white border border-slate-100 shadow-[0_10px_30px_rgba(227,24,55,0.16)] flex items-center justify-center p-2.5 mb-2.5">
+            <div className="w-16 h-16 rounded-2xl bg-white border border-slate-100 shadow-[0_10px_30px_rgba(59,80,223,0.16)] flex items-center justify-center p-2.5 mb-2.5">
               <img src="/assets/dashboard/logo-white-nobg.png" alt="K&A Clinic" className="w-full h-full object-contain" />
             </div>
             <div className="font-display font-extrabold text-2xl tracking-tight text-slate-900 leading-none">K&A Clinic</div>
-            <div className="text-[10px] font-bold text-red-600 uppercase tracking-widest mt-1.5">Anti-Rabies &amp; Animal Bite Center</div>
+            <div className="text-[10px] font-bold text-[#3B50DF] uppercase tracking-widest mt-1.5">Anti-Rabies &amp; Animal Bite Center</div>
           </div>
 
           {status === 'loading' && (
@@ -153,8 +153,8 @@ export default function AcceptInvite({ onDone }) {
 
           {status === 'invalid' && (
             <div className="my-auto text-center py-4 animate-in fade-in duration-500">
-              <div className="w-12 h-12 rounded-2xl bg-red-50 flex items-center justify-center mx-auto mb-3">
-                <XCircle className="w-6 h-6 text-red-600" />
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 flex items-center justify-center mx-auto mb-3">
+                <XCircle className="w-6 h-6 text-rose-600" />
               </div>
               <h1 className="font-display text-lg font-extrabold text-slate-900 mb-1.5">Invite link invalid</h1>
               <p className="text-sm text-slate-500 leading-relaxed max-w-[280px] mx-auto">{error}</p>
@@ -164,8 +164,8 @@ export default function AcceptInvite({ onDone }) {
           {status === 'valid' && (
             <div className="my-auto animate-in fade-in duration-500">
               <div className="flex justify-center mb-3">
-                <div className="w-11 h-11 rounded-2xl bg-red-50 flex items-center justify-center">
-                  <ShieldCheck className="w-5 h-5 text-red-600" />
+                <div className="w-11 h-11 rounded-2xl bg-indigo-50 flex items-center justify-center">
+                  <ShieldCheck className="w-5 h-5 text-[#3B50DF]" />
                 </div>
               </div>
               <h1 className="font-display text-lg font-extrabold text-slate-900 mb-1.5 text-center">Complete your account</h1>
@@ -174,7 +174,7 @@ export default function AcceptInvite({ onDone }) {
               </p>
 
               {error && (
-                <div className="flex items-start gap-2 bg-red-50 text-red-600 text-xs p-3 rounded-xl border border-red-100 mb-4 animate-in slide-in-from-top-2">
+                <div className="flex items-start gap-2 bg-rose-50 text-rose-600 text-xs p-3 rounded-xl border border-rose-100 mb-4 animate-in slide-in-from-top-2">
                   <XCircle className="w-4 h-4 mt-0.5 shrink-0" />
                   <p className="font-semibold">{error}</p>
                 </div>
@@ -305,9 +305,9 @@ export default function AcceptInvite({ onDone }) {
         </div>
 
         {/* ── RIGHT PANEL: Live staff-profile preview ── */}
-        <div className="w-full md:w-1/2 p-8 sm:p-10 md:p-12 bg-gradient-to-br from-slate-900 via-slate-950 to-[#1a0509] flex flex-col justify-between relative overflow-hidden border-l border-white/5 self-stretch">
-          <div className="absolute -top-16 -right-10 w-72 h-72 bg-red-600/25 rounded-full blur-[90px] pointer-events-none animate-drift-slow" />
-          <div className="absolute -bottom-24 -left-16 w-80 h-80 bg-red-900/30 rounded-full blur-[100px] pointer-events-none animate-drift-slower" />
+        <div className="w-full md:w-1/2 p-8 sm:p-10 md:p-12 bg-gradient-to-br from-slate-900 via-slate-950 to-[#0c1222] flex flex-col justify-between relative overflow-hidden border-l border-white/5 self-stretch">
+          <div className="absolute -top-16 -right-10 w-72 h-72 bg-indigo-600/25 rounded-full blur-[90px] pointer-events-none animate-drift-slow" />
+          <div className="absolute -bottom-24 -left-16 w-80 h-80 bg-blue-900/30 rounded-full blur-[100px] pointer-events-none animate-drift-slower" />
           <div className="absolute inset-0 opacity-[0.05] [background-image:radial-gradient(circle,white_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none" />
 
           <div className="relative z-10 flex-1 flex flex-col items-center justify-center p-2">
@@ -376,11 +376,11 @@ export default function AcceptInvite({ onDone }) {
                   </div>
 
                   <div className="relative bg-white rounded-3xl border border-white/60 shadow-[0_30px_80px_rgba(0,0,0,0.5)] p-6 overflow-hidden transition-transform duration-500 hover:-translate-y-1.5">
-                    <div className={`absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r transition-colors duration-500 ${status === 'success' ? 'from-emerald-500 via-emerald-400 to-emerald-600' : 'from-red-500 via-rose-400 to-red-600'}`} />
-                    <UserIcon className="absolute -right-6 -top-5 w-32 h-32 text-red-50 rotate-12 pointer-events-none" strokeWidth={1.25} />
+                    <div className={`absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r transition-colors duration-500 ${status === 'success' ? 'from-emerald-500 via-emerald-400 to-emerald-600' : 'from-indigo-500 via-blue-400 to-indigo-600'}`} />
+                    <UserIcon className="absolute -right-6 -top-5 w-32 h-32 text-indigo-50 rotate-12 pointer-events-none" strokeWidth={1.25} />
 
                     <div className="relative flex items-center gap-1.5 mb-5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-indigo-400" />
                       <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
                       <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
                       <span className="ml-auto text-[10px] font-bold text-slate-400 tracking-wide">
@@ -390,7 +390,7 @@ export default function AcceptInvite({ onDone }) {
 
                     <div className="relative flex items-center gap-3 mb-5">
                       <div className="relative shrink-0">
-                        <div className="w-11 h-11 rounded-full bg-gradient-to-br from-red-500 to-red-700 text-white flex items-center justify-center font-extrabold text-sm ring-4 ring-red-50 transition-all">
+                        <div className="w-11 h-11 rounded-full bg-gradient-to-br from-indigo-600 to-[#3B50DF] text-white flex items-center justify-center font-extrabold text-sm ring-4 ring-indigo-50 transition-all">
                           {initials || <UserIcon className="w-4 h-4" />}
                         </div>
                         <span className={`absolute -right-0.5 -bottom-0.5 w-3.5 h-3.5 rounded-full border-2 border-white transition-colors ${status === 'success' ? 'bg-emerald-500' : 'bg-amber-400'}`} />
@@ -431,7 +431,7 @@ export default function AcceptInvite({ onDone }) {
             <h2 className="font-display text-2xl font-extrabold text-white mb-2 tracking-tight">
               {rightCopy.title}
             </h2>
-            <p className="text-rose-100/60 text-sm leading-relaxed font-medium max-w-md">
+            <p className="text-slate-300 text-sm leading-relaxed font-medium max-w-md">
               {rightCopy.desc}
             </p>
           </div>

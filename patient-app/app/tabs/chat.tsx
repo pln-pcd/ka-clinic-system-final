@@ -17,6 +17,7 @@ import {
   ActivityIndicator,
   Alert,
   BackHandler,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -43,45 +44,26 @@ type BubbleMessage = {
 };
 type Mode = 'bot' | 'admin';
 
-// Label of the "Talk to Clinic Staff" control, derived from the server-side
-// conversation record on every load — never from a local flag — so closing the
-// app, losing signal, or backgrounding it all resolve to whatever state the
-// conversation is actually in:
-//   'trigger' — no open conversation -> tapping starts a brand-new one
-//   'resume'  — an open conversation exists -> tapping returns to that thread
-//
-// The control is always shown in bot view. It was previously hidden until the
-// bot failed to answer, which left a patient who simply wanted a human with no
-// way to reach one. `needsEscalation` is still tracked and still highlights the
-// button, but no longer gates whether it exists.
 type StaffButtonState = 'trigger' | 'resume';
 
-// Device-local record of "the bot's last reply needed a human." Scoped per
-// uid so two patients sharing a device never inherit each other's trigger.
 const pendingTriggerKey = (uid: string) => `kna:pendingEscalation:${uid}`;
 
-const BOT_SENDER_LABEL = 'K&A AI Assistant';
-// Individual staff names are not exposed to patients; admin replies are written
-// with senderName 'K&A Clinic' (ka-clinic-admin/src/messages.jsx handleSend),
-// and anything missing falls back to this generic label.
+const BOT_NAME = 'KAI';
+const BOT_SENDER_LABEL = 'KAI (K&A AI Assistant)';
 const STAFF_SENDER_LABEL = 'K&A Staff';
 const PATIENT_SENDER_LABEL = 'You';
 
 const C = {
-  red: '#EF4444',
-  redLight: '#FFF0F1',
+  red: '#3B50DF',
+  redLight: '#EEF2FF',
   bg: '#F8F9FA',
   border: '#E9ECEF',
   text: '#1A1D1F',
   textSub: '#6C757D',
-  userBubble: '#EF4444',
+  userBubble: '#3B50DF',
   aiBubble: '#F1F3F5',
 };
 
-// Non-clinical prompts only. These used to be "After a bite?", "Dose count?",
-// "Side effects?" and "What is Rabies?" — all clinical, and all of them now
-// route straight to staff, so offering them as one-tap shortcuts would promise
-// an answer the assistant is no longer allowed to give.
 const SUGGESTIONS = [
   { icon: 'time', label: 'Clinic hours?' },
   { icon: 'calendar', label: 'How do I book an appointment?' },
@@ -92,40 +74,18 @@ const SUGGESTIONS = [
 export default function ChatScreen() {
   const { user, mrn } = usePatientAuth();
 
-  // Which view the patient is looking at. Unlike the old behavior, escalating
-  // no longer takes the bot away — the patient can switch back and keep asking
-  // the assistant while staff are picking up the conversation.
   const [mode, setMode] = useState<Mode>('bot');
-
-  // The patient's currently open (unresolved) conversation, read live from
-  // Firestore. This is the single source of truth for the staff button: an
-  // open thread means 'resume', no open thread means 'trigger'. A resolved
-  // thread is never reopened — staff archiving it (ka-clinic-admin/src/
-  // messages.jsx handleArchive) or the patient ending it drops it out of this
-  // query, and the next escalation creates a brand-new document.
   const [openThreadId, setOpenThreadId] = useState<string | null>(null);
   const [threadLoaded, setThreadLoaded] = useState(false);
   const [escalating, setEscalating] = useState(false);
   const [endingConversation, setEndingConversation] = useState(false);
 
-  // Whether the bot's most recent reply was one it could not or must not
-  // answer (api/chatbot.js needsEscalation). Bot messages are deliberately
-  // never written to Firestore — that would put every exchange in the clinic's
-  // inbox — so this is mirrored to AsyncStorage instead, per patient uid.
-  // Without that, a patient who force-quits after the bot says "I can't answer
-  // that" reopens to no button at all, losing the offer of help precisely when
-  // they were told to ask for it.
   const [lastReplyNeedsEscalation, setLastReplyNeedsEscalation] = useState(false);
   const [pendingTriggerLoaded, setPendingTriggerLoaded] = useState(false);
 
-  // Bot-mode conversation — ephemeral, local only (mirrors the landing page
-  // chatbot's behavior); never written to Firestore, so it never shows up
-  // in the Admin Dashboard's Patient Messages inbox.
   const [botMessages, setBotMessages] = useState<BubbleMessage[]>([]);
   const [botTyping, setBotTyping] = useState(false);
 
-  // Admin-mode conversation — real-time, persisted, one Firestore thread per
-  // escalation (see startEscalation below).
   const [adminMessages, setAdminMessages] = useState<BubbleMessage[]>([]);
   const [adminMessagesLoaded, setAdminMessagesLoaded] = useState(false);
 
@@ -133,6 +93,7 @@ export default function ChatScreen() {
   const [chatError, setChatError] = useState('');
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
 
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -149,6 +110,28 @@ export default function ChatScreen() {
       () => { goBackRef.current(); return true; }
     );
     return () => backHandler.remove();
+  }, []);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => {
+        setKeyboardVisible(true);
+        setTimeout(() => {
+          scrollRef.current?.scrollToEnd({ animated: true });
+        }, 80);
+      }
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setKeyboardVisible(false);
+      }
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
   }, []);
 
   // ── The patient's open conversation, straight from the server ───────────
@@ -435,8 +418,8 @@ export default function ChatScreen() {
           <Ionicons name="chevron-back" size={22} color={C.text} />
         </TouchableOpacity>
         <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={s.headerTitle}><Text style={{ color: C.red, fontWeight: '900' }}>K&A</Text> {mode === 'admin' ? 'Clinic Staff' : 'AI Assistant'}</Text>
-          <Text style={s.headerSubtitle}>{mode === 'admin' ? 'Chatting with clinic staff' : 'Medical AI Helpdesk'}</Text>
+          <Text style={s.headerTitle}>{mode === 'admin' ? (<><Text style={{ color: C.red, fontWeight: '900' }}>K&A</Text> Clinic Staff</>) : (<><Text style={{ color: C.red, fontWeight: '900' }}>{BOT_NAME}</Text> · AI Assistant</>)}</Text>
+          <Text style={s.headerSubtitle}>{mode === 'admin' ? 'Chatting with clinic staff' : 'K&A Virtual Assistant · Helpdesk'}</Text>
         </View>
         {/* Refresh — starts a fresh assistant conversation. Bot view only */}
         {mode === 'bot' ? (
@@ -445,7 +428,7 @@ export default function ChatScreen() {
             onPress={startNewBotConversation}
             activeOpacity={0.6}
             accessibilityRole="button"
-            accessibilityLabel="Start a new conversation with the assistant"
+            accessibilityLabel="Start a new conversation with KAI"
           >
             <Ionicons name="refresh" size={20} color={C.text} />
           </TouchableOpacity>
@@ -454,181 +437,178 @@ export default function ChatScreen() {
         )}
       </View>
 
-      {/* Body */}
-      <View style={{ flex: 1 }}>
-        {chatError ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), padding: scale(14), backgroundColor: C.redLight }}>
-            <Ionicons name="alert-circle-outline" size={16} color={C.red} />
-            <Text style={{ color: C.red, fontSize: moderateScale(12.5), flex: 1 }}>{chatError}</Text>
-          </View>
-        ) : null}
-
-        {!threadLoaded || !messagesLoaded ? (
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-            <ActivityIndicator color={C.red} size="large" />
-          </View>
-        ) : messages.length === 0 ? (
-          <ScrollView contentContainerStyle={s.emptyContent} keyboardShouldPersistTaps="handled">
-            <View style={s.hero}>
-              <View style={s.heroIcon}>
-                <Ionicons name={mode === 'admin' ? 'person-circle' : 'medical'} size={34} color={C.red} />
-              </View>
-              <Text style={s.heroTitle}>{mode === 'admin' ? 'Message the Clinic' : 'How Can We Help?'}</Text>
-              <Text style={s.heroSub}>
-                {mode === 'admin'
-                  ? 'Send a message and clinic staff will reply here'
-                  : 'Ask about appointments, clinic hours, or how to use the app. Medical questions go straight to clinic staff.'}
-              </Text>
+      {/* Body with KeyboardHandling */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
+      >
+        <View style={{ flex: 1 }}>
+          {chatError ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), padding: scale(14), backgroundColor: C.redLight }}>
+              <Ionicons name="alert-circle-outline" size={16} color={C.red} />
+              <Text style={{ color: C.red, fontSize: moderateScale(12.5), flex: 1 }}>{chatError}</Text>
             </View>
-            {mode === 'bot' && (
-              <View style={s.grid}>
-                {SUGGESTIONS.map((sug, i) => (
-                  <TouchableOpacity key={i} style={s.card} onPress={() => sendBotMessage(sug.label)} activeOpacity={0.8}>
-                    <View style={s.cardIconBox}>
-                      <Ionicons name={sug.icon as any} size={20} color={C.red} />
-                    </View>
-                    <Text style={s.cardText}>{sug.label}</Text>
-                  </TouchableOpacity>
-                ))}
+          ) : null}
+
+          {!threadLoaded || !messagesLoaded ? (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+              <ActivityIndicator color={C.red} size="large" />
+            </View>
+          ) : messages.length === 0 ? (
+            <ScrollView contentContainerStyle={s.emptyContent} keyboardShouldPersistTaps="handled">
+              <View style={s.hero}>
+                <View style={s.heroIcon}>
+                  <Ionicons name={mode === 'admin' ? 'person-circle' : 'medical'} size={34} color={C.red} />
+                </View>
+                <Text style={s.heroTitle}>{mode === 'admin' ? 'Message the Clinic' : `Hi! I'm ${BOT_NAME}`}</Text>
+                <Text style={s.heroSub}>
+                  {mode === 'admin'
+                    ? 'Send a message and clinic staff will reply here'
+                    : "I'm your K&A Clinic virtual assistant. Ask about clinic hours, booking appointments, or app help. Medical questions go straight to clinic staff."}
+                </Text>
               </View>
-            )}
-          </ScrollView>
-        ) : (
-          <ScrollView ref={scrollRef} contentContainerStyle={s.chatScroll} keyboardShouldPersistTaps="handled">
-            {messages.map((m) => {
-              const isPatient = m.sender === 'patient';
-              // Bot replies are always the assistant; staff replies show the
-              // generic clinic label rather than an individual's name. The
-              // patient's own bubbles are labelled too, so a thread that mixes
-              // assistant and staff replies never leaves a bubble unattributed.
-              const senderLabel = m.sender === 'bot'
-                ? BOT_SENDER_LABEL
-                : m.sender === 'admin'
-                  ? (m.senderName || STAFF_SENDER_LABEL)
-                  : PATIENT_SENDER_LABEL;
-              return (
-                <View key={m.id} style={[s.msgRow, isPatient ? s.msgUser : s.msgAi]}>
-                  {/* Only this wrapper caps the width. The bubble itself must
-                      not also cap it — nesting two 85% limits compounds them,
-                      which squeezed short messages hard enough to break single
-                      words across lines ("rabi/es"). */}
-                  <View style={[s.msgColumn, isPatient ? s.msgColumnOwn : s.msgColumnOther]}>
-                    {senderLabel && (
-                      <Text style={[s.senderLabel, isPatient && s.senderLabelOwn]}>{senderLabel}</Text>
-                    )}
-                    <View style={[s.bubble, isPatient ? s.bubbleUser : s.bubbleAi]}>
-                      <Text style={[s.msgText, isPatient && { color: '#fff' }]}>
-                        {m.text}
-                      </Text>
+              {mode === 'bot' && (
+                <View style={s.grid}>
+                  {SUGGESTIONS.map((sug, i) => (
+                    <TouchableOpacity key={i} style={s.card} onPress={() => sendBotMessage(sug.label)} activeOpacity={0.8}>
+                      <View style={s.cardIconBox}>
+                        <Ionicons name={sug.icon as any} size={20} color={C.red} />
+                      </View>
+                      <Text style={s.cardText}>{sug.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </ScrollView>
+          ) : (
+            <ScrollView ref={scrollRef} contentContainerStyle={s.chatScroll} keyboardShouldPersistTaps="handled">
+              {messages.map((m) => {
+                const isPatient = m.sender === 'patient';
+                const senderLabel = m.sender === 'bot'
+                  ? BOT_SENDER_LABEL
+                  : m.sender === 'admin'
+                    ? (m.senderName || STAFF_SENDER_LABEL)
+                    : PATIENT_SENDER_LABEL;
+                return (
+                  <View key={m.id} style={[s.msgRow, isPatient ? s.msgUser : s.msgAi]}>
+                    <View style={[s.msgColumn, isPatient ? s.msgColumnOwn : s.msgColumnOther]}>
+                      {senderLabel && (
+                        <Text style={[s.senderLabel, isPatient && s.senderLabelOwn]}>{senderLabel}</Text>
+                      )}
+                      <View style={[s.bubble, isPatient ? s.bubbleUser : s.bubbleAi]}>
+                        <Text style={[s.msgText, isPatient && { color: '#fff' }]}>
+                          {m.text}
+                        </Text>
+                      </View>
                     </View>
                   </View>
+                );
+              })}
+              {typing && (
+                <ActivityIndicator color={C.red} style={{ alignSelf: 'flex-start', marginLeft: scale(20) }} />
+              )}
+            </ScrollView>
+          )}
+
+          {/* Bot view controls */}
+          {mode === 'bot' && threadLoaded && openThreadId && (
+            <View style={s.actionRow}>
+              <TouchableOpacity
+                style={s.flexBtnPrimary}
+                onPress={onStaffButtonPress}
+                disabled={escalating}
+                activeOpacity={0.7}
+              >
+                {escalating ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <>
+                    <Ionicons name="arrow-undo-outline" size={15} color="#fff" />
+                    <Text style={s.flexBtnPrimaryTxt}>Back to Clinic Staff</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity style={s.flexBtnSecondary} onPress={endConversation} disabled={endingConversation} activeOpacity={0.7}>
+                {endingConversation ? (
+                  <ActivityIndicator color={C.red} size="small" />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark-done-outline" size={15} color={C.red} />
+                    <Text style={s.flexBtnSecondaryTxt}>Done / End</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Staff view */}
+          {mode === 'admin' && threadLoaded && openThreadId && (
+            <View style={s.actionRow}>
+              <TouchableOpacity style={s.flexBtnSecondary} onPress={() => setMode('bot')} activeOpacity={0.7}>
+                <Ionicons name="chatbubble-ellipses-outline" size={15} color={C.textSub} />
+                <Text style={s.flexBtnSecondaryTxt}>Ask Assistant</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={s.flexBtnPrimary} onPress={endConversation} disabled={endingConversation} activeOpacity={0.7}>
+                {endingConversation ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark-done-outline" size={15} color="#fff" />
+                    <Text style={s.flexBtnPrimaryTxt}>Done / End</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* ══ TALK TO CLINIC STAFF POPUP MODAL ════════════════════════════════ */}
+          <Modal visible={showEscalationModal} transparent animationType="fade" statusBarTranslucent>
+            <View style={s.modalOverlay}>
+              <View style={s.modalCard}>
+                <View style={s.modalHeader}>
+                  <View style={s.modalIconWrap}>
+                    <Ionicons name="medical-outline" size={24} color={C.red} />
+                  </View>
+                  <Text style={s.modalTitle}>Talk to Clinic Staff</Text>
                 </View>
-              );
-            })}
-            {typing && (
-              <ActivityIndicator color={C.red} style={{ alignSelf: 'flex-start', marginLeft: scale(20) }} />
-            )}
-          </ScrollView>
-        )}
-
-        {/* Bot view controls — always available so a patient who simply wants a
-            human never has to coax the bot into failing first. When the bot's
-            last reply could not answer, the button is emphasised rather than
-            newly revealed. End Conversation appears alongside it whenever a
-            conversation is open, so it can be closed without stepping into the
-            thread. */}
-        {/* Bot view controls — only shown if an active staff thread exists so patient can switch back or end it */}
-        {mode === 'bot' && threadLoaded && openThreadId && (
-          <View style={s.actionRow}>
-            <TouchableOpacity
-              style={s.flexBtnPrimary}
-              onPress={onStaffButtonPress}
-              disabled={escalating}
-              activeOpacity={0.7}
-            >
-              {escalating ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <>
-                  <Ionicons name="arrow-undo-outline" size={15} color="#fff" />
-                  <Text style={s.flexBtnPrimaryTxt}>Back to Clinic Staff</Text>
-                </>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity style={s.flexBtnSecondary} onPress={endConversation} disabled={endingConversation} activeOpacity={0.7}>
-              {endingConversation ? (
-                <ActivityIndicator color={C.red} size="small" />
-              ) : (
-                <>
-                  <Ionicons name="checkmark-done-outline" size={15} color={C.red} />
-                  <Text style={s.flexBtnSecondaryTxt}>Done / End</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Staff view — side-by-side / stacked action controls */}
-        {mode === 'admin' && threadLoaded && openThreadId && (
-          <View style={s.actionRow}>
-            <TouchableOpacity style={s.flexBtnSecondary} onPress={() => setMode('bot')} activeOpacity={0.7}>
-              <Ionicons name="chatbubble-ellipses-outline" size={15} color={C.textSub} />
-              <Text style={s.flexBtnSecondaryTxt}>Ask Assistant</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={s.flexBtnPrimary} onPress={endConversation} disabled={endingConversation} activeOpacity={0.7}>
-              {endingConversation ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <>
-                  <Ionicons name="checkmark-done-outline" size={15} color="#fff" />
-                  <Text style={s.flexBtnPrimaryTxt}>Done / End</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* ══ TALK TO CLINIC STAFF POPUP MODAL ════════════════════════════════ */}
-        <Modal visible={showEscalationModal} transparent animationType="fade" statusBarTranslucent>
-          <View style={s.modalOverlay}>
-            <View style={s.modalCard}>
-              <View style={s.modalHeader}>
-                <View style={s.modalIconWrap}>
-                  <Ionicons name="medical-outline" size={24} color={C.red} />
+                <Text style={s.modalMsg}>
+                  Medical and rabies-related questions are answered by clinic staff, not the assistant. Would you like to connect directly with K&A Clinic staff?
+                </Text>
+                <View style={s.modalActions}>
+                  <TouchableOpacity
+                    style={s.modalCancelBtn}
+                    onPress={() => setShowEscalationModal(false)}
+                  >
+                    <Text style={s.modalCancelTxt}>Dismiss</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={s.modalConfirmBtn}
+                    onPress={() => {
+                      setShowEscalationModal(false);
+                      onStaffButtonPress();
+                    }}
+                  >
+                    <Text style={s.modalConfirmTxt}>Talk to Staff</Text>
+                  </TouchableOpacity>
                 </View>
-                <Text style={s.modalTitle}>Talk to Clinic Staff</Text>
-              </View>
-              <Text style={s.modalMsg}>
-                Medical and rabies-related questions are answered by clinic staff, not the assistant. Would you like to connect directly with K&A Clinic staff?
-              </Text>
-              <View style={s.modalActions}>
-                <TouchableOpacity
-                  style={s.modalCancelBtn}
-                  onPress={() => setShowEscalationModal(false)}
-                >
-                  <Text style={s.modalCancelTxt}>Dismiss</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={s.modalConfirmBtn}
-                  onPress={() => {
-                    setShowEscalationModal(false);
-                    onStaffButtonPress();
-                  }}
-                >
-                  <Text style={s.modalConfirmTxt}>Talk to Staff</Text>
-                </TouchableOpacity>
               </View>
             </View>
-          </View>
-        </Modal>
+          </Modal>
 
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 60 + insets.top : 0}
-        >
-          <View style={[s.inputContainer, { paddingBottom: Math.max(insets.bottom, verticalScale(14)) }]}>
+          {/* Bottom Chat Input Box — cushioned above foot/navigation bar and lifts cleanly above keyboard */}
+          <View
+            style={[
+              s.inputContainer,
+              {
+                paddingBottom: keyboardVisible
+                  ? verticalScale(8)
+                  : Math.max(insets.bottom, verticalScale(16)) + verticalScale(6),
+              },
+            ]}
+          >
             <View style={s.inputWrapper}>
               <TextInput
                 style={s.input}
@@ -643,8 +623,8 @@ export default function ChatScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </KeyboardAvoidingView>
-      </View>
+        </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }

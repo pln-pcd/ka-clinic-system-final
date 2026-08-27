@@ -3,7 +3,23 @@
 // Firestore rules independently reject a staff account's list/get calls
 // against admins/{uid} regardless of what the client does.
 import { collection, onSnapshot } from 'firebase/firestore';
-import { Mail, RotateCcw, Search, ShieldCheck, Trash2, UserPlus, Users, X } from 'lucide-react';
+import {
+  Building2,
+  Check,
+  Copy,
+  Mail,
+  RotateCcw,
+  Search,
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
+  Trash2,
+  UserCheck,
+  UserPlus,
+  UserX,
+  Users,
+  X,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { auth, db } from '../lib/firebase';
 import Toast from '../components/Toast';
@@ -18,7 +34,7 @@ function formatDate(ts) {
 const STATUS_STYLE = {
   active: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   invited: 'bg-amber-50 text-amber-700 border-amber-200',
-  revoked: 'bg-slate-100 text-slate-500 border-slate-200',
+  revoked: 'bg-rose-50 text-rose-700 border-rose-200',
 };
 
 async function postJson(url, body, idToken) {
@@ -40,6 +56,8 @@ export default function ManageAdmins() {
   const [toast, setToast] = useState(null);
   const [busyUid, setBusyUid] = useState(null);
   const [confirmRevoke, setConfirmRevoke] = useState(null);
+  const [activeTab, setActiveTab] = useState('all'); // 'all' | 'active' | 'revoked'
+  const [copiedUid, setCopiedUid] = useState(null);
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'admins'), snap => {
@@ -52,6 +70,14 @@ export default function ManageAdmins() {
   function showToast(type, text) {
     setToast({ type, text });
     setTimeout(() => setToast(null), 3500);
+  }
+
+  function handleCopyEmail(email, uid) {
+    if (!email) return;
+    navigator.clipboard?.writeText(email);
+    setCopiedUid(uid);
+    showToast('success', `Copied ${email} to clipboard`);
+    setTimeout(() => setCopiedUid(null), 2000);
   }
 
   async function handleInvite(e) {
@@ -101,38 +127,97 @@ export default function ManageAdmins() {
   }
 
   const sorted = admins.slice().sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email));
-  const filtered = sorted.filter(a =>
+  const activeAndInvited = sorted.filter(a => a.status !== 'revoked');
+  const revokedAdmins = sorted.filter(a => a.status === 'revoked');
+
+  const filtered = sorted.filter(a => {
+    const matchesSearch =
+      (a.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (a.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (a.role || '').toLowerCase().includes(searchTerm.toLowerCase());
+
+    if (!matchesSearch) return false;
+    if (activeTab === 'active') return a.status !== 'revoked';
+    if (activeTab === 'revoked') return a.status === 'revoked';
+    return true;
+  });
+
+  const filteredRevoked = revokedAdmins.filter(a =>
     (a.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (a.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (a.role || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const activeCount = admins.filter(a => a.status === 'active').length;
+  const invitedCount = admins.filter(a => a.status === 'invited').length;
+  const revokedCount = revokedAdmins.length;
+
+  const stats = [
+    { label: 'Total Accounts', value: admins.length, sub: 'Registered & Invited', icon: Users, color: '#3B50DF', tint: '#EEF2FF', border: '#E0E7FF' },
+    { label: 'Active Admins', value: activeCount, sub: 'Full Portal Access', icon: ShieldCheck, color: '#059669', tint: '#ECFDF5', border: '#A7F3D0' },
+    { label: 'Pending Invites', value: invitedCount, sub: 'Awaiting Setup', icon: Mail, color: '#D97706', tint: '#FEF3C7', border: '#FDE68A' },
+    { label: 'Revoked Access', value: revokedCount, sub: 'Disabled Accounts', icon: UserX, color: '#DC2626', tint: '#FEF2F2', border: '#FECACA' },
+  ];
+
   return (
     <div className="h-full overflow-y-auto bg-[#F4F5F7]">
-      <div className="px-7 py-6 max-w-screen-2xl mx-auto">
+      <div className="px-7 py-6 max-w-screen-2xl mx-auto space-y-6">
 
-        <div className="flex items-center justify-between mb-6">
+        {/* ── Page Title Header ── */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-2xl font-extrabold tracking-tight text-slate-900">Manage Admins</h2>
             <p className="text-sm text-slate-500 mt-1">Invite staff members, assign roles, and manage system access.</p>
           </div>
           <button
             onClick={() => setInviteOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl shadow-sm transition-all cursor-pointer"
+            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#3B50DF] hover:bg-[#2F40B5] text-white text-sm font-bold rounded-xl shadow-xs transition-all cursor-pointer shrink-0"
           >
             <UserPlus size={16} /> Invite Admin
           </button>
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          {/* Table Header with Search Input */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 px-6 py-4 border-b border-slate-200 bg-slate-50/50">
-            <div className="flex items-center gap-2">
-              <Users size={18} className="text-slate-600" />
-              <h3 className="text-sm font-extrabold text-slate-800">Team Members</h3>
-              <span className="ml-1 text-xs font-bold text-slate-500 bg-slate-200/60 px-2 py-0.5 rounded-full">
-                {filtered.length} account{filtered.length === 1 ? '' : 's'}
-              </span>
+        {/* ── Main Active / Team Members Table Card ── */}
+        <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xs overflow-hidden">
+          
+          {/* Table Header with Tabs & Search */}
+          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 px-6 py-4 border-b border-slate-200 bg-slate-50/60">
+            
+            {/* View Filter Tabs */}
+            <div className="flex items-center gap-1.5 bg-slate-200/60 p-1 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setActiveTab('all')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'all'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                All Accounts ({admins.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('active')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'active'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Active &amp; Invited ({activeAndInvited.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('revoked')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'revoked'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Revoked ({revokedCount})
+              </button>
             </div>
 
             {/* Search Input Box */}
@@ -143,10 +228,10 @@ export default function ManageAdmins() {
                 placeholder="Search admins by name or email…"
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
-                className="w-full bg-white border border-slate-300 pl-9 pr-3.5 py-2 rounded-xl text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-600/20 focus:border-red-600 transition-all shadow-xs"
+                className="w-full bg-white border border-slate-300 pl-9 pr-8 py-2 rounded-xl text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#3B50DF] focus:ring-1 focus:ring-[#3B50DF] transition-all shadow-xs"
               />
               {searchTerm && (
-                <button onClick={() => setSearchTerm('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                <button onClick={() => setSearchTerm('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer">
                   <X size={14} />
                 </button>
               )}
@@ -158,12 +243,12 @@ export default function ManageAdmins() {
           ) : filtered.length === 0 ? (
             <div className="py-16 text-center">
               <Users className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-              <p className="text-sm font-bold text-slate-700">No admins found</p>
+              <p className="text-sm font-bold text-slate-700">No accounts found</p>
               <p className="text-xs text-slate-400 mt-1">
                 {searchTerm ? `No accounts match "${searchTerm}".` : 'No admin accounts registered yet.'}
               </p>
               {searchTerm && (
-                <button onClick={() => setSearchTerm('')} className="mt-3 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-700 rounded-lg transition-all">
+                <button onClick={() => setSearchTerm('')} className="mt-3 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-700 rounded-lg transition-all cursor-pointer">
                   Clear Search
                 </button>
               )}
@@ -178,61 +263,104 @@ export default function ManageAdmins() {
                     <th className="px-6 py-3.5 text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Role</th>
                     <th className="px-6 py-3.5 text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Status</th>
                     <th className="px-6 py-3.5 text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Date Invited</th>
-                    <th className="px-6 py-3.5 text-right text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Actions</th>
+                    <th className="px-6 py-3.5 text-center text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filtered.map(admin => (
-                    <tr key={admin.uid} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="px-6 py-3.5">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow-xs">
-                            {(admin.name || admin.email || '?').charAt(0).toUpperCase()}
+                  {filtered.map(admin => {
+                    const isCurrentUser = admin.uid === auth.currentUser?.uid;
+                    const isManager = (admin.role || '').toLowerCase() === 'manager';
+                    const isRevoked = admin.status === 'revoked';
+
+                    return (
+                      <tr key={admin.uid} className="hover:bg-slate-50/80 transition-colors">
+                        
+                        {/* Administrator Column */}
+                        <td className="px-6 py-3.5">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow-xs">
+                              {(admin.name || admin.email || '?').charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <span className="text-sm font-bold text-slate-900 block">
+                                {admin.name || <span className="text-slate-400 font-medium italic">Pending Setup</span>}
+                              </span>
+                              <span className="text-[11px] text-slate-400 font-medium">
+                                {isCurrentUser ? 'Current Account (You)' : isManager ? 'Clinic Administrator' : 'Team Member'}
+                              </span>
+                            </div>
                           </div>
-                          <div>
-                            <span className="text-sm font-bold text-slate-900 block">
-                              {admin.name || <span className="text-slate-400 font-medium italic">Pending Setup</span>}
-                            </span>
-                            <span className="text-[11px] text-slate-400 font-medium">{admin.uid === auth.currentUser?.uid ? 'Current Account (You)' : 'Team Member'}</span>
+                        </td>
+
+                        {/* Email Column */}
+                        <td className="px-6 py-3.5 text-xs font-bold text-slate-600">
+                          {admin.email || '—'}
+                        </td>
+
+                        {/* Role Column */}
+                        <td className="px-6 py-3.5">
+                          <span className="text-[11px] font-extrabold uppercase tracking-wide px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
+                            {admin.role || 'Staff'}
+                          </span>
+                        </td>
+
+                        {/* Status Column */}
+                        <td className="px-6 py-3.5">
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full border text-[11px] font-extrabold capitalize ${STATUS_STYLE[admin.status] || STATUS_STYLE.revoked}`}>
+                            {admin.status}
+                          </span>
+                        </td>
+
+                        {/* Date Invited Column */}
+                        <td className="px-6 py-3.5 text-xs font-semibold text-slate-500">
+                          {formatDate(admin.createdAt)}
+                        </td>
+
+                        {/* Actions Column */}
+                        <td className="px-6 py-3.5 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            {/* Resend button */}
+                            {admin.status === 'invited' ? (
+                              <button
+                                onClick={() => handleResend(admin)}
+                                disabled={busyUid === admin.uid}
+                                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors disabled:opacity-50 cursor-pointer"
+                              >
+                                <RotateCcw size={13} /> Resend
+                              </button>
+                            ) : isRevoked ? (
+                              <button
+                                onClick={() => handleResend(admin)}
+                                disabled={busyUid === admin.uid}
+                                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-[#3B50DF] bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 transition-colors disabled:opacity-50 cursor-pointer"
+                              >
+                                <UserPlus size={13} /> Re-invite
+                              </button>
+                            ) : (
+                              <button
+                                disabled
+                                title="Account is already active"
+                                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-400 bg-slate-100 border border-slate-200/60 opacity-50 cursor-not-allowed"
+                              >
+                                <RotateCcw size={13} /> Resend
+                              </button>
+                            )}
+
+                            {/* Revoke button */}
+                            {!isRevoked && !isCurrentUser && (
+                              <button
+                                onClick={() => setConfirmRevoke(admin)}
+                                disabled={busyUid === admin.uid}
+                                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors disabled:opacity-50 cursor-pointer"
+                              >
+                                <Trash2 size={13} /> Revoke
+                              </button>
+                            )}
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-3.5 text-xs font-bold text-slate-600">{admin.email}</td>
-                      <td className="px-6 py-3.5">
-                        <span className="text-[11px] font-extrabold uppercase tracking-wide px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
-                          {admin.role || 'Staff'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-3.5">
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full border text-[11px] font-extrabold capitalize ${STATUS_STYLE[admin.status] || STATUS_STYLE.revoked}`}>
-                          {admin.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-3.5 text-xs font-semibold text-slate-500">{formatDate(admin.createdAt)}</td>
-                      <td className="px-6 py-3.5 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          {admin.status === 'invited' && (
-                            <button
-                              onClick={() => handleResend(admin)}
-                              disabled={busyUid === admin.uid}
-                              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors disabled:opacity-50 cursor-pointer"
-                            >
-                              <RotateCcw size={13} /> Resend
-                            </button>
-                          )}
-                          {admin.status !== 'revoked' && admin.uid !== auth.currentUser?.uid && (
-                            <button
-                              onClick={() => setConfirmRevoke(admin)}
-                              disabled={busyUid === admin.uid}
-                              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 border border-red-100 transition-colors disabled:opacity-50 cursor-pointer"
-                            >
-                              <Trash2 size={13} /> Revoke
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -240,61 +368,66 @@ export default function ManageAdmins() {
         </div>
       </div>
 
-      {/* Invite Admin Modal Card — Bigger 580px Card with simple X icon */}
+      {/* ── Invite Admin Modal Card ── */}
       {inviteOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(6px)' }} onClick={() => setInviteOpen(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }} onClick={() => setInviteOpen(false)}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200" onClick={e => e.stopPropagation()}>
             
             {/* Header Banner */}
-            <div className="bg-[#1E293B] px-7 py-5 flex items-center justify-between">
-              <div className="flex items-center gap-3.5">
-                <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-white shrink-0">
-                  <UserPlus size={20} />
+            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-indigo-50 text-[#3B50DF] border border-indigo-100/90 flex items-center justify-center shrink-0 shadow-2xs">
+                  <UserPlus size={16} />
                 </div>
                 <div>
-                  <h3 className="text-lg font-extrabold text-white m-0 leading-tight">Invite New Administrator</h3>
-                  <p className="text-[11px] text-slate-300 font-medium mt-1">Send portal invitation link to clinic staff</p>
+                  <h3 className="text-sm font-bold text-slate-900">Invite New Administrator</h3>
+                  <p className="text-[11px] text-slate-400 font-normal mt-0.5">Send portal invitation link to clinic staff</p>
                 </div>
               </div>
-              {/* Simple X Icon (No background circle) */}
-              <button onClick={() => setInviteOpen(false)} className="text-slate-400 hover:text-white p-1 transition-colors cursor-pointer" title="Close">
-                <X size={20} />
+              <button
+                onClick={() => setInviteOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors"
+                title="Close"
+              >
+                <X size={16} />
               </button>
             </div>
 
-            <form onSubmit={handleInvite} className="p-6">
-              <div className="mb-5">
-                <label htmlFor="invite-admin-email" className="block text-[11px] font-extrabold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Staff Email Address *
-                </label>
-                <div className="relative">
-                  <Mail className="w-3.5 h-3.5 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  <input
-                    id="invite-admin-email"
-                    autoFocus
-                    type="email"
-                    placeholder="staff@kaclinic.ph"
-                    value={inviteEmail}
-                    onChange={e => setInviteEmail(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 pl-10 pr-3.5 py-2.5 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-4 focus:ring-red-600/10 focus:border-red-600 transition-all"
-                  />
+            <form onSubmit={handleInvite}>
+              <div className="p-6">
+                <div>
+                  <label htmlFor="invite-admin-email" className="block text-xs font-semibold text-slate-500 mb-1.5">
+                    Staff Email Address *
+                  </label>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      id="invite-admin-email"
+                      autoFocus
+                      type="email"
+                      placeholder="staff@kaclinic.ph"
+                      value={inviteEmail}
+                      onChange={e => setInviteEmail(e.target.value)}
+                      className="w-full bg-white border border-slate-300 pl-10 pr-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-[#3B50DF] focus:ring-1 focus:ring-[#3B50DF] transition-all"
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-400 font-normal mt-1.5">An invitation email will be delivered to complete account setup.</p>
                 </div>
-                <p className="text-[11px] text-slate-400 font-medium mt-1.5">An invitation email will be delivered to complete account setup.</p>
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center justify-end gap-3 pt-2">
+              <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3">
                 <button
                   type="button"
                   onClick={() => setInviteOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all cursor-pointer"
+                  className="px-3.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 text-slate-700 cursor-pointer hover:bg-slate-100 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={inviteSending || !inviteEmail.trim()}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all disabled:opacity-60 cursor-pointer shadow-xs"
+                  className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-[#3B50DF] hover:bg-[#2F40B5] text-white cursor-pointer shadow-xs transition-colors disabled:opacity-50"
                 >
                   {inviteSending ? 'Sending Invitation…' : 'Send Invite'}
                 </button>
@@ -304,29 +437,55 @@ export default function ManageAdmins() {
         </div>
       )}
 
-      {/* Revoke confirm */}
+      {/* ── Revoke Confirm Modal ── */}
       {confirmRevoke && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)' }} onClick={() => setConfirmRevoke(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="px-6 pt-6 pb-4 flex flex-col items-center text-center">
-              <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4 bg-red-50 border border-red-100">
-                <ShieldCheck size={24} className="text-red-600" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }} onClick={() => setConfirmRevoke(null)}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden border border-slate-200" onClick={e => e.stopPropagation()}>
+            
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-slate-100 bg-rose-50/60 flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-600 border border-rose-200 flex items-center justify-center shrink-0 shadow-2xs">
+                  <ShieldAlert size={16} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Revoke Access?</h3>
+                  <p className="text-[11px] text-slate-500 font-normal mt-0.5">Administrator Deactivation</p>
+                </div>
               </div>
-              <h3 className="text-base font-bold text-slate-900">Revoke {confirmRevoke.name || confirmRevoke.email}?</h3>
-              <p className="text-sm text-slate-500 mt-1.5 leading-relaxed">
-                They'll be signed out immediately and won't be able to log back in until re-invited.
+              <button
+                onClick={() => setConfirmRevoke(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors"
+                title="Close"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Are you sure you want to revoke portal access for <strong className="text-slate-900">{confirmRevoke.name || confirmRevoke.email}</strong>?
+              </p>
+              <p className="text-[11px] text-slate-400 mt-2">
+                They will be signed out immediately and won't be able to access the admin portal until re-invited.
               </p>
             </div>
-            <div className="px-6 pb-6 flex gap-3">
-              <button onClick={() => setConfirmRevoke(null)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
+
+            <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirmRevoke(null)}
+                className="px-3.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 text-slate-700 cursor-pointer hover:bg-slate-100 transition-colors"
+              >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={() => handleRevoke(confirmRevoke)}
                 disabled={busyUid === confirmRevoke.uid}
-                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-red-600 hover:bg-red-700 transition-all disabled:opacity-60"
+                className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-rose-600 hover:bg-rose-700 text-white cursor-pointer shadow-xs transition-colors disabled:opacity-50 inline-flex items-center gap-1.5"
               >
-                {busyUid === confirmRevoke.uid ? 'Revoking…' : 'Yes, Revoke'}
+                {busyUid === confirmRevoke.uid ? 'Revoking…' : 'Confirm Revoke'}
               </button>
             </div>
           </div>

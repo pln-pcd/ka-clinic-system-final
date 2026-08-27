@@ -50,6 +50,7 @@ import {
 } from '../../config/notifications';
 import { usePatientAuth } from '../../context/PatientAuthContext';
 import { moderateScale, scale, verticalScale } from '../../constants/scale';
+import CustomAlertModal, { CustomAlertConfig } from '../../components/CustomAlertModal';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -207,10 +208,25 @@ const NotifSwipeToDeleteRow = ({ children, onDelete }: { children: React.ReactNo
 export default function RabiesRecoveryApp() {
   const router = useRouter();
   const params = useLocalSearchParams<{ tab?: string }>();
-  const { user, mrn, loading: authLoading } = usePatientAuth();
+  const { user, mrn, isGuest, loading: authLoading } = usePatientAuth();
   const insets = useSafeAreaInsets();
 
   const [activeTab, setActiveTab] = useState<'Home' | 'Records'>('Home');
+
+  // ── Custom Alert Modal State ──────────────────────────────────────────────
+  const [alertConfig, setAlertConfig] = useState<CustomAlertConfig>({
+    visible: false,
+    title: '',
+    message: '',
+  });
+
+  const showAlert = (config: Omit<CustomAlertConfig, 'visible'>) => {
+    setAlertConfig({ ...config, visible: true });
+  };
+
+  const hideAlert = () => {
+    setAlertConfig(prev => ({ ...prev, visible: false }));
+  };
 
   useEffect(() => {
     if (params?.tab === 'Records') {
@@ -300,13 +316,34 @@ export default function RabiesRecoveryApp() {
 
   const handleExportFrontCard = async () => {
     if (exportingCard) return;
+    if (isGuest || user?.isAnonymous || !mrn) {
+      showAlert({
+        type: 'guest',
+        title: 'Guest Mode',
+        message: 'Guest accounts cannot export personalized medical cards. Sign in or register with your Medical Record Number (MRN) to access and export your official record card.',
+        primaryButtonText: 'Sign In / Register',
+        onPrimaryPress: () => {
+          hideAlert();
+          router.push('/auth/login');
+        },
+        secondaryButtonText: 'Dismiss',
+        onSecondaryPress: hideAlert,
+      });
+      return;
+    }
     const isBack = showEnlargeModal ? enlargeFlipped : isFlippedState;
     let targetRef = isBack ? cardBackShotRef : cardFrontShotRef;
     if (showEnlargeModal) {
       targetRef = isBack ? modalCardBackShotRef : modalCardFrontShotRef;
     }
     if (!targetRef.current?.capture) {
-      Alert.alert('Export Unavailable', 'The card is still loading. Please try again in a moment.');
+      showAlert({
+        type: 'warning',
+        title: 'Export Unavailable',
+        message: 'The card is still loading. Please try again in a moment.',
+        primaryButtonText: 'OK',
+        onPrimaryPress: hideAlert,
+      });
       return;
     }
     setExportingCard(true);
@@ -319,10 +356,22 @@ export default function RabiesRecoveryApp() {
           dialogTitle: isBack ? 'History of Exposure Record Card' : 'Anti-Rabies Vaccination Record Card',
         });
       } else {
-        Alert.alert('Card Exported', `Image saved to photos: ${uri}`);
+        showAlert({
+          type: 'success',
+          title: 'Card Exported',
+          message: `Image saved to photos: ${uri}`,
+          primaryButtonText: 'OK',
+          onPrimaryPress: hideAlert,
+        });
       }
     } catch (err: any) {
-      Alert.alert('Export Failed', err?.message || 'Could not export record card.');
+      showAlert({
+        type: 'error',
+        title: 'Export Failed',
+        message: err?.message || 'Could not export record card.',
+        primaryButtonText: 'OK',
+        onPrimaryPress: hideAlert,
+      });
     } finally {
       setExportingCard(false);
     }
@@ -572,7 +621,6 @@ export default function RabiesRecoveryApp() {
   // field names ka-clinic-admin/src/patients.jsx writes to `vaccinations/{mrn}`.
   // Guests have no clinic record at all, so the card shows blanks rather than
   // the sample-data placeholders used while a real patient's record is loading.
-  const isGuest = !!user?.isAnonymous;
   const pr = patientRecord || {};
   // Guests have no clinical record — show a dash instead of the sample-data
   // placeholder a loading real patient record would otherwise fall back to.
@@ -850,6 +898,104 @@ export default function RabiesRecoveryApp() {
                   <Ionicons name="expand-outline" size={13} color="#FFFFFF" />
                   <Text style={s.enlargeCardBtnTxt}>Enlarge Card</Text>
                 </TouchableOpacity>
+              </View>
+
+              {/* ══ COMPREHENSIVE CASE & INCIDENT DETAILS TABLE ══ */}
+              <View style={s.recordsSection}>
+                <View style={s.recordsSectionHeader}>
+                  <View style={s.recordsSectionAccent} />
+                  <Text style={s.recordsSectionTitle}>Case & Incident Record</Text>
+                </View>
+
+                <View style={s.recordsTableCard}>
+                  <View style={s.recordsTableHeaderRow}>
+                    <Text style={[s.recordsTableHeaderCell, { flex: 1.2 }]}>RECORD FIELD</Text>
+                    <Text style={[s.recordsTableHeaderCell, { flex: 1.8 }]}>DETAILS</Text>
+                  </View>
+
+                  <View style={s.recordsTableRow}>
+                    <Text style={[s.recordsTableCellLabel, { flex: 1.2 }]}>Exposure Date</Text>
+                    <Text style={[s.recordsTableCellValue, { flex: 1.8 }]}>
+                      {pr.date || pr.exposureDate ? formatDoseDate(pr.date || pr.exposureDate) : (isGuest ? '—' : '08/04/26')}
+                    </Text>
+                  </View>
+                  <View style={[s.recordsTableRow, s.recordsTableRowAlt]}>
+                    <Text style={[s.recordsTableCellLabel, { flex: 1.2 }]}>Exposure Category</Text>
+                    <Text style={[s.recordsTableCellValue, { flex: 1.8, color: '#3B50DF', fontWeight: '700' }]}>{catVal}</Text>
+                  </View>
+                  <View style={s.recordsTableRow}>
+                    <Text style={[s.recordsTableCellLabel, { flex: 1.2 }]}>Biting Animal</Text>
+                    <Text style={[s.recordsTableCellValue, { flex: 1.8 }]}>{pr.animal || pr.sourceOfExposure || (isGuest ? '—' : 'Dog / Cat')}</Text>
+                  </View>
+                  <View style={[s.recordsTableRow, s.recordsTableRowAlt]}>
+                    <Text style={[s.recordsTableCellLabel, { flex: 1.2 }]}>Animal Status</Text>
+                    <Text style={[s.recordsTableCellValue, { flex: 1.8 }]}>{pr.animalStatus || (isGuest ? '—' : 'Alive & Observed')}</Text>
+                  </View>
+                  <View style={s.recordsTableRow}>
+                    <Text style={[s.recordsTableCellLabel, { flex: 1.2 }]}>Local Washing</Text>
+                    <Text style={[s.recordsTableCellValue, { flex: 1.8 }]}>{pr.washTreatment || (isGuest ? '—' : 'Soap & Running Water')}</Text>
+                  </View>
+                  <View style={[s.recordsTableRow, s.recordsTableRowAlt]}>
+                    <Text style={[s.recordsTableCellLabel, { flex: 1.2 }]}>Known Allergies</Text>
+                    <Text style={[s.recordsTableCellValue, { flex: 1.8 }]}>{pr.allergies || (isGuest ? '—' : 'None Reported')}</Text>
+                  </View>
+                  <View style={[s.recordsTableRow, { borderBottomWidth: 0 }]}>
+                    <Text style={[s.recordsTableCellLabel, { flex: 1.2 }]}>Attending ABTC</Text>
+                    <Text style={[s.recordsTableCellValue, { flex: 1.8, fontWeight: '700', color: '#1E293B' }]}>K&A Animal Bite Center</Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* ══ PEP VACCINATION SCHEDULE TABLE ══ */}
+              <View style={s.recordsSection}>
+                <View style={s.recordsSectionHeader}>
+                  <View style={s.recordsSectionAccent} />
+                  <Text style={s.recordsSectionTitle}>PEP Dose Timeline</Text>
+                </View>
+
+                <View style={s.recordsTableCard}>
+                  {/* Table Header Row */}
+                  <View style={s.recordsTableHeaderRow}>
+                    <Text style={[s.recordsTableHeaderCell, { flex: 1.1 }]}>DOSE</Text>
+                    <Text style={[s.recordsTableHeaderCell, { flex: 1.4 }]}>VACCINE</Text>
+                    <Text style={[s.recordsTableHeaderCell, { flex: 1.1 }]}>DOSAGE</Text>
+                    <Text style={[s.recordsTableHeaderCell, { flex: 1.0 }]}>DATE</Text>
+                    <Text style={[s.recordsTableHeaderCell, { flex: 0.9, textAlign: 'center' }]}>STATUS</Text>
+                  </View>
+
+                  {doseList.map((d: any, idx: number) => {
+                    const isDone = d.done || (d.status || d.s) === 'done';
+                    const vaccineName = d.vaccineBrand || d.b || pr.vaccineBrand || (idx === 4 ? 'ERIG' : 'Speeda ARV');
+                    const dosageVal = d.dosage || pr.route || (idx === 4 ? '20 IU/kg' : '0.5 mL (IM)');
+                    const dateVal = d.date ? formatDoseDate(d.date) : (isGuest ? '—' : 'Scheduled');
+                    const isAlt = idx % 2 === 1;
+                    const isLast = idx === doseList.length - 1;
+
+                    return (
+                      <View key={d.id || idx} style={[s.recordsTableRow, isAlt && s.recordsTableRowAlt, isLast && { borderBottomWidth: 0 }]}>
+                        <Text style={[s.recordsTableCellValue, { flex: 1.1, fontWeight: '700', color: '#1E293B' }]} numberOfLines={1}>
+                          {d.label || d.n || `Dose ${idx + 1}`}
+                        </Text>
+                        <Text style={[s.recordsTableCellValue, { flex: 1.4 }]} numberOfLines={1}>
+                          {vaccineName}
+                        </Text>
+                        <Text style={[s.recordsTableCellValue, { flex: 1.1 }]} numberOfLines={1}>
+                          {dosageVal}
+                        </Text>
+                        <Text style={[s.recordsTableCellValue, { flex: 1.0 }]} numberOfLines={1}>
+                          {dateVal}
+                        </Text>
+                        <View style={{ flex: 0.9, alignItems: 'center', justifyContent: 'center' }}>
+                          <View style={[s.recordsMiniBadge, isDone ? s.recordsMiniBadgeDone : s.recordsMiniBadgePending]}>
+                            <Text style={[s.recordsMiniBadgeTxt, isDone ? s.recordsMiniBadgeTxtDone : s.recordsMiniBadgeTxtPending]}>
+                              {isDone ? 'DONE' : 'PENDING'}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
               </View>
           </>
         </View>
@@ -1310,17 +1456,7 @@ export default function RabiesRecoveryApp() {
           <Text style={nav.label}>Chat</Text>
         </TouchableOpacity>
 
-        {/* Tab 4: Records */}
-        <TouchableOpacity
-          style={nav.tab}
-          activeOpacity={0.7}
-          onPress={() => router.navigate('/records')}
-        >
-          <Ionicons name="id-card-outline" size={24} color="#64748B" />
-          <Text style={nav.label}>Records</Text>
-        </TouchableOpacity>
-
-        {/* Tab 5: Account */}
+        {/* Tab 4: Account */}
         <TouchableOpacity
           style={nav.tab}
           activeOpacity={0.7}
@@ -1330,6 +1466,9 @@ export default function RabiesRecoveryApp() {
           <Text style={nav.label}>Account</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Custom Alert Modal */}
+      <CustomAlertModal config={alertConfig} onClose={hideAlert} />
     </View>
   );
 }
@@ -3057,5 +3196,80 @@ const s = StyleSheet.create({
     fontSize: moderateScale(12),
     fontWeight: '600',
     color: '#5F6368',
+  },
+
+  // ══ MEDICAL RECORDS INLINE CARD STYLES ══
+  recordsSection: { marginTop: verticalScale(20), width: '100%' },
+  recordsSectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: verticalScale(10), gap: scale(8) },
+  recordsSectionAccent: { width: scale(4), height: verticalScale(18), borderRadius: scale(2), backgroundColor: '#3B50DF' },
+  recordsSectionTitle: { fontSize: moderateScale(17), fontWeight: '900', color: C.charcoal, flex: 1 },
+
+  recordsTableCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: scale(16),
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    overflow: 'hidden',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  recordsTableHeaderRow: {
+    flexDirection: 'row',
+    backgroundColor: '#0F172A',
+    paddingVertical: verticalScale(10),
+    paddingHorizontal: scale(10),
+    alignItems: 'center',
+  },
+  recordsTableHeaderCell: {
+    fontSize: moderateScale(10),
+    fontWeight: '800',
+    color: '#94A3B8',
+    letterSpacing: 0.5,
+  },
+  recordsTableRow: {
+    flexDirection: 'row',
+    paddingVertical: verticalScale(11),
+    paddingHorizontal: scale(10),
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  recordsTableRowAlt: {
+    backgroundColor: '#F8FAFC',
+  },
+  recordsTableCellLabel: {
+    fontSize: moderateScale(11.5),
+    fontWeight: '700',
+    color: '#475569',
+  },
+  recordsTableCellValue: {
+    fontSize: moderateScale(11),
+    fontWeight: '600',
+    color: '#1E293B',
+  },
+  recordsMiniBadge: {
+    paddingHorizontal: scale(6),
+    paddingVertical: verticalScale(3),
+    borderRadius: scale(6),
+  },
+  recordsMiniBadgeDone: {
+    backgroundColor: '#ECFDF5',
+  },
+  recordsMiniBadgePending: {
+    backgroundColor: '#FFF1F3',
+  },
+  recordsMiniBadgeTxt: {
+    fontSize: moderateScale(9.5),
+    fontWeight: '800',
+  },
+  recordsMiniBadgeTxtDone: {
+    color: '#059669',
+  },
+  recordsMiniBadgeTxtPending: {
+    color: '#3B50DF',
   },
 });

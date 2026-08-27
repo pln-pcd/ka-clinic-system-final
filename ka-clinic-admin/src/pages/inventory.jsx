@@ -7,8 +7,8 @@ import { db } from '../lib/firebase';
 /* ─────────────────────────── CSS ─────────────────────────── */
 const globalCSS = `
   :root {
-    --primary-red: #C8151A;
-    --red-hover: #A81015;
+    --primary-blue: #3B50DF;
+    --blue-hover: #2F40B5;
     --bg-main: #FAF9F9;
     --bg-card: #FFFFFF;
     --text-main: #1C1C1E;
@@ -20,7 +20,7 @@ const globalCSS = `
   body { font-family: 'Roboto', system-ui, -apple-system, sans-serif; background: var(--bg-main); color: var(--text-main); }
 
   .btn-add {
-    background: var(--primary-red);
+    background: var(--primary-blue);
     color: white;
     padding: 6px 12px;
     border-radius: 6px;
@@ -33,7 +33,7 @@ const globalCSS = `
     border: none;
     cursor: pointer;
   }
-  .btn-add:hover { background: var(--red-hover); }
+  .btn-add:hover { background: var(--blue-hover); }
 
   .btn-export {
     background: white;
@@ -108,8 +108,8 @@ const globalCSS = `
     width: 100%;
     text-align: left;
   }
-  .export-option:hover { border-color: #C8151A; background: #FFF8F8; }
-  .export-option-selected { border-color: #C8151A !important; background: #FFF0F0 !important; }
+  .export-option:hover { border-color: #3B50DF; background: #F8FAFC; }
+  .export-option-selected { border-color: #3B50DF !important; background: #EEF2FF !important; }
 `;
 
 /* ─────────────────────────── HELPERS ─────────────────────────── */
@@ -131,7 +131,7 @@ const buildInventoryReportHtml = (rows, periodLabel) => {
     <td style="text-align:center;font-weight:600;">${r.category}</td>
     <td style="text-align:center;font-weight:700;color:#0F172A;">${r.stock} ${fmtUnit(r.unit)}</td>
     <td style="text-align:center;">${r.expiry || '—'}</td>
-    <td style="text-align:center;font-weight:700;color:${liveStatus(r) === 'in-stock' ? '#15803D' : '#C8151A'};">${statusLabel(r).toUpperCase()}</td>
+    <td style="text-align:center;font-weight:700;color:${liveStatus(r) === 'in-stock' ? '#15803D' : '#DC2626'};">${statusLabel(r).toUpperCase()}</td>
   </tr>`).join('');
 
   return `<!DOCTYPE html><html><head><title>Inventory Stock Report</title>
@@ -148,14 +148,14 @@ const buildInventoryReportHtml = (rows, periodLabel) => {
 
   <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:14px;border-bottom:2px solid #0F172A;margin-bottom:16px;">
     <div style="width:58px;height:58px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:#FAFAFA;border:1px solid #CBD5E1;flex-shrink:0;">
-      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#C8151A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#3B50DF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="10"/>
         <path d="M12 6v12M6 12h12"/>
       </svg>
     </div>
     <div style="text-align:center;flex:1;padding:0 16px;">
       <div style="font-family:'Times New Roman',Georgia,serif;font-size:10px;font-weight:600;color:#475569;letter-spacing:1.2px;text-transform:uppercase;">Republic of the Philippines</div>
-      <div style="font-family:'Times New Roman',Georgia,serif;font-size:18px;font-weight:800;color:#C8151A;margin:2px 0 1px;letter-spacing:-0.01em;">K&amp;A Anti-Rabies Vaccine Clinic</div>
+      <div style="font-family:'Times New Roman',Georgia,serif;font-size:18px;font-weight:800;color:#1E293B;margin:2px 0 1px;letter-spacing:-0.01em;">K&amp;A Anti-Rabies Vaccine Clinic</div>
       <div style="font-family:'Segoe UI',sans-serif;font-size:10.5px;font-weight:700;color:#0F172A;text-transform:uppercase;letter-spacing:0.5px;">Animal Bite Treatment Center</div>
       <div style="font-size:9px;color:#64748B;margin-top:3px;font-family:'Segoe UI',sans-serif;">Polangui, Albay &bull; Contact: (052) 486-1220 &bull; Email: knaclinic.ph@gmail.com</div>
     </div>
@@ -426,22 +426,24 @@ export default function VaccineInventoryPage() {
       {/* Stats Row */}
       {(() => {
         const stats = [
-          { label: 'Total Items', value: inventory.length, icon: Package },
-          { label: 'Low Stock', value: inventory.filter(i => i.stock < 10 && i.stock > 0).length, icon: AlertCircle },
-          { label: 'Out of Stock', value: inventory.filter(i => i.stock <= 0).length, icon: XCircle },
+          { label: 'Total Items', value: inventory.length, sub: 'Active inventory items', icon: Package, color: '#3B50DF', tint: '#EEF2FF', border: '#E0E7FF' },
+          { label: 'Low Stock', value: inventory.filter(i => i.stock < 10 && i.stock > 0).length, sub: 'Reorder recommended', icon: AlertCircle, color: '#D97706', tint: '#FEF3C7', border: '#FDE68A' },
+          { label: 'Out of Stock', value: inventory.filter(i => i.stock <= 0).length, sub: 'Immediate restocking required', icon: XCircle, color: '#DC2626', tint: '#FEF2F2', border: '#FECACA' },
         ];
         return (
-          <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
             {stats.map((s, i) => (
-              <div key={i} className="bg-white rounded-xl border border-gray-200 p-5 hover:border-gray-300 hover:shadow-sm transition-all">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-slate-50 border border-slate-200">
-                    <s.icon size={18} strokeWidth={2} color="#475569" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-gray-900 tabular-nums leading-none">{s.value}</p>
-                    <p className="text-xs font-medium text-gray-500 mt-1">{s.label}</p>
-                  </div>
+              <div key={i} className="bg-white border border-slate-200/80 rounded-2xl p-4 sm:p-5 flex items-center gap-4 shadow-2xs hover:shadow-xs transition-all">
+                <div
+                  className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 shadow-2xs"
+                  style={{ background: s.tint, border: `1px solid ${s.border}`, color: s.color }}
+                >
+                  <s.icon size={20} strokeWidth={2.2} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-2xl font-extrabold text-slate-900 leading-none tabular-nums">{s.value}</p>
+                  <p className="text-xs font-bold text-slate-700 mt-1.5 truncate">{s.label}</p>
+                  <p className="text-[11px] font-medium text-slate-400 mt-0.5 truncate">{s.sub}</p>
                 </div>
               </div>
             ))}
@@ -862,34 +864,32 @@ export default function VaccineInventoryPage() {
 
       {/* ── Export Report Modal (Print Preview Split Layout) ── */}
       {showExportModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(4px)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div style={{ background: '#FFFFFF', borderRadius: 16, width: '1360px', maxWidth: '98vw', height: '92vh', maxHeight: '960px', boxShadow: '0 20px 40px rgba(0,0,0,0.25)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ background: '#FFFFFF', borderRadius: 24, width: '1360px', maxWidth: '98vw', height: '92vh', maxHeight: '960px', boxShadow: '0 24px 64px rgba(0,0,0,0.25)', overflow: 'hidden', display: 'flex', flexDirection: 'column', border: '1px solid #E2E8F0' }}>
             
-            {/* Dark Navy Header Bar */}
-            <div style={{
-              background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)',
-              padding: '16px 24px',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              flexShrink: 0
-            }}>
-              <div>
-                <h3 style={{ fontSize: '1.0625rem', fontWeight: 800, color: '#FFFFFF', margin: 0, letterSpacing: '-0.01em' }}>Export Inventory Report</h3>
-                <p style={{ fontSize: '.75rem', color: 'rgba(255,255,255,0.65)', margin: '3px 0 0' }}>Generate, print, and download inventory stock reports</p>
+            {/* Light Clean Header Bar (Matching Export Clinic Report) */}
+            <div
+              className="px-6 py-4 flex items-center justify-between"
+              style={{ flexShrink: 0, background: '#F4F6FE', borderBottom: '1px solid #E0E5FA' }}
+            >
+              <div className="flex items-center gap-3">
+                <div style={{ width: 34, height: 34, borderRadius: 10, background: '#3B50DF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Export Inventory Report</h3>
+                  <p className="text-[11px] text-slate-500 font-normal mt-0.5">Generate, print, and download inventory stock reports</p>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={closeExportModal}
-                style={{
-                  width: 32, height: 32, borderRadius: 8, border: 'none',
-                  background: 'rgba(255,255,255,0.12)', color: '#FFFFFF',
-                  fontSize: '1rem', fontWeight: 700, cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  transition: 'background .15s'
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.22)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.12)'}
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer transition-colors"
+                aria-label="Close"
               >
-                ✕
+                <X size={16} />
               </button>
             </div>
 
@@ -898,8 +898,8 @@ export default function VaccineInventoryPage() {
 
               {/* LEFT PANEL: Settings Controls */}
               <div style={{
-                width: '330px', flexShrink: 0, background: '#FAFAFA',
-                borderRight: '1px solid #E2E8F0', padding: '20px 20px',
+                width: '330px', flexShrink: 0, background: '#F7F8FD',
+                borderRight: '1px solid #E3E7F5', padding: '20px 20px',
                 display: 'flex', flexDirection: 'column', gap: 18, overflowY: 'auto'
               }}>
                 {/* Period selection */}
@@ -912,7 +912,7 @@ export default function VaccineInventoryPage() {
                     onChange={e => setExportPeriod(e.target.value)}
                     style={{
                       width: '100%', padding: '9px 12px', fontSize: '.8125rem', fontWeight: 600, color: '#0F172A',
-                      border: '1px solid #CBD5E1', borderRadius: 8, background: '#FFFFFF', outline: 'none', cursor: 'pointer',
+                      border: '1px solid #CBD5E1', borderRadius: 12, background: '#FFFFFF', outline: 'none', cursor: 'pointer',
                       boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
                     }}
                   >
@@ -934,7 +934,7 @@ export default function VaccineInventoryPage() {
                     onChange={e => setExportFormat(e.target.value)}
                     style={{
                       width: '100%', padding: '9px 12px', fontSize: '.8125rem', fontWeight: 600, color: '#0F172A',
-                      border: '1px solid #CBD5E1', borderRadius: 8, background: '#FFFFFF', outline: 'none', cursor: 'pointer',
+                      border: '1px solid #CBD5E1', borderRadius: 12, background: '#FFFFFF', outline: 'none', cursor: 'pointer',
                       boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
                     }}
                   >
@@ -943,14 +943,15 @@ export default function VaccineInventoryPage() {
                   </select>
                 </div>
 
-                {/* Left Sidebar Action Buttons (No Red, No Cancel Button) */}
+                {/* Left Sidebar Action Buttons */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 'auto', paddingTop: 16, borderTop: '1px solid #E2E8F0' }}>
                   <button
                     type="button"
                     onClick={handleExport}
                     disabled={exportRowCount === 0}
                     style={{
-                      width: '100%', height: 42, padding: '0 16px', borderRadius: 8, border: 'none', background: '#0F172A', color: '#FFFFFF',
+                      width: '100%', height: 42, padding: '0 16px', borderRadius: 12, border: '1px solid transparent',
+                      background: '#3B50DF', color: '#FFFFFF',
                       fontSize: '.8125rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer',
                       opacity: exportRowCount === 0 ? 0.5 : 1
                     }}
@@ -961,7 +962,7 @@ export default function VaccineInventoryPage() {
                 </div>
               </div>
 
-              {/* RIGHT PANEL: Live Paper Document Preview Workspace (Matches PDF Viewer Reference) */}
+              {/* RIGHT PANEL: Live Paper Document Preview Workspace */}
               <div style={{ flex: 1, background: '#1E293B', padding: '16px 24px 24px', overflow: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 
                 {/* Top Centered Dark PDF Viewer Toolbar */}

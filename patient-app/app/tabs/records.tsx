@@ -24,6 +24,7 @@ import { formatDoseDate } from '../../config/dates';
 import { db } from '../../config/firebase';
 import { usePatientAuth } from '../../context/PatientAuthContext';
 import { moderateScale, scale, verticalScale } from '../../constants/scale';
+import CustomAlertModal, { CustomAlertConfig } from '../../components/CustomAlertModal';
 
 const { width } = Dimensions.get('window');
 const MEDICAL_RED = '#EF4444';
@@ -52,10 +53,25 @@ const DEFAULT_RECORD_DOSES = [
 
 export default function RecordsScreen() {
   const router = useRouter();
-  const { user, mrn } = usePatientAuth();
+  const { user, mrn, isGuest } = usePatientAuth();
   const insets = useSafeAreaInsets();
 
   const [patientRecord, setPatientRecord] = useState<any | null>(null);
+
+  // ── Custom Alert Modal State ──────────────────────────────────────────────
+  const [alertConfig, setAlertConfig] = useState<CustomAlertConfig>({
+    visible: false,
+    title: '',
+    message: '',
+  });
+
+  const showAlert = (config: Omit<CustomAlertConfig, 'visible'>) => {
+    setAlertConfig({ ...config, visible: true });
+  };
+
+  const hideAlert = () => {
+    setAlertConfig(prev => ({ ...prev, visible: false }));
+  };
 
   // 3D Flip Card State
   const flipAnim = useSharedValue(0);
@@ -90,6 +106,21 @@ export default function RecordsScreen() {
   });
 
   const handleExportCard = async () => {
+    if (isGuest || user?.isAnonymous || !mrn) {
+      showAlert({
+        type: 'guest',
+        title: 'Guest Mode',
+        message: 'Guest accounts cannot export personalized medical cards. Sign in or register with your Medical Record Number (MRN) to access and export your official record card.',
+        primaryButtonText: 'Sign In / Register',
+        onPrimaryPress: () => {
+          hideAlert();
+          router.push('/auth/login');
+        },
+        secondaryButtonText: 'Dismiss',
+        onSecondaryPress: hideAlert,
+      });
+      return;
+    }
     const targetRef = isFlippedState ? cardBackShotRef : cardFrontShotRef;
     if (!targetRef.current?.capture) return;
     setExportingCard(true);
@@ -101,10 +132,22 @@ export default function RecordsScreen() {
           dialogTitle: 'Export Vaccination Record Card',
         });
       } else {
-        Alert.alert('Card Exported', `Image saved to temporary file: ${uri}`);
+        showAlert({
+          type: 'success',
+          title: 'Card Exported',
+          message: `Card image saved to: ${uri}`,
+          primaryButtonText: 'OK',
+          onPrimaryPress: hideAlert,
+        });
       }
     } catch (e: any) {
-      Alert.alert('Export Failed', e?.message || 'Could not export card image.');
+      showAlert({
+        type: 'error',
+        title: 'Export Failed',
+        message: e?.message || 'Could not export card image. Please try again.',
+        primaryButtonText: 'OK',
+        onPrimaryPress: hideAlert,
+      });
     } finally {
       setExportingCard(false);
     }
@@ -301,6 +344,9 @@ export default function RecordsScreen() {
           <Text style={nav.label}>Account</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Custom Alert Modal */}
+      <CustomAlertModal config={alertConfig} onClose={hideAlert} />
     </View>
   );
 }
