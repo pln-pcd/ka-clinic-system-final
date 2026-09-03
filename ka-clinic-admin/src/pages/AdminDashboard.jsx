@@ -199,7 +199,7 @@ function PageTransition({ children, pageKey }) {
       filter:     visible ? 'none' : 'blur(2px)',
       transition: 'opacity 0.32s cubic-bezier(0.22,1,0.36,1), transform 0.32s cubic-bezier(0.22,1,0.36,1), filter 0.28s ease',
       height: '100%',
-      backgroundColor: '#F4F5F7',
+      backgroundColor: '#F0F4FA',
     }}>
       {content}
     </div>
@@ -654,11 +654,11 @@ export default function AdminDashboard({ onLogout }) {
           onClick={() => setSelectedCalendarDay(isSelected ? null : day)}
           className="relative p-2 text-center rounded-xl text-xs font-bold cursor-pointer select-none transition-all"
           style={{
-            background: isSelected ? '#0F172A' : isToday ? '#3B50DF' : 'transparent',
+            background: isSelected ? '#060e24' : isToday ? '#1D4ED8' : 'transparent',
             color: isSelected || isToday ? '#ffffff' : '#334155',
-            boxShadow: isToday ? '0 2px 8px rgba(59,80,223,0.3)' : 'none',
+            boxShadow: isToday ? '0 2px 8px rgba(29,78,216,0.35)' : 'none',
           }}
-          onMouseEnter={e => { if (!isSelected && !isToday) { e.currentTarget.style.background = '#F1F5F9'; e.currentTarget.style.transform = 'scale(1.08)'; } }}
+          onMouseEnter={e => { if (!isSelected && !isToday) { e.currentTarget.style.background = '#EFF6FF'; e.currentTarget.style.transform = 'scale(1.08)'; } }}
           onMouseLeave={e => { if (!isSelected && !isToday) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.transform = 'scale(1)'; } }}
         >
           {day}
@@ -720,7 +720,7 @@ export default function AdminDashboard({ onLogout }) {
       label: 'Total Patients',
       value: stats.patients,
       sub: `${stats.patientsThisWeek} registered this week`,
-      color: '#3B50DF', tint: '#EEF2FF', border: '#E0E7FF',
+      color: '#1D4ED8', tint: '#EFF6FF', border: '#DBEAFE',
       Icon: Users,
       progress: null,
       page: 'patients'
@@ -729,7 +729,7 @@ export default function AdminDashboard({ onLogout }) {
       label: 'Today Appointments',
       value: stats.todayApts,
       sub: `${todayApts.filter(a => a.status === 'confirmed').length} confirmed`,
-      color: '#E11D48', tint: '#FFF1F2', border: '#FFE4E6',
+      color: '#0E2A6D', tint: '#EEF2FF', border: '#E0E7FF',
       Icon: Calendar,
       progress: null,
       page: 'appointments'
@@ -738,7 +738,7 @@ export default function AdminDashboard({ onLogout }) {
       label: 'Unread Messages',
       value: stats.unreadMessages,
       sub: 'Require attention',
-      color: '#D97706', tint: '#FEF3C7', border: '#FDE68A',
+      color: '#2563EB', tint: '#EFF6FF', border: '#DBEAFE',
       Icon: MessageSquare,
       progress: null,
       page: 'messages'
@@ -757,7 +757,7 @@ export default function AdminDashboard({ onLogout }) {
   ];
 
   return (
-    <div className="min-h-screen flex font-sans bg-[#F4F5F7] text-gray-900">
+    <div className="min-h-screen flex font-sans bg-[#F0F4FA] text-gray-900">
       {/* ── LOGOUT CONFIRM MODAL ── */}
       {showLogoutConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -790,26 +790,26 @@ export default function AdminDashboard({ onLogout }) {
       )}
 
       {/* ── SIDEBAR (Deep Midnight Navy Theme with SVG Curved Notch Cutout Active Tabs) ── */}
-      <div className="fixed h-screen z-40 shadow-xl flex flex-col justify-between bg-[#0F172A] text-white transition-all duration-300"
+      <div className="fixed h-screen z-40 flex flex-col justify-between bg-[#060e24] text-white transition-all duration-300"
         style={{ width: sidebarOpen ? 256 : 76 }}>
         <div className="flex flex-col min-h-0 flex-1">
           {/* Logo Header — White background logo beside clinic name */}
-          <div className="px-4 py-5 border-b border-slate-800 flex items-center justify-between min-h-[72px]">
+          <div className="px-4 py-5 border-b border-blue-950/60 flex items-center justify-between min-h-[72px]">
             <div style={{ opacity: sidebarOpen ? 1 : 0, transform: sidebarOpen ? 'translateX(0)' : 'translateX(-12px)', transition: 'opacity 0.22s,transform 0.25s', pointerEvents: sidebarOpen ? 'auto' : 'none', overflow: 'hidden', whiteSpace: 'nowrap' }} className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center p-1 flex-shrink-0 shadow-sm border border-slate-200/20">
+              <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center p-1 flex-shrink-0 shadow-sm border border-blue-100/90">
                 <img
-                  src="/assets/dashboard/logo-white.png"
+                  src="/assets/dashboard/logo-white-nobg.png"
                   alt="K&A Clinic Logo"
                   className="w-full h-full object-contain"
                 />
               </div>
               <div className="min-w-0">
                 <h1 className="font-bold text-base tracking-normal leading-tight text-white whitespace-nowrap">K&A Clinic</h1>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5 whitespace-nowrap">Clinical Admin</p>
+                <p className="text-[10px] font-bold text-white uppercase tracking-widest mt-0.5 whitespace-nowrap">Clinical Admin</p>
               </div>
             </div>
             <button onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-2 rounded-xl flex-shrink-0 cursor-pointer transition-colors hover:bg-white/10 text-slate-400 hover:text-white"
+              className="p-2 rounded-xl flex-shrink-0 cursor-pointer transition-colors hover:bg-blue-600/20 text-blue-200/80 hover:text-white"
               title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}>
               <Menu size={20} strokeWidth={2} />
             </button>
@@ -818,7 +818,7 @@ export default function AdminDashboard({ onLogout }) {
           {/* Nav List */}
           <nav className="pl-3 pr-0 py-4 space-y-4 overflow-y-auto flex-1 custom-scrollbar">
             <div>
-              <div className="px-3 pb-2 text-[10.5px] font-bold uppercase tracking-widest text-slate-400 h-6 flex items-center overflow-hidden">
+              <div className="px-3 pb-2 text-[10.5px] font-bold uppercase tracking-widest text-white h-6 flex items-center overflow-hidden">
                 <span className={`whitespace-nowrap transition-opacity duration-200 ${sidebarOpen ? 'opacity-100' : 'opacity-0'}`}>
                   Clinical Management
                 </span>
@@ -830,24 +830,24 @@ export default function AdminDashboard({ onLogout }) {
                     <button key={item.id} onClick={() => { setSelectedOverduePatientId(null); setActivePage(item.id); }}
                       className={`group w-full flex items-center gap-3 relative cursor-pointer text-sm leading-snug transition-colors duration-150 ${
                         isActive
-                          ? 'bg-[#F4F5F7] text-[#0F172A] font-extrabold rounded-l-2xl pl-3.5 pr-3 py-3 shadow-2xs relative z-10'
-                          : 'text-slate-300/90 font-medium hover:bg-white/10 hover:text-white pl-3.5 pr-3 py-2.5 rounded-xl mr-4'
+                          ? 'bg-[#F0F4FA] text-[#0a1d47] font-extrabold rounded-l-2xl pl-3.5 pr-3 py-3 relative z-10 -mr-1 w-[calc(100%+4px)]'
+                          : 'text-blue-100/85 font-medium hover:bg-blue-600/15 hover:text-white pl-3.5 pr-3 py-2.5 rounded-xl mr-4'
                       }`}
                       title={!sidebarOpen ? item.label : ''}>
 
                       {/* PERFECT SVG CONCAVE CURVED NOTCHES */}
                       {isActive && (
                         <>
-                          <svg className="absolute right-0 -top-4 w-4 h-4 text-[#F4F5F7] pointer-events-none z-20" viewBox="0 0 16 16" fill="currentColor">
+                          <svg className="absolute -right-0.5 -top-4 w-4 h-4 text-[#F0F4FA] pointer-events-none z-20" viewBox="0 0 16 16" fill="currentColor">
                             <path d="M16 16V0C16 8.83656 8.83656 16 0 16H16Z" />
                           </svg>
-                          <svg className="absolute right-0 -bottom-4 w-4 h-4 text-[#F4F5F7] pointer-events-none z-20" viewBox="0 0 16 16" fill="currentColor">
+                          <svg className="absolute -right-0.5 -bottom-4 w-4 h-4 text-[#F0F4FA] pointer-events-none z-20" viewBox="0 0 16 16" fill="currentColor">
                             <path d="M16 0V16C16 7.16344 8.83656 0 0 0H16Z" />
                           </svg>
                         </>
                       )}
 
-                      <item.icon size={19} strokeWidth={2.2} className={`flex-shrink-0 transition-colors relative z-10 ${isActive ? 'text-[#0F172A]' : 'text-slate-400 group-hover:text-white'}`}/>
+                      <item.icon size={19} strokeWidth={2.2} className={`flex-shrink-0 transition-colors relative z-10 ${isActive ? 'text-[#0a1d47]' : 'text-blue-300/70 group-hover:text-white'}`}/>
                       <span className="relative z-10" style={{ opacity: sidebarOpen ? 1 : 0, overflow: 'hidden', whiteSpace: 'nowrap', transition: 'opacity 0.18s', flex: 1, textAlign: 'left' }}>
                         {item.label}
                       </span>
@@ -863,7 +863,7 @@ export default function AdminDashboard({ onLogout }) {
             </div>
 
             <div>
-              <div className="px-3 pb-2 text-[10.5px] font-bold uppercase tracking-widest text-slate-400 h-6 flex items-center overflow-hidden">
+              <div className="px-3 pb-2 text-[10.5px] font-bold uppercase tracking-widest text-white h-6 flex items-center overflow-hidden">
                 <span className={`whitespace-nowrap transition-opacity duration-200 ${sidebarOpen ? 'opacity-100' : 'opacity-0'}`}>
                   System & Logistics
                 </span>
@@ -875,24 +875,24 @@ export default function AdminDashboard({ onLogout }) {
                     <button key={item.id} onClick={() => { setSelectedOverduePatientId(null); setActivePage(item.id); }}
                       className={`group w-full flex items-center gap-3 relative cursor-pointer text-sm leading-snug transition-colors duration-150 ${
                         isActive
-                          ? 'bg-[#F4F5F7] text-[#0F172A] font-extrabold rounded-l-2xl pl-3.5 pr-3 py-3 shadow-2xs relative z-10'
-                          : 'text-slate-300/90 font-medium hover:bg-white/10 hover:text-white pl-3.5 pr-3 py-2.5 rounded-xl mr-4'
+                          ? 'bg-[#F0F4FA] text-[#0a1d47] font-extrabold rounded-l-2xl pl-3.5 pr-3 py-3 relative z-10 -mr-1 w-[calc(100%+4px)]'
+                          : 'text-blue-100/85 font-medium hover:bg-blue-600/15 hover:text-white pl-3.5 pr-3 py-2.5 rounded-xl mr-4'
                       }`}
                       title={!sidebarOpen ? item.label : ''}>
 
                       {/* PERFECT SVG CONCAVE CURVED NOTCHES */}
                       {isActive && (
                         <>
-                          <svg className="absolute right-0 -top-4 w-4 h-4 text-[#F4F5F7] pointer-events-none z-20" viewBox="0 0 16 16" fill="currentColor">
+                          <svg className="absolute -right-0.5 -top-4 w-4 h-4 text-[#F0F4FA] pointer-events-none z-20" viewBox="0 0 16 16" fill="currentColor">
                             <path d="M16 16V0C16 8.83656 8.83656 16 0 16H16Z" />
                           </svg>
-                          <svg className="absolute right-0 -bottom-4 w-4 h-4 text-[#F4F5F7] pointer-events-none z-20" viewBox="0 0 16 16" fill="currentColor">
+                          <svg className="absolute -right-0.5 -bottom-4 w-4 h-4 text-[#F0F4FA] pointer-events-none z-20" viewBox="0 0 16 16" fill="currentColor">
                             <path d="M16 0V16C16 7.16344 8.83656 0 0 0H16Z" />
                           </svg>
                         </>
                       )}
 
-                      <item.icon size={19} strokeWidth={2.2} className={`flex-shrink-0 transition-colors relative z-10 ${isActive ? 'text-[#0F172A]' : 'text-slate-400 group-hover:text-white'}`}/>
+                      <item.icon size={19} strokeWidth={2.2} className={`flex-shrink-0 transition-colors relative z-10 ${isActive ? 'text-[#0a1d47]' : 'text-blue-300/70 group-hover:text-white'}`}/>
                       <span className="relative z-10" style={{ opacity: sidebarOpen ? 1 : 0, overflow: 'hidden', whiteSpace: 'nowrap', transition: 'opacity 0.18s', flex: 1, textAlign: 'left' }}>
                         {item.label}
                       </span>
@@ -905,8 +905,8 @@ export default function AdminDashboard({ onLogout }) {
         </div>
 
         {/* Logout Footer */}
-        <div className="p-3 border-t border-slate-800">
-          <button onClick={handleLogout} className="w-full flex items-center gap-3 pl-3.5 pr-3 py-2.5 rounded-xl transition-colors cursor-pointer text-sm font-medium text-slate-300/90 hover:bg-white/10 hover:text-rose-300"
+        <div className="p-3 border-t border-blue-950/60">
+          <button onClick={handleLogout} className="w-full flex items-center gap-3 pl-3.5 pr-3 py-2.5 rounded-xl transition-colors cursor-pointer text-sm font-medium text-blue-200/80 hover:bg-blue-600/20 hover:text-rose-300"
           title={!sidebarOpen ? 'Sign Out' : ''}>
             <LogOut size={19} strokeWidth={2} className="flex-shrink-0" />
             <span style={{ opacity: sidebarOpen ? 1 : 0, overflow: 'hidden', whiteSpace: 'nowrap', transition: 'opacity 0.18s' }}>
@@ -917,15 +917,15 @@ export default function AdminDashboard({ onLogout }) {
       </div>
 
       {/* ── MAIN CONTENT AREA ── */}
-      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden bg-[#F4F5F7]"
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden bg-[#F0F4FA]"
         style={{ marginLeft: sidebarOpen ? 256 : 76, transition: 'margin-left 0.4s cubic-bezier(0.22,1,0.36,1)' }}>
 
-        {/* ── STICKY TOP HEADER (FROSTED GLASS MODERN DESIGN) ── */}
-        <header className="border-b sticky top-0 z-30 h-20 flex items-center px-7 justify-between flex-shrink-0 shadow-2xs transition-all bg-[#F4F5F7]/95 backdrop-blur-md border-slate-200/80 text-slate-900 gap-4">
+        {/* ── STICKY TOP HEADER (CLEAN WHITE MODERN DESIGN) ── */}
+        <header className="border-b sticky top-0 z-30 h-20 flex items-center px-7 justify-between flex-shrink-0 transition-all bg-white border-slate-200 text-slate-900 gap-4 shadow-2xs">
           <div className="flex items-center gap-3 shrink-0">
-            <div className="h-6 w-1 rounded-full bg-[#3B50DF]"/>
+            <div className="h-6 w-1 rounded-full bg-[#1D4ED8]"/>
             <div>
-              <h1 className="text-lg font-bold leading-none tracking-tight text-slate-900">{menuItems.find(m => m.id === activePage)?.label || 'Dashboard'}</h1>
+              <h1 className="text-lg font-bold leading-none tracking-tight text-[#0a1d47]">{menuItems.find(m => m.id === activePage)?.label || 'Dashboard'}</h1>
               <p className="text-xs leading-none mt-1.5 text-slate-500 font-normal flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
                 K&A Anti-Rabies Vaccination Clinic
@@ -944,8 +944,8 @@ export default function AdminDashboard({ onLogout }) {
               >
                 <div className={`relative flex items-center w-full rounded-full border transition-all duration-300 ${
                   searchFocused
-                    ? 'bg-white border-indigo-300 shadow-xs ring-2 ring-indigo-500/10'
-                    : 'bg-slate-100/90 border-slate-200/90 hover:bg-slate-100 hover:border-slate-300'
+                    ? 'bg-white border-blue-500 shadow-xs ring-2 ring-blue-500/15'
+                    : 'bg-slate-50 border-slate-200 hover:bg-white hover:border-slate-300'
                 }`}>
                   <input
                     ref={searchRef}
@@ -954,12 +954,12 @@ export default function AdminDashboard({ onLogout }) {
                     onChange={e => setSearchQuery(e.target.value)}
                     onFocus={() => setSearchFocused(true)}
                     placeholder="Search patients, stock..."
-                    className="w-full py-2 px-4 text-xs font-semibold bg-transparent text-slate-800 placeholder-slate-400 outline-none rounded-full"
+                    className="w-full py-2 px-4 text-xs font-semibold bg-transparent text-[#0a1d47] placeholder-slate-400 outline-none rounded-full"
                   />
                   {searchQuery ? (
                     <button
                       onClick={() => setSearchQuery('')}
-                      className="absolute right-2.5 p-1 text-slate-400 hover:text-slate-700 rounded-full hover:bg-slate-200/60 cursor-pointer"
+                      className="absolute right-2.5 p-1 text-slate-400 hover:text-[#0a1d47] rounded-full hover:bg-blue-50 cursor-pointer"
                       title="Clear search"
                     >
                       <X size={14} />
@@ -968,7 +968,7 @@ export default function AdminDashboard({ onLogout }) {
                     <div className="absolute right-3 flex items-center gap-1">
                       <button
                         onClick={() => searchRef.current?.focus()}
-                        className="text-slate-400 hover:text-slate-700 cursor-pointer"
+                        className="text-slate-400 hover:text-[#1D4ED8] cursor-pointer"
                         title="Search"
                       >
                         <Search size={15} />
@@ -979,10 +979,10 @@ export default function AdminDashboard({ onLogout }) {
 
                 {/* Circular Search Results Dropdown */}
                 {searchFocused && searchQuery.trim() !== '' && (
-                  <div className="absolute right-0 top-11 w-72 sm:w-80 bg-white rounded-3xl shadow-xl border border-slate-200/90 z-50 overflow-hidden max-h-96 overflow-y-auto custom-scrollbar text-slate-900"
+                  <div className="absolute right-0 top-11 w-72 sm:w-80 bg-white rounded-3xl shadow-xl border border-blue-100 z-50 overflow-hidden max-h-96 overflow-y-auto custom-scrollbar text-slate-900"
                     style={{ animation: 'kna-notif-in 0.18s ease-out both' }}>
-                    <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Search Results</span>
+                    <div className="px-4 py-2.5 bg-blue-50/50 border-b border-blue-100 flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-[#0a1d47] uppercase tracking-wider">Search Results</span>
                       <span className="text-[10px] font-semibold text-slate-400">{searchResults.length} match{searchResults.length !== 1 ? 'es' : ''}</span>
                     </div>
 
@@ -998,7 +998,7 @@ export default function AdminDashboard({ onLogout }) {
                           const badgeBg = res.type === 'patient'
                             ? 'bg-blue-50 text-blue-700 border-blue-200'
                             : res.type === 'appointment'
-                            ? 'bg-purple-50 text-purple-700 border-purple-200'
+                            ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
                             : res.type === 'inventory'
                             ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                             : 'bg-rose-50 text-rose-700 border-rose-200';
@@ -1013,14 +1013,14 @@ export default function AdminDashboard({ onLogout }) {
                                 setSearchFocused(false);
                                 setSearchQuery('');
                               }}
-                              className="p-2.5 rounded-2xl flex items-center justify-between gap-2.5 hover:bg-slate-50 transition-colors cursor-pointer border border-transparent hover:border-slate-100"
+                              className="p-2.5 rounded-2xl flex items-center justify-between gap-2.5 hover:bg-blue-50/50 transition-colors cursor-pointer border border-transparent hover:border-blue-100"
                             >
                               <div className="flex items-center gap-2.5 min-w-0">
-                                <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center flex-shrink-0">
+                                <div className="w-8 h-8 rounded-full bg-blue-50 text-[#1D4ED8] flex items-center justify-center flex-shrink-0">
                                   <IconComp size={15} />
                                 </div>
                                 <div className="min-w-0">
-                                  <p className="text-xs font-bold text-slate-800 truncate">{res.title}</p>
+                                  <p className="text-xs font-bold text-[#0a1d47] truncate">{res.title}</p>
                                   <p className="text-[10.5px] text-slate-400 truncate mt-0.5">{res.sub}</p>
                                 </div>
                               </div>
@@ -1037,34 +1037,34 @@ export default function AdminDashboard({ onLogout }) {
               </div>
             )}
 
-            {/* Notification Bell (ENLARGED 44px x 44px) */}
+            {/* Notification Bell */}
             <div className="relative" ref={notifRef}>
               <button onClick={() => { setNotifOpen(o => !o); if (!notifOpen) markAllRead(); }}
-                className="w-11 h-11 flex items-center justify-center rounded-full border border-slate-200/80 bg-slate-100/90 hover:bg-indigo-50 hover:border-indigo-200 hover:text-[#3B50DF] text-slate-700 shadow-2xs relative cursor-pointer transition-all">
+                className="w-11 h-11 flex items-center justify-center rounded-full border border-slate-200 bg-slate-50 hover:bg-blue-50 hover:border-blue-200 hover:text-[#1D4ED8] text-slate-700 shadow-2xs relative cursor-pointer transition-all">
                 <Bell size={19}/>
                 {unreadNotifCount > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-[20px] h-[20px] bg-rose-500 text-white text-[11px] font-bold rounded-full flex items-center justify-center px-1" style={{ animation: 'kna-badge-pop 0.3s cubic-bezier(0.22,1,0.36,1) both' }}>{unreadNotifCount > 9 ? '9+' : unreadNotifCount}</span>}
               </button>
 
-              {/* ── NOTIFICATION CENTER CARD (MATCHES DESIGN SPEC WITHOUT AI) ── */}
+              {/* ── NOTIFICATION CENTER CARD ── */}
               {notifOpen && (
                 <div
-                  className="absolute right-0 top-13 w-[min(400px,calc(100vw-2rem))] rounded-3xl shadow-2xl border border-slate-200/90 bg-white z-50 overflow-hidden p-5 text-slate-900"
+                  className="absolute right-0 top-13 w-[min(400px,calc(100vw-2rem))] rounded-3xl shadow-2xl border border-slate-200 bg-white z-50 overflow-hidden p-5 text-slate-900"
                   style={{ animation: 'kna-notif-in 0.22s cubic-bezier(0.22,1,0.36,1) both' }}
                 >
-                  {/* TOP HEADER ROW: TITLE + SEE ALL BUTTON */}
+                  {/* TOP HEADER ROW */}
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-base font-bold text-slate-900 tracking-tight">Notification Center</h3>
+                    <h3 className="text-base font-bold text-[#0a1d47] tracking-tight">Notification Center</h3>
                     <div className="flex items-center gap-2">
                       <button
                         onClick={markAllRead}
-                        className="px-3.5 py-1 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-600 shadow-2xs transition-all cursor-pointer"
+                        className="px-3.5 py-1 rounded-xl border border-slate-200 bg-slate-50 hover:bg-blue-50 text-xs font-semibold text-[#0a1d47] shadow-2xs transition-all cursor-pointer"
                       >
                         See All
                       </button>
                     </div>
                   </div>
 
-                  {/* SEGMENTED TAB PILL CONTAINER (Today | This Week | Earlier) */}
+                  {/* SEGMENTED TAB PILL CONTAINER */}
                   <div className="bg-slate-100/90 p-1 rounded-2xl flex items-center mb-4 text-xs font-semibold text-slate-500">
                     {['Today', 'This Week', 'Earlier'].map((tab) => {
                       const isSelected = notifTab === tab;
@@ -1074,7 +1074,7 @@ export default function AdminDashboard({ onLogout }) {
                           onClick={() => setNotifTab(tab)}
                           className={`flex-1 py-1.5 px-3 rounded-xl text-center transition-all cursor-pointer ${
                             isSelected
-                              ? 'bg-white text-slate-900 font-bold shadow-2xs'
+                              ? 'bg-white text-[#0a1d47] font-bold shadow-2xs'
                               : 'text-slate-500 hover:text-slate-800'
                           }`}
                         >
@@ -1109,20 +1109,18 @@ export default function AdminDashboard({ onLogout }) {
                           <div
                             key={n.id}
                             onClick={() => handleNotifClick(n)}
-                            className="py-3 px-1 flex items-start gap-3 hover:bg-slate-50/80 transition-all cursor-pointer group relative"
+                            className="py-3 px-1 flex items-start gap-3 hover:bg-blue-50/40 transition-all cursor-pointer group relative"
                             style={{ animation: `kna-notif-item 0.18s ease-out ${idx * 0.03}s both` }}
                           >
-                            {/* Left Light Circular Icon Chip */}
-                            <div className="w-10 h-10 rounded-full bg-slate-100/90 border border-slate-200/70 flex items-center justify-center text-slate-700 shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
-                              <IconComponent size={17} strokeWidth={2} className="text-slate-700" />
+                            <div className="w-10 h-10 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-[#1D4ED8] shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
+                              <IconComponent size={17} strokeWidth={2} />
                             </div>
 
-                            {/* Notification Item Details */}
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center justify-between gap-2">
                                 <div className="flex items-center gap-1.5 min-w-0">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-purple-500 shrink-0 inline-block" />
-                                  <p className={`text-xs ${isUnread ? 'font-bold text-slate-900' : 'font-semibold text-slate-700'} truncate`}>
+                                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0 inline-block" />
+                                  <p className={`text-xs ${isUnread ? 'font-bold text-[#0a1d47]' : 'font-semibold text-slate-700'} truncate`}>
                                     {n.title}
                                   </p>
                                 </div>
@@ -1134,7 +1132,6 @@ export default function AdminDashboard({ onLogout }) {
                               </p>
                             </div>
 
-                            {/* Dismiss Button */}
                             <button
                               onClick={(e) => { e.stopPropagation(); dismissNotif(n.id); }}
                               className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-slate-700 p-1 rounded-full hover:bg-slate-200/60 transition-all shrink-0 cursor-pointer -mr-1 -mt-1"
@@ -1151,19 +1148,19 @@ export default function AdminDashboard({ onLogout }) {
               )}
             </div>
 
-            <div className="w-px h-6 bg-slate-200/80 mx-1"/>
+            <div className="w-px h-6 bg-slate-300 mx-1.5"/>
 
-            {/* Admin Profile Pill (BALANCED COMPACT SIZE) */}
-            <div className="flex items-center gap-2 p-1 pl-1 pr-3.5 rounded-full cursor-pointer transition-all bg-slate-100/90 hover:bg-white hover:shadow-2xs border border-slate-200/80 text-slate-900" onClick={() => setActivePage('settings')}>
-              <div className="w-8 h-8 rounded-full bg-[#3B50DF] flex items-center justify-center text-white font-extrabold text-xs shadow-2xs">
+            {/* Admin Profile Pill */}
+            <div className="flex items-center gap-2 p-1 pl-1 pr-3.5 rounded-full cursor-pointer transition-all bg-slate-50 hover:bg-blue-50/70 hover:shadow-2xs border border-slate-200 text-slate-900" onClick={() => setActivePage('settings')}>
+              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#0a1d47] to-[#1D4ED8] flex items-center justify-center text-white font-extrabold text-xs shadow-2xs">
                 {adminProfile.initials}
               </div>
-              <span className="text-xs font-bold hidden sm:block text-slate-800">{adminProfile.name}</span>
+              <span className="text-xs font-bold hidden sm:block text-[#0a1d47]">{adminProfile.name}</span>
             </div>
           </div>
         </header>
 
-        {/* Floating Real-Time Noticeable Toast Container (Photo Matched Style) */}
+        {/* Floating Real-Time Noticeable Toast Container */}
         {activeToast && (
           <div className="fixed top-24 right-6 z-50 w-96 transition-all duration-300" style={{ animation: 'kna-notif-in 0.25s cubic-bezier(0.22,1,0.36,1) both' }}>
             <ToastNotificationCard
@@ -1177,11 +1174,11 @@ export default function AdminDashboard({ onLogout }) {
         )}
 
         {/* ── PAGE CONTENT ── */}
-        <main className="flex-1 overflow-hidden bg-[#F4F5F7]">
+        <main className="flex-1 overflow-hidden bg-[#F0F4FA]">
           <PageTransition pageKey={activePage}>
 
             {activePage === 'dashboard' && (
-              <div className="h-full overflow-y-auto bg-[#F4F5F7]">
+              <div className="h-full overflow-y-auto bg-[#F0F4FA]">
                 <div className="px-4 sm:px-6 md:px-8 py-6 w-full max-w-[1700px] mx-auto space-y-6">
 
                   {/* ── TOP HERO ROW: WELCOME BANNER + QUICK CLINIC OPERATIONS ── */}
@@ -1191,68 +1188,68 @@ export default function AdminDashboard({ onLogout }) {
                     </div>
 
                     <div className="lg:col-span-5 xl:col-span-4 flex">
-                      <div className="rounded-3xl border p-5 sm:p-6 w-full flex flex-col bg-white border-slate-200/70 shadow-2xs text-slate-900 transition-all"
+                      <div className="rounded-3xl border p-5 sm:p-6 w-full flex flex-col bg-white border-blue-100/80 shadow-2xs text-slate-900 transition-all"
                         style={{ animation: 'kna-section-in 0.46s cubic-bezier(0.22,1,0.36,1) 0.18s both' }}>
                         <div className="flex-1 flex flex-col">
                           <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-sm font-bold text-slate-900">Clinic Operations</h3>
+                            <h3 className="text-sm font-bold text-[#0a1d47]">Clinic Operations</h3>
                           </div>
 
-                          {/* 2-Column responsive action grid filling card height evenly */}
+                          {/* 2-Column responsive action grid */}
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-3 flex-1">
                             <button
                               onClick={() => {
                                 setActivePage('patients');
                                 setOpenAddPatientModal(true);
                               }}
-                              className="group flex items-center justify-between p-3.5 px-4 rounded-2xl text-xs font-semibold border border-slate-200/70 transition-all cursor-pointer bg-slate-50/60 hover:bg-white hover:border-rose-200 text-slate-800 hover:text-rose-900 shadow-2xs hover:shadow-xs hover:-translate-y-0.5 h-full"
+                              className="group flex items-center justify-between p-3.5 px-4 rounded-2xl text-xs font-semibold border border-blue-100/80 transition-all cursor-pointer bg-blue-50/30 hover:bg-white hover:border-blue-300 text-[#0a1d47] shadow-2xs hover:shadow-xs hover:-translate-y-0.5 h-full"
                             >
                               <span className="flex items-center gap-2.5 truncate">
-                                <div className="w-7 h-7 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
+                                <div className="w-7 h-7 rounded-xl bg-blue-50 text-[#1D4ED8] flex items-center justify-center shrink-0 border border-blue-100">
                                   <UserPlus size={15} />
                                 </div>
                                 <span className="truncate">New Patient</span>
                               </span>
-                              <ChevronRightIcon size={14} className="transition-transform text-slate-400 group-hover:text-rose-600 group-hover:translate-x-0.5 shrink-0" />
+                              <ChevronRightIcon size={14} className="transition-transform text-slate-400 group-hover:text-[#1D4ED8] group-hover:translate-x-0.5 shrink-0" />
                             </button>
 
                             <button
                               onClick={() => setActivePage('appointments')}
-                              className="group flex items-center justify-between p-3.5 px-4 rounded-2xl text-xs font-semibold border border-slate-200/70 transition-all cursor-pointer bg-slate-50/60 hover:bg-white hover:border-indigo-200 text-slate-800 hover:text-indigo-900 shadow-2xs hover:shadow-xs hover:-translate-y-0.5 h-full"
+                              className="group flex items-center justify-between p-3.5 px-4 rounded-2xl text-xs font-semibold border border-blue-100/80 transition-all cursor-pointer bg-blue-50/30 hover:bg-white hover:border-blue-300 text-[#0a1d47] shadow-2xs hover:shadow-xs hover:-translate-y-0.5 h-full"
                             >
                               <span className="flex items-center gap-2.5 truncate">
-                                <div className="w-7 h-7 rounded-xl bg-indigo-50 text-[#3B50DF] flex items-center justify-center shrink-0 border border-indigo-100">
+                                <div className="w-7 h-7 rounded-xl bg-blue-50 text-[#1D4ED8] flex items-center justify-center shrink-0 border border-blue-100">
                                   <Calendar size={15} />
                                 </div>
                                 <span className="truncate">Walk-In Apt</span>
                               </span>
-                              <ChevronRightIcon size={14} className="transition-transform text-slate-400 group-hover:text-[#3B50DF] group-hover:translate-x-0.5 shrink-0" />
+                              <ChevronRightIcon size={14} className="transition-transform text-slate-400 group-hover:text-[#1D4ED8] group-hover:translate-x-0.5 shrink-0" />
                             </button>
 
                             <button
                               onClick={() => setActivePage('inventory')}
-                              className="group flex items-center justify-between p-3.5 px-4 rounded-2xl text-xs font-semibold border border-slate-200/70 transition-all cursor-pointer bg-slate-50/60 hover:bg-white hover:border-emerald-200 text-slate-800 hover:text-emerald-900 shadow-2xs hover:shadow-xs hover:-translate-y-0.5 h-full"
+                              className="group flex items-center justify-between p-3.5 px-4 rounded-2xl text-xs font-semibold border border-blue-100/80 transition-all cursor-pointer bg-blue-50/30 hover:bg-white hover:border-blue-300 text-[#0a1d47] shadow-2xs hover:shadow-xs hover:-translate-y-0.5 h-full"
                             >
                               <span className="flex items-center gap-2.5 truncate">
-                                <div className="w-7 h-7 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
+                                <div className="w-7 h-7 rounded-xl bg-blue-50 text-[#1D4ED8] flex items-center justify-center shrink-0 border border-blue-100">
                                   <Package size={15} />
                                 </div>
                                 <span className="truncate">Vaccine Stock</span>
                               </span>
-                              <ChevronRightIcon size={14} className="transition-transform text-slate-400 group-hover:text-emerald-600 group-hover:translate-x-0.5 shrink-0" />
+                              <ChevronRightIcon size={14} className="transition-transform text-slate-400 group-hover:text-[#1D4ED8] group-hover:translate-x-0.5 shrink-0" />
                             </button>
 
                             <button
                               onClick={() => setActivePage('incidents')}
-                              className="group flex items-center justify-between p-3.5 px-4 rounded-2xl text-xs font-semibold border border-slate-200/70 transition-all cursor-pointer bg-slate-50/60 hover:bg-white hover:border-amber-200 text-slate-800 hover:text-amber-900 shadow-2xs hover:shadow-xs hover:-translate-y-0.5 h-full"
+                              className="group flex items-center justify-between p-3.5 px-4 rounded-2xl text-xs font-semibold border border-blue-100/80 transition-all cursor-pointer bg-blue-50/30 hover:bg-white hover:border-blue-300 text-[#0a1d47] shadow-2xs hover:shadow-xs hover:-translate-y-0.5 h-full"
                             >
                               <span className="flex items-center gap-2.5 truncate">
-                                <div className="w-7 h-7 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100">
+                                <div className="w-7 h-7 rounded-xl bg-blue-50 text-[#1D4ED8] flex items-center justify-center shrink-0 border border-blue-100">
                                   <MapIcon size={15} />
                                 </div>
                                 <span className="truncate">Incident Map</span>
                               </span>
-                              <ChevronRightIcon size={14} className="transition-transform text-slate-400 group-hover:text-amber-600 group-hover:translate-x-0.5 shrink-0" />
+                              <ChevronRightIcon size={14} className="transition-transform text-slate-400 group-hover:text-[#1D4ED8] group-hover:translate-x-0.5 shrink-0" />
                             </button>
                           </div>
                         </div>
@@ -1260,15 +1257,15 @@ export default function AdminDashboard({ onLogout }) {
                     </div>
                   </div>
 
-                  {/* ── STAT BAR — ONE CARD, THE FOUR FIGURES SEPARATED BY DIVIDERS ── */}
-                  <div className="rounded-3xl border bg-white border-slate-200/70 shadow-2xs overflow-hidden"
+                  {/* ── STAT BAR ── */}
+                  <div className="rounded-3xl border bg-white border-blue-100/80 shadow-2xs overflow-hidden"
                     style={{ animation: 'kna-card-in 0.42s cubic-bezier(0.22,1,0.36,1) 0.04s both' }}>
-                    <div className="flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-slate-200">
+                    <div className="flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-blue-100/80">
                       {dashboardStatWidgets.map((w, i) => (
                         <div key={i} onClick={() => setActivePage(w.page)}
-                          className="group flex-1 min-w-0 p-5 sm:p-6 cursor-pointer flex items-center justify-between transition-colors duration-200 hover:bg-slate-50">
+                          className="group flex-1 min-w-0 p-5 sm:p-6 cursor-pointer flex items-center justify-between transition-colors duration-200 hover:bg-blue-50/30">
                           <div className="min-w-0 pr-3">
-                            <p className="text-3xl font-extrabold leading-none tabular-nums text-slate-900 group-hover:text-[#3B50DF] transition-colors">
+                            <p className="text-3xl font-extrabold leading-none tabular-nums text-[#0a1d47] group-hover:text-[#1D4ED8] transition-colors">
                               {w.value}
                             </p>
                             <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mt-2 truncate">{w.label}</p>
@@ -1281,7 +1278,7 @@ export default function AdminDashboard({ onLogout }) {
                             </div>
                           ) : (
                             <div className="transition-transform group-hover:scale-105 shrink-0">
-                              <CircularProgress percentage={w.progress} size={48} strokeWidth={4} color={w.color === '#C8151A' ? '#C8151A' : '#3B50DF'} trackColor="#E2E8F0" />
+                              <CircularProgress percentage={w.progress} size={48} strokeWidth={4} color={w.color === '#DC2626' ? '#DC2626' : '#1D4ED8'} trackColor="#DBEAFE" />
                             </div>
                           )}
                         </div>
@@ -1289,19 +1286,19 @@ export default function AdminDashboard({ onLogout }) {
                     </div>
                   </div>
 
-                  {/* ── MAIN DASHBOARD GRID: LEFT 5 COLS (LONGER OVERDUE TRACKER), RIGHT 7 COLS (TODAY'S SCHED + CALENDAR, VACCINE INVENTORY BELOW) ── */}
+                  {/* ── MAIN DASHBOARD GRID ── */}
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
 
-                    {/* LEFT COLUMN: OVERDUE DOSE TRACKER (LONGER PORTRAIT CARD) */}
+                    {/* LEFT COLUMN: OVERDUE DOSE TRACKER */}
                     <div className="lg:col-span-5 xl:col-span-4 flex flex-col gap-6">
 
-                      {/* 1. Overdue Dose Tracker Card (Taller/Longer Format) */}
-                      <div className="rounded-3xl border overflow-hidden bg-white border-slate-200/70 shadow-2xs text-slate-900"
+                      {/* 1. Overdue Dose Tracker Card */}
+                      <div className="rounded-3xl border overflow-hidden bg-white border-blue-100/80 shadow-2xs text-slate-900"
                         style={{ animation: 'kna-section-in 0.46s cubic-bezier(0.22,1,0.36,1) 0.10s both' }}>
-                        <div className="p-5 border-b border-slate-100 bg-slate-50/40 flex items-center justify-between">
+                        <div className="p-5 border-b border-blue-50 bg-blue-50/40 flex items-center justify-between">
                           <div>
                             <div className="flex items-center gap-2">
-                              <h3 className="text-sm font-bold tracking-tight text-slate-900">Overdue Dose Tracker</h3>
+                              <h3 className="text-sm font-bold tracking-tight text-[#0a1d47]">Overdue Dose Tracker</h3>
                               {overdueList.length > 0 && (
                                 <span className="bg-rose-50 text-rose-600 text-[10px] font-bold px-2 py-0.5 rounded-full border border-rose-200">
                                   {overdueList.length} Action Needed
@@ -1311,7 +1308,7 @@ export default function AdminDashboard({ onLogout }) {
                             <p className="text-[11px] mt-0.5 text-slate-500 font-normal">Patients past due on scheduled doses</p>
                           </div>
                           <button onClick={() => setActivePage('vaccination')}
-                            className="text-xs font-bold text-[#3B50DF] hover:underline cursor-pointer">
+                            className="text-xs font-bold text-[#1D4ED8] hover:underline cursor-pointer">
                             View All →
                           </button>
                         </div>
@@ -1326,13 +1323,13 @@ export default function AdminDashboard({ onLogout }) {
                           <div className="p-3.5 space-y-2.5">
                             {overdueList.slice(0, 7).map(o => (
                               <button key={o.id} onClick={() => { setSelectedOverduePatientId(o.firestoreId || o.id || o.name); setActivePage('vaccination'); }}
-                                className="w-full flex items-center justify-between gap-2.5 p-3 rounded-2xl transition-all cursor-pointer text-left bg-slate-50/50 hover:bg-rose-50/50 border border-slate-100 hover:border-rose-200 group">
+                                className="w-full flex items-center justify-between gap-2.5 p-3 rounded-2xl transition-all cursor-pointer text-left bg-slate-50/50 hover:bg-blue-50/50 border border-slate-100 hover:border-blue-200 group">
                                 <div className="flex items-center gap-2.5 min-w-0">
                                   <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 bg-rose-100/80 text-rose-600 border border-rose-200/60">
                                     <AlertCircle size={15} />
                                   </div>
                                   <div className="min-w-0">
-                                    <p className="text-xs font-bold text-slate-900 group-hover:text-rose-900 transition-colors truncate">{o.name}</p>
+                                    <p className="text-xs font-bold text-[#0a1d47] group-hover:text-[#1D4ED8] transition-colors truncate">{o.name}</p>
                                     <p className="text-[10.5px] text-slate-500 font-normal truncate">{o.doseLabel} · <span className="font-semibold text-rose-600">{fmtDate(o.dueDate)}</span></p>
                                   </div>
                                 </div>
@@ -1349,36 +1346,36 @@ export default function AdminDashboard({ onLogout }) {
                     {/* RIGHT COLUMN: TODAY'S SCHEDULE & CALENDAR (ROW 1) + VACCINE INVENTORY (ROW 2) */}
                     <div className="lg:col-span-7 xl:col-span-8 flex flex-col gap-6">
 
-                      {/* TOP ROW: TODAY'S SCHEDULE + STANDALONE CALENDAR (MATCHED HEIGHT) */}
+                      {/* TOP ROW: TODAY'S SCHEDULE + STANDALONE CALENDAR */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
 
-                        {/* 1. Today's Schedule Card (Longer / Matched Height Format) */}
-                        <div className="rounded-3xl border p-5 bg-white border-slate-200/70 shadow-2xs text-slate-900 flex flex-col justify-between h-full"
+                        {/* 1. Today's Schedule Card */}
+                        <div className="rounded-3xl border p-5 bg-white border-blue-100/80 shadow-2xs text-slate-900 flex flex-col justify-between h-full"
                           style={{ animation: 'kna-section-in 0.46s cubic-bezier(0.22,1,0.36,1) 0.14s both' }}>
                           <div>
                             <div className="flex items-center justify-between mb-4">
                               <div>
-                                <h3 className="text-sm font-bold tracking-tight text-slate-900">Today's Schedule</h3>
+                                <h3 className="text-sm font-bold tracking-tight text-[#0a1d47]">Today's Schedule</h3>
                                 <p className="text-[11px] text-slate-500 font-normal mt-0.5">{todayApts.length} appointment{todayApts.length !== 1 ? 's' : ''} today</p>
                               </div>
-                              <button onClick={() => setActivePage('appointments')} className="text-xs font-bold text-[#3B50DF] hover:underline cursor-pointer">View All →</button>
+                              <button onClick={() => setActivePage('appointments')} className="text-xs font-bold text-[#1D4ED8] hover:underline cursor-pointer">View All →</button>
                             </div>
 
                             {todayApts.length === 0 ? (
-                              <div className="flex-1 flex flex-col items-center justify-center py-12 text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 min-h-[220px]">
-                                <Calendar size={26} className="text-slate-300 mx-auto mb-2" />
+                              <div className="flex-1 flex flex-col items-center justify-center py-12 text-center bg-blue-50/30 rounded-2xl border border-dashed border-blue-100 min-h-[220px]">
+                                <Calendar size={26} className="text-blue-300 mx-auto mb-2" />
                                 <p className="text-xs font-bold text-slate-700">No appointments today</p>
                                 <p className="text-[11px] text-slate-400 mt-0.5 font-normal">All clear for today</p>
                               </div>
                             ) : (
-                              <div className="relative pl-3 space-y-3.5 before:absolute before:left-1.5 before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-200/80">
+                              <div className="relative pl-3 space-y-3.5 before:absolute before:left-1.5 before:top-3 before:bottom-3 before:w-0.5 before:bg-blue-100">
                                 {[...todayApts].sort((a, b) => (a.time || '').localeCompare(b.time || '')).slice(0, 4).map((apt, idx) => {
                                   const isTop = idx === 0;
                                   return isTop ? (
                                     <div key={apt.id} onClick={() => setActivePage('appointments')}
-                                      className="relative z-10 w-full p-3.5 rounded-2xl bg-[#3B50DF] text-white shadow-xs cursor-pointer transition-transform hover:scale-[1.01]">
+                                      className="relative z-10 w-full p-3.5 rounded-2xl bg-gradient-to-r from-[#0a1d47] via-[#0e2a6d] to-[#1D4ED8] text-white shadow-xs cursor-pointer transition-transform hover:scale-[1.01]">
                                       <div className="flex items-center justify-between gap-2 mb-1">
-                                        <span className="text-[11px] font-bold text-indigo-100 flex items-center gap-1.5">
+                                        <span className="text-[11px] font-bold text-sky-200 flex items-center gap-1.5">
                                           <Clock size={13} /> {apt.time || '10:00 AM'}
                                         </span>
                                         <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-white/20 text-white uppercase tracking-wider">
@@ -1386,19 +1383,19 @@ export default function AdminDashboard({ onLogout }) {
                                         </span>
                                       </div>
                                       <h4 className="text-xs font-bold text-white truncate">{apt.name || apt.patient || 'Patient'}</h4>
-                                      <p className="text-[11px] text-indigo-100/90 mt-0.5 truncate">{apt.type || apt.purpose || 'Consultation'}</p>
+                                      <p className="text-[11px] text-sky-100/90 mt-0.5 truncate">{apt.type || apt.purpose || 'Consultation'}</p>
                                     </div>
                                   ) : (
                                     <div key={apt.id} onClick={() => setActivePage('appointments')}
-                                      className="relative z-10 flex items-center justify-between gap-3 p-2.5 rounded-2xl bg-slate-50/80 hover:bg-slate-100/80 border border-slate-100 cursor-pointer transition-colors group">
+                                      className="relative z-10 flex items-center justify-between gap-3 p-2.5 rounded-2xl bg-slate-50/80 hover:bg-blue-50/60 border border-slate-100 hover:border-blue-100 cursor-pointer transition-colors group">
                                       <div className="flex items-center gap-2.5 min-w-0">
-                                        <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 shrink-0" />
+                                        <div className="w-2.5 h-2.5 rounded-full bg-[#1D4ED8] shrink-0" />
                                         <div className="min-w-0">
-                                          <p className="text-xs font-bold text-slate-900 group-hover:text-[#3B50DF] transition-colors truncate">{apt.name || apt.patient}</p>
+                                          <p className="text-xs font-bold text-[#0a1d47] group-hover:text-[#1D4ED8] transition-colors truncate">{apt.name || apt.patient}</p>
                                           <p className="text-[10.5px] text-slate-500 font-normal mt-0.5 truncate">{apt.time || '—'} · {apt.type || apt.purpose || 'Consultation'}</p>
                                         </div>
                                       </div>
-                                      <ChevronRightIcon size={14} className="text-slate-400 group-hover:text-[#3B50DF] transition-transform group-hover:translate-x-0.5 shrink-0" />
+                                      <ChevronRightIcon size={14} className="text-slate-400 group-hover:text-[#1D4ED8] transition-transform group-hover:translate-x-0.5 shrink-0" />
                                     </div>
                                   );
                                 })}
@@ -1408,20 +1405,20 @@ export default function AdminDashboard({ onLogout }) {
                         </div>
 
                         {/* 2. Standalone Interactive Calendar Widget */}
-                        <div className="rounded-3xl border overflow-hidden bg-white border-slate-200/70 shadow-2xs text-slate-900 flex flex-col justify-between h-full"
+                        <div className="rounded-3xl border overflow-hidden bg-white border-blue-100/80 shadow-2xs text-slate-900 flex flex-col justify-between h-full"
                           style={{ animation: 'kna-section-in 0.46s cubic-bezier(0.22,1,0.36,1) 0.18s both' }}>
                           <div>
-                            <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 bg-slate-50/40">
+                            <div className="flex items-center justify-between px-5 py-3.5 border-b border-blue-50 bg-blue-50/40">
                               <button onClick={() => { setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1)); setSelectedCalendarDay(null); }}
-                                className="w-7 h-7 flex items-center justify-center rounded-xl cursor-pointer transition-colors text-slate-500 hover:bg-white hover:shadow-2xs border border-transparent hover:border-slate-200">
+                                className="w-7 h-7 flex items-center justify-center rounded-xl cursor-pointer transition-colors text-slate-500 hover:bg-white hover:shadow-2xs border border-transparent hover:border-blue-100">
                                 <ChevronLeft size={15}/>
                               </button>
                               <div className="text-center">
-                                <h3 className="text-xs font-bold text-slate-900">{currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</h3>
+                                <h3 className="text-xs font-bold text-[#0a1d47]">{currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</h3>
                                 <p className="text-[10px] text-slate-400 font-normal">Clinic Calendar</p>
                               </div>
                               <button onClick={() => { setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1)); setSelectedCalendarDay(null); }}
-                                className="w-7 h-7 flex items-center justify-center rounded-xl cursor-pointer transition-colors text-slate-500 hover:bg-white hover:shadow-2xs border border-transparent hover:border-slate-200">
+                                className="w-7 h-7 flex items-center justify-center rounded-xl cursor-pointer transition-colors text-slate-500 hover:bg-white hover:shadow-2xs border border-transparent hover:border-blue-100">
                                 <ChevronRightIcon size={15}/>
                               </button>
                             </div>
@@ -1433,16 +1430,16 @@ export default function AdminDashboard({ onLogout }) {
                         </div>
                       </div>
 
-                      {/* BOTTOM ROW: VACCINE INVENTORY OVERVIEW (MOVED A BIT DOWN) */}
-                      <div className="rounded-3xl border overflow-hidden bg-white border-slate-200/70 shadow-2xs text-slate-900 mt-2"
+                      {/* BOTTOM ROW: VACCINE INVENTORY OVERVIEW */}
+                      <div className="rounded-3xl border overflow-hidden bg-white border-blue-100/80 shadow-2xs text-slate-900 mt-2"
                         style={{ animation: 'kna-section-in 0.46s cubic-bezier(0.22,1,0.36,1) 0.22s both' }}>
-                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/40">
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-blue-50 bg-blue-50/40">
                           <div>
-                            <h3 className="text-sm font-bold tracking-tight text-slate-900">Vaccine Inventory Overview</h3>
+                            <h3 className="text-sm font-bold tracking-tight text-[#0a1d47]">Vaccine Inventory Overview</h3>
                             <p className="text-xs mt-0.5 text-slate-500 font-normal">Real-time clinical stock status</p>
                           </div>
                           <button onClick={() => setActivePage('inventory')}
-                            className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-slate-700 bg-slate-100 hover:bg-indigo-50 hover:text-[#3B50DF] transition-all cursor-pointer shadow-2xs">
+                            className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-[#0a1d47] bg-blue-50 hover:bg-blue-100 hover:text-[#1D4ED8] transition-all cursor-pointer shadow-2xs border border-blue-100">
                             Manage Inventory →
                           </button>
                         </div>
@@ -1450,11 +1447,11 @@ export default function AdminDashboard({ onLogout }) {
                         <div className="overflow-x-auto">
                           <table className="w-full text-left border-collapse">
                             <thead>
-                              <tr className="border-b border-slate-100 bg-slate-50/50">
-                                <th className="px-6 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Item Name</th>
-                                <th className="px-6 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Category</th>
-                                <th className="px-6 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Stock Level</th>
-                                <th className="px-6 py-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Status</th>
+                              <tr className="border-b border-blue-50 bg-blue-50/30">
+                                <th className="px-6 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Item Name</th>
+                                <th className="px-6 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Category</th>
+                                <th className="px-6 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Stock Level</th>
+                                <th className="px-6 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
@@ -1475,8 +1472,8 @@ export default function AdminDashboard({ onLogout }) {
                                   : 'bg-emerald-50 text-emerald-700 border-emerald-200';
 
                                 return (
-                                  <tr key={item.id} className="transition-colors hover:bg-slate-50/80">
-                                    <td className="px-6 py-3.5 text-xs font-semibold text-slate-900">{item.name}</td>
+                                  <tr key={item.id} className="transition-colors hover:bg-blue-50/30">
+                                    <td className="px-6 py-3.5 text-xs font-semibold text-[#0a1d47]">{item.name}</td>
                                     <td className="px-6 py-3.5 text-xs text-slate-500 font-normal">{item.category || 'Vaccine'}</td>
                                     <td className="px-6 py-3.5 text-xs font-bold text-slate-800 tabular-nums">{qty} {item.unit || 'units'}</td>
                                     <td className="px-6 py-3.5">

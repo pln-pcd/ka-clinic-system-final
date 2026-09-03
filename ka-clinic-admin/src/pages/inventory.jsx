@@ -9,7 +9,7 @@ const globalCSS = `
   :root {
     --primary-blue: #3B50DF;
     --blue-hover: #2F40B5;
-    --bg-main: #FAF9F9;
+    --bg-main: #F0F4FA;
     --bg-card: #FFFFFF;
     --text-main: #1C1C1E;
     --text-muted: #7A6E6E;

@@ -9,21 +9,24 @@ import { doc, getDoc } from 'firebase/firestore';
 import React, { useEffect, useRef, useState } from 'react';
 import { auth, db } from '../lib/firebase';
 import {
-  ArrowRight, ShieldCheck, Mail, Lock, Key, Eye, EyeOff, Info, Check, CheckCircle2, ChevronLeft, Loader2, Clock, BadgeCheck, HelpCircle, AlertTriangle, MapPin, Syringe, Dog, Heart
+  ArrowRight, ShieldCheck, Mail, Lock, Key, Eye, EyeOff, Info, Check, CheckCircle2, ChevronLeft, Loader2, HelpCircle, Syringe, Heart, Sparkles
 } from 'lucide-react';
 
 const SLIDES = [
   {
-    title: 'High-Quality Clinical Record System',
-    desc: 'Comprehensive anti-rabies prophylaxis, dose tracking, and digital healthcare records management.',
+    tag: 'Clinical Intelligence',
+    headline: 'Protect Smarter. Care Faster. Heal Anywhere.',
+    desc: 'From immediate bite triage to digital PEP dose schedules, our powerful clinical portal coordinates patient care seamlessly.',
   },
   {
-    title: 'Never Miss a PEP Dose',
-    desc: 'Automatic Day 0 / 3 / 7 / 14 schedule tracking keeps every patient on protocol.',
+    tag: 'PEP Dose Protocol',
+    headline: 'Never Miss A Dose. Precision Tracking.',
+    desc: 'Automatic Day 0, 3, 7, and 14 schedule tracking keeps every anti-rabies patient strictly on protocol.',
   },
   {
-    title: 'Rapid Bite Incident Response',
-    desc: 'Log, triage, and coordinate animal bite cases the moment a patient walks in.',
+    tag: 'Triage & Incident Map',
+    headline: 'Rapid Bite Response. Digital Records.',
+    desc: 'Log, assess category severity, and track vaccination inventory in real time across the entire clinic.',
   },
 ];
 
@@ -38,31 +41,33 @@ async function postJson(url, body, extraHeaders) {
 }
 
 export default function AdminLogin({ onSuccess, onBack }) {
-  const [email,       setEmail]       = useState('');
-  const [password,    setPassword]    = useState('');
-  const [showPass,    setShowPass]    = useState(false);
-  const [rememberMe,  setRememberMe]  = useState(false);
-  const [error,       setError]       = useState('');
-  const [loading,     setLoading]     = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPass, setShowPass] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
-  const [showForgot,  setShowForgot]  = useState(false);
-  const [showHelp,    setShowHelp]    = useState(false);
-  const [slide,       setSlide]       = useState(0);
+  const [showForgot, setShowForgot] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+  const [slide, setSlide] = useState(0);
+  const [videoError, setVideoError] = useState(false);
 
   // Forgot password
   const [forgotSending, setForgotSending] = useState(false);
-  const [forgotSent,    setForgotSent]    = useState(false);
+  const [forgotSent, setForgotSent] = useState(false);
 
   // Email-OTP second factor (Batch 3), skippable on a trusted device (Batch 4)
-  const [otpStep,        setOtpStep]        = useState(false);
-  const [otpValue,       setOtpValue]       = useState('');
-  const [otpError,       setOtpError]       = useState('');
-  const [otpLoading,     setOtpLoading]     = useState(false);
-  const [maskedEmail,    setMaskedEmail]    = useState('');
+  const [otpStep, setOtpStep] = useState(false);
+  const [otpValue, setOtpValue] = useState('');
+  const [otpError, setOtpError] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [maskedEmail, setMaskedEmail] = useState('');
   const [resendCooldown, setResendCooldown] = useState(0);
 
   const emailRef = useRef();
   const otpRef = useRef();
+  const videoRef = useRef();
 
   const REMEMBER_KEY = 'ka_admin_remembered_email';
 
@@ -78,7 +83,7 @@ export default function AdminLogin({ onSuccess, onBack }) {
   useEffect(() => {
     const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     if (reduceMotion) return;
-    const id = setInterval(() => setSlide(s => (s + 1) % SLIDES.length), 4500);
+    const id = setInterval(() => setSlide(s => (s + 1) % SLIDES.length), 5500);
     return () => clearInterval(id);
   }, []);
 
@@ -90,13 +95,13 @@ export default function AdminLogin({ onSuccess, onBack }) {
 
   function friendlyError(code) {
     switch (code) {
-      case 'auth/invalid-email':            return 'Invalid email address.';
-      case 'auth/user-not-found':           return 'No account found with this email.';
-      case 'auth/wrong-password':           return 'Incorrect password. Please try again.';
-      case 'auth/invalid-credential':       return 'Invalid credentials. Check your email and password.';
-      case 'auth/too-many-requests':        return 'Too many attempts. Please try again later.';
-      case 'auth/network-request-failed':   return 'Network error. Check your connection.';
-      default:                              return 'Sign-in failed. Please verify your credentials.';
+      case 'auth/invalid-email': return 'Invalid email address.';
+      case 'auth/user-not-found': return 'No account found with this email.';
+      case 'auth/wrong-password': return 'Incorrect password. Please try again.';
+      case 'auth/invalid-credential': return 'Invalid credentials. Check your email and password.';
+      case 'auth/too-many-requests': return 'Too many attempts. Please try again later.';
+      case 'auth/network-request-failed': return 'Network error. Check your connection.';
+      default: return 'Sign-in failed. Please verify your credentials.';
     }
   }
 
@@ -109,10 +114,6 @@ export default function AdminLogin({ onSuccess, onBack }) {
     await setPersistence(auth, persistence);
   }
 
-  // Firebase Auth alone isn't enough to grant dashboard access — role and
-  // status live in Firestore (admins/{uid}), never hardcoded here. An
-  // authenticated user with no doc, or a revoked/invited one, gets signed
-  // back out immediately.
   async function verifyAdminAccess(uid) {
     const snap = await getDoc(doc(db, 'admins', uid));
     if (!snap.exists() || snap.data().status !== 'active') {
@@ -123,7 +124,7 @@ export default function AdminLogin({ onSuccess, onBack }) {
 
   function completeLogin() {
     setShowSuccess(true);
-    setTimeout(() => { if (onSuccess) onSuccess(); }, 2500);
+    setTimeout(() => { if (onSuccess) onSuccess(); }, 2200);
   }
 
   function initiateOtpStep(masked) {
@@ -135,10 +136,6 @@ export default function AdminLogin({ onSuccess, onBack }) {
     setTimeout(() => otpRef.current?.focus(), 100);
   }
 
-  // Called right after a verified password sign-in. The server checks the
-  // request's trusted-device cookie first — if it matches, no email goes
-  // out and login completes immediately (Batch 4); otherwise it sends the
-  // OTP and we show the code-entry step (Batch 3).
   async function requestOtpOrSkip() {
     try {
       const idToken = await auth.currentUser.getIdToken();
@@ -170,8 +167,6 @@ export default function AdminLogin({ onSuccess, onBack }) {
     setLoading(true);
 
     try {
-      // Block even a correct password while locked out — check BEFORE
-      // attempting sign-in at all, not after.
       const pre = await postJson('/api/admin-login', { action: 'precheck', email: trimmedEmail }).catch(() => null);
       if (pre?.locked) {
         setError(lockedMessage(pre.minutesRemaining));
@@ -224,8 +219,6 @@ export default function AdminLogin({ onSuccess, onBack }) {
     setOtpError('');
     try {
       const idToken = await auth.currentUser.getIdToken();
-      // The device-trust decision was already made via "Remember me" on the
-      // login screen (Batch 4) — no separate checkbox at this step.
       const data = await postJson('/api/verify-admin-otp', { code, rememberDevice: rememberMe }, { Authorization: `Bearer ${idToken}` });
       if (!data?.success) {
         setOtpError(data?.error || 'Invalid or expired code.');
@@ -289,589 +282,420 @@ export default function AdminLogin({ onSuccess, onBack }) {
   const busy = loading;
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 sm:p-6 bg-slate-100 font-sans selection:bg-indigo-600 selection:text-white relative overflow-hidden">
+    <div className="relative min-h-screen w-full flex flex-col justify-between overflow-hidden bg-[#060e24] font-sans selection:bg-blue-900 selection:text-white">
 
-      {/* Light Dominant Background Aura Glows */}
-      <div className="absolute top-[-10%] left-[-5%] w-[45vw] h-[45vw] bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-5%] w-[45vw] h-[45vw] bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+      {/* ── BACKGROUND: Video Background with Natural Proportion & Blue-Navy Atmosphere ── */}
+      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+        {/* Base dark navy backdrop */}
+        <div className="absolute inset-0 bg-[#060e24]" />
 
-      {/* ── LANDSCAPE EXPANDED MODAL CARD (Larger Landscape Layout) ── */}
-      <div className="w-full max-w-[1180px] bg-white rounded-[36px] shadow-[0_30px_90px_rgba(15,23,42,0.15)] border border-slate-200/80 overflow-hidden flex flex-col md:flex-row relative z-10 h-auto md:h-[640px]">
+        {/* Dynamic Video Layer (Centered, aspect-ratio preserved, non-stretched) */}
+        {!videoError && (
+          <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
+            <video
+              ref={videoRef}
+              autoPlay
+              loop
+              muted
+              playsInline
+              onError={() => setVideoError(true)}
+              className="min-w-full min-h-full w-auto h-auto max-w-none object-cover opacity-80 transition-opacity duration-1000"
+            >
+              <source src="/assets/dashboard/login.mp4" type="video/mp4" />
+              <source src="/login.mp4" type="video/mp4" />
+              <source src="/assets/login.mp4" type="video/mp4" />
+            </video>
+          </div>
+        )}
 
-        {/* ── LEFT PANEL: Form Section (Dominant Light White Theme) ── */}
-        <div className="w-full md:w-1/2 p-8 sm:p-10 md:p-12 bg-white flex flex-col relative z-10 h-full">
+        {/* Ambient Navy & Blue Atmospheric Glows */}
+        <div className="absolute -top-32 -left-32 w-[650px] h-[650px] bg-blue-600/25 rounded-full blur-[140px]" />
+        <div className="absolute -bottom-32 left-1/3 w-[550px] h-[550px] bg-indigo-700/20 rounded-full blur-[160px]" />
+        <div className="absolute top-1/4 right-10 w-[500px] h-[500px] bg-sky-500/15 rounded-full blur-[130px]" />
 
-          {/* Top Logo / Brand Header — bigger mark, centered */}
-          <div className="relative mb-5">
-            {onBack && (
-              <button
-                onClick={onBack}
-                className="absolute top-0 right-0 text-xs font-semibold text-slate-400 hover:text-slate-700 flex items-center gap-1 transition-colors"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" /> Website
-              </button>
-            )}
+        {/* Geometric Grid Texture Accent in Navy / Cyan Hue */}
+        <div className="absolute inset-0 opacity-[0.06] [background-image:linear-gradient(to_right,#60a5fa_1px,transparent_1px),linear-gradient(to_bottom,#60a5fa_1px,transparent_1px)] [background-size:48px_48px]" />
 
-            <div className="flex flex-col items-center text-center pt-1">
-              <div className="w-16 h-16 rounded-2xl bg-white border border-slate-100 shadow-[0_10px_30px_rgba(59,80,223,0.16)] flex items-center justify-center p-2.5 mb-2.5">
-                <img src="/assets/dashboard/logo-white-nobg.png" alt="K&A Clinic" className="w-full h-full object-contain" />
-              </div>
-              <div className="font-display font-extrabold text-2xl tracking-tight text-slate-900 leading-none">K&A Clinic</div>
-              <div className="text-[10px] font-bold text-[#3B50DF] uppercase tracking-widest mt-1.5">Anti-Rabies &amp; Animal Bite Center</div>
-            </div>
+        {/* Deep Navy Vignette & Readability Gradient Overlay */}
+        <div className="absolute inset-0 bg-gradient-to-r from-[#060e24]/90 via-[#091b42]/60 to-[#071333]/85 backdrop-blur-[0.5px]" />
+      </div>
+
+      {/* ── TOP HEADER / NAV BAR ── */}
+      <header className="relative z-20 w-full px-6 sm:px-10 md:px-14 pt-6 sm:pt-8 flex items-center justify-between">
+        {/* Brand Logo & Name */}
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center p-1.5 shadow-md border border-blue-100/90">
+            <img src="/assets/dashboard/logo-white-nobg.png" alt="K&A Clinic" className="w-full h-full object-contain" />
+          </div>
+          <div>
+            <span className="text-white font-extrabold text-lg sm:text-xl tracking-tight leading-none block">
+              K&amp;A Clinic
+            </span>
+            <span className="text-[10px] uppercase font-bold tracking-widest text-sky-400 block mt-0.5">
+              Rabies &amp; Bite Center
+            </span>
+          </div>
+        </div>
+
+        {/* Back to Website Link */}
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="group flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-[#0a1e4a]/60 hover:bg-[#123275]/80 backdrop-blur-md border border-blue-400/30 text-xs font-semibold text-blue-100 hover:text-white transition-all shadow-sm active:scale-95"
+          >
+            <ChevronLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
+            <span>Back to Website</span>
+          </button>
+        )}
+      </header>
+
+      {/* ── MAIN CONTENT AREA (Split Layout: Left Copy + Right Floating Card) ── */}
+      <main className="relative z-20 w-full max-w-7xl mx-auto px-6 sm:px-10 md:px-14 py-8 md:py-12 flex-1 flex flex-col md:flex-row items-center justify-between gap-10 md:gap-16">
+
+        {/* ── LEFT HERO COPY SECTION (Over Video) ── */}
+        <div className="w-full md:w-1/2 flex flex-col justify-center text-left max-w-xl">
+          {/* Blue Pill Badge */}
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-950/70 backdrop-blur-md border border-blue-400/30 text-sky-300 text-xs font-bold tracking-wide w-fit mb-5 animate-in fade-in slide-in-from-bottom-2 duration-300 shadow-sm">
+            <Sparkles className="w-3.5 h-3.5 text-sky-400" />
+            <span>{SLIDES[slide].tag}</span>
           </div>
 
-          {otpStep ? (
-            /* ── Email-OTP Verification Step (Batch 3) ── */
-            <div className="my-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="text-xs font-bold text-[#3B50DF] uppercase tracking-widest mb-1.5 flex items-center gap-2">
-                <Key className="w-4 h-4" /> — Verification
-              </div>
-              <h2 className="font-display text-2xl font-extrabold text-slate-900 mb-1.5">Enter Verification Code</h2>
-              <p className="text-xs text-slate-500 mb-6 leading-relaxed">
-                We sent a 6-digit code to {maskedEmail || 'your email'}. It expires in 5 minutes.
-              </p>
+          {/* Headline */}
+          <h1 key={`title-${slide}`} className="text-3xl sm:text-4xl md:text-5xl lg:text-[52px] font-extrabold text-white tracking-tight leading-[1.12] mb-4 drop-shadow-sm animate-in fade-in slide-in-from-bottom-3 duration-500 font-display">
+            {SLIDES[slide].headline}
+          </h1>
 
-              {otpError && (
-                <div className="flex items-start gap-2 bg-rose-50 text-rose-600 text-xs p-3 rounded-xl border border-rose-100 mb-4 animate-in slide-in-from-top-2">
-                  <Info className="w-4 h-4 mt-0.5 shrink-0" />
-                  <p className="font-semibold">{otpError}</p>
-                </div>
-              )}
+          {/* Subtitle */}
+          <p key={`desc-${slide}`} className="text-blue-100/80 text-sm sm:text-base font-normal leading-relaxed mb-8 max-w-lg animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {SLIDES[slide].desc}
+          </p>
 
-              <div className="relative mb-4">
-                <input
-                  ref={otpRef}
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  placeholder="000000"
-                  value={otpValue}
-                  onChange={e => {
-                    const v = e.target.value.replace(/\D/g, '').slice(0, 6);
-                    setOtpValue(v);
-                    setOtpError('');
-                    if (v.length === 6) setTimeout(() => handleVerifyOtp(v), 150);
-                  }}
-                  onKeyDown={e => { if (e.key === 'Enter') handleVerifyOtp(); }}
-                  disabled={otpLoading}
-                  className="w-full bg-slate-100/90 border border-slate-200/80 px-4 py-3.5 rounded-xl text-center font-mono text-xl font-bold tracking-[0.4em] text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-4 focus:ring-red-600/10 focus:border-red-600 transition-all disabled:opacity-50"
-                />
-              </div>
-
-              {rememberMe && (
-                <p className="flex items-center gap-1.5 text-[11px] text-slate-400 mb-5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  This device will be remembered for 30 days — no code needed next time.
-                </p>
-              )}
-
+          {/* Interactive Carousel Pagination Indicator */}
+          <div className="flex items-center gap-2.5">
+            {SLIDES.map((s, i) => (
               <button
-                onClick={() => handleVerifyOtp()}
-                disabled={otpLoading || otpValue.trim().length !== 6}
-                className="w-full bg-[#E31837] hover:bg-[#C41228] text-white py-3.5 rounded-xl text-sm font-bold transition-all shadow-md shadow-red-600/25 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-md"
-              >
-                {otpLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : (
-                  <>
-                    Verify &amp; Continue
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-
-              <button
+                key={s.tag}
                 type="button"
-                onClick={handleResendOtp}
-                disabled={resendCooldown > 0}
-                className="mt-4 w-full text-center text-xs font-semibold text-red-600 hover:text-red-700 disabled:text-slate-400 disabled:cursor-not-allowed transition-colors"
-              >
-                {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : 'Resend code'}
-              </button>
+                onClick={() => setSlide(i)}
+                aria-label={`Slide ${i + 1}`}
+                className={`h-2 rounded-full transition-all duration-300 ${
+                  slide === i
+                    ? 'w-10 bg-sky-400 shadow-[0_0_14px_rgba(56,189,248,0.8)]'
+                    : 'w-2.5 bg-blue-300/30 hover:bg-blue-300/60'
+                }`}
+              />
+            ))}
+          </div>
+        </div>
 
-              <button
-                onClick={handleOtpBack}
-                className="mt-3 w-full flex items-center justify-center gap-1.5 text-xs text-slate-500 hover:text-slate-900 font-semibold transition-colors"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" /> Back to login
-              </button>
-            </div>
-          ) : (
+        {/* ── RIGHT SECTION: Floating Modern Card ── */}
+        <div className="w-full md:w-auto md:min-w-[420px] lg:min-w-[460px] max-w-[460px]">
+          <div className="bg-white rounded-[28px] sm:rounded-[36px] shadow-[0_30px_90px_rgba(3,10,32,0.6)] border border-blue-100/90 p-8 sm:p-10 md:p-11 relative backdrop-blur-sm animate-in fade-in zoom-in-95 duration-400">
 
-          <div className="my-auto animate-in fade-in duration-500">
-
-            {!showForgot && (
-              <p className="text-center text-sm text-slate-500 font-medium leading-relaxed mb-6 max-w-[300px] mx-auto">
-                Access patient records, dose schedules, and clinic operations in one secure place.
-              </p>
-            )}
-
-            {error && (
-              <div className="flex items-start gap-2 bg-red-50 text-red-600 text-xs p-3 rounded-xl border border-red-100 mb-4 animate-in slide-in-from-top-2">
-                <Info className="w-4 h-4 mt-0.5 shrink-0" />
-                <p className="font-semibold">{error}</p>
-              </div>
-            )}
-
-            {showForgot ? (
-              /* ── Forgot Password View ── */
+            {/* OTP Step View */}
+            {otpStep ? (
               <div className="animate-in fade-in duration-300">
-                <div className="flex justify-center mb-3">
-                  <div className="w-11 h-11 rounded-2xl bg-red-50 flex items-center justify-center">
-                    <Key className="w-5 h-5 text-red-600" />
-                  </div>
+                <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center mb-4 text-[#0e2a6d]">
+                  <Key className="w-6 h-6" />
                 </div>
-                <h2 className="font-display text-lg font-extrabold text-slate-900 mb-1.5 text-center">
-                  Reset your password
+                <h2 className="text-2xl font-extrabold text-[#0a1b3f] tracking-tight mb-1 font-display">
+                  Verification Code
+                </h2>
+                <p className="text-xs text-slate-500 leading-relaxed mb-6 font-medium">
+                  We sent a 6-digit code to <span className="font-semibold text-[#0a1b3f]">{maskedEmail || 'your email'}</span>.
+                </p>
+
+                {otpError && (
+                  <div className="flex items-start gap-2 bg-rose-50 text-rose-600 text-xs p-3 rounded-xl border border-rose-100 mb-4 animate-in slide-in-from-top-2">
+                    <Info className="w-4 h-4 mt-0.5 shrink-0" />
+                    <p className="font-semibold">{otpError}</p>
+                  </div>
+                )}
+
+                <div className="mb-4">
+                  <input
+                    ref={otpRef}
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    placeholder="000000"
+                    value={otpValue}
+                    onChange={e => {
+                      const v = e.target.value.replace(/\D/g, '').slice(0, 6);
+                      setOtpValue(v);
+                      setOtpError('');
+                      if (v.length === 6) setTimeout(() => handleVerifyOtp(v), 150);
+                    }}
+                    onKeyDown={e => { if (e.key === 'Enter') handleVerifyOtp(); }}
+                    disabled={otpLoading}
+                    className="w-full bg-slate-50 border border-slate-200 px-4 py-3.5 rounded-2xl text-center font-mono text-2xl font-bold tracking-[0.35em] text-[#0a1b3f] placeholder:text-slate-300 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-600/15 focus:border-[#1d4ed8] transition-all disabled:opacity-50"
+                  />
+                </div>
+
+                {rememberMe && (
+                  <p className="flex items-center gap-1.5 text-[11px] text-slate-500 mb-5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    Remember this device for 30 days.
+                  </p>
+                )}
+
+                <button
+                  onClick={() => handleVerifyOtp()}
+                  disabled={otpLoading || otpValue.trim().length !== 6}
+                  className="w-full bg-gradient-to-r from-[#0a1d47] via-[#0e2a6d] to-[#1d4ed8] hover:from-[#071533] hover:via-[#0a2054] hover:to-[#173fa8] text-white py-3.5 rounded-full text-sm font-bold tracking-wide transition-all shadow-[0_10px_25px_rgba(14,42,109,0.3)] hover:shadow-[0_15px_30px_rgba(14,42,109,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {otpLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : (
+                    <>
+                      Verify &amp; Continue
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+
+                <div className="flex items-center justify-between mt-4">
+                  <button
+                    type="button"
+                    onClick={handleResendOtp}
+                    disabled={resendCooldown > 0}
+                    className="text-xs font-semibold text-[#1d4ed8] hover:text-[#0a1d47] disabled:text-slate-400 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend code'}
+                  </button>
+
+                  <button
+                    onClick={handleOtpBack}
+                    className="flex items-center gap-1 text-xs text-slate-500 hover:text-[#0a1d47] font-semibold transition-colors"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" /> Back to login
+                  </button>
+                </div>
+              </div>
+            ) : showForgot ? (
+              /* Forgot Password View */
+              <div className="animate-in fade-in duration-300">
+                <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center mb-4 text-[#0e2a6d]">
+                  <Key className="w-6 h-6" />
+                </div>
+                <h2 className="text-2xl font-extrabold text-[#0a1b3f] tracking-tight mb-1 font-display">
+                  Reset Password
                 </h2>
 
                 {forgotSent ? (
-                  <>
-                    <p className="text-sm text-slate-500 leading-relaxed mb-5 text-center">
-                      Check <span className="font-semibold text-slate-700">{email.trim()}</span> for a link to reset your password.
+                  <div className="mt-4">
+                    <p className="text-sm text-slate-600 leading-relaxed mb-6">
+                      Check <span className="font-bold text-[#0a1b3f]">{email.trim()}</span> for instructions to reset your password.
                     </p>
                     <button
                       onClick={() => { setShowForgot(false); setForgotSent(false); setError(''); }}
-                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-lg text-sm font-bold transition-all shadow-md shadow-indigo-600/20 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:scale-[0.99]"
+                      className="w-full bg-gradient-to-r from-[#0a1d47] via-[#0e2a6d] to-[#1d4ed8] hover:from-[#071533] hover:via-[#0a2054] hover:to-[#173fa8] text-white py-3.5 rounded-full text-sm font-bold tracking-wide transition-all shadow-[0_10px_25px_rgba(14,42,109,0.3)] active:scale-[0.99]"
                     >
                       Back to Login
                     </button>
-                  </>
+                  </div>
                 ) : (
-                  <>
-                    <p className="text-sm text-slate-500 leading-relaxed mb-5 text-center">
-                      Enter your registered email and we'll send you a reset link.
+                  <div>
+                    <p className="text-xs text-slate-500 leading-relaxed mb-6 font-medium">
+                      Enter your authorized clinic email to receive a password reset link.
                     </p>
-                    <div className="mb-4">
-                      <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">Email</label>
+                    <div className="mb-5">
+                      <label className="block text-xs font-bold text-[#0a1b3f] mb-1.5">Email</label>
                       <div className="relative">
-                        <Mail className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                         <input
                           type="text"
                           autoComplete="email"
-                          placeholder="Enter your email"
+                          placeholder="Input your email"
                           value={email}
                           onChange={e => setEmail(e.target.value)}
                           disabled={forgotSending}
-                          className="w-full bg-slate-100/80 border border-slate-200/70 pl-9 pr-3.5 py-2.5 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 placeholder:font-normal focus:outline-none focus:ring-4 focus:ring-red-600/10 focus:border-red-600 transition-all disabled:opacity-50 font-medium"
+                          className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-600/15 focus:border-[#1d4ed8] transition-all disabled:opacity-50 font-medium"
                         />
                       </div>
                     </div>
                     <button
                       onClick={handleForgotPassword}
                       disabled={forgotSending || !email.trim()}
-                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-lg text-sm font-bold transition-all shadow-md shadow-indigo-600/20 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-60 mb-3"
+                      className="w-full bg-gradient-to-r from-[#0a1d47] via-[#0e2a6d] to-[#1d4ed8] hover:from-[#071533] hover:via-[#0a2054] hover:to-[#173fa8] text-white py-3.5 rounded-full text-sm font-bold tracking-wide transition-all shadow-[0_10px_25px_rgba(14,42,109,0.3)] hover:shadow-[0_15px_30px_rgba(14,42,109,0.45)] active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-50 mb-3"
                     >
                       {forgotSending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Send Reset Link'}
                     </button>
                     <button
                       onClick={() => { setShowForgot(false); setError(''); }}
-                      className="w-full flex items-center justify-center gap-1.5 text-xs text-slate-500 hover:text-slate-900 font-semibold"
+                      className="w-full flex items-center justify-center gap-1.5 text-xs text-slate-500 hover:text-[#0a1d47] font-semibold py-1 transition-colors"
                     >
                       <ChevronLeft className="w-3.5 h-3.5" /> Back to Login
                     </button>
-                  </>
+                  </div>
                 )}
               </div>
             ) : (
-              /* ── Primary Login Form (email + password) ── */
-              <form onSubmit={handleEmailLogin} className="space-y-3.5">
+              /* ── Standard Login Form (Blue & Navy Blue Theme) ── */
+              <div className="animate-in fade-in duration-300">
+                {/* Header Titles */}
+                <h2 className="text-3xl font-extrabold text-[#0a1b3f] tracking-tight mb-1 font-display">
+                  Welcome Back!
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-500 font-medium mb-6">
+                  Log in to access your clinic portal and records.
+                </p>
 
-                {/* Field: Email */}
-                <div>
-                  <label htmlFor="login-id" className="block text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
-                    Email
-                  </label>
-                  <div className="relative">
-                    <Mail className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                {error && (
+                  <div className="flex items-start gap-2 bg-red-50 text-red-600 text-xs p-3 rounded-xl border border-red-100 mb-4 animate-in slide-in-from-top-2">
+                    <Info className="w-4 h-4 mt-0.5 shrink-0" />
+                    <p className="font-semibold">{error}</p>
+                  </div>
+                )}
+
+                <form onSubmit={handleEmailLogin} className="space-y-4">
+                  {/* Email Input */}
+                  <div>
+                    <label htmlFor="login-email" className="block text-xs font-bold text-[#0a1b3f] mb-1.5">
+                      Email
+                    </label>
                     <input
                       ref={emailRef}
-                      id="login-id"
+                      id="login-email"
                       type="text"
                       autoComplete="email"
-                      placeholder="Enter your email"
+                      placeholder="Input your email"
                       value={email}
                       onChange={e => setEmail(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') document.getElementById('pass')?.focus(); }}
+                      onKeyDown={e => { if (e.key === 'Enter') document.getElementById('login-password')?.focus(); }}
                       disabled={busy}
-                      className="w-full bg-slate-100/80 border border-slate-200/70 pl-9 pr-3.5 py-2.5 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 placeholder:font-normal focus:outline-none focus:ring-4 focus:ring-red-600/10 focus:border-red-600 transition-all disabled:opacity-50 font-medium"
+                      className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-600/15 focus:border-[#1d4ed8] transition-all disabled:opacity-50 font-medium"
                     />
                   </div>
-                </div>
 
-                {/* Field: Password with Forgot password ? right-aligned */}
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label htmlFor="pass" className="block text-[11px] font-bold text-slate-400 uppercase tracking-wide">
+                  {/* Password Input */}
+                  <div>
+                    <label htmlFor="login-password" className="block text-xs font-bold text-[#0a1b3f] mb-1.5">
                       Password
                     </label>
+                    <div className="relative">
+                      <input
+                        id="login-password"
+                        type={showPass ? 'text' : 'password'}
+                        autoComplete="current-password"
+                        placeholder="Input your password"
+                        value={password}
+                        onChange={e => setPassword(e.target.value)}
+                        disabled={busy}
+                        className="w-full bg-slate-50 border border-slate-200 pl-4 pr-11 py-3 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-600/15 focus:border-[#1d4ed8] transition-all disabled:opacity-50 font-medium"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPass(!showPass)}
+                        aria-label={showPass ? 'Hide password' : 'Show password'}
+                        className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-[#1d4ed8] transition-colors"
+                      >
+                        {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Remember Me & Forgot Password Row */}
+                  <div className="flex items-center justify-between pt-1">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        className="peer sr-only"
+                        checked={rememberMe}
+                        onChange={e => {
+                          setRememberMe(e.target.checked);
+                          if (!e.target.checked) localStorage.removeItem(REMEMBER_KEY);
+                        }}
+                      />
+                      <div className={`w-4 h-4 rounded-md flex items-center justify-center transition-colors border ${rememberMe ? 'bg-[#0e2a6d] border-[#0e2a6d] text-white' : 'border-slate-300 bg-white'}`}>
+                        {rememberMe && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+                      </div>
+                      <span className="text-xs font-semibold text-slate-600">Remember Me</span>
+                    </label>
+
                     <button
                       type="button"
                       onClick={() => { setShowForgot(true); setForgotSent(false); setError(''); }}
-                      className="text-[11px] font-bold text-red-600 hover:text-red-700 transition-colors"
+                      className="text-xs font-semibold text-[#1d4ed8] hover:text-[#0a1d47] transition-colors"
                     >
-                      Forgot password ?
+                      Forgot Password?
                     </button>
                   </div>
-                  <div className="relative">
-                    <Lock className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    <input
-                      id="pass"
-                      type={showPass ? 'text' : 'password'}
-                      autoComplete="current-password"
-                      placeholder="Enter your password"
-                      value={password}
-                      onChange={e => setPassword(e.target.value)}
-                      disabled={busy}
-                      className="w-full bg-slate-100/80 border border-slate-200/70 pl-9 pr-10 py-2.5 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 placeholder:font-normal focus:outline-none focus:ring-4 focus:ring-red-600/10 focus:border-red-600 transition-all disabled:opacity-50 font-medium"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPass(!showPass)}
-                      aria-label={showPass ? 'Hide password' : 'Show password'}
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
-                    >
-                      {showPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
-                </div>
 
-                {/* Remember Me Checkbox */}
-                <div className="flex items-center pt-0.5">
-                  <label className="flex items-center gap-2 cursor-pointer group" title="Skips the email code on your next sign-in from this device for 30 days">
-                    <input
-                      type="checkbox"
-                      className="peer sr-only"
-                      checked={rememberMe}
-                      onChange={e => {
-                        setRememberMe(e.target.checked);
-                        if (!e.target.checked) localStorage.removeItem(REMEMBER_KEY);
-                      }}
-                    />
-                    <div className={`w-4 h-4 rounded flex items-center justify-center transition-colors border bg-white peer-focus-visible:ring-2 peer-focus-visible:ring-red-500 peer-focus-visible:ring-offset-1 ${rememberMe ? 'border-red-600' : 'border-slate-300 group-hover:border-red-400'}`}>
-                      {rememberMe && <Check className="w-3 h-3 text-red-600" strokeWidth={3} />}
-                    </div>
-                    <span className="text-xs font-semibold text-slate-500 group-hover:text-slate-800 transition-colors">Remember me</span>
-                  </label>
-                </div>
-
-                {/* Login Button */}
-                <button
-                  type="submit"
-                  disabled={busy}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-lg text-sm font-bold tracking-tight transition-all shadow-md shadow-indigo-600/20 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-md"
-                >
-                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : (
-                    <>
-                      Log In
-                      <ArrowRight className="w-4 h-4" />
-                    </>
-                  )}
-                </button>
-
-                {/* Need help affordance */}
-                <div className="pt-0.5">
+                  {/* Login CTA Button with Navy Blue / Royal Blue Gradient */}
                   <button
-                    type="button"
-                    onClick={() => setShowHelp(v => !v)}
-                    className="w-full flex items-center justify-center gap-1.5 text-[11px] text-slate-400 hover:text-slate-600 font-semibold transition-colors"
+                    type="submit"
+                    disabled={busy}
+                    className="w-full bg-gradient-to-r from-[#0a1d47] via-[#0e2a6d] to-[#1d4ed8] hover:from-[#071533] hover:via-[#0a2054] hover:to-[#173fa8] text-white py-3.5 px-6 rounded-full text-sm font-bold tracking-wide transition-all shadow-[0_10px_25px_rgba(14,42,109,0.35)] hover:shadow-[0_15px_30px_rgba(14,42,109,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-50 disabled:hover:translate-y-0 mt-3"
                   >
-                    <HelpCircle className="w-3.5 h-3.5" /> Need help signing in?
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : (
+                      <>
+                        Login
+                      </>
+                    )}
                   </button>
-                  {showHelp && (
-                    <p className="mt-2 text-[11px] leading-relaxed text-slate-500 bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-center animate-in fade-in slide-in-from-top-1 duration-200">
-                      Only invited team members can sign in. Contact your clinic manager for access.
+
+                  {/* Divider / Secondary Notice */}
+                  <div className="relative my-4 flex items-center justify-center">
+                    <div className="border-t border-slate-100 w-full" />
+                    <span className="bg-blue-50/70 border border-blue-100/80 px-3 py-0.5 rounded-full text-[11px] text-[#1e40af] font-bold tracking-wide shrink-0">
+                      Clinic Staff Portal
+                    </span>
+                    <div className="border-t border-slate-100 w-full" />
+                  </div>
+
+                  {/* Bottom Prompt: Need Access / Help */}
+                  <div className="text-center pt-1">
+                    <p className="text-xs text-slate-500 font-medium">
+                      Don't have an account?{' '}
+                      <button
+                        type="button"
+                        onClick={() => setShowHelp(v => !v)}
+                        className="font-bold text-[#1d4ed8] hover:text-[#0a1d47] hover:underline cursor-pointer transition-colors"
+                      >
+                        Contact Manager
+                      </button>
                     </p>
-                  )}
-                </div>
 
-              </form>
+                    {showHelp && (
+                      <p className="mt-2.5 text-[11px] leading-relaxed text-[#0e2a6d] bg-blue-50/90 border border-blue-200/80 rounded-xl p-3 text-center animate-in fade-in duration-200">
+                        Admin accounts are invitation-only. Contact your clinic director or supervisor to receive an invitation link.
+                      </p>
+                    )}
+                  </div>
+
+                </form>
+              </div>
             )}
-          </div>
-          )}
 
+          </div>
         </div>
 
-        {/* ── RIGHT PANEL: Dose-Schedule Dashboard Illustration (dark) ── */}
-        <div className="w-full md:w-1/2 p-8 sm:p-10 md:p-12 bg-gradient-to-br from-slate-900 via-slate-950 to-[#0c1222] flex flex-col justify-between relative overflow-hidden border-l border-white/5 h-full">
+      </main>
 
-          {/* Ambient glow + texture */}
-          <div className="absolute -top-16 -right-10 w-72 h-72 bg-indigo-600/25 rounded-full blur-[90px] pointer-events-none animate-drift-slow" />
-          <div className="absolute -bottom-24 -left-16 w-80 h-80 bg-blue-900/30 rounded-full blur-[100px] pointer-events-none animate-drift-slower" />
-          <div className="absolute inset-0 opacity-[0.05] [background-image:radial-gradient(circle,white_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none" />
-
-          {/* Illustration: changes with the active slide below */}
-          <div className="relative z-10 flex-1 flex flex-col items-center justify-center p-2">
-            <div key={slide} className="relative w-full max-w-[420px] animate-in fade-in slide-in-from-bottom-2 duration-500">
-
-              {slide === 0 && (
-                <>
-                  {/* Floating chip */}
-                  <div className="absolute -top-4 -right-3 z-20 bg-white border border-slate-200 rounded-full shadow-lg shadow-black/20 pl-2 pr-3.5 py-1.5 flex items-center gap-1.5 animate-float">
-                    <div className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
-                      <BadgeCheck className="w-3.5 h-3.5 text-white" />
-                    </div>
-                    <span className="text-[11px] font-bold text-slate-700">Records Synced</span>
-                  </div>
-
-                  <div className="relative bg-white rounded-3xl border border-white/60 shadow-[0_30px_80px_rgba(0,0,0,0.5)] p-6 overflow-hidden transition-transform duration-500 hover:-translate-y-1.5">
-                    <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-indigo-500 via-blue-400 to-indigo-600" />
-                    <Heart className="absolute -right-6 -top-5 w-32 h-32 text-indigo-50 rotate-12 pointer-events-none" fill="currentColor" strokeWidth={0} />
-
-                    <div className="relative flex items-center gap-1.5 mb-5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-indigo-400" />
-                      <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
-                      <span className="ml-auto text-[10px] font-bold text-slate-400 tracking-wide">MRN-00214</span>
-                    </div>
-
-                    <div className="relative flex items-center gap-3 mb-5">
-                      <div className="relative shrink-0">
-                        <div className="w-11 h-11 rounded-full bg-gradient-to-br from-indigo-600 to-[#3B50DF] text-white flex items-center justify-center font-extrabold text-sm ring-4 ring-indigo-50">
-                          JD
-                        </div>
-                        <span className="absolute -right-0.5 -bottom-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white" />
-                      </div>
-                      <div>
-                        <div className="text-sm font-bold text-slate-800 leading-none">Juan Dela Cruz</div>
-                        <div className="text-[10px] text-slate-400 font-medium mt-1.5">Active Patient · 3 Visits</div>
-                      </div>
-                    </div>
-
-                    <div className="relative space-y-2.5">
-                      {[
-                        { icon: ShieldCheck, label: 'Vaccination History', chip: 'Up to date', chipTone: 'emerald', iconBg: 'bg-emerald-50', iconColor: 'text-emerald-600' },
-                        { icon: Clock,       label: 'Next Appointment',   chip: 'Aug 3',       chipTone: 'slate',   iconBg: 'bg-slate-100', iconColor: 'text-slate-500' },
-                        { icon: BadgeCheck,  label: 'Bite Incident',      chip: 'Resolved',    chipTone: 'emerald', iconBg: 'bg-emerald-50', iconColor: 'text-emerald-600' },
-                      ].map(row => (
-                        <div key={row.label} className="flex items-center justify-between bg-slate-50 border border-slate-100 rounded-xl pl-2.5 pr-3 py-2 gap-2">
-                          <div className="flex items-center gap-2.5">
-                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${row.iconBg}`}>
-                              <row.icon className={`w-3.5 h-3.5 ${row.iconColor}`} />
-                            </div>
-                            <span className="text-xs font-semibold text-slate-600">{row.label}</span>
-                          </div>
-                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${row.chipTone === 'emerald' ? 'text-emerald-600 bg-emerald-50' : 'text-slate-700 bg-slate-200'}`}>
-                            {row.chip}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {slide === 1 && (
-                <>
-                  <div className="absolute -top-4 -right-3 z-20 bg-white border border-slate-200 rounded-full shadow-lg shadow-black/20 pl-2 pr-3.5 py-1.5 flex items-center gap-1.5 animate-float">
-                    <div className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
-                      <BadgeCheck className="w-3.5 h-3.5 text-white" />
-                    </div>
-                    <span className="text-[11px] font-bold text-slate-700">Protocol Verified</span>
-                  </div>
-
-                  <div className="relative bg-white rounded-3xl border border-white/60 shadow-[0_30px_80px_rgba(0,0,0,0.5)] p-6 overflow-hidden transition-transform duration-500 hover:-translate-y-1.5">
-                    <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-indigo-500 via-blue-400 to-indigo-600" />
-                    <Syringe className="absolute -right-4 -bottom-6 w-32 h-32 text-indigo-50 -rotate-12 pointer-events-none" strokeWidth={1.25} />
-
-                    <div className="relative flex items-center gap-1.5 mb-5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-indigo-400" />
-                      <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
-                      <span className="ml-auto text-[10px] font-bold text-slate-400 tracking-wide">MRN-00214</span>
-                    </div>
-
-                    <div className="relative text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-5">
-                      Post-Exposure Prophylaxis Schedule
-                    </div>
-
-                    <div className="relative flex items-center justify-between mb-1 px-1">
-                      <div className="absolute left-0 right-0 top-[13px] h-0.5 bg-slate-200" />
-                      <div className="absolute left-0 top-[13px] h-0.5 bg-gradient-to-r from-indigo-600 to-indigo-400" style={{ width: '78%' }} />
-                      {[
-                        { label: 'Day 0', done: true },
-                        { label: 'Day 3', done: true },
-                        { label: 'Day 7', done: true },
-                        { label: 'Day 14', done: false },
-                      ].map((step) => (
-                        <div key={step.label} className="relative z-10 flex flex-col items-center gap-2">
-                          {!step.done && (
-                            <span className="absolute top-0 w-7 h-7 rounded-full bg-indigo-400/60 animate-ping" />
-                          )}
-                          <div className={`relative w-7 h-7 rounded-full flex items-center justify-center border-2 ${step.done ? 'bg-[#3B50DF] border-[#3B50DF]' : 'bg-white border-[#3B50DF]'}`}>
-                            {step.done
-                              ? <CheckCircle2 className="w-4 h-4 text-white" strokeWidth={2.5} />
-                              : <Clock className="w-3.5 h-3.5 text-[#3B50DF]" />}
-                          </div>
-                          <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
-                            {step.label}
-                            {!step.done && (
-                              <span className="text-[8px] font-extrabold text-[#3B50DF] bg-indigo-50 px-1 py-0.5 rounded leading-none">DUE</span>
-                            )}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="relative mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
-                          <Syringe className="w-4 h-4 text-[#3B50DF]" />
-                        </div>
-                        <div>
-                          <div className="text-xs font-bold text-slate-800 leading-none">Rabies Vaccine</div>
-                          <div className="text-[10px] text-slate-400 font-medium mt-1">IM · Deltoid</div>
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-extrabold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full">On Schedule</span>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {slide === 2 && (
-                <>
-                  <div className="absolute -top-4 -right-3 z-20 bg-white border border-slate-200 rounded-full shadow-lg shadow-black/20 pl-2 pr-3.5 py-1.5 flex items-center gap-1.5 animate-float">
-                    <div className="w-5 h-5 rounded-full bg-amber-500 flex items-center justify-center shrink-0">
-                      <AlertTriangle className="w-3.5 h-3.5 text-white" />
-                    </div>
-                    <span className="text-[11px] font-bold text-slate-700">2 min ago</span>
-                  </div>
-
-                  <div className="relative bg-white rounded-3xl border border-white/60 shadow-[0_30px_80px_rgba(0,0,0,0.5)] p-6 overflow-hidden transition-transform duration-500 hover:-translate-y-1.5">
-                    <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-indigo-500 via-blue-400 to-indigo-600" />
-                    <AlertTriangle className="absolute -right-5 -top-5 w-32 h-32 text-indigo-50 rotate-12 pointer-events-none" fill="currentColor" strokeWidth={0} />
-
-                    <div className="relative flex items-center gap-1.5 mb-5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-indigo-400" />
-                      <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
-                      <span className="ml-auto text-[10px] font-bold text-slate-400 tracking-wide">INC-00532</span>
-                    </div>
-
-                    <div className="relative flex items-center gap-3 mb-5">
-                      <div className="w-11 h-11 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
-                        <AlertTriangle className="w-5 h-5 text-[#3B50DF]" />
-                      </div>
-                      <div>
-                        <div className="text-sm font-bold text-slate-800 leading-none">New Bite Incident</div>
-                        <div className="text-[10px] text-slate-400 font-medium mt-1.5">Logged by Front Desk</div>
-                      </div>
-                    </div>
-
-                    <div className="relative space-y-2.5 mb-4">
-                      <div className="flex items-center justify-between bg-slate-50 border border-slate-100 rounded-xl pl-2.5 pr-3 py-2 gap-2">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-7 h-7 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
-                            <Dog className="w-3.5 h-3.5 text-amber-600" />
-                          </div>
-                          <span className="text-xs font-semibold text-slate-600">Animal</span>
-                        </div>
-                        <span className="text-xs font-bold text-slate-800">Domestic Dog</span>
-                      </div>
-
-                      {/* Bite-site body map */}
-                      <div className="flex items-center gap-3 bg-slate-50 border border-slate-100 rounded-xl px-3 py-2.5">
-                        <div className="shrink-0 bg-white rounded-lg border border-slate-100 p-1.5">
-                          <svg viewBox="0 0 60 100" className="w-8 h-14" fill="none">
-                            <circle cx="30" cy="10" r="7" stroke="#CBD5E1" strokeWidth="3" />
-                            <path d="M18,24 Q30,19 42,24 L44,58 Q30,65 16,58 Z" stroke="#CBD5E1" strokeWidth="3" strokeLinejoin="round" />
-                            <path d="M18,26 L8,48 L6,62" stroke="#CBD5E1" strokeWidth="3" strokeLinecap="round" />
-                            <path d="M42,26 L52,48 L54,62" stroke="#CBD5E1" strokeWidth="3" strokeLinecap="round" />
-                            <path d="M24,60 L21,96" stroke="#CBD5E1" strokeWidth="3" strokeLinecap="round" />
-                            <path d="M36,60 L39,96" stroke="#CBD5E1" strokeWidth="3" strokeLinecap="round" />
-                            <circle cx="7" cy="55" r="7" fill="#EF4444" fillOpacity="0.25" className="animate-ping" style={{ transformOrigin: '7px 55px' }} />
-                            <circle cx="7" cy="55" r="4" fill="#DC2626" stroke="white" strokeWidth="1.5" />
-                          </svg>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-0.5">
-                            <MapPin className="w-3 h-3" /> Bite Site
-                          </div>
-                          <div className="text-xs font-bold text-slate-800">Left Forearm</div>
-                        </div>
-                        <span className="text-[10px] font-extrabold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full self-start shrink-0">Category II</span>
-                      </div>
-                    </div>
-
-                    <div className="relative pt-4 border-t border-slate-100 flex items-center justify-between">
-                      <span className="text-xs font-semibold text-slate-500">Status</span>
-                      <span className="text-[10px] font-extrabold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full">PEP Initiated</span>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Bottom Headline, Description, & Carousel Pills */}
-          <div key={`copy-${slide}`} className="relative z-10 pt-3 text-center md:text-left animate-in fade-in slide-in-from-bottom-1 duration-500">
-            <h2 className="font-display text-2xl font-extrabold text-white mb-2 tracking-tight">
-              {SLIDES[slide].title}
-            </h2>
-            <p className="text-slate-300 text-sm leading-relaxed mb-6 font-medium max-w-md">
-              {SLIDES[slide].desc}
-            </p>
-
-            {/* Carousel Pills */}
-            <div className="flex items-center justify-center md:justify-start gap-2">
-              {SLIDES.map((s, i) => (
-                <button
-                  key={s.title}
-                  type="button"
-                  onClick={() => setSlide(i)}
-                  aria-label={`Show slide ${i + 1}: ${s.title}`}
-                  aria-current={slide === i}
-                  className={`h-2 rounded-full transition-all duration-300 ${slide === i ? 'w-9 bg-[#3B50DF]' : 'w-6 bg-white/15 hover:bg-white/30'}`}
-                />
-              ))}
-            </div>
-          </div>
-
+      {/* ── FOOTER BAR ── */}
+      <footer className="relative z-20 w-full px-6 sm:px-10 md:px-14 pb-6 sm:pb-8 flex flex-col sm:flex-row items-center justify-between text-[11px] text-blue-200/60 gap-2">
+        <span>&copy; {new Date().getFullYear()} K&amp;A Animal Bite Center. All rights reserved.</span>
+        <div className="flex items-center gap-4 text-blue-200/70 font-medium">
+          <span>HIPAA &amp; DOH Compliant</span>
+          <span>&bull;</span>
+          <span>Authorized Access Only</span>
         </div>
+      </footer>
 
-      </div>
-
-      {/* Success Overlay — animated verification moment */}
+      {/* ── SUCCESS OVERLAY (Transition to Dashboard) ── */}
       {showSuccess && (
-        <div className="fixed inset-0 z-50 bg-white/95 backdrop-blur-md flex flex-col items-center justify-center animate-in fade-in zoom-in-95 duration-300">
-          <div className="relative w-32 h-32 mb-5">
-            {/* continuous processing ring */}
-            <div className="absolute inset-0 rounded-full border-2 border-dashed border-indigo-200 animate-spin-slow" />
-
-            {/* center success badge */}
-            <div className="absolute inset-3 bg-emerald-50 rounded-full flex items-center justify-center border border-emerald-100 animate-pop-in">
-              <CheckCircle2 className="w-9 h-9 text-emerald-600" />
-            </div>
-
-            {/* orbiting sticker icons, staggered pop-in + gentle float */}
-            <div className="absolute -top-1 -right-2 animate-pop-in" style={{ animationDelay: '180ms' }}>
-              <div className="w-9 h-9 bg-white rounded-xl shadow-lg shadow-slate-900/10 border border-slate-100 flex items-center justify-center animate-float">
-                <ShieldCheck className="w-4 h-4 text-[#3B50DF]" />
-              </div>
-            </div>
-            <div className="absolute bottom-0 -left-3 animate-pop-in" style={{ animationDelay: '340ms' }}>
-              <div className="w-9 h-9 bg-white rounded-xl shadow-lg shadow-slate-900/10 border border-slate-100 flex items-center justify-center animate-float">
-                <Syringe className="w-4 h-4 text-[#3B50DF]" />
-              </div>
-            </div>
-            <div className="absolute top-8 -left-5 animate-pop-in" style={{ animationDelay: '500ms' }}>
-              <div className="w-7 h-7 bg-white rounded-full shadow-lg shadow-slate-900/10 border border-slate-100 flex items-center justify-center animate-float">
-                <Heart className="w-3.5 h-3.5 text-[#3B50DF]" fill="currentColor" strokeWidth={0} />
-              </div>
+        <div className="fixed inset-0 z-50 bg-[#060e24]/95 backdrop-blur-md flex flex-col items-center justify-center animate-in fade-in zoom-in-95 duration-300 text-white">
+          <div className="relative w-28 h-28 mb-5 flex items-center justify-center">
+            <div className="absolute inset-0 rounded-full border-2 border-dashed border-sky-400/50 animate-spin-slow" />
+            <div className="w-16 h-16 bg-blue-500/20 border border-blue-400 rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(59,130,246,0.5)] animate-pop-in">
+              <CheckCircle2 className="w-8 h-8 text-sky-400" />
             </div>
           </div>
-
-          <h2 className="font-display text-2xl font-extrabold text-slate-900 mb-1">Verified</h2>
-          <p className="text-slate-500 text-sm font-semibold flex items-center gap-1.5">
-            Preparing your dashboard
-            <span className="inline-flex items-end gap-0.5 pb-0.5">
-              <span className="w-1 h-1 rounded-full bg-slate-400 animate-dot-pulse" style={{ animationDelay: '0ms' }} />
-              <span className="w-1 h-1 rounded-full bg-slate-400 animate-dot-pulse" style={{ animationDelay: '160ms' }} />
-              <span className="w-1 h-1 rounded-full bg-slate-400 animate-dot-pulse" style={{ animationDelay: '320ms' }} />
-            </span>
+          <h2 className="font-display text-2xl font-extrabold text-white mb-1">Authenticated</h2>
+          <p className="text-blue-200 text-sm font-semibold flex items-center gap-1.5">
+            Loading clinic dashboard...
           </p>
         </div>
       )}
+
     </div>
   );
 }

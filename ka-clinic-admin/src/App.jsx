@@ -59,8 +59,8 @@ export default function App() {
   return (
     <>
       {view === 'checking' && (
-        <div className="min-h-screen flex items-center justify-center bg-[#F4F5F7]">
-          <div className="w-8 h-8 border-[3px] border-slate-200 border-t-red-600 rounded-full animate-spin" />
+        <div className="min-h-screen flex items-center justify-center bg-[#060e24]">
+          <div className="w-8 h-8 border-[3px] border-blue-900 border-t-[#1D4ED8] rounded-full animate-spin" />
         </div>
       )}
 

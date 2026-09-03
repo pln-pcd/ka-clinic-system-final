@@ -706,7 +706,7 @@ export default function SettingsPage({ onLogout }) {
   };
 
   return (
-    <div className="h-full overflow-y-auto bg-[#F4F5F7]">
+    <div className="h-full overflow-y-auto bg-[#F0F4FA]">
       <div className="px-7 py-6 max-w-screen-2xl mx-auto space-y-6">
         
         {/* ── Clean Page Title Header ── */}

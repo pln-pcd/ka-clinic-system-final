@@ -36,7 +36,7 @@ const globalCSS = `
     --primary-red: #6366F1;
     --red-hover: #4F46E5;
     --red-soft: #EEF2FF;
-    --bg-main: #FAF9F9;
+    --bg-main: #F0F4FA;
     --bg-card: #FFFFFF;
     --bg-subtle: #F4F1F1;
     --text-main: #1C1C1E;
@@ -1358,40 +1358,58 @@ export default function AppointmentPage() {
         </div>
       </div>
 
-      {/* POPUP CARD FOR APPOINTMENT PREVIEW ON A SPECIFIC DATE */}
+      {/* POPUP CARD FOR APPOINTMENT PREVIEW ON A SPECIFIC DATE (Matches Add Report / Patients Modal Style) */}
       {datePreviewModalOpen && (
-        <div className="modal-overlay" onClick={() => setDatePreviewModalOpen(false)}>
-          <div className="modal-card" style={{ maxWidth: 720, width: '92%', padding: 0, overflow: 'hidden', borderRadius: 16 }} onClick={e => e.stopPropagation()}>
+        <div
+          className="modal-overlay"
+          style={{ alignItems: 'center', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)', zIndex: 9999 }}
+          onClick={e => { if (e.target.classList.contains('modal-overlay')) setDatePreviewModalOpen(false); }}
+        >
+          <div
+            className="modal bg-white rounded-3xl shadow-2xl border border-slate-200"
+            style={{ maxWidth: 680, width: '92%', maxHeight: '85vh', padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+            onClick={e => e.stopPropagation()}
+          >
             
-            {/* Compact Header Banner (Smaller Header Padding & Font) */}
-            <div style={{ background: '#1E293B', padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <h3 style={{ fontSize: '0.9375rem', fontWeight: 800, color: '#FFFFFF', margin: 0, lineHeight: 1.2 }}>
-                  Appointment Preview
-                </h3>
-                <p style={{ fontSize: '0.75rem', color: '#94A3B8', fontWeight: 500, marginTop: 2, margin: 0 }}>
-                  {new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
-                </p>
+            {/* Light Brand Header Bar — Matches Add Report Header Style */}
+            <div
+              className="px-6 py-4 flex items-center justify-between"
+              style={{ flexShrink: 0, background: '#F4F6FE', borderBottom: '1px solid #E0E5FA' }}
+            >
+              <div className="flex items-center gap-3">
+                <div style={{ width: 34, height: 34, borderRadius: 10, background: '#3B50DF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <CalendarIcon size={17} color="#FFFFFF" strokeWidth={2.2} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Appointment Preview
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-normal mt-0.5">
+                    {new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                  </p>
+                </div>
               </div>
               <button
+                type="button"
                 onClick={() => setDatePreviewModalOpen(false)}
-                style={{ background: 'rgba(255, 255, 255, 0.1)', border: 'none', borderRadius: 6, width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94A3B8', cursor: 'pointer', transition: 'all 0.15s ease' }}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-lg cursor-pointer transition-colors"
                 title="Close preview"
+                aria-label="Close"
               >
-                <X size={15} />
+                <X size={16} />
               </button>
             </div>
 
-            {/* Simple Clean iPhone Notes Style List Content (Bigger Modal Body) */}
-            <div style={{ padding: '12px 24px', maxHeight: 480, overflowY: 'auto' }}>
+            {/* Content List Body */}
+            <div style={{ padding: '16px 24px', maxHeight: 460, overflowY: 'auto', flex: 1 }}>
               {timelineApts.length === 0 ? (
-                <div className="empty-state" style={{ padding: '40px 16px', textAlign: 'center' }}>
-                  <Clock size={28} style={{ opacity: 0.35, margin: '0 auto 8px', color: '#64748B' }} />
+                <div className="empty-state" style={{ padding: '48px 16px', textAlign: 'center' }}>
+                  <Clock size={32} style={{ opacity: 0.35, margin: '0 auto 10px', color: '#64748B' }} />
                   <p style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#1E293B' }}>No appointments scheduled</p>
                   <p style={{ fontSize: '0.8125rem', color: '#64748B', marginTop: 3 }}>No bookings recorded for {selectedDate}.</p>
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {timelineApts.map((apt, idx) => {
                     const [timeStart, timeEnd] = (apt.time || 'TBD').split(' - ');
                     const isLast = idx === timelineApts.length - 1;
@@ -1400,15 +1418,18 @@ export default function AppointmentPage() {
                       <div
                         key={apt.id}
                         style={{
-                          padding: '14px 4px',
+                          padding: '14px 10px',
+                          borderRadius: 12,
                           borderBottom: isLast ? 'none' : '1px solid #F1F5F9',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
                           gap: 16,
+                          transition: 'background-color 0.15s ease'
                         }}
+                        className="hover:bg-slate-50/80"
                       >
-                        {/* Left Details (iPhone Notes typography) */}
+                        {/* Left Details */}
                         <div style={{ minWidth: 0, flex: 1 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                             <span style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A' }}>
@@ -1416,27 +1437,28 @@ export default function AppointmentPage() {
                             </span>
                             <span style={{
                               fontSize: '0.6875rem', fontWeight: 700,
-                              padding: '2px 8px', borderRadius: 12,
+                              padding: '2px 9px', borderRadius: 999,
                               background: apt.status === 'confirmed' || apt.status === 'accepted' ? '#DCFCE7' : apt.status === 'done' ? '#DBEAFE' : apt.status === 'cancelled' ? '#FEE2E2' : '#FEF3C7',
-                              color: apt.status === 'confirmed' || apt.status === 'accepted' ? '#15803D' : apt.status === 'done' ? '#1D4ED8' : apt.status === 'cancelled' ? '#B91C1C' : '#B45309'
+                              color: apt.status === 'confirmed' || apt.status === 'accepted' ? '#15803D' : apt.status === 'done' ? '#1D4ED8' : apt.status === 'cancelled' ? '#B91C1C' : '#B45309',
+                              border: `1px solid ${apt.status === 'confirmed' || apt.status === 'accepted' ? '#86EFAC' : apt.status === 'done' ? '#93C5FD' : apt.status === 'cancelled' ? '#FCA5A5' : '#FDE68A'}`
                             }}>
                               {apt.status === 'accepted' ? 'Confirmed' : apt.status.charAt(0).toUpperCase() + apt.status.slice(1)}
                             </span>
                           </div>
 
-                          <div style={{ fontSize: '0.8125rem', color: '#64748B', marginTop: 4, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                          <div style={{ fontSize: '0.8125rem', color: '#64748B', marginTop: 5, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                             <span style={{ fontWeight: 600, color: '#334155', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                              <Clock size={13} style={{ color: '#475569' }} />
+                              <Clock size={13} style={{ color: '#64748B' }} />
                               {timeStart}{timeEnd ? ` - ${timeEnd}` : ''}
                             </span>
                             <span style={{ color: '#CBD5E1' }}>•</span>
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                              <CalendarIcon size={13} style={{ color: '#475569' }} />
+                              <CalendarIcon size={13} style={{ color: '#64748B' }} />
                               {apt.type || 'Consultation'}
                             </span>
                             <span style={{ color: '#CBD5E1' }}>•</span>
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                              <Phone size={13} style={{ color: '#475569' }} />
+                              <Phone size={13} style={{ color: '#64748B' }} />
                               {apt.contactNumber || apt.contact || 'No contact'}
                             </span>
                           </div>
@@ -1449,7 +1471,7 @@ export default function AppointmentPage() {
                               className="btn-queue-action btn-queue-confirm"
                               onClick={() => handleQuickAction(apt.id, 'confirmed')}
                               title="Accept / Confirm"
-                              style={{ padding: '4px 10px', fontSize: '0.71875rem' }}
+                              style={{ padding: '5px 12px', fontSize: '0.71875rem' }}
                             >
                               <UserCheck size={12} />
                               <span>Confirm</span>
@@ -1463,14 +1485,18 @@ export default function AppointmentPage() {
               )}
             </div>
 
-            {/* Clean Footer */}
-            <div style={{ borderTop: '1px solid #E2E8F0', padding: '12px 20px', background: '#F8FAFC', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            {/* Clean Footer Bar */}
+            <div
+              className="px-6 py-3.5 flex items-center justify-between"
+              style={{ flexShrink: 0, background: '#F8FAFC', borderTop: '1px solid #E2E8F0' }}
+            >
               <span style={{ fontSize: '0.8125rem', color: '#64748B', fontWeight: 600 }}>
                 {timelineApts.length} appointment{timelineApts.length === 1 ? '' : 's'} on this date
               </span>
               <button
+                type="button"
                 onClick={() => setDatePreviewModalOpen(false)}
-                style={{ background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 8, padding: '6px 16px', fontSize: '0.8125rem', fontWeight: 700, color: '#334155', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
+                className="px-4 py-1.5 text-xs font-semibold rounded-xl border border-slate-300 text-slate-700 bg-white hover:bg-slate-100 transition-colors shadow-xs cursor-pointer"
               >
                 Close
               </button>

@@ -12,7 +12,7 @@ import Toast from "../components/Toast";
 const globalCSS = `
   :root {
     --blue:#3B50DF; --blue-light:#EEF2FF; --blue-soft:#E0E7FF;
-    --white:#FFFFFF; --bg:#F4F5F7; --bg-2:#EAECEF;
+    --white:#FFFFFF; --bg:#F0F4FA; --bg-2:#E2E8F0;
     --text:#1C1C1E; --text-2:#3D3535;
     --muted:#7A6E6E; --muted-2:#A89E9E;
     --border:#E8E2E2; --border-2:#D4CBCB;
@@ -25,7 +25,7 @@ const globalCSS = `
   }
   *{box-sizing:border-box;margin:0;padding:0;}
   body, button, input, select, textarea, table, td, th, div, span, p, h1, h2, h3, h4 { font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
-  body{background:#F4F5F7;color:var(--text);}
+  body{background:#F0F4FA;color:var(--text);}
 
   /* Table */
   .table-wrap{overflow-x:auto;}
@@ -1910,7 +1910,7 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
         archivedAt: serverTimestamp(),
         retentionExpiryYear: expYear,
       });
-      onToast(`Record archived in DOH Retention Caseload (Valid until ${expYear}) ✓`, 'success');
+      onToast('Patient moved to Archive ✓', 'success');
     } catch (err) {
       console.error('Archive error:', err);
       onToast('Failed to archive record.', 'error');
@@ -1954,10 +1954,10 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
                   ? 'bg-emerald-50 text-emerald-800 border-emerald-300 cursor-default'
                   : 'bg-white text-emerald-800 border-emerald-300 hover:bg-emerald-50'
               }`}
-              title="Archive into DOH 10-Year Statutory Retention Caseload"
+              title="Archive Patient Record"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>
-              {patient.isArchived ? 'Preserved in Caseload ✓' : 'Archive to Retention Caseload'}
+              {patient.isArchived ? 'Archived ✓' : 'Archive'}
             </button>
           )}
 
@@ -1977,28 +1977,6 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
           </button>
         </div>
       </div>
-
-      {/* ── DOH RETENTION NOTICE BANNER FOR COMPLETED & RETAINED RECORDS ── */}
-      {isCompletedOrArchived && (
-        <div className="mb-6 p-4 rounded-2xl bg-emerald-50/80 border border-emerald-200/90 flex items-start justify-between gap-4 flex-wrap shadow-2xs">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-200 mt-0.5">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h4 className="text-xs font-extrabold text-emerald-950 uppercase tracking-wide">DOH Statutory Medical Record Retention Compliance</h4>
-                <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
-                  Preserved in Caseload (10-Year Statutory Period)
-                </span>
-              </div>
-              <p className="text-[11.5px] text-emerald-900/90 mt-1 leading-relaxed max-w-4xl">
-                Pursuant to Philippine DOH Medical Record Retention Guidelines (DOH AO 2012-0012), completed patient post-exposure prophylaxis (PEP) & bite injury encounter records remain preserved intact in the active clinic caseload for a mandatory statutory retention window of at least <strong>10 years</strong> (Preserved active until <strong>{getDOHRetentionYear(rec || patient)}</strong>). Full clinical records remain intact for follow-up review, legal preservation, and medical audits prior to cold-storage archiving.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── TOP ROW: CARD 1 (PROFILE & GENERAL INFO WITH DIVIDER) & CARD 2 (STANDALONE MEDICAL HISTORY) ── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6 items-stretch">
@@ -3179,61 +3157,26 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
     if (period === 'yearly') return String(now.getFullYear());
     return '';
   }
-
-  // Shared print/email HTML shell — official Philippine institutional letterhead with clean table layout
-  function reportStyles() {
-    return `
-      *{box-sizing:border-box;}
-      body{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,Helvetica,Arial,sans-serif;color:#0F172A;padding:0;margin:0;font-size:11.5px;line-height:1.5;background:#FFFFFF;}
-      .letterhead-container{border-bottom:2px solid #0F172A;padding-bottom:14px;margin-bottom:16px;}
-      .formal-summary{width:100%;border-collapse:collapse;margin-bottom:20px;border:1px solid #CBD5E1;}
-      .formal-summary th{background:#F1F5F9;color:#334155;font-weight:700;text-transform:uppercase;font-size:9px;letter-spacing:0.5px;padding:8px 12px;border:1px solid #CBD5E1;text-align:center;}
-      .formal-summary td{padding:10px 12px;border:1px solid #CBD5E1;text-align:center;font-size:14px;font-weight:800;color:#0F172A;}
-      
-      .section-title{font-size:10.5px;font-weight:800;margin:18px 0 10px;color:#0F172A;text-transform:uppercase;letter-spacing:0.6px;border-bottom:2px solid #0F172A;padding-bottom:4px;}
-      table.data-table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:11px;border:1px solid #CBD5E1;}
-      table.data-table th{background:#F1F5F9;text-align:left;padding:8px 10px;border:1px solid #CBD5E1;font-size:9px;text-transform:uppercase;letter-spacing:0.5px;color:#334155;font-weight:700;}
-      table.data-table td{padding:7px 10px;border:1px solid #E2E8F0;vertical-align:middle;color:#1E293B;}
-      table.data-table tr:nth-child(even) td{background:#F8FAFC;}
-      .status-pill{display:inline-block;padding:2px 8px;border-radius:4px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.3px;}
-      .status-completed{background:#DCFCE7;color:#15803D;border:1px solid #A7F3D0;}
-      .status-ongoing{background:#EFF6FF;color:#1D4ED8;border:1px solid #BFDBFE;}
-      .footer{font-size:9px;color:#94A3B8;margin-top:24px;border-top:1px solid #E2E8F0;padding-top:10px;display:flex;justify-content:space-between;align-items:center;}
-    `;
-  }
-
-  // Official Philippine Government / Institutional Letterhead
+  // Official Philippine Government / Institutional Rural Health Unit Letterhead
   function letterhead() {
     return `
-      <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:14px;border-bottom:2px solid #0F172A;margin-bottom:16px;">
-        <!-- Left Accreditation Emblem -->
-        <div style="width:58px;height:58px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:#F8FAFC;border:1px solid #CBD5E1;flex-shrink:0;">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#3B50DF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"/>
-            <path d="M12 6v12M6 12h12"/>
-          </svg>
+      <div style="display:flex;align-items:center;justify-content:center;gap:22px;padding-bottom:12px;margin-bottom:8px;">
+        <!-- Left White Clinic Logo Beside RHU Header Text -->
+        <div style="width:72px;height:72px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <img src="/assets/dashboard/logo-white-nobg.png" alt="K&A Clinic Logo" style="width:70px;height:70px;object-fit:contain;" />
         </div>
 
         <!-- Center Official Republic Letterhead Text -->
-        <div style="text-align:center;flex:1;padding:0 16px;">
-          <div style="font-family:'Times New Roman',Georgia,serif;font-size:10px;font-weight:600;color:#475569;letter-spacing:1.2px;text-transform:uppercase;">Republic of the Philippines</div>
-          <div style="font-family:'Times New Roman',Georgia,serif;font-size:18px;font-weight:800;color:#1E293B;margin:2px 0 1px;letter-spacing:-0.01em;">K&amp;A Anti-Rabies Vaccine Clinic</div>
-          <div style="font-family:'Segoe UI',sans-serif;font-size:10.5px;font-weight:700;color:#0F172A;text-transform:uppercase;letter-spacing:0.5px;">Animal Bite Treatment Center</div>
-          <div style="font-size:9px;color:#64748B;margin-top:3px;font-family:'Segoe UI',sans-serif;">Polangui, Albay &bull; Contact: (052) 486-1220 &bull; Email: knaclinic.ph@gmail.com</div>
-        </div>
-
-        <!-- Right Clinic Seal -->
-        <div style="width:58px;height:58px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:#0F172A;border:1px solid #0F172A;flex-shrink:0;">
-          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-            <path d="M12 8v8M8 12h8"/>
-          </svg>
+        <div style="text-align:center;">
+          <div style="font-size:10px;color:#475569;letter-spacing:0.8px;font-weight:600;text-transform:uppercase;">Republic of the Philippines</div>
+          <div style="font-size:10px;color:#475569;letter-spacing:0.5px;font-weight:600;">Municipality of Polangui, Province of Albay</div>
+          <div style="font-size:13.5px;font-weight:900;color:#0F172A;letter-spacing:0.4px;margin-top:2px;">RURAL HEALTH UNIT &bull; ANIMAL BITE TREATMENT CENTER</div>
         </div>
       </div>
     `;
   }
 
-  // Realistic Simple Microsoft Excel Live Preview HTML
+  // Realistic Microsoft Excel Live Table Preview HTML
   function buildExcelPreviewHtml(rows, periodLabelStr) {
     const serviceCount = {};
     const statusCount = { ongoing: 0, completed: 0 };
@@ -3244,23 +3187,25 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
       statusCount[st] = (statusCount[st] || 0) + 1;
     });
 
-    const headers = ['#', 'Case No.', 'Patient Name', 'Age', 'Sex', 'Address', 'Contact No.', 'Service', 'Status', 'Date Registered'];
+    const headers = ['#', 'Barangay / Address', 'Patient ID', 'Patient Name', 'Age / Sex', 'Contact No.', 'Service', 'Exposure', 'Status', 'Date Registered'];
     const colLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
 
     const tableRows = rows.map((p, idx) => {
-      const st = derivePatientStatus(p);
+      const liveSt = derivePatientStatus(p);
+      const isOverdue = liveSt !== 'completed' && buildDoses(p).some(d => d.status === 'miss');
+      const stLabel = liveSt === 'completed' ? 'Completed' : isOverdue ? 'Overdue' : 'Ongoing';
       const rowNum = idx + 6;
       return `<tr>
         <td class="row-num">${rowNum}</td>
         <td style="text-align:center;">${idx + 1}</td>
+        <td>${p.barangay || p.address || 'Polangui'}</td>
         <td style="font-weight:bold;color:#0F172A;">${p.id || p.mrn || '—'}</td>
         <td style="font-weight:bold;color:#0F172A;">${formatTitleCase(p.name || '—')}</td>
-        <td style="text-align:center;">${p.age || '—'}</td>
-        <td style="text-align:center;">${p.sex || '—'}</td>
-        <td>${p.address || '—'}</td>
+        <td style="text-align:center;">${p.age || '—'} / ${p.sex || '—'}</td>
         <td>${p.contact || '—'}</td>
-        <td style="text-align:center;font-weight:bold;">${p.service || '—'}</td>
-        <td style="text-align:center;font-weight:bold;color:${st === 'completed' ? '#15803D' : '#1D4ED8'};">${st.toUpperCase()}</td>
+        <td style="text-align:center;font-weight:bold;">${p.service || 'PEP'}</td>
+        <td style="text-align:center;">${p.cat ? `Cat ${p.cat}` : (p.animal || '—')}</td>
+        <td style="text-align:center;font-weight:bold;color:${stLabel === 'Completed' ? '#15803D' : stLabel === 'Overdue' ? '#DC2626' : '#1D4ED8'};">${stLabel.toUpperCase()}</td>
         <td style="text-align:center;">${p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString('en-PH') : (p.date || '—')}</td>
       </tr>`;
     }).join('');
@@ -3272,10 +3217,10 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
         .sheet-container{background:#FFFFFF;overflow-x:auto;padding:0;}
         table.excel-grid{border-collapse:collapse;width:100%;table-layout:fixed;}
         table.excel-grid th, table.excel-grid td{border:1px solid #CBD5E1;padding:6px 9px;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-        th.col-head{background:#F1F5F9;color:#475569;font-weight:700;text-align:center;font-size:10px;border:1px solid #CBD5E1;}
-        td.row-num{background:#F1F5F9;color:#64748B;font-weight:700;text-align:center;font-size:10px;width:36px;border:1px solid #CBD5E1;}
+        th.col-head{background:#EFF6FF;color:#1D4ED8;font-weight:700;text-align:center;font-size:10px;border:1px solid #CBD5E1;}
+        td.row-num{background:#F8FAFC;color:#64748B;font-weight:700;text-align:center;font-size:10px;width:36px;border:1px solid #CBD5E1;}
         .sheet-tabs{background:#F1F5F9;border-top:1px solid #CBD5E1;padding:4px 12px;display:flex;align-items:center;gap:4px;font-size:11px;position:sticky;bottom:0;}
-        .tab{background:#FFFFFF;border:1px solid #CBD5E1;border-bottom:none;padding:4px 12px;font-weight:700;color:#15803D;border-top:2px solid #15803D;border-radius:3px 3px 0 0;}
+        .tab{background:#FFFFFF;border:1px solid #CBD5E1;border-bottom:none;padding:4px 12px;font-weight:700;color:#1D4ED8;border-top:2px solid #1D4ED8;border-radius:3px 3px 0 0;}
       </style></head><body>
 
       <div class="sheet-container">
@@ -3289,25 +3234,25 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
           <tbody>
             <tr>
               <td class="row-num">1</td>
-              <td colspan="10" style="font-size:13px;font-weight:bold;color:#0F172A;background:#F8FAFC;">K&amp;A CLINIC — PATIENT REGISTRY REPORT</td>
+              <td colspan="10" style="font-size:13px;font-weight:bold;color:#1D4ED8;background:#EFF6FF;">HEALTH MONITORING &amp; PATIENT REGISTRY REPORT</td>
             </tr>
             <tr>
               <td class="row-num">2</td>
-              <td colspan="10" style="color:#475569;background:#F8FAFC;">Report Period: <strong>${periodLabelStr}</strong> &nbsp;|&nbsp; Date Exported: ${new Date().toLocaleString('en-PH')}</td>
+              <td colspan="10" style="color:#475569;background:#F8FAFC;">Period Covered: <strong>${periodLabelStr}</strong> &nbsp;|&nbsp; Barangay: All Barangays &nbsp;|&nbsp; Date Generated: ${new Date().toLocaleString('en-PH')}</td>
             </tr>
             <tr>
               <td class="row-num">3</td>
               <td colspan="3" style="background:#F1F5F9;font-weight:bold;">Total Patients: ${rows.length}</td>
-              <td colspan="3" style="background:#F1F5F9;font-weight:bold;color:#1D4ED8;">Ongoing: ${statusCount.ongoing || 0}</td>
-              <td colspan="4" style="background:#F1F5F9;font-weight:bold;color:#15803D;">Completed: ${statusCount.completed || 0}</td>
+              <td colspan="3" style="background:#F1F5F9;font-weight:bold;color:#1D4ED8;">Ongoing Cases: ${statusCount.ongoing || 0}</td>
+              <td colspan="4" style="background:#F1F5F9;font-weight:bold;color:#15803D;">Completed Cases: ${statusCount.completed || 0}</td>
             </tr>
             <tr>
               <td class="row-num">4</td>
               <td colspan="10" style="background:#FFFFFF;height:4px;"></td>
             </tr>
-            <tr style="background:#0F172A;color:#FFFFFF;font-weight:bold;">
+            <tr style="background:#1D4ED8;color:#FFFFFF;font-weight:bold;">
               <td class="row-num" style="background:#F1F5F9;color:#64748B;">5</td>
-              ${headers.map(h => `<td style="background:#0F172A;color:#FFFFFF;font-weight:bold;text-align:${h === '#' || h === 'Age' || h === 'Sex' || h === 'Service' || h === 'Status' || h === 'Date Registered' ? 'center' : 'left'};">${h}</td>`).join('')}
+              ${headers.map(h => `<td style="background:#1D4ED8;color:#FFFFFF;font-weight:bold;text-align:${h === '#' || h === 'Age / Sex' || h === 'Service' || h === 'Exposure' || h === 'Status' || h === 'Date Registered' ? 'center' : 'left'};">${h}</td>`).join('')}
             </tr>
             ${tableRows}
           </tbody>
@@ -3337,62 +3282,52 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
       statusCount[st] = (statusCount[st] || 0) + 1;
     });
 
-    const headers = ['#', 'Case No.', 'Patient Name', 'Age', 'Sex', 'Address', 'Contact No.', 'Service Type', 'Status', 'Date Registered'];
+    const headers = ['#', 'Barangay / Address', 'Patient ID', 'Patient Name', 'Age / Sex', 'Contact No.', 'Service Type', 'Exposure', 'Status', 'Date Registered'];
     const cols = headers.length;
 
     const tableRows = rows.map((p, idx) => {
-      const st = derivePatientStatus(p);
+      const liveSt = derivePatientStatus(p);
+      const isOverdue = liveSt !== 'completed' && buildDoses(p).some(d => d.status === 'miss');
+      const stLabel = liveSt === 'completed' ? 'Completed' : isOverdue ? 'Overdue' : 'Ongoing';
       const bg = idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
       return `<tr style="background-color:${bg};">
         <td style="padding:6px;border:1px solid #CBD5E1;text-align:center;">${idx + 1}</td>
+        <td style="padding:6px;border:1px solid #CBD5E1;">${p.barangay || p.address || 'Polangui'}</td>
         <td style="padding:6px;border:1px solid #CBD5E1;font-weight:bold;">${p.id || p.mrn || '—'}</td>
         <td style="padding:6px;border:1px solid #CBD5E1;font-weight:bold;">${formatTitleCase(p.name || '—')}</td>
-        <td style="padding:6px;border:1px solid #CBD5E1;text-align:center;">${p.age || '—'}</td>
-        <td style="padding:6px;border:1px solid #CBD5E1;text-align:center;">${p.sex || '—'}</td>
-        <td style="padding:6px;border:1px solid #CBD5E1;">${p.address || '—'}</td>
+        <td style="padding:6px;border:1px solid #CBD5E1;text-align:center;">${p.age || '—'} / ${p.sex || '—'}</td>
         <td style="padding:6px;border:1px solid #CBD5E1;">${p.contact || '—'}</td>
-        <td style="padding:6px;border:1px solid #CBD5E1;text-align:center;font-weight:bold;">${p.service || '—'}</td>
-        <td style="padding:6px;border:1px solid #CBD5E1;text-align:center;font-weight:bold;color:${st === 'completed' ? '#15803D' : '#1D4ED8'};">${st.toUpperCase()}</td>
+        <td style="padding:6px;border:1px solid #CBD5E1;text-align:center;font-weight:bold;">${p.service || 'PEP'}</td>
+        <td style="padding:6px;border:1px solid #CBD5E1;text-align:center;">${p.cat ? `Cat ${p.cat}` : (p.animal || '—')}</td>
+        <td style="padding:6px;border:1px solid #CBD5E1;text-align:center;font-weight:bold;color:${stLabel === 'Completed' ? '#15803D' : stLabel === 'Overdue' ? '#DC2626' : '#1D4ED8'};">${stLabel.toUpperCase()}</td>
         <td style="padding:6px;border:1px solid #CBD5E1;text-align:center;">${p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString('en-PH') : (p.date || '—')}</td>
       </tr>`;
     }).join('');
 
-    const svcSummaryRows = Object.entries(serviceCount).map(([svc, cnt]) =>
-      `<tr><td style="padding:6px;border:1px solid #CBD5E1;font-weight:bold;">${svc}</td><td style="padding:6px;border:1px solid #CBD5E1;text-align:center;">${cnt}</td><td style="padding:6px;border:1px solid #CBD5E1;text-align:center;">${((cnt / rows.length) * 100).toFixed(1)}%</td></tr>`
-    ).join('');
-
     const html = `<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8">
       <style>
         td,th{font-family:Calibri,Arial,sans-serif;font-size:10.5pt;}
-        .brand{font-size:16pt;font-weight:bold;color:#0F172A;}
+        .brand{font-size:16pt;font-weight:bold;color:#1D4ED8;}
         .tagline{font-size:9.5pt;color:#475569;}
         .meta{font-size:10pt;color:#334155;}
-        th.col{background:#0F172A;color:#FFFFFF;font-weight:bold;text-align:left;padding:8px;}
-        th.subcol{background:#334155;color:#FFFFFF;font-weight:bold;text-align:center;padding:6px;}
-        .card{background:#F8FAFC;border:1px solid #CBD5E1;font-weight:bold;text-align:center;}
+        th.col{background:#1D4ED8;color:#FFFFFF;font-weight:bold;text-align:left;padding:8px;}
+        .card{background:#EFF6FF;border:1px solid #BFDBFE;font-weight:bold;text-align:center;color:#1D4ED8;}
       </style></head><body>
       <table border="0">
-        <tr><td class="brand" colspan="${cols}">K&amp;A Clinic &mdash; Anti-Rabies &amp; Animal Bite Center</td></tr>
-        <tr><td class="tagline" colspan="${cols}">OFFICIAL CLINICAL PATIENT REPORT &bull; ${periodLabel()}</td></tr>
-        <tr><td class="meta" colspan="${cols}">Report Period: ${periodLabel()} | Exported: ${new Date().toLocaleString('en-PH')}</td></tr>
+        <tr><td class="brand" colspan="${cols}">HEALTH MONITORING &amp; PATIENT REGISTRY REPORT</td></tr>
+        <tr><td class="tagline" colspan="${cols}">RURAL HEALTH UNIT &bull; ANIMAL BITE TREATMENT CENTER &bull; POLANGUI, ALBAY</td></tr>
+        <tr><td class="meta" colspan="${cols}">Period Covered: ${periodLabel()} | Barangay: All Barangays | Date Generated: ${new Date().toLocaleString('en-PH')}</td></tr>
         <tr><td colspan="${cols}"></td></tr>
       </table>
       <table border="1" style="margin-bottom:15px;">
-        <tr style="background:#F1F5F9;">
-          <th style="background:#F1F5F9;color:#0F172A;font-weight:bold;" colspan="3">SUMMARY METRICS</th>
+        <tr style="background:#EFF6FF;">
+          <th style="background:#EFF6FF;color:#1D4ED8;font-weight:bold;" colspan="3">SUMMARY METRICS</th>
         </tr>
         <tr>
           <td class="card">Total Patients: ${rows.length}</td>
           <td class="card">Ongoing Cases: ${statusCount.ongoing || 0}</td>
           <td class="card">Completed Cases: ${statusCount.completed || 0}</td>
         </tr>
-      </table>
-      <br/>
-      <table border="1" style="margin-bottom:15px;">
-        <thead>
-          <tr><th class="subcol">Service Type</th><th class="subcol">Patient Count</th><th class="subcol">% of Total</th></tr>
-        </thead>
-        <tbody>${svcSummaryRows}</tbody>
       </table>
       <br/>
       <table border="1">
@@ -3413,82 +3348,96 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
     onToast(`Excel report exported (${rows.length} patient${rows.length !== 1 ? 's' : ''})`, 'success');
   }
 
+  // Exact Landscape HTML Report matching user example image with Blue theme
   function buildBulkReportHtml(rows) {
-    const serviceCount = {};
-    const statusCount = { ongoing: 0, completed: 0 };
-    rows.forEach(p => {
-      const svc = p.service || 'PEP';
-      serviceCount[svc] = (serviceCount[svc] || 0) + 1;
-      const st = derivePatientStatus(p);
-      statusCount[st] = (statusCount[st] || 0) + 1;
-    });
-    const svcRows = Object.entries(serviceCount).map(([k, v]) =>
-      `<tr><td style="font-weight:bold;">${k}</td><td style="text-align:center;">${v}</td><td style="text-align:center;">${((v / rows.length) * 100).toFixed(1)}%</td></tr>`
-    ).join('');
     const tableRows = rows.map((p, i) => {
-      const st = derivePatientStatus(p);
+      const liveSt = derivePatientStatus(p);
+      const isOverdue = liveSt !== 'completed' && buildDoses(p).some(d => d.status === 'miss');
+      const stBadge = liveSt === 'completed'
+        ? `<span class="badge-completed">✔ Completed</span>`
+        : isOverdue
+        ? `<span class="badge-overdue">▲ Overdue</span>`
+        : `<span class="badge-ongoing">● Ongoing</span>`;
+
       return `
       <tr>
         <td style="text-align:center;color:#64748B;">${i + 1}</td>
-        <td style="font-weight:bold;color:#0F172A;">${p.id || p.mrn || '—'}</td>
-        <td style="font-weight:bold;color:#0F172A;">${formatTitleCase(p.name || '—')}</td>
-        <td style="text-align:center;">${p.age || '—'}</td>
-        <td style="text-align:center;">${p.sex || '—'}</td>
-        <td style="text-align:center;font-weight:bold;">${p.service || '—'}</td>
-        <td style="text-align:center;"><span class="status-pill status-${st}">${st}</span></td>
+        <td style="font-weight:600;">${p.barangay || p.address || 'Polangui'}</td>
+        <td style="color:#0F172A;font-weight:500;">${p.id || p.mrn || '—'}</td>
+        <td style="font-weight:700;color:#0F172A;">${formatTitleCase(p.name || '—')}</td>
+        <td style="text-align:center;">${p.age || '—'} / ${p.sex || '—'}</td>
+        <td>${p.contact || '—'}</td>
+        <td style="text-align:center;font-weight:700;">${p.service || 'PEP'}</td>
+        <td style="text-align:center;">${p.cat ? `Cat ${p.cat}` : (p.animal || '—')}</td>
+        <td style="text-align:center;">${stBadge}</td>
         <td style="text-align:center;">${p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString('en-PH') : (p.date || '—')}</td>
       </tr>`;
     }).join('');
-    return `<!DOCTYPE html><html><head><title>Patient Report — ${periodLabel()}</title>
-    <style>${reportStyles()}</style></head><body style="padding:28px 36px;">
-    ${letterhead()}
-    
-    <!-- Inline Metadata Row (Matching user sample format: Label: Underlined Value) -->
-    <div style="text-align:center;margin-bottom:14px;font-size:11px;color:#0F172A;line-height:1.8;">
-      <strong>Report Period:</strong> <span style="text-decoration:underline;margin-right:16px;">${periodLabel()}</span>
-      <strong>Date Exported:</strong> <span style="text-decoration:underline;margin-right:16px;">${new Date().toLocaleString('en-PH')}</span>
-      <strong>Total Records:</strong> <span style="text-decoration:underline;">${rows.length} Patients</span>
-    </div>
 
-    <!-- Centered Document Title -->
-    <div style="text-align:center;font-size:13.5px;font-weight:800;color:#0F172A;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:18px;">
-      OFFICIAL CLINICAL REGISTRY REPORT
-    </div>
+    return `<!DOCTYPE html><html><head><title>Health Monitoring Report — ${periodLabel()}</title>
+    <style>
+      *{box-sizing:border-box;}
+      body{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,Helvetica,Arial,sans-serif;color:#0F172A;padding:24px 32px;margin:0;font-size:11px;line-height:1.4;background:#FFFFFF;}
+      .header-meta{display:flex;align-items:center;justify-content:center;gap:24px;font-size:9.5px;color:#475569;margin-top:6px;font-weight:600;}
+      .header-meta strong{color:#0F172A;}
+      .blue-divider{border-bottom:2.5px solid #1D4ED8;margin:10px 0 14px;}
+      .section-heading{display:flex;align-items:flex-start;gap:6px;margin-bottom:12px;}
+      .section-title{font-size:11.5px;font-weight:800;color:#0F172A;margin:0;}
+      .section-subtitle{font-size:9.5px;color:#64748B;margin:2px 0 0;}
+      table.report-table{width:100%;border-collapse:collapse;font-size:10px;table-layout:fixed;}
+      table.report-table th{background:#EFF6FF;color:#1D4ED8;font-size:8.5px;font-weight:800;text-transform:uppercase;letter-spacing:0.4px;padding:8px 8px;border-bottom:1.5px solid #BFDBFE;text-align:left;}
+      table.report-table td{padding:7px 8px;border-bottom:1px solid #F1F5F9;vertical-align:middle;color:#1E293B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+      .badge-completed{background:#DCFCE7;color:#15803D;border:1px solid #86EFAC;padding:2px 8px;border-radius:999px;font-weight:700;font-size:8.5px;display:inline-flex;align-items:center;gap:3px;}
+      .badge-ongoing{background:#EFF6FF;color:#1D4ED8;border:1px solid #93C5FD;padding:2px 8px;border-radius:999px;font-weight:700;font-size:8.5px;display:inline-flex;align-items:center;gap:3px;}
+      .badge-overdue{background:#FEF2F2;color:#DC2626;border:1px solid #FCA5A5;padding:2px 8px;border-radius:999px;font-weight:700;font-size:8.5px;display:inline-flex;align-items:center;gap:3px;}
+      .footer{font-size:8.5px;color:#94A3B8;margin-top:16px;border-top:1px solid #E2E8F0;padding-top:8px;display:flex;justify-content:space-between;}
+    </style></head><body>
+      ${letterhead()}
+      
+      <div style="text-align:center;margin-top:12px;margin-bottom:10px;">
+        <h2 style="margin:0 0 5px;font-size:14.5px;font-weight:900;color:#0F172A;letter-spacing:0.5px;text-transform:uppercase;">HEALTH MONITORING REPORT</h2>
+        <div style="font-size:10.5px;color:#64748B;font-weight:500;">Barangay Summary — ${periodLabel()}</div>
+      </div>
 
-    <div class="section-title">Key Registry Metrics</div>
-    <table class="formal-summary">
-      <thead>
-        <tr>
-          <th>Total Patients Registered</th>
-          <th>Active Ongoing Cases</th>
-          <th>Completed Series Cases</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>${rows.length}</td>
-          <td style="color:#1D4ED8;">${statusCount.ongoing || 0}</td>
-          <td style="color:#15803D;">${statusCount.completed || 0}</td>
-        </tr>
-      </tbody>
-    </table>
+      <div class="header-meta" style="margin-top:10px;margin-bottom:12px;gap:28px;">
+        <span><strong>Period Covered:</strong> ${periodLabel()}</span>
+        <span><strong>Barangay:</strong> All Barangays</span>
+        <span><strong>Date Generated:</strong> ${new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+      </div>
 
-    <div class="section-title">Summary Breakdown by Service</div>
-    <table class="data-table" style="width:auto;min-width:340px;">
-      <thead><tr><th>Service Category</th><th style="text-align:center;">Patient Count</th><th style="text-align:center;">Percentage</th></tr></thead>
-      <tbody>${svcRows}</tbody>
-    </table>
+      <div class="blue-divider" style="margin:12px 0 16px;"></div>
 
-    <div class="section-title">Official Patient Registry</div>
-    <table class="data-table">
-      <thead><tr><th style="text-align:center;">#</th><th>Case No.</th><th>Patient Name</th><th style="text-align:center;">Age</th><th style="text-align:center;">Sex</th><th style="text-align:center;">Service</th><th style="text-align:center;">Status</th><th style="text-align:center;">Date Registered</th></tr></thead>
-      <tbody>${tableRows}</tbody>
-    </table>
+      <div class="section-heading">
+        <div>
+          <div class="section-title">📍 Barangay Health &amp; Patient Registry Summary</div>
+          <div class="section-subtitle">Comprehensive patient demographic, vaccination course, exposure category, and completion tracking</div>
+        </div>
+      </div>
 
-    <div class="footer">
-      <span>K&amp;A Anti-Rabies &amp; Animal Bite Center &bull; Official Clinical Record</span>
-      <span>Page 1 of 1</span>
-    </div>
+      <table class="report-table">
+        <thead>
+          <tr>
+            <th style="width:4%;text-align:center;">#</th>
+            <th style="width:14%;">Barangay / Address</th>
+            <th style="width:10%;">Patient ID</th>
+            <th style="width:16%;">Patient Name</th>
+            <th style="width:8%;text-align:center;">Age / Sex</th>
+            <th style="width:11%;">Contact</th>
+            <th style="width:7%;text-align:center;">Service</th>
+            <th style="width:9%;text-align:center;">Exposure</th>
+            <th style="width:10%;text-align:center;">Status</th>
+            <th style="width:11%;text-align:center;">Date Registered</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${tableRows}
+        </tbody>
+      </table>
+
+      <div class="footer">
+        <span>K&amp;A Animal Bite Treatment Center &bull; Official Clinical Record</span>
+        <span>Page 1 of 1</span>
+      </div>
     </body></html>`;
   }
 
@@ -3502,80 +3451,122 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
     onToast(`${period.charAt(0).toUpperCase() + period.slice(1)} report opened for printing`, 'success');
   }
 
+  // Professional Landscape A4 PDF Generation (Blue Theme)
   function buildBulkPdf(rows) {
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const statusCount = { ongoing: 0, completed: 0 };
-    rows.forEach(p => {
-      const st = derivePatientStatus(p);
-      statusCount[st] = (statusCount[st] || 0) + 1;
-    });
+    const doc = new jsPDF({ orientation: 'landscape', format: 'a4', unit: 'mm' });
+    const pageWidth = doc.internal.pageSize.getWidth(); // 297mm
+    const pageHeight = doc.internal.pageSize.getHeight(); // 210mm
 
-    // Top Republic Letterhead Header
+    // Header Institutional Text
     doc.setFontSize(8);
     doc.setFont(undefined, 'normal');
     doc.setTextColor(71, 85, 105);
-    doc.text('REPUBLIC OF THE PHILIPPINES', pageWidth / 2, 12, { align: 'center' });
+    doc.text('Republic of the Philippines', pageWidth / 2, 11, { align: 'center' });
+    doc.text('Municipality of Polangui, Province of Albay', pageWidth / 2, 15, { align: 'center' });
 
-    doc.setFontSize(14);
+    doc.setFontSize(10.5);
     doc.setFont(undefined, 'bold');
-    doc.setTextColor(200, 21, 26);
-    doc.text('K&A Anti-Rabies Vaccine Clinic', pageWidth / 2, 18, { align: 'center' });
-
-    doc.setFontSize(9);
-    doc.setFont(undefined, 'normal');
     doc.setTextColor(15, 23, 42);
-    doc.text('ANIMAL BITE TREATMENT CENTER', pageWidth / 2, 23, { align: 'center' });
+    doc.text('RURAL HEALTH UNIT · ANIMAL BITE TREATMENT CENTER', pageWidth / 2, 20, { align: 'center' });
 
-    doc.setFontSize(8);
+    // Document Title (Blue)
+    doc.setFontSize(13);
+    doc.setFont(undefined, 'bold');
+    doc.setTextColor(29, 78, 216);
+    doc.text('HEALTH MONITORING REPORT', pageWidth / 2, 28.5, { align: 'center' });
+
+    doc.setFontSize(8.5);
+    doc.setFont(undefined, 'normal');
     doc.setTextColor(100, 116, 139);
-    doc.text('Polangui, Albay · Tel: (052) 486-1220 · knaclinic.ph@gmail.com', pageWidth / 2, 28, { align: 'center' });
+    doc.text(`Barangay Summary — ${periodLabel()}`, pageWidth / 2, 33.5, { align: 'center' });
 
-    doc.setDrawColor(15, 23, 42);
-    doc.setLineWidth(0.8);
-    doc.line(14, 31, pageWidth - 14, 31);
+    // Metadata row
+    doc.setFontSize(7.5);
+    doc.setTextColor(51, 65, 85);
+    const metaStr = `Period Covered: ${periodLabel()}    |    Barangay: All Barangays    |    Date Generated: ${new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`;
+    doc.text(metaStr, pageWidth / 2, 39.5, { align: 'center' });
 
-    // Inline Metadata
+    // Blue separator line
+    doc.setDrawColor(29, 78, 216);
+    doc.setLineWidth(0.6);
+    doc.line(14, 43, pageWidth - 14, 43);
+
+    // Section Subtitle
     doc.setFontSize(9);
-    doc.setTextColor(15, 23, 42);
-    doc.setFont(undefined, 'normal');
-    const metaStr = `Report Period: ${periodLabel()}   |   Exported: ${new Date().toLocaleString('en-PH')}   |   Total Patients: ${rows.length}`;
-    doc.text(metaStr, pageWidth / 2, 38, { align: 'center' });
-
-    // Title
-    doc.setFontSize(12);
     doc.setFont(undefined, 'bold');
-    doc.text('OFFICIAL CLINICAL PATIENT REGISTRY REPORT', pageWidth / 2, 46, { align: 'center' });
+    doc.setTextColor(15, 23, 42);
+    doc.text('Barangay Health & Patient Registry Summary', 14, 48.5);
+    doc.setFontSize(7);
+    doc.setFont(undefined, 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.text('Comprehensive patient demographic, vaccination course, exposure category, and completion tracking', 14, 52);
 
     autoTable(doc, {
-      startY: 50,
-      head: [['Total Patients Registered', 'Active Ongoing Cases', 'Completed Series Cases']],
-      body: [[String(rows.length), String(statusCount.ongoing || 0), String(statusCount.completed || 0)]],
-      theme: 'grid',
-      headStyles: { fillColor: [241, 245, 249], textColor: [51, 65, 85], fontSize: 8, fontStyle: 'bold', halign: 'center' },
-      styles: { fontSize: 10, halign: 'center', cellPadding: 4 },
+      startY: 55,
+      head: [['#', 'Barangay / Address', 'Patient ID', 'Patient Name', 'Age / Sex', 'Contact No.', 'Service', 'Exposure', 'Status', 'Date Registered']],
+      body: rows.map((p, i) => {
+        const liveSt = derivePatientStatus(p);
+        const isOverdue = liveSt !== 'completed' && buildDoses(p).some(d => d.status === 'miss');
+        const stLabel = liveSt === 'completed' ? 'Completed' : isOverdue ? 'Overdue' : 'Ongoing';
+        return [
+          i + 1,
+          p.barangay || p.address || 'Polangui',
+          p.id || p.mrn || '—',
+          formatTitleCase(p.name || '—'),
+          `${p.age || '—'} / ${p.sex || '—'}`,
+          p.contact || '—',
+          p.service || 'PEP',
+          p.cat ? `Cat ${p.cat}` : (p.animal || '—'),
+          stLabel,
+          p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString('en-PH') : (p.date || '—'),
+        ];
+      }),
+      headStyles: {
+        fillColor: [239, 246, 255],
+        textColor: [29, 78, 216],
+        fontSize: 7.5,
+        fontStyle: 'bold',
+        halign: 'left',
+      },
+      styles: {
+        fontSize: 7.5,
+        cellPadding: 2.5,
+        textColor: [15, 23, 42],
+        lineColor: [226, 232, 240],
+        lineWidth: 0.1,
+      },
+      columnStyles: {
+        0: { halign: 'center', cellWidth: 8 },
+        4: { halign: 'center', cellWidth: 16 },
+        6: { halign: 'center', cellWidth: 14 },
+        7: { halign: 'center', cellWidth: 18 },
+        8: { halign: 'center', fontStyle: 'bold', cellWidth: 20 },
+        9: { halign: 'center', cellWidth: 24 },
+      },
+      didParseCell: function (data) {
+        if (data.section === 'body' && data.column.index === 8) {
+          if (data.cell.raw === 'Completed') {
+            data.cell.styles.textColor = [21, 128, 61];
+          } else if (data.cell.raw === 'Overdue') {
+            data.cell.styles.textColor = [220, 38, 38];
+          } else {
+            data.cell.styles.textColor = [29, 78, 216];
+          }
+        }
+      },
     });
 
-    autoTable(doc, {
-      startY: doc.lastAutoTable.finalY + 8,
-      head: [['#', 'Case No.', 'Name', 'Age', 'Sex', 'Service', 'Status', 'Date Registered']],
-      body: rows.map((p, i) => [i + 1, p.id || p.mrn || '—', formatTitleCase(p.name || '—'), p.age || '—', p.sex || '—', p.service || '—', derivePatientStatus(p).toUpperCase(), p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString('en-PH') : (p.date || '—')]),
-      headStyles: { fillColor: [15, 23, 42], textColor: 255, fontSize: 8, fontStyle: 'bold' },
-      styles: { fontSize: 8, cellPadding: 3 },
-      alternateRowStyles: { fillColor: [250, 250, 252] },
-    });
-
-    doc.setFontSize(8);
+    doc.setFontSize(7);
     doc.setTextColor(148, 163, 184);
-    doc.text(`K&A Anti-Rabies Vaccine Clinic · Confidential Clinical Report · ${new Date().getFullYear()}`, pageWidth / 2, doc.internal.pageSize.getHeight() - 10, { align: 'center' });
+    doc.text(`K&A Animal Bite Treatment Center · Rural Health Unit · Confidential Clinical Report`, pageWidth / 2, pageHeight - 6, { align: 'center' });
     return doc;
   }
 
   function exportBulkPdf() {
     const rows = getFilteredPatients();
     if (rows.length === 0) { onToast('No patients found for this period', 'error'); return; }
-    buildBulkPdf(rows).save(`patient-report-${period}-${new Date().toISOString().slice(0, 10)}.pdf`);
-    onToast(`PDF exported (${rows.length} patient${rows.length !== 1 ? 's' : ''})`, 'success');
+    buildBulkPdf(rows).save(`health-monitoring-report-${period}-${new Date().toISOString().slice(0, 10)}.pdf`);
+    onToast(`Landscape PDF exported (${rows.length} patient${rows.length !== 1 ? 's' : ''})`, 'success');
   }
 
   function runBulkExport() {
@@ -4047,9 +4038,8 @@ doc.text('___________', pageWidth - 20 - colWidth / 2, y + 6, { align: 'center' 
     setEmailTo('');
   }
 
-  // The clinic report exported as Excel is set up landscape, so the preview
-  // sheet turns with it.
-  const isLandscapeSheet = mode === 'bulk' && exportFormat === 'xls';
+  // The clinic report is landscape orientation, so preview sheet turns landscape
+  const isLandscapeSheet = mode === 'bulk';
 
   const previewPane = (html) => (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}>
@@ -4337,9 +4327,6 @@ doc.text('___________', pageWidth - 20 - colWidth / 2, y + 6, { align: 'center' 
 
               {/* Fit to Page */}
               <button type="button" onClick={() => setZoomLevel(0.85)} style={{ background: 'transparent', border: 'none', color: '#334155', fontSize: '.9rem', cursor: 'pointer', padding: '0 4px' }} title="Fit to Page">↕</button>
-
-              {/* Rotate Page */}
-              <button type="button" onClick={() => setRotation(r => (r + 90) % 360)} style={{ background: 'transparent', border: 'none', color: '#334155', fontSize: '1rem', cursor: 'pointer', padding: '0 4px' }} title="Rotate Page">↻</button>
             </div>
 
             {/* Paper Sheet Preview Container (Scales as a whole paper sheet!)
@@ -4952,7 +4939,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
         archivedAt: serverTimestamp(),
         retentionExpiryYear: expYear,
       });
-      showToast(`${getName(patient)} archived in DOH Retention Caseload (Retained until ${expYear}) ✓`, 'success');
+      showToast(`${getName(patient)} moved to Archive ✓`, 'success');
     } catch (err) {
       console.error('Archive error:', err);
       showToast('Failed to archive patient record.', 'error');
@@ -5027,7 +5014,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
   const FILTER_OPTIONS = [
     { key: 'all', label: 'All' },
     { key: 'ongoing', label: 'Ongoing' },
-    { key: 'completed', label: 'Completed' },
+    { key: 'overdue', label: 'Overdue' },
   ];
   const SORT_OPTIONS = [
     { key: 'newest', label: 'Registered (Newest)' },
@@ -5049,8 +5036,12 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
       return true;
     })
     .filter(p => {
+      if (filter === 'all') return true;
       const liveStatus = derivePatientStatus(p);
-      return filter === 'all' || liveStatus === filter;
+      const isOverdue = liveStatus !== 'completed' && buildDoses(p).some(d => d.status === 'miss');
+      if (filter === 'ongoing') return liveStatus !== 'completed' && !isOverdue;
+      if (filter === 'overdue') return isOverdue;
+      return liveStatus === filter;
     })
     .filter(p => {
       if (!debouncedSearch) return true;
@@ -5101,13 +5092,13 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
       <style>{globalCSS}</style>
       <div style={{ padding: '20px 28px 36px', maxWidth: '1400px', margin: '0 auto' }}>
 
-        {/* ── Caseload Segmented Tabs ── */}
+        {/* ── View Switcher: Patients vs Archive ── */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
           <button
             type="button"
             onClick={() => { setCaseloadTab('active'); setCurrentPage(1); }}
             style={{
-              padding: '8px 16px',
+              padding: '8px 18px',
               borderRadius: 12,
               border: caseloadTab === 'active' ? '1.5px solid #3B50DF' : '1px solid #E2E8F0',
               background: caseloadTab === 'active' ? '#EEF2FF' : '#FFFFFF',
@@ -5122,25 +5113,14 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
               transition: 'all .15s ease'
             }}
           >
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#3B50DF', display: 'inline-block' }} />
-            Active Caseload
-            <span style={{
-              fontSize: '.6875rem',
-              fontWeight: 800,
-              padding: '2px 7px',
-              borderRadius: 999,
-              background: caseloadTab === 'active' ? '#3B50DF' : '#F1F5F9',
-              color: caseloadTab === 'active' ? '#FFFFFF' : '#64748B'
-            }}>
-              {activeCount}
-            </span>
+            Patients
           </button>
 
           <button
             type="button"
             onClick={() => { setCaseloadTab('completed'); setCurrentPage(1); }}
             style={{
-              padding: '8px 16px',
+              padding: '8px 18px',
               borderRadius: 12,
               border: caseloadTab === 'completed' ? '1.5px solid #059669' : '1px solid #E2E8F0',
               background: caseloadTab === 'completed' ? '#ECFDF5' : '#FFFFFF',
@@ -5155,91 +5135,22 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
               transition: 'all .15s ease'
             }}
           >
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10B981', display: 'inline-block' }} />
-            Completed & Retention Caseload (DOH 10-Yr)
-            <span style={{
-              fontSize: '.6875rem',
-              fontWeight: 800,
-              padding: '2px 7px',
-              borderRadius: 999,
-              background: caseloadTab === 'completed' ? '#059669' : '#F1F5F9',
-              color: caseloadTab === 'completed' ? '#FFFFFF' : '#64748B'
-            }}>
-              {completedCount}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => { setCaseloadTab('all'); setCurrentPage(1); }}
-            style={{
-              padding: '8px 16px',
-              borderRadius: 12,
-              border: caseloadTab === 'all' ? '1.5px solid #64748B' : '1px solid #E2E8F0',
-              background: caseloadTab === 'all' ? '#F8FAFC' : '#FFFFFF',
-              color: caseloadTab === 'all' ? '#0F172A' : '#475569',
-              fontWeight: caseloadTab === 'all' ? 800 : 600,
-              fontSize: '.8125rem',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              cursor: 'pointer',
-              boxShadow: caseloadTab === 'all' ? '0 1px 3px rgba(0,0,0,0.08)' : '0 1px 2px rgba(0,0,0,0.04)',
-              transition: 'all .15s ease'
-            }}
-          >
-            All Registered Patients
-            <span style={{
-              fontSize: '.6875rem',
-              fontWeight: 800,
-              padding: '2px 7px',
-              borderRadius: 999,
-              background: caseloadTab === 'all' ? '#0F172A' : '#F1F5F9',
-              color: caseloadTab === 'all' ? '#FFFFFF' : '#64748B'
-            }}>
-              {totalCount}
-            </span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>
+            Archive
+            {completedCount > 0 && (
+              <span style={{
+                fontSize: '.6875rem',
+                fontWeight: 800,
+                padding: '2px 7px',
+                borderRadius: 999,
+                background: caseloadTab === 'completed' ? '#059669' : '#F1F5F9',
+                color: caseloadTab === 'completed' ? '#FFFFFF' : '#64748B'
+              }}>
+                {completedCount}
+              </span>
+            )}
           </button>
         </div>
-
-        {/* ── DOH Retention Policy Notice for Completed Records ── */}
-        {caseloadTab === 'completed' && (
-          <div style={{
-            background: 'linear-gradient(135deg, #ECFDF5 0%, #F0FDF4 100%)',
-            border: '1px solid #A7F3D0',
-            borderRadius: 14,
-            padding: '12px 16px',
-            marginBottom: 14,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 14,
-            flexWrap: 'wrap'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{
-                width: 32, height: 32, borderRadius: 8, background: '#D1FAE5',
-                color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0, border: '1px solid #A7F3D0'
-              }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
-              </div>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <strong style={{ fontSize: '.78125rem', color: '#065F46', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.4px' }}>
-                    DOH Statutory Medical Record Retention Compliance
-                  </strong>
-                  <span style={{ fontSize: '.6875rem', fontWeight: 800, background: '#D1FAE5', color: '#047857', padding: '1px 7px', borderRadius: 999, border: '1px solid #6EE7B7' }}>
-                    10-Year Statutory Period
-                  </span>
-                </div>
-                <p style={{ fontSize: '.71875rem', color: '#065F46', marginTop: 2, lineHeight: 1.4 }}>
-                  Pursuant to Philippine DOH clinical record retention standards (DOH AO 2012-0012), completed patient post-exposure prophylaxis (PEP) encounter records remain preserved intact in the clinic database for a minimum statutory retention window of 10 years before cold-storage archiving.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* ── Main Clean Table Card Container ── */}
         <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
@@ -5280,31 +5191,33 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
 
             {/* Filter and Sort — two independent dropdowns & Action Buttons */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div ref={filterMenuRef} style={{ position: 'relative' }}>
-                <button
-                  type="button"
-                  onClick={() => setFilterMenuOpen(o => !o)}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', fontSize: '.78125rem', fontWeight: 600, border: '1.5px solid #CBD5E1', borderRadius: '.5rem', background: '#FFFFFF', color: '#0F172A', cursor: 'pointer' }}
-                >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>
-                  Filter
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
-                </button>
+              {caseloadTab !== 'completed' && (
+                <div ref={filterMenuRef} style={{ position: 'relative' }}>
+                  <button
+                    type="button"
+                    onClick={() => setFilterMenuOpen(o => !o)}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', fontSize: '.78125rem', fontWeight: 600, border: '1.5px solid #CBD5E1', borderRadius: '.5rem', background: '#FFFFFF', color: '#0F172A', cursor: 'pointer' }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>
+                    Filter
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+                  </button>
 
-                {filterMenuOpen && (
-                  <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, minWidth: 180, background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: 6, zIndex: 30 }}>
-                    {FILTER_OPTIONS.map(opt => (
-                      <button key={opt.key} type="button"
-                        onClick={() => { setFilter(opt.key); setCurrentPage(1); setFilterMenuOpen(false); }}
-                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', textAlign: 'left', padding: '7px 8px', borderRadius: 6, border: 'none', background: 'transparent', color: '#334155', fontSize: '.78125rem', fontWeight: filter === opt.key ? 700 : 500, cursor: 'pointer' }}
-                      >
-                        {opt.label}
-                        {filter === opt.key && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+                  {filterMenuOpen && (
+                    <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, minWidth: 180, background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: 6, zIndex: 30 }}>
+                      {FILTER_OPTIONS.map(opt => (
+                        <button key={opt.key} type="button"
+                          onClick={() => { setFilter(opt.key); setCurrentPage(1); setFilterMenuOpen(false); }}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', textAlign: 'left', padding: '7px 8px', borderRadius: 6, border: 'none', background: 'transparent', color: '#334155', fontSize: '.78125rem', fontWeight: filter === opt.key ? 700 : 500, cursor: 'pointer' }}
+                        >
+                          {opt.label}
+                          {filter === opt.key && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div ref={sortMenuRef} style={{ position: 'relative' }}>
                 <button
@@ -5348,19 +5261,21 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
               </button>
 
               {/* Add Patient Button — Royal Blue (#3B50DF) */}
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setModal(true)}
-                style={{
-                  background: '#3B50DF', color: '#FFFFFF', border: 'none', padding: '7px 16px', borderRadius: '.5rem',
-                  fontWeight: 700, fontSize: '.78125rem', display: 'inline-flex', alignItems: 'center', gap: 6,
-                  boxShadow: '0 2px 8px rgba(59,80,223,0.25)', cursor: 'pointer', transition: 'all 0.15s ease'
-                }}
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                Add Patient
-              </button>
+              {caseloadTab !== 'completed' && (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setModal(true)}
+                  style={{
+                    background: '#3B50DF', color: '#FFFFFF', border: 'none', padding: '7px 16px', borderRadius: '.5rem',
+                    fontWeight: 700, fontSize: '.78125rem', display: 'inline-flex', alignItems: 'center', gap: 6,
+                    boxShadow: '0 2px 8px rgba(59,80,223,0.25)', cursor: 'pointer', transition: 'all 0.15s ease'
+                  }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  Add Patient
+                </button>
+              )}
             </div>
 
           </div>
@@ -5371,23 +5286,20 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
               <thead>
                 <tr style={{ background: '#FAFAFA', borderBottom: '1px solid #E2E8F0', color: '#64748B', fontSize: '.6875rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.5px' }}>
                   <th style={{ padding: '16px 12px 16px 20px', width: '10%', fontWeight: 600, color: '#64748B' }}>Patient ID</th>
-                  <th style={{ padding: '16px 12px', width: '22%', fontWeight: 600, color: '#64748B' }}>Name</th>
-                  <th style={{ padding: '16px 12px', width: '14%', fontWeight: 600, color: '#64748B' }}>Email</th>
-                  <th style={{ padding: '16px 12px', width: '11%', fontWeight: 600, color: '#64748B' }}>Mobile</th>
+                  <th style={{ padding: '16px 12px', width: '16%', fontWeight: 600, color: '#64748B' }}>Name</th>
+                  <th style={{ padding: '16px 12px', width: '22%', fontWeight: 600, color: '#64748B' }}>Email</th>
+                  <th style={{ padding: '16px 12px', width: '14%', fontWeight: 600, color: '#64748B' }}>Mobile</th>
                   <th style={{ padding: '16px 12px', width: '8%', fontWeight: 600, color: '#64748B' }}>Service</th>
-                  <th style={{ padding: '16px 12px', width: '8%', fontWeight: 600, color: '#64748B' }}>Status</th>
-                  {caseloadTab === 'completed' && (
-                    <th style={{ padding: '16px 12px', width: '12%', fontWeight: 600, color: '#047857' }}>DOH Retention (10-Yr)</th>
-                  )}
+                  <th style={{ padding: '16px 8px', width: '10%', fontWeight: 600, color: '#64748B' }}>Status</th>
                   <th style={{ padding: '16px 12px', width: '10%', fontWeight: 600, color: '#64748B' }}>Submitted On</th>
-                  <th style={{ padding: '16px 20px 16px 12px', width: '150px', textAlign: 'center', fontWeight: 600, color: '#64748B' }}>Actions</th>
+                  <th style={{ padding: '16px 16px 16px 8px', width: '10%', textAlign: 'center', fontWeight: 600, color: '#64748B' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={caseloadTab === 'completed' ? 9 : 8} style={{ textAlign: 'center', padding: 36, color: '#64748B', fontWeight: 500 }}>Loading patient records…</td></tr>
+                  <tr><td colSpan={8} style={{ textAlign: 'center', padding: 36, color: '#64748B', fontWeight: 500 }}>Loading patient records…</td></tr>
                 ) : paginatedPatients.length === 0 ? (
-                  <tr><td colSpan={caseloadTab === 'completed' ? 9 : 8} style={{ textAlign: 'center', padding: 36, color: '#64748B', fontWeight: 500 }}>No patient records found in this caseload view</td></tr>
+                  <tr><td colSpan={8} style={{ textAlign: 'center', padding: 36, color: '#64748B', fontWeight: 500 }}>No {caseloadTab === 'completed' ? 'archived ' : ''}patient records found</td></tr>
                 ) : (
                   paginatedPatients.map(p => {
                     const rowId = p.firestoreId || p.id;
@@ -5419,18 +5331,20 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
                         <td style={{ padding: '16px 12px', fontWeight: 600, color: '#0F172A', fontSize: '.8125rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={formattedName}>
                           {formattedName}
                         </td>
-                        <td style={{ padding: '16px 12px', color: '#334155', fontWeight: 400, fontSize: '.8125rem' }}>
+                        <td style={{ padding: '16px 12px', color: '#334155', fontWeight: 400, fontSize: '.8125rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={p.email || '—'}>
                           {p.email || '—'}
                         </td>
-                        <td style={{ padding: '16px 12px', color: '#334155', fontWeight: 400, fontSize: '.8125rem' }}>
+                        <td style={{ padding: '16px 12px', color: '#334155', fontWeight: 400, fontSize: '.8125rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={p.contact || '—'}>
                           {p.contact || '—'}
                         </td>
                         <td style={{ padding: '16px 12px' }}>
                           <ServiceBadge service={p.service} />
                         </td>
-                        <td style={{ padding: '16px 12px' }}>
+                        <td style={{ padding: '16px 8px', whiteSpace: 'nowrap' }}>
                           <span style={{
-                            display: 'inline-block', padding: '4px 10px', borderRadius: '9999px', fontSize: '.6875rem', fontWeight: 600,
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                            padding: '4px 10px', borderRadius: '9999px', fontSize: '.6875rem', fontWeight: 600,
+                            whiteSpace: 'nowrap',
                             background: liveStatus === 'completed' ? '#ECFDF5' : isOverdue ? '#FEF2F2' : '#EFF6FF',
                             color: liveStatus === 'completed' ? '#059669' : isOverdue ? '#DC2626' : '#1D4ED8',
                             border: liveStatus === 'completed' ? '1px solid #A7F3D0' : isOverdue ? '1px solid #FCA5A5' : '1px solid #BFDBFE'
@@ -5438,27 +5352,16 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
                             {liveStatus === 'completed' ? 'Completed' : isOverdue ? 'Overdue' : 'Ongoing'}
                           </span>
                         </td>
-                        {caseloadTab === 'completed' && (
-                          <td style={{ padding: '16px 12px' }}>
-                            <span style={{
-                              display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: '6px', fontSize: '.6875rem', fontWeight: 700,
-                              background: '#ECFDF5', color: '#047857', border: '1px solid #A7F3D0'
-                            }}>
-                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                              Retained ({getDOHRetentionYear(p)})
-                            </span>
-                          </td>
-                        )}
-                        <td style={{ padding: '16px 12px', color: '#64748B', fontWeight: 400, fontSize: '.8125rem' }}>
+                        <td style={{ padding: '16px 12px', color: '#64748B', fontWeight: 400, fontSize: '.8125rem', whiteSpace: 'nowrap' }}>
                           {fmtDate(p.date)}
                         </td>
-                        <td style={{ padding: '16px 20px 16px 12px', width: '150px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                        <td style={{ padding: '16px 16px 16px 8px', width: '11%', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
                           <div style={{ display: 'flex', gap: 6, justifyContent: 'center', alignItems: 'center' }}>
                             {liveStatus === 'completed' && !p.isArchived && (
                               <button
                                 type="button"
                                 className="icon-btn"
-                                title="Archive into DOH Retention Caseload"
+                                title="Move to Archive"
                                 onClick={() => handleArchivePatient(p)}
                                 style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid #A7F3D0', background: '#ECFDF5', color: '#047857', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
                               >
