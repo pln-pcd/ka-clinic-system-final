@@ -1336,7 +1336,11 @@ function EditPatientModal({ patient, onClose, onSave, inventoryItems = [] }) {
                   onChange={e => set('service', e.target.value)}
                   className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
                 >
-                  <option>PEP</option><option>Tetanus</option><option>Hepatitis</option><option>Pneumonia</option>
+                  <option>PEP</option>
+                  <option>PrEP</option>
+                  <option>Tetanus</option>
+                  <option>Hepatitis</option>
+                  <option>Pneumonia</option>
                 </select>
               </div>
               <div>
@@ -1354,6 +1358,19 @@ function EditPatientModal({ patient, onClose, onSave, inventoryItems = [] }) {
               </div>
             </div>
           </div>
+
+          {/* PrEP Information Notice */}
+          {form.service === 'PrEP' && (
+            <div className="bg-indigo-50/70 border border-indigo-200/80 rounded-2xl p-3.5 text-xs text-indigo-900">
+              <p className="font-bold flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-[#3B50DF]" />
+                Pre-Exposure Prophylaxis (PrEP)
+              </p>
+              <p className="mt-1 text-slate-600 font-normal">
+                Preventive rabies immunization schedule before exposure (3 doses: Days 0, 7, and 21 or 28). No animal bite exposure details required.
+              </p>
+            </div>
+          )}
 
           {/* PEP Exposure Details */}
           {isPep && (
@@ -1978,161 +1995,158 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
         </div>
       </div>
 
-      {/* ── TOP ROW: CARD 1 (PROFILE & GENERAL INFO WITH DIVIDER) & CARD 2 (STANDALONE MEDICAL HISTORY) ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6 items-stretch">
+      {/* ── TOP ROW: COMBINED PROFILE, GENERAL INFO & MEDICAL HISTORY CARD WITH DIVIDERS ── */}
+      <div className="w-full bg-white rounded-3xl p-6 border border-slate-200/80 ring-1 ring-slate-900/5 shadow-xs hover:shadow-sm transition-all mb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch divide-y lg:divide-y-0 lg:divide-x divide-slate-100 h-full">
 
-        {/* ── CARD 1 (LEFT 7 COLS): PROFILE SUMMARY & GENERAL INFORMATION WITH VERTICAL DIVIDER ── */}
-        <div className="lg:col-span-7 bg-white rounded-3xl p-6 border border-indigo-100/90 ring-1 ring-indigo-500/10 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-6 items-stretch divide-y sm:divide-y-0 sm:divide-x divide-slate-100 h-full">
+          {/* Profile Side (3 cols) */}
+          <div className="lg:col-span-3 pr-0 lg:pr-6 flex flex-col justify-between items-center text-center">
+            <div className="w-full flex flex-col items-center">
+              <div className="w-24 h-24 rounded-full bg-gradient-to-br from-indigo-50 to-slate-100 border-2 border-indigo-100 flex items-center justify-center shadow-xs overflow-hidden shrink-0 mb-3 relative">
+                {patientPhoto ? (
+                  <img
+                    src={patientPhoto}
+                    alt={patient.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
+                ) : (
+                  <span className="text-xl font-black text-[#3B50DF] tracking-tight">{getInitials(patient.name || '?')}</span>
+                )}
+              </div>
 
-            {/* Profile Side (5 cols) */}
-            <div className="sm:col-span-5 pr-0 sm:pr-6 flex flex-col justify-between items-center text-center">
-              <div className="w-full flex flex-col items-center">
-                <div className="w-24 h-24 rounded-full bg-gradient-to-br from-indigo-50 to-slate-100 border-2 border-indigo-100 flex items-center justify-center shadow-xs overflow-hidden shrink-0 mb-3 relative">
-                  {patientPhoto ? (
-                    <img
-                      src={patientPhoto}
-                      alt={patient.name}
-                      className="w-full h-full object-cover"
-                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                    />
-                  ) : (
-                    <span className="text-xl font-black text-[#3B50DF] tracking-tight">{getInitials(patient.name || '?')}</span>
-                  )}
+              <h2 className="text-base font-extrabold text-slate-900 leading-tight">{patient.name}</h2>
+              <p className="text-xs text-slate-400 font-medium mt-1 truncate max-w-full">{patient.email || 'No email registered'}</p>
+
+              <div className="grid grid-cols-2 gap-3 w-full mt-4 pt-3 border-t border-slate-100">
+                <div className="bg-indigo-50/50 rounded-2xl p-2.5 text-center border border-indigo-100/80 shadow-2xs">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Appointments</span>
+                  <span className="text-sm font-extrabold text-slate-900 mt-0.5 block">{patientApts.length}</span>
                 </div>
-
-                <h2 className="text-base font-extrabold text-slate-900 leading-tight">{patient.name}</h2>
-                <p className="text-xs text-slate-400 font-medium mt-1 truncate max-w-full">{patient.email || 'No email registered'}</p>
-
-                <div className="grid grid-cols-2 gap-3 w-full mt-4 pt-3 border-t border-slate-100">
-                  <div className="bg-indigo-50/50 rounded-2xl p-2.5 text-center border border-indigo-100/80 shadow-2xs">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Appointments</span>
-                    <span className="text-sm font-extrabold text-slate-900 mt-0.5 block">{patientApts.length}</span>
-                  </div>
-                  <div className="bg-indigo-50/50 rounded-2xl p-2.5 text-center border border-indigo-100/80 shadow-2xs">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">MRN Code</span>
-                    <span className="text-xs font-extrabold text-[#3B50DF] mt-1 block truncate">{rec.id}</span>
-                  </div>
+                <div className="bg-indigo-50/50 rounded-2xl p-2.5 text-center border border-indigo-100/80 shadow-2xs">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">MRN Code</span>
+                  <span className="text-xs font-extrabold text-[#3B50DF] mt-1 block truncate">{rec.id}</span>
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* General Info Side (7 cols) */}
-            <div className="sm:col-span-7 sm:pl-6 pt-6 sm:pt-0 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between mb-3 pb-2.5 border-b border-indigo-50">
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-lg bg-indigo-50 text-[#3B50DF] border border-indigo-100 flex items-center justify-center shrink-0 shadow-2xs">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                    </div>
-                    <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider">General Information</h3>
+          {/* General Info Side (4 cols) */}
+          <div className="lg:col-span-4 px-0 lg:px-6 pt-6 lg:pt-0 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-3 pb-2.5 border-b border-indigo-50">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-indigo-50 text-[#3B50DF] border border-indigo-100 flex items-center justify-center shrink-0 shadow-2xs">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                   </div>
-                  <button
-                    onClick={() => onEdit?.(r || patient)}
-                    className="w-6 h-6 rounded-full bg-slate-50 text-slate-500 hover:text-[#3B50DF] hover:bg-indigo-50 flex items-center justify-center transition-colors cursor-pointer"
-                    title="Edit Patient Info"
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
-                  </button>
+                  <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider">General Information</h3>
+                </div>
+                <button
+                  onClick={() => onEdit?.(r || patient)}
+                  className="w-6 h-6 rounded-full bg-slate-50 text-slate-500 hover:text-[#3B50DF] hover:bg-indigo-50 flex items-center justify-center transition-colors cursor-pointer"
+                  title="Edit Patient Info"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs font-semibold">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Gender / Sex</span>
+                  <span className="text-xs font-bold text-slate-800 mt-0.5 block">{patient.sex || 'Female'}</span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-x-5 gap-y-3 text-xs font-semibold">
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Gender / Sex</span>
-                    <span className="text-xs font-bold text-slate-800 mt-0.5 block">{patient.sex || 'Female'}</span>
-                  </div>
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Birth Date / Age</span>
+                  <span className="text-xs font-bold text-slate-800 mt-0.5 block">{rec.age ? `${rec.age} yrs old` : '—'}</span>
+                </div>
 
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Birth Date / Age</span>
-                    <span className="text-xs font-bold text-slate-800 mt-0.5 block">{rec.age ? `${rec.age} yrs old` : '—'}</span>
-                  </div>
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Mobile Number</span>
+                  <span className="text-xs font-bold text-slate-800 mt-0.5 block">{patient.contact || '—'}</span>
+                </div>
 
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Mobile Number</span>
-                    <span className="text-xs font-bold text-slate-800 mt-0.5 block">{patient.contact || '—'}</span>
-                  </div>
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Address</span>
+                  <span className="text-xs font-bold text-slate-800 mt-0.5 block truncate">{rec.address || '—'}</span>
+                </div>
 
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Address</span>
-                    <span className="text-xs font-bold text-slate-800 mt-0.5 block truncate">{rec.address || '—'}</span>
-                  </div>
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Service Category</span>
+                  <div className="mt-0.5"><ServiceBadge service={patient.service} /></div>
+                </div>
 
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Service Category</span>
-                    <div className="mt-0.5"><ServiceBadge service={patient.service} /></div>
-                  </div>
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Registration Date</span>
+                  <span className="text-xs font-bold text-slate-800 mt-0.5 block">{fmtDate(rec.date)}</span>
+                </div>
 
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Registration Date</span>
-                    <span className="text-xs font-bold text-slate-800 mt-0.5 block">{fmtDate(rec.date)}</span>
-                  </div>
-
-                  <div className="col-span-2">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Live Status</span>
-                    <span className="mt-0.5 inline-block">
-                      <span className={`badge ${statusBadgeClass[liveStatus] || 'badge-blue'}`}>
-                        {liveStatus.charAt(0).toUpperCase() + liveStatus.slice(1)}
-                      </span>
+                <div className="col-span-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Live Status</span>
+                  <span className="mt-0.5 inline-block">
+                    <span className={`badge ${statusBadgeClass[liveStatus] || 'badge-blue'}`}>
+                      {liveStatus.charAt(0).toUpperCase() + liveStatus.slice(1)}
                     </span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Medical History & Exposure Details Side (5 cols) */}
+          <div className="lg:col-span-5 pl-0 lg:pl-6 pt-6 lg:pt-0 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-3 pb-2.5 border-b border-teal-50">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-teal-50 text-teal-700 border border-teal-100 flex items-center justify-center shrink-0 shadow-2xs">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
                   </div>
+                  <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider">Medical History &amp; Exposure Details</h3>
+                </div>
+                <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200/80">Clinical Data</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs font-semibold text-slate-700">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Exposure Category</span>
+                  <span className="text-xs font-bold text-slate-900 mt-0.5 block">Cat {patient.cat || '—'}</span>
+                </div>
+
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Biting Animal</span>
+                  <span className="text-xs font-bold text-slate-900 mt-0.5 block">{patient.animal || 'Bite / Scratch'}</span>
+                </div>
+
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Wound Location</span>
+                  <span className="text-xs font-bold text-slate-900 mt-0.5 block truncate">{patient.woundLocation || patient.biteLocation || '—'}</span>
+                </div>
+
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Vaccine Brand</span>
+                  <span className="text-xs font-bold text-[#3B50DF] mt-0.5 block truncate">{patient.vaccineBrand || 'Rabipur'}</span>
+                </div>
+
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Known Allergies</span>
+                  <span className="text-xs font-bold text-slate-800 mt-0.5 block truncate">{patient.allergies || 'None'}</span>
+                </div>
+
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Past Vaccines</span>
+                  <span className="text-xs font-bold text-slate-800 mt-0.5 block truncate">{patient.pastVaccines || 'None'}</span>
+                </div>
+
+                <div className="col-span-2 pt-1 border-t border-slate-100">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Doctor / Nurse Remarks</span>
+                  <p className="text-slate-700 font-normal leading-relaxed text-[11.5px] bg-teal-50/30 p-2.5 rounded-xl border border-teal-100/80 border-l-4 border-l-teal-500">
+                    {rec.notes || 'No custom clinical remarks noted.'}
+                  </p>
                 </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* ── CARD 2 (RIGHT 5 COLS): STANDALONE MEDICAL HISTORY & EXPOSURE DETAILS CARD ── */}
-        <div className="lg:col-span-5 bg-white rounded-3xl p-6 border border-teal-100/90 ring-1 ring-teal-500/10 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-4 pb-3 border-b border-teal-50">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-lg bg-teal-50 text-teal-700 border border-teal-100 flex items-center justify-center shrink-0 shadow-2xs">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-                </div>
-                <h3 className="text-sm font-extrabold text-slate-900">Medical History & Exposure Details</h3>
-              </div>
-              <span className="text-[11px] font-bold text-teal-700 bg-teal-50 px-2.5 py-1 rounded-full border border-teal-200/80">Clinical Data</span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-xs font-semibold text-slate-700">
-              <div>
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Exposure Category</span>
-                <span className="text-xs font-bold text-slate-900 mt-1 block">Cat {patient.cat || '—'}</span>
-              </div>
-
-              <div>
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Biting Animal</span>
-                <span className="text-xs font-bold text-slate-900 mt-1 block">{patient.animal || 'Bite / Scratch'}</span>
-              </div>
-
-              <div>
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Wound Location</span>
-                <span className="text-xs font-bold text-slate-900 mt-1 block">{patient.woundLocation || patient.biteLocation || '—'}</span>
-              </div>
-
-              <div>
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Vaccine Brand</span>
-                <span className="text-xs font-bold text-[#3B50DF] mt-1 block">{patient.vaccineBrand || 'Rabipur'}</span>
-              </div>
-
-              <div>
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Known Allergies</span>
-                <span className="text-xs font-bold text-slate-800 mt-1 block">{patient.allergies || 'None'}</span>
-              </div>
-
-              <div>
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Past Vaccines</span>
-                <span className="text-xs font-bold text-slate-800 mt-1 block">{patient.pastVaccines || 'None'}</span>
-              </div>
-
-              <div className="col-span-2 pt-2 border-t border-slate-100">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Doctor / Nurse Remarks</span>
-                <p className="text-slate-700 font-normal leading-relaxed text-[11.5px] bg-teal-50/30 p-2.5 rounded-xl border border-teal-100/80 border-l-4 border-l-teal-500">
-                  {rec.notes || 'No custom clinical remarks noted.'}
-                </p>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -2140,34 +2154,34 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6 items-start">
 
         {/* ── LEFT COLUMN (6 COLS): COMPACT VACCINATION DOSES TRACKER ── */}
-        <div className="lg:col-span-6 bg-white rounded-3xl border border-blue-100/90 ring-1 ring-blue-500/10 shadow-xs hover:shadow-sm transition-all p-5 flex flex-col justify-between">
+        <div className="lg:col-span-6 bg-white rounded-3xl border border-blue-100/90 ring-1 ring-blue-500/10 shadow-xs hover:shadow-sm transition-all p-5 sm:p-6 flex flex-col justify-between">
           <div>
-            {/* Clean Compact Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-blue-50 flex-wrap gap-2 mb-3">
+            {/* Clean Header */}
+            <div className="flex items-center justify-between pb-3.5 border-b border-blue-50 flex-wrap gap-2 mb-4">
               <div>
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-lg bg-indigo-50 text-[#3B50DF] border border-indigo-100/90 flex items-center justify-center shrink-0 shadow-2xs">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8v4l3 3" /><circle cx="12" cy="12" r="9" /></svg>
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-50 text-[#3B50DF] border border-indigo-100/90 flex items-center justify-center shrink-0 shadow-2xs">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8v4l3 3" /><circle cx="12" cy="12" r="9" /></svg>
                   </div>
-                  <h3 className="text-xs font-extrabold text-slate-900">
+                  <h3 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight">
                     Vaccination Doses
                   </h3>
-                  <span className="text-[9.5px] font-bold text-[#3B50DF] bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100/90">
+                  <span className="text-xs font-bold text-[#3B50DF] bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-100/90">
                     {patient.service || 'PEP'} Protocol
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-400 font-medium mt-0.5 pl-8">Dose schedule timeline for {patient.name}</p>
+                <p className="text-xs sm:text-[13px] text-slate-500 font-medium mt-1 pl-10.5">Dose schedule timeline for {patient.name}</p>
               </div>
             </div>
 
-            {/* Compact Dose Timeline List */}
+            {/* Dose Timeline List */}
             {rec.doses.length === 0 ? (
-              <div className="py-5 text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 p-3">
-                <p className="text-xs font-bold text-slate-700">No vaccination doses recorded yet</p>
-                <p className="text-[11px] text-slate-400 font-normal mt-0.5">Doses appear here once the vaccination schedule is recorded.</p>
+              <div className="py-6 text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 p-4">
+                <p className="text-sm font-bold text-slate-700">No vaccination doses recorded yet</p>
+                <p className="text-xs text-slate-400 font-normal mt-0.5">Doses appear here once the vaccination schedule is recorded.</p>
               </div>
             ) : (
-              <div className="space-y-1">
+              <div className="space-y-2">
                 {rec.doses.map((d, i) => {
                   const isDone = d.s === 'done';
                   const isMiss = d.s === 'miss';
@@ -2178,7 +2192,7 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
                     : isMiss
                     ? 'bg-rose-50/40 border-rose-200/80'
                     : isNext
-                    ? 'bg-indigo-50/60 border-[#3B50DF] shadow-2xs'
+                    ? 'bg-indigo-50/60 border-[#3B50DF] shadow-2xs ring-1 ring-[#3B50DF]/20'
                     : 'bg-slate-50/60 border-slate-200/70';
 
                   const badgeBg = isDone
@@ -2194,15 +2208,15 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
                   return (
                     <div
                       key={i}
-                      className={`py-1.5 px-3 rounded-xl border transition-all flex items-center justify-between gap-2.5 ${cardBg}`}
+                      className={`py-2.5 px-3.5 sm:px-4 rounded-2xl border transition-all flex items-center justify-between gap-3 ${cardBg}`}
                     >
-                      <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="flex items-center gap-3 min-w-0">
                         {/* Circle Badge Number or Icon */}
-                        <div className={`w-6 h-6 rounded-full flex items-center justify-center font-extrabold text-[10.5px] shrink-0 shadow-2xs border ${badgeBg}`}>
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs sm:text-sm shrink-0 shadow-2xs border ${badgeBg}`}>
                           {isDone ? (
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
                           ) : isMiss ? (
-                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                           ) : (
                             <span>{i + 1}</span>
                           )}
@@ -2210,18 +2224,27 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
 
                         {/* Dose Name & Date */}
                         <div className="min-w-0">
-                          <p className={`text-[11.5px] font-bold truncate leading-tight ${isDone ? 'text-slate-900 line-through decoration-emerald-500/60' : 'text-slate-900'}`}>
-                            {d.n}
-                          </p>
-                          <div className="flex items-center gap-1 text-[10.5px] text-slate-500 font-medium">
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
-                            <span>{d.date}</span>
-                          </div>
+                          {d.n ? (
+                            <>
+                              <p className={`text-sm font-extrabold truncate leading-tight ${isDone ? 'text-slate-900 line-through decoration-emerald-500/60' : 'text-slate-900'}`}>
+                                {d.n}
+                              </p>
+                              <div className="flex items-center gap-1.5 text-xs sm:text-[13px] text-slate-500 font-semibold mt-0.5">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+                                <span>{d.date}</span>
+                              </div>
+                            </>
+                          ) : (
+                            <div className={`flex items-center gap-2 text-sm sm:text-base font-bold ${isDone ? 'text-slate-700 line-through decoration-emerald-500/60' : 'text-slate-900'}`}>
+                              <svg width="15" height="15" className="text-slate-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+                              <span>{d.date}</span>
+                            </div>
+                          )}
                         </div>
                       </div>
 
                       {/* Status Badge */}
-                      <span className={`text-[9.5px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wide shrink-0 ${
+                      <span className={`text-xs font-black px-2.5 py-1 rounded-lg uppercase tracking-wider shrink-0 ${
                         isDone
                           ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/80'
                           : isMiss
@@ -2241,11 +2264,11 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
 
           {/* Status Legend Footer */}
           {rec.doses.length > 0 && (
-            <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] font-semibold text-slate-500">
-              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Completed</span>
-              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#3B50DF]" /> Next Due</span>
-              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-slate-300" /> Scheduled</span>
-              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-rose-500" /> Missed</span>
+            <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-slate-600 flex-wrap gap-2">
+              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500" /> Completed</span>
+              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#3B50DF]" /> Next Due</span>
+              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-slate-300" /> Scheduled</span>
+              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-rose-500" /> Missed</span>
             </div>
           )}
         </div>
@@ -3070,6 +3093,14 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
     { key: 'pdf', label: 'PDF' },
   ];
 
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'completed' | 'overdue' | 'ongoing'
+  function statusFilterLabel() {
+    if (statusFilter === 'completed') return 'Completed';
+    if (statusFilter === 'overdue') return 'Overdue';
+    if (statusFilter === 'ongoing') return 'Ongoing';
+    return 'All Statuses';
+  }
+
   // Preview gate — nothing leaves the modal until the user has seen the
   // rendered report. 'form' = pick period/format, 'preview' = review it.
   const [step, setStep] = useState('form');
@@ -3132,17 +3163,27 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
     return patients.filter(p => {
       const raw = p.createdAt?.toDate ? p.createdAt.toDate() : (p.date ? new Date(p.date + 'T00:00:00') : null);
       if (!raw) return false;
+      let matchesPeriod = false;
       if (period === 'daily') {
-        return raw.toDateString() === now.toDateString();
+        matchesPeriod = raw.toDateString() === now.toDateString();
       } else if (period === 'weekly') {
         const msAgo = now - raw;
-        return msAgo >= 0 && msAgo <= 7 * 24 * 60 * 60 * 1000;
+        matchesPeriod = msAgo >= 0 && msAgo <= 7 * 24 * 60 * 60 * 1000;
       } else if (period === 'monthly') {
-        return raw.getFullYear() === now.getFullYear() && raw.getMonth() === now.getMonth();
+        matchesPeriod = raw.getFullYear() === now.getFullYear() && raw.getMonth() === now.getMonth();
       } else if (period === 'yearly') {
-        return raw.getFullYear() === now.getFullYear();
+        matchesPeriod = raw.getFullYear() === now.getFullYear();
       }
-      return false;
+      if (!matchesPeriod) return false;
+
+      if (statusFilter && statusFilter !== 'all') {
+        const liveSt = derivePatientStatus(p);
+        const isOverdue = liveSt !== 'completed' && buildDoses(p).some(d => d.status === 'miss');
+        const patientStatus = liveSt === 'completed' ? 'completed' : isOverdue ? 'overdue' : 'ongoing';
+        if (patientStatus !== statusFilter) return false;
+      }
+
+      return true;
     });
   }
 
@@ -3190,7 +3231,9 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
     const headers = ['#', 'Barangay / Address', 'Patient ID', 'Patient Name', 'Age / Sex', 'Contact No.', 'Service', 'Exposure', 'Status', 'Date Registered'];
     const colLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
 
-    const tableRows = rows.map((p, idx) => {
+    const tableRows = rows.length === 0
+      ? `<tr><td class="row-num">6</td><td colspan="10" style="text-align:center;padding:16px;color:#64748B;font-style:italic;">No ${statusFilter === 'all' ? '' : statusFilter + ' '}records found for this period.</td></tr>`
+      : rows.map((p, idx) => {
       const liveSt = derivePatientStatus(p);
       const isOverdue = liveSt !== 'completed' && buildDoses(p).some(d => d.status === 'miss');
       const stLabel = liveSt === 'completed' ? 'Completed' : isOverdue ? 'Overdue' : 'Ongoing';
@@ -3238,7 +3281,7 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
             </tr>
             <tr>
               <td class="row-num">2</td>
-              <td colspan="10" style="color:#475569;background:#F8FAFC;">Period Covered: <strong>${periodLabelStr}</strong> &nbsp;|&nbsp; Barangay: All Barangays &nbsp;|&nbsp; Date Generated: ${new Date().toLocaleString('en-PH')}</td>
+              <td colspan="10" style="color:#475569;background:#F8FAFC;">Period Covered: <strong>${periodLabelStr}</strong> &nbsp;|&nbsp; Status: <strong>${statusFilterLabel()}</strong> &nbsp;|&nbsp; Barangay: All Barangays &nbsp;|&nbsp; Date Generated: ${new Date().toLocaleString('en-PH')}</td>
             </tr>
             <tr>
               <td class="row-num">3</td>
@@ -3316,7 +3359,7 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
       <table border="0">
         <tr><td class="brand" colspan="${cols}">HEALTH MONITORING &amp; PATIENT REGISTRY REPORT</td></tr>
         <tr><td class="tagline" colspan="${cols}">RURAL HEALTH UNIT &bull; ANIMAL BITE TREATMENT CENTER &bull; POLANGUI, ALBAY</td></tr>
-        <tr><td class="meta" colspan="${cols}">Period Covered: ${periodLabel()} | Barangay: All Barangays | Date Generated: ${new Date().toLocaleString('en-PH')}</td></tr>
+        <tr><td class="meta" colspan="${cols}">Period Covered: ${periodLabel()} | Status: ${statusFilterLabel()} | Barangay: All Barangays | Date Generated: ${new Date().toLocaleString('en-PH')}</td></tr>
         <tr><td colspan="${cols}"></td></tr>
       </table>
       <table border="1" style="margin-bottom:15px;">
@@ -3342,7 +3385,8 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `clinic-report-${period}-${new Date().toISOString().slice(0, 10)}.xls`;
+    const statusSlug = statusFilter !== 'all' ? `-${statusFilter}` : '';
+    a.download = `clinic-report-${period}${statusSlug}-${new Date().toISOString().slice(0, 10)}.xls`;
     a.click();
     URL.revokeObjectURL(url);
     onToast(`Excel report exported (${rows.length} patient${rows.length !== 1 ? 's' : ''})`, 'success');
@@ -3350,7 +3394,9 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
 
   // Exact Landscape HTML Report matching user example image with Blue theme
   function buildBulkReportHtml(rows) {
-    const tableRows = rows.map((p, i) => {
+    const tableRows = rows.length === 0
+      ? `<tr><td colspan="10" style="text-align:center;padding:24px;color:#64748B;font-style:italic;">No ${statusFilter === 'all' ? '' : statusFilter + ' '}records found for this period.</td></tr>`
+      : rows.map((p, i) => {
       const liveSt = derivePatientStatus(p);
       const isOverdue = liveSt !== 'completed' && buildDoses(p).some(d => d.status === 'miss');
       const stBadge = liveSt === 'completed'
@@ -3399,8 +3445,9 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
         <div style="font-size:10.5px;color:#64748B;font-weight:500;">Barangay Summary — ${periodLabel()}</div>
       </div>
 
-      <div class="header-meta" style="margin-top:10px;margin-bottom:12px;gap:28px;">
+      <div class="header-meta" style="margin-top:10px;margin-bottom:12px;gap:24px;">
         <span><strong>Period Covered:</strong> ${periodLabel()}</span>
+        <span><strong>Status:</strong> ${statusFilterLabel()}</span>
         <span><strong>Barangay:</strong> All Barangays</span>
         <span><strong>Date Generated:</strong> ${new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
       </div>
@@ -3483,7 +3530,7 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
     // Metadata row
     doc.setFontSize(7.5);
     doc.setTextColor(51, 65, 85);
-    const metaStr = `Period Covered: ${periodLabel()}    |    Barangay: All Barangays    |    Date Generated: ${new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`;
+    const metaStr = `Period Covered: ${periodLabel()}    |    Status: ${statusFilterLabel()}    |    Barangay: All Barangays    |    Date Generated: ${new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`;
     doc.text(metaStr, pageWidth / 2, 39.5, { align: 'center' });
 
     // Blue separator line
@@ -3565,7 +3612,8 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
   function exportBulkPdf() {
     const rows = getFilteredPatients();
     if (rows.length === 0) { onToast('No patients found for this period', 'error'); return; }
-    buildBulkPdf(rows).save(`health-monitoring-report-${period}-${new Date().toISOString().slice(0, 10)}.pdf`);
+    const statusSlug = statusFilter !== 'all' ? `-${statusFilter}` : '';
+    buildBulkPdf(rows).save(`health-monitoring-report-${period}${statusSlug}-${new Date().toISOString().slice(0, 10)}.pdf`);
     onToast(`Landscape PDF exported (${rows.length} patient${rows.length !== 1 ? 's' : ''})`, 'success');
   }
 
@@ -3587,6 +3635,7 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
       const hasERIG = doses.some(d => (d.n || d.label || '').includes('ERIG'));
       return hasERIG ? `ERIG + ARV ${doneCount}-dose series` : (doneCount ? `ARV ${doneCount}-dose series (Days 0, 3, 7, 14, 28)` : 'ARV vaccination series');
     }
+    if (p.service === 'PrEP') return `Rabies PrEP preventive series${doneCount ? ` (${doneCount} dose${doneCount > 1 ? 's' : ''} completed)` : ' (Days 0, 7, 21)'}`;
     if (p.service === 'Tetanus') return `Anti-Tetanus vaccination${doneCount ? ` (${doneCount} dose${doneCount > 1 ? 's' : ''} completed)` : ''}`;
     if (p.service === 'Hepatitis') return `Hepatitis vaccination series${doneCount ? ` (${doneCount} dose${doneCount > 1 ? 's' : ''} completed)` : ''}`;
     if (p.service === 'Pneumonia') return `Pneumococcal vaccination${doneCount ? ` (${doneCount} dose${doneCount > 1 ? 's' : ''} completed)` : ''}`;
@@ -4123,6 +4172,27 @@ doc.text('___________', pageWidth - 20 - colWidth / 2, y + 6, { align: 'center' 
                     <option value="weekly">Weekly (Last 7 Days)</option>
                     <option value="monthly">Monthly (This Month)</option>
                     <option value="yearly">Yearly (This Year)</option>
+                  </select>
+                </div>
+
+                {/* Record Status Selector */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '.71875rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 6 }}>
+                    RECORD STATUS:
+                  </label>
+                  <select
+                    value={statusFilter}
+                    onChange={e => setStatusFilter(e.target.value)}
+                    style={{
+                      width: '100%', padding: '9px 12px', fontSize: '.8125rem', fontWeight: 600, color: '#0F172A',
+                      border: '1px solid #CBD5E1', borderRadius: 12, background: '#FFFFFF', outline: 'none', cursor: 'pointer',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+                    }}
+                  >
+                    <option value="all">All Records</option>
+                    <option value="completed">Completed</option>
+                    <option value="overdue">Overdue</option>
+                    <option value="ongoing">Ongoing</option>
                   </select>
                 </div>
 

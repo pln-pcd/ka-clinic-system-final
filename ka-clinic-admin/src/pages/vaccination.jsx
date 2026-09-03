@@ -154,19 +154,23 @@ export default function VaccinationTrackerPage({ selectedPatientId }) {
   const itemsPerPage = 10;
 
   // Auto-select patient when opened from Overdue Dose Tracker or direct link
+  const autoOpenedRef = useRef(null);
   useEffect(() => {
     if (selectedPatientId && patients.length > 0) {
-      const match = patients.find(p =>
-        p.firestoreId === selectedPatientId ||
-        p.id === selectedPatientId ||
-        (p.name && p.name.toLowerCase() === String(selectedPatientId).toLowerCase()) ||
-        getName(p).toLowerCase().includes(String(selectedPatientId).toLowerCase())
-      );
-      if (match) {
-        setDetailPt(match);
+      if (autoOpenedRef.current !== selectedPatientId) {
+        const match = patients.find(p =>
+          p.firestoreId === selectedPatientId ||
+          p.id === selectedPatientId ||
+          (p.name && p.name.toLowerCase() === String(selectedPatientId).toLowerCase()) ||
+          getName(p).toLowerCase().includes(String(selectedPatientId).toLowerCase())
+        );
+        if (match) {
+          autoOpenedRef.current = selectedPatientId;
+          setDetailPt(match);
+        }
       }
-    } else if (!selectedPatientId) {
-      setDetailPt(null);
+    } else {
+      autoOpenedRef.current = null;
     }
   }, [selectedPatientId, patients]);
 
@@ -417,14 +421,16 @@ export default function VaccinationTrackerPage({ selectedPatientId }) {
           : x
       )
     );
-    if (detailPt && detailPt.firestoreId === p.firestoreId) {
-      setDetailPt(prev => ({
-        ...prev,
-        doses: updatedDoses,
-        status: newStatus,
-        dose: `${doneCount}/${totalDoses}`,
-      }));
-    }
+    setDetailPt(prev =>
+      prev && prev.firestoreId === p.firestoreId
+        ? {
+            ...prev,
+            doses: updatedDoses,
+            status: newStatus,
+            dose: `${doneCount}/${totalDoses}`,
+          }
+        : prev
+    );
 
     // ── BACKGROUND FIREBASE DOSE UPDATE ──
     updateDoc(doc(db, 'vaccinations', p.firestoreId), {

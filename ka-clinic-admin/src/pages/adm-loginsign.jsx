@@ -331,7 +331,7 @@ export default function AdminLogin({ onSuccess, onBack }) {
             <span className="text-white font-extrabold text-lg sm:text-xl tracking-tight leading-none block">
               K&amp;A Clinic
             </span>
-            <span className="text-[10px] uppercase font-bold tracking-widest text-sky-400 block mt-0.5">
+            <span className="text-[10px] uppercase font-bold tracking-widest text-white block mt-0.5">
               Rabies &amp; Bite Center
             </span>
           </div>

@@ -654,7 +654,7 @@ export default function AdminDashboard({ onLogout }) {
           onClick={() => setSelectedCalendarDay(isSelected ? null : day)}
           className="relative p-2 text-center rounded-xl text-xs font-bold cursor-pointer select-none transition-all"
           style={{
-            background: isSelected ? '#060e24' : isToday ? '#1D4ED8' : 'transparent',
+            background: isSelected ? '#08173d' : isToday ? '#1D4ED8' : 'transparent',
             color: isSelected || isToday ? '#ffffff' : '#334155',
             boxShadow: isToday ? '0 2px 8px rgba(29,78,216,0.35)' : 'none',
           }}
@@ -789,29 +789,35 @@ export default function AdminDashboard({ onLogout }) {
         </div>
       )}
 
-      {/* ── SIDEBAR (Deep Midnight Navy Theme with SVG Curved Notch Cutout Active Tabs) ── */}
-      <div className="fixed h-screen z-40 flex flex-col justify-between bg-[#060e24] text-white transition-all duration-300"
+      {/* ── SIDEBAR (Deep Rich Navy Blue Theme with SVG Curved Notch Cutout Active Tabs) ── */}
+      <div className="fixed h-screen z-40 flex flex-col justify-between bg-[#08173d] text-white transition-all duration-300"
         style={{ width: sidebarOpen ? 256 : 76 }}>
         <div className="flex flex-col min-h-0 flex-1">
           {/* Logo Header — White background logo beside clinic name */}
-          <div className="px-4 py-5 border-b border-blue-950/60 flex items-center justify-between min-h-[72px]">
-            <div style={{ opacity: sidebarOpen ? 1 : 0, transform: sidebarOpen ? 'translateX(0)' : 'translateX(-12px)', transition: 'opacity 0.22s,transform 0.25s', pointerEvents: sidebarOpen ? 'auto' : 'none', overflow: 'hidden', whiteSpace: 'nowrap' }} className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center p-1 flex-shrink-0 shadow-sm border border-blue-100/90">
-                <img
-                  src="/assets/dashboard/logo-white-nobg.png"
-                  alt="K&A Clinic Logo"
-                  className="w-full h-full object-contain"
-                />
+          <div className={`py-5 border-b border-blue-950/60 flex items-center min-h-[72px] transition-all duration-300 ${
+            sidebarOpen ? 'px-4 justify-between' : 'pl-3 pr-0 justify-start'
+          }`}>
+            {sidebarOpen && (
+              <div className="flex items-center gap-3 min-w-0 overflow-hidden">
+                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center p-1 flex-shrink-0 shadow-sm border border-blue-100/90">
+                  <img
+                    src="/assets/dashboard/logo-white-nobg.png"
+                    alt="K&A Clinic Logo"
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+                <div className="min-w-0">
+                  <h1 className="font-bold text-base tracking-normal leading-tight text-white whitespace-nowrap">K&A Clinic</h1>
+                  <p className="text-[10px] font-bold text-white uppercase tracking-widest mt-0.5 whitespace-nowrap">Clinical Admin</p>
+                </div>
               </div>
-              <div className="min-w-0">
-                <h1 className="font-bold text-base tracking-normal leading-tight text-white whitespace-nowrap">K&A Clinic</h1>
-                <p className="text-[10px] font-bold text-white uppercase tracking-widest mt-0.5 whitespace-nowrap">Clinical Admin</p>
-              </div>
-            </div>
+            )}
             <button onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-2 rounded-xl flex-shrink-0 cursor-pointer transition-colors hover:bg-blue-600/20 text-blue-200/80 hover:text-white"
+              className={`flex items-center cursor-pointer transition-colors hover:bg-blue-600/20 text-blue-200/80 hover:text-white ${
+                sidebarOpen ? 'p-2 rounded-xl flex-shrink-0' : 'pl-3.5 pr-3 py-2.5 rounded-xl flex-shrink-0'
+              }`}
               title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}>
-              <Menu size={20} strokeWidth={2} />
+              <Menu size={sidebarOpen ? 20 : 19} strokeWidth={sidebarOpen ? 2 : 2.2} className="flex-shrink-0" />
             </button>
           </div>
 
@@ -830,7 +836,7 @@ export default function AdminDashboard({ onLogout }) {
                     <button key={item.id} onClick={() => { setSelectedOverduePatientId(null); setActivePage(item.id); }}
                       className={`group w-full flex items-center gap-3 relative cursor-pointer text-sm leading-snug transition-colors duration-150 ${
                         isActive
-                          ? 'bg-[#F0F4FA] text-[#0a1d47] font-extrabold rounded-l-2xl pl-3.5 pr-3 py-3 relative z-10 -mr-1 w-[calc(100%+4px)]'
+                          ? 'bg-[#F0F4FA] text-[#08173d] font-extrabold rounded-l-2xl pl-3.5 pr-3 py-3 relative z-10 -mr-1 w-[calc(100%+4px)]'
                           : 'text-blue-100/85 font-medium hover:bg-blue-600/15 hover:text-white pl-3.5 pr-3 py-2.5 rounded-xl mr-4'
                       }`}
                       title={!sidebarOpen ? item.label : ''}>
@@ -847,7 +853,7 @@ export default function AdminDashboard({ onLogout }) {
                         </>
                       )}
 
-                      <item.icon size={19} strokeWidth={2.2} className={`flex-shrink-0 transition-colors relative z-10 ${isActive ? 'text-[#0a1d47]' : 'text-blue-300/70 group-hover:text-white'}`}/>
+                      <item.icon size={19} strokeWidth={2.2} className={`flex-shrink-0 transition-colors relative z-10 ${isActive ? 'text-[#08173d]' : 'text-blue-300/70 group-hover:text-white'}`}/>
                       <span className="relative z-10" style={{ opacity: sidebarOpen ? 1 : 0, overflow: 'hidden', whiteSpace: 'nowrap', transition: 'opacity 0.18s', flex: 1, textAlign: 'left' }}>
                         {item.label}
                       </span>
@@ -875,7 +881,7 @@ export default function AdminDashboard({ onLogout }) {
                     <button key={item.id} onClick={() => { setSelectedOverduePatientId(null); setActivePage(item.id); }}
                       className={`group w-full flex items-center gap-3 relative cursor-pointer text-sm leading-snug transition-colors duration-150 ${
                         isActive
-                          ? 'bg-[#F0F4FA] text-[#0a1d47] font-extrabold rounded-l-2xl pl-3.5 pr-3 py-3 relative z-10 -mr-1 w-[calc(100%+4px)]'
+                          ? 'bg-[#F0F4FA] text-[#08173d] font-extrabold rounded-l-2xl pl-3.5 pr-3 py-3 relative z-10 -mr-1 w-[calc(100%+4px)]'
                           : 'text-blue-100/85 font-medium hover:bg-blue-600/15 hover:text-white pl-3.5 pr-3 py-2.5 rounded-xl mr-4'
                       }`}
                       title={!sidebarOpen ? item.label : ''}>
@@ -892,7 +898,7 @@ export default function AdminDashboard({ onLogout }) {
                         </>
                       )}
 
-                      <item.icon size={19} strokeWidth={2.2} className={`flex-shrink-0 transition-colors relative z-10 ${isActive ? 'text-[#0a1d47]' : 'text-blue-300/70 group-hover:text-white'}`}/>
+                      <item.icon size={19} strokeWidth={2.2} className={`flex-shrink-0 transition-colors relative z-10 ${isActive ? 'text-[#08173d]' : 'text-blue-300/70 group-hover:text-white'}`}/>
                       <span className="relative z-10" style={{ opacity: sidebarOpen ? 1 : 0, overflow: 'hidden', whiteSpace: 'nowrap', transition: 'opacity 0.18s', flex: 1, textAlign: 'left' }}>
                         {item.label}
                       </span>
