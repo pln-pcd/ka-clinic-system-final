@@ -1,7 +1,7 @@
 import { doc, getDoc } from 'firebase/firestore';
 import {
-  AlertTriangle, ArrowRight, BadgeCheck, CheckCircle2, Eye, EyeOff, FileText,
-  Loader2, Lock, Mail, ShieldCheck, Syringe, User as UserIcon, XCircle,
+  AlertTriangle, ArrowRight, CheckCircle2, Eye, EyeOff, FileText,
+  Loader2, Lock, Mail, Syringe, User as UserIcon, XCircle,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { db } from '../lib/firebase';
@@ -107,6 +107,14 @@ export default function AcceptInvite({ onDone }) {
   const reqMatchOk = confirmPassword.length > 0 && password === confirmPassword;
   const initials = getInitials(name);
   const displayName = name.trim() || 'Your Name';
+  // A stable, human-readable badge number derived from the invite token, so
+  // the credential shows a real identifier rather than a decorative one.
+  const credentialNo = token
+    ? `KA-${token.replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase()}`
+    : 'KA-------';
+  // The stamp lands when the form is genuinely complete — it reports state,
+  // it is not an entrance effect.
+  const stampVisible = status === 'success' || (status === 'valid' && !!name.trim() && reqLenOk && reqMatchOk);
 
   const rightCopy = {
     loading: {
@@ -136,12 +144,14 @@ export default function AcceptInvite({ onDone }) {
 
         {/* ── LEFT PANEL: Form ── */}
         <div className="w-full md:w-1/2 p-8 sm:p-10 md:p-12 bg-white flex flex-col relative z-10 self-stretch">
-          <div className="flex flex-col items-center text-center pt-1 mb-5">
-            <div className="w-16 h-16 rounded-2xl bg-white border border-slate-100 shadow-[0_10px_30px_rgba(59,80,223,0.16)] flex items-center justify-center p-2.5 mb-2.5">
-              <img src="/assets/dashboard/logo-white-nobg.png" alt="K&A Clinic" className="w-full h-full object-contain" />
+          {/* Brand lockup — logo sits beside the wordmark, both flush left */}
+          <div className="flex items-center gap-3 mb-9">
+            <div className="w-11 h-11 rounded-xl bg-white border border-slate-200 shadow-[0_6px_18px_rgba(10,29,71,0.12)] flex items-center justify-center p-1.5 shrink-0">
+              <img src="/assets/dashboard/logo-white-nobg.png" alt="" className="w-full h-full object-contain" />
             </div>
-            <div className="font-display font-extrabold text-2xl tracking-tight text-slate-900 leading-none">K&A Clinic</div>
-            <div className="text-[10px] font-bold text-[#3B50DF] uppercase tracking-widest mt-1.5">Anti-Rabies &amp; Animal Bite Center</div>
+            <div className="font-display font-extrabold text-[19px] tracking-tight text-slate-900 leading-tight">
+              K&amp;A Animal Bite Center
+            </div>
           </div>
 
           {status === 'loading' && (
@@ -152,41 +162,38 @@ export default function AcceptInvite({ onDone }) {
           )}
 
           {status === 'invalid' && (
-            <div className="my-auto text-center py-4 animate-in fade-in duration-500">
-              <div className="w-12 h-12 rounded-2xl bg-rose-50 flex items-center justify-center mx-auto mb-3">
+            <div className="my-auto py-4 animate-in fade-in duration-500">
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 flex items-center justify-center mb-4">
                 <XCircle className="w-6 h-6 text-rose-600" />
               </div>
-              <h1 className="font-display text-lg font-extrabold text-slate-900 mb-1.5">Invite link invalid</h1>
-              <p className="text-sm text-slate-500 leading-relaxed max-w-[280px] mx-auto">{error}</p>
+              <h1 className="font-display text-xl font-extrabold text-slate-900 mb-2">Invite link invalid</h1>
+              <p className="text-sm text-slate-500 leading-relaxed max-w-[320px]">{error}</p>
             </div>
           )}
 
           {status === 'valid' && (
             <div className="my-auto animate-in fade-in duration-500">
-              <div className="flex justify-center mb-3">
-                <div className="w-11 h-11 rounded-2xl bg-indigo-50 flex items-center justify-center">
-                  <ShieldCheck className="w-5 h-5 text-[#3B50DF]" />
-                </div>
-              </div>
-              <h1 className="font-display text-lg font-extrabold text-slate-900 mb-1.5 text-center">Complete your account</h1>
-              <p className="text-sm text-slate-500 leading-relaxed mb-5 text-center">
-                You've been invited to join the K&amp;A Clinic Admin Dashboard as staff.
+              <h1 className="font-display text-2xl font-extrabold text-slate-900 tracking-tight mb-2">
+                Complete your account
+              </h1>
+              <p className="text-sm text-slate-500 leading-relaxed mb-7 max-w-[380px]">
+                You've been invited to join the K&amp;A Clinic Admin Dashboard as staff. Set a password to activate your credential.
               </p>
 
               {error && (
-                <div className="flex items-start gap-2 bg-rose-50 text-rose-600 text-xs p-3 rounded-xl border border-rose-100 mb-4 animate-in slide-in-from-top-2">
+                <div className="flex items-start gap-2 bg-rose-50 text-rose-600 text-xs p-3 rounded-xl border border-rose-100 mb-5 animate-in slide-in-from-top-2">
                   <XCircle className="w-4 h-4 mt-0.5 shrink-0" />
                   <p className="font-semibold">{error}</p>
                 </div>
               )}
 
-              <form onSubmit={handleSubmit} className="space-y-3.5">
+              <form onSubmit={handleSubmit} className="space-y-5">
                 <div>
-                  <label htmlFor="invite-name" className="block text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
+                  <label htmlFor="invite-name" className="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">
                     Full Name
                   </label>
                   <div className="relative">
-                    <UserIcon className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <UserIcon className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                     <input
                       id="invite-name"
                       autoFocus
@@ -195,30 +202,35 @@ export default function AcceptInvite({ onDone }) {
                       value={name}
                       onChange={e => { setName(e.target.value); setError(''); }}
                       disabled={submitting}
-                      className="w-full bg-slate-100/80 border border-slate-200/70 pl-9 pr-3.5 py-2.5 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 placeholder:font-normal focus:outline-none focus:ring-4 focus:ring-red-600/10 focus:border-red-600 transition-all disabled:opacity-50 font-medium"
+                      className="w-full bg-slate-50 border border-slate-200 pl-11 pr-4 py-3.5 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 placeholder:font-normal focus:outline-none focus:bg-white focus:ring-4 focus:ring-[#0e2a6d]/10 focus:border-[#0e2a6d] transition-all disabled:opacity-50 font-medium"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">Email</label>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">
+                    Email
+                  </label>
                   <div className="relative">
-                    <Mail className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                     <input
                       type="text"
                       value={invite?.email || ''}
                       readOnly
-                      className="w-full bg-slate-100 border border-slate-200/70 pl-9 pr-3.5 py-2.5 rounded-lg text-sm text-slate-400 font-medium cursor-not-allowed"
+                      className="w-full bg-slate-100 border border-slate-200 pl-11 pr-4 py-3.5 rounded-xl text-sm text-slate-500 font-medium cursor-not-allowed"
                     />
+                    <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                      Locked
+                    </span>
                   </div>
                 </div>
 
                 <div>
-                  <label htmlFor="invite-password" className="block text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
+                  <label htmlFor="invite-password" className="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">
                     Set Password
                   </label>
                   <div className="relative">
-                    <Lock className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                     <input
                       id="invite-password"
                       type={showPass ? 'text' : 'password'}
@@ -227,25 +239,25 @@ export default function AcceptInvite({ onDone }) {
                       value={password}
                       onChange={e => { setPassword(e.target.value); setError(''); }}
                       disabled={submitting}
-                      className="w-full bg-slate-100/80 border border-slate-200/70 pl-9 pr-10 py-2.5 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 placeholder:font-normal focus:outline-none focus:ring-4 focus:ring-red-600/10 focus:border-red-600 transition-all disabled:opacity-50 font-medium"
+                      className="w-full bg-slate-50 border border-slate-200 pl-11 pr-12 py-3.5 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 placeholder:font-normal focus:outline-none focus:bg-white focus:ring-4 focus:ring-[#0e2a6d]/10 focus:border-[#0e2a6d] transition-all disabled:opacity-50 font-medium"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPass(!showPass)}
                       aria-label={showPass ? 'Hide password' : 'Show password'}
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                      className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-700 transition-colors"
                     >
-                      {showPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
                 </div>
 
                 <div>
-                  <label htmlFor="invite-confirm-password" className="block text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">
+                  <label htmlFor="invite-confirm-password" className="block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">
                     Confirm Password
                   </label>
                   <div className="relative">
-                    <Lock className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                     <input
                       id="invite-confirm-password"
                       type={showPass ? 'text' : 'password'}
@@ -254,24 +266,24 @@ export default function AcceptInvite({ onDone }) {
                       value={confirmPassword}
                       onChange={e => { setConfirmPassword(e.target.value); setError(''); }}
                       disabled={submitting}
-                      className="w-full bg-slate-100/80 border border-slate-200/70 pl-9 pr-3.5 py-2.5 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 placeholder:font-normal focus:outline-none focus:ring-4 focus:ring-red-600/10 focus:border-red-600 transition-all disabled:opacity-50 font-medium"
+                      className="w-full bg-slate-50 border border-slate-200 pl-11 pr-4 py-3.5 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 placeholder:font-normal focus:outline-none focus:bg-white focus:ring-4 focus:ring-[#0e2a6d]/10 focus:border-[#0e2a6d] transition-all disabled:opacity-50 font-medium"
                     />
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 pt-0.5">
-                  <span className={`inline-flex items-center gap-1 text-[11px] font-semibold transition-colors ${reqLenOk ? 'text-emerald-600' : 'text-slate-400'}`}>
-                    <CheckCircle2 className="w-3 h-3" strokeWidth={reqLenOk ? 2.5 : 2} /> 8+ characters
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                  <span className={`inline-flex items-center gap-1.5 text-[11.5px] font-semibold transition-colors ${reqLenOk ? 'text-emerald-600' : 'text-slate-500'}`}>
+                    <CheckCircle2 className="w-3.5 h-3.5" strokeWidth={reqLenOk ? 2.5 : 2} /> 8+ characters
                   </span>
-                  <span className={`inline-flex items-center gap-1 text-[11px] font-semibold transition-colors ${reqMatchOk ? 'text-emerald-600' : 'text-slate-400'}`}>
-                    <CheckCircle2 className="w-3 h-3" strokeWidth={reqMatchOk ? 2.5 : 2} /> Passwords match
+                  <span className={`inline-flex items-center gap-1.5 text-[11.5px] font-semibold transition-colors ${reqMatchOk ? 'text-emerald-600' : 'text-slate-500'}`}>
+                    <CheckCircle2 className="w-3.5 h-3.5" strokeWidth={reqMatchOk ? 2.5 : 2} /> Passwords match
                   </span>
                 </div>
 
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="w-full bg-[#E31837] hover:bg-[#C41228] text-white py-3 rounded-lg text-sm font-bold transition-all shadow-md shadow-red-600/20 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-md"
+                  className="w-full bg-gradient-to-r from-[#0a1d47] via-[#0e2a6d] to-[#1d4ed8] hover:from-[#071533] hover:via-[#0a2054] hover:to-[#173fa8] text-white py-3.5 rounded-full text-sm font-bold tracking-wide transition-all shadow-[0_10px_25px_rgba(14,42,109,0.3)] hover:shadow-[0_15px_30px_rgba(14,42,109,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-[0_10px_25px_rgba(14,42,109,0.3)]"
                 >
                   {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : (
                     <>
@@ -285,17 +297,17 @@ export default function AcceptInvite({ onDone }) {
           )}
 
           {status === 'success' && (
-            <div className="my-auto text-center py-4 animate-in fade-in duration-500">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center mx-auto mb-3">
+            <div className="my-auto py-4 animate-in fade-in duration-500">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center mb-4">
                 <CheckCircle2 className="w-6 h-6 text-emerald-600" />
               </div>
-              <h1 className="font-display text-lg font-extrabold text-slate-900 mb-1.5">Account activated</h1>
-              <p className="text-sm text-slate-500 leading-relaxed mb-5">
+              <h1 className="font-display text-xl font-extrabold text-slate-900 mb-2">Account activated</h1>
+              <p className="text-sm text-slate-500 leading-relaxed mb-7 max-w-[340px]">
                 You can now log in with your email and password.
               </p>
               <button
                 onClick={onDone}
-                className="w-full bg-[#E31837] hover:bg-[#C41228] text-white py-3 rounded-lg text-sm font-bold transition-all shadow-md shadow-red-600/20 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:scale-[0.99] flex items-center justify-center gap-2"
+                className="w-full bg-gradient-to-r from-[#0a1d47] via-[#0e2a6d] to-[#1d4ed8] hover:from-[#071533] hover:via-[#0a2054] hover:to-[#173fa8] text-white py-3.5 rounded-full text-sm font-bold tracking-wide transition-all shadow-[0_10px_25px_rgba(14,42,109,0.3)] hover:shadow-[0_15px_30px_rgba(14,42,109,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] flex items-center justify-center gap-2"
               >
                 Go to Login
                 <ArrowRight className="w-4 h-4" />
@@ -304,134 +316,143 @@ export default function AcceptInvite({ onDone }) {
           )}
         </div>
 
-        {/* ── RIGHT PANEL: Live staff-profile preview ── */}
-        <div className="w-full md:w-1/2 p-8 sm:p-10 md:p-12 bg-gradient-to-br from-slate-900 via-slate-950 to-[#0c1222] flex flex-col justify-between relative overflow-hidden border-l border-white/5 self-stretch">
-          <div className="absolute -top-16 -right-10 w-72 h-72 bg-indigo-600/25 rounded-full blur-[90px] pointer-events-none animate-drift-slow" />
-          <div className="absolute -bottom-24 -left-16 w-80 h-80 bg-blue-900/30 rounded-full blur-[100px] pointer-events-none animate-drift-slower" />
-          <div className="absolute inset-0 opacity-[0.05] [background-image:radial-gradient(circle,white_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none" />
+        {/* ── RIGHT PANEL: the staff credential this invite issues ──
+            Not an abstract preview card: the thing being created here is a
+            clinic ID badge, so it is drawn as one — hanging from its lanyard,
+            filling in as the form is completed, and stamped once it is valid. */}
+        <div className="w-full md:w-1/2 px-8 sm:px-10 md:px-12 pt-14 pb-10 bg-gradient-to-br from-[#0a1d47] via-[#091b42] to-[#060e24] flex flex-col justify-between relative overflow-hidden border-l border-white/5 self-stretch">
+          <div className="absolute -top-16 -right-10 w-72 h-72 bg-[#1d4ed8]/25 rounded-full blur-[90px] pointer-events-none animate-drift-slow" />
+          <div className="absolute -bottom-24 -left-16 w-80 h-80 bg-[#0e2a6d]/40 rounded-full blur-[100px] pointer-events-none animate-drift-slower" />
+          <div className="absolute inset-0 opacity-[0.06] [background-image:radial-gradient(circle,white_1px,transparent_1px)] [background-size:26px_26px] pointer-events-none" />
 
-          <div className="relative z-10 flex-1 flex flex-col items-center justify-center p-2">
-            <div className="relative w-full max-w-[420px]">
+          <div className="relative z-10 flex-1 flex flex-col items-center justify-center">
+            {/* Lanyard: two straps meeting at the clip the badge hangs from */}
+            <div className="relative w-full max-w-[380px] flex flex-col items-center" aria-hidden="true">
+              <div className="relative h-16 w-28">
+                <div className="absolute left-1/2 top-0 h-16 w-[7px] -translate-x-1/2 origin-top rotate-[19deg] rounded-full bg-gradient-to-b from-[#1d4ed8]/70 to-[#0e2a6d]/80" />
+                <div className="absolute left-1/2 top-0 h-16 w-[7px] -translate-x-1/2 origin-top -rotate-[19deg] rounded-full bg-gradient-to-b from-[#1d4ed8]/70 to-[#0e2a6d]/80" />
+              </div>
+              <div className="-mt-1 h-4 w-11 rounded-md bg-gradient-to-b from-slate-200 to-slate-400 shadow-[0_2px_6px_rgba(0,0,0,0.45)] ring-1 ring-white/40" />
+            </div>
 
-              {status === 'loading' && (
-                <div className="relative bg-white/95 rounded-3xl border border-white/60 shadow-[0_30px_80px_rgba(0,0,0,0.5)] p-6 overflow-hidden animate-pulse">
-                  <div className="absolute inset-x-0 top-0 h-1.5 bg-slate-200" />
-                  <div className="flex items-center gap-1.5 mb-5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-slate-200" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-slate-200" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-slate-200" />
-                    <span className="ml-auto w-16 h-2.5 rounded-full bg-slate-200" />
-                  </div>
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="w-11 h-11 rounded-full bg-slate-200 shrink-0" />
-                    <div className="space-y-2">
-                      <div className="w-28 h-3 rounded-full bg-slate-200" />
-                      <div className="w-20 h-2.5 rounded-full bg-slate-100" />
+            <div className="relative w-full max-w-[380px] -mt-2 animate-badge-sway">
+              {/* Badge body */}
+              <div className="relative rounded-[26px] bg-white shadow-[0_34px_80px_-20px_rgba(0,0,0,0.75)] ring-1 ring-white/50 overflow-hidden">
+                {/* Punch slot */}
+                <div className="absolute left-1/2 top-3.5 h-2 w-14 -translate-x-1/2 rounded-full bg-slate-900/12 ring-1 ring-slate-900/5" />
+
+                {/* Credential header */}
+                <div className="pt-9 pb-4 px-6 bg-gradient-to-br from-[#0a1d47] to-[#0e2a6d]">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-white/95 flex items-center justify-center p-1 shrink-0">
+                      <img src="/assets/dashboard/logo-white-nobg.png" alt="" className="w-full h-full object-contain" />
                     </div>
-                  </div>
-                  <div className="space-y-2.5">
-                    <div className="h-9 rounded-xl bg-slate-100" />
-                    <div className="h-9 rounded-xl bg-slate-100" />
-                    <div className="h-9 rounded-xl bg-slate-100" />
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-extrabold text-white leading-tight tracking-tight truncate">
+                        K&amp;A Animal Bite Center
+                      </div>
+                      <div className="text-[9px] font-semibold text-blue-200/90 tracking-[0.18em] uppercase mt-0.5">
+                        Staff Credential
+                      </div>
+                    </div>
+                    <span className="ml-auto text-[9px] font-bold text-blue-100/80 tracking-wide shrink-0">
+                      {status === 'success' ? 'ACTIVE' : (invite ? formatExpiry(invite.expiresAt) : '—')}
+                    </span>
                   </div>
                 </div>
-              )}
 
-              {status === 'invalid' && (
-                <div className="relative bg-white/90 rounded-3xl border border-white/50 shadow-[0_30px_80px_rgba(0,0,0,0.5)] p-6 overflow-hidden opacity-90 animate-in fade-in duration-500">
-                  <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-slate-400 via-slate-300 to-slate-400" />
-                  <Lock className="absolute -right-5 -top-5 w-32 h-32 text-slate-100 rotate-12 pointer-events-none" strokeWidth={1.25} />
+                {/* Holder */}
+                <div className="px-6 pt-5 pb-5">
+                  <div className="flex items-center gap-3.5">
+                    <div className="relative shrink-0">
+                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-extrabold text-base transition-colors duration-300 ${
+                        name.trim()
+                          ? 'bg-gradient-to-br from-[#0e2a6d] to-[#1d4ed8] text-white'
+                          : 'bg-slate-100 text-slate-300 border border-dashed border-slate-300'
+                      }`}>
+                        {initials || <UserIcon className="w-5 h-5" />}
+                      </div>
+                      <span className={`absolute -right-1 -bottom-1 w-4 h-4 rounded-full border-2 border-white transition-colors ${status === 'success' ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+                    </div>
 
-                  <div className="relative flex items-center gap-1.5 mb-5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-slate-300" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-slate-300" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-slate-300" />
-                    <span className="ml-auto text-[10px] font-bold text-slate-400 tracking-wide">INVALID</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.14em]">Name</div>
+                      <div className={`font-display text-base font-extrabold leading-tight truncate transition-colors ${name.trim() ? 'text-slate-900' : 'text-slate-300'}`}>
+                        {displayName}
+                      </div>
+                      <div className="text-[11px] text-slate-500 font-medium truncate mt-0.5">{invite?.email || ''}</div>
+                    </div>
                   </div>
 
-                  <div className="relative flex items-center gap-3 mb-5">
-                    <div className="w-11 h-11 rounded-full bg-slate-200 text-slate-400 flex items-center justify-center shrink-0">
-                      <Lock className="w-4 h-4" />
+                  {/* Credential data block */}
+                  <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 pt-4 border-t border-slate-100">
+                    <div>
+                      <div className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.14em]">Role</div>
+                      <div className="text-xs font-bold text-slate-800 mt-1">Clinic Staff</div>
                     </div>
                     <div>
-                      <div className="text-sm font-bold text-slate-500 leading-none">Invite Unavailable</div>
-                      <div className="text-[10px] text-slate-400 font-medium mt-1.5">No active session to preview</div>
+                      <div className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.14em]">Credential No.</div>
+                      <div className="text-xs font-bold text-slate-800 mt-1 font-mono tabular-nums">{credentialNo}</div>
                     </div>
                   </div>
 
-                  <div className="relative pt-4 border-t border-slate-100 flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-400">Status</span>
-                    <span className="text-[10px] font-extrabold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">Unavailable</span>
-                  </div>
-                </div>
-              )}
-
-              {(status === 'valid' || status === 'success') && (
-                <>
-                  <div className={`absolute -top-4 -right-3 z-20 bg-white border border-slate-200 rounded-full shadow-lg shadow-black/20 pl-2 pr-3.5 py-1.5 flex items-center gap-1.5 animate-float ${status === 'valid' ? 'animate-in fade-in slide-in-from-top-2 duration-500' : 'animate-in fade-in zoom-in-95 duration-300'}`}>
-                    <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${status === 'success' ? 'bg-emerald-500' : 'bg-amber-500'}`}>
-                      <BadgeCheck className="w-3.5 h-3.5 text-white" />
-                    </div>
-                    <span className="text-[11px] font-bold text-slate-700">{status === 'success' ? 'Account Active' : 'Invite Verified'}</span>
-                  </div>
-
-                  <div className="relative bg-white rounded-3xl border border-white/60 shadow-[0_30px_80px_rgba(0,0,0,0.5)] p-6 overflow-hidden transition-transform duration-500 hover:-translate-y-1.5">
-                    <div className={`absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r transition-colors duration-500 ${status === 'success' ? 'from-emerald-500 via-emerald-400 to-emerald-600' : 'from-indigo-500 via-blue-400 to-indigo-600'}`} />
-                    <UserIcon className="absolute -right-6 -top-5 w-32 h-32 text-indigo-50 rotate-12 pointer-events-none" strokeWidth={1.25} />
-
-                    <div className="relative flex items-center gap-1.5 mb-5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-indigo-400" />
-                      <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
-                      <span className="ml-auto text-[10px] font-bold text-slate-400 tracking-wide">
-                        {status === 'success' ? 'ACTIVE' : (invite ? formatExpiry(invite.expiresAt) : 'STAFF-ID')}
-                      </span>
-                    </div>
-
-                    <div className="relative flex items-center gap-3 mb-5">
-                      <div className="relative shrink-0">
-                        <div className="w-11 h-11 rounded-full bg-gradient-to-br from-indigo-600 to-[#3B50DF] text-white flex items-center justify-center font-extrabold text-sm ring-4 ring-indigo-50 transition-all">
-                          {initials || <UserIcon className="w-4 h-4" />}
-                        </div>
-                        <span className={`absolute -right-0.5 -bottom-0.5 w-3.5 h-3.5 rounded-full border-2 border-white transition-colors ${status === 'success' ? 'bg-emerald-500' : 'bg-amber-400'}`} />
-                      </div>
-                      <div className="min-w-0">
-                        <div className={`text-sm font-bold leading-none truncate ${name.trim() ? 'text-slate-800' : 'text-slate-300'}`}>{displayName}</div>
-                        <div className="text-[10px] text-slate-400 font-medium mt-1.5 truncate">{invite?.email || ''} · Staff</div>
-                      </div>
-                    </div>
-
-                    <div className="relative space-y-2.5">
+                  {/* Access lines */}
+                  <div className="mt-4 pt-4 border-t border-slate-100">
+                    <div className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.14em] mb-2.5">Grants Access To</div>
+                    <div className="space-y-1.5">
                       {PERMISSIONS.map(row => (
-                        <div key={row.label} className="flex items-center justify-between bg-slate-50 border border-slate-100 rounded-xl pl-2.5 pr-3 py-2 gap-2">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 bg-emerald-50">
-                              <row.icon className="w-3.5 h-3.5 text-emerald-600" />
-                            </div>
-                            <span className="text-xs font-semibold text-slate-600">{row.label}</span>
-                          </div>
-                          <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full text-emerald-600 bg-emerald-50">Included</span>
+                        <div key={row.label} className="flex items-center gap-2.5">
+                          <row.icon className="w-3.5 h-3.5 text-[#1d4ed8] shrink-0" strokeWidth={2.2} />
+                          <span className="text-[11.5px] font-semibold text-slate-700">{row.label}</span>
+                          <span className="ml-auto h-px flex-1 bg-slate-100" />
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" strokeWidth={2.4} />
                         </div>
                       ))}
                     </div>
+                  </div>
+                </div>
 
-                    <div className="relative mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
-                      <span className="text-xs font-semibold text-slate-500">Status</span>
-                      <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full transition-colors ${status === 'success' ? 'text-emerald-600 bg-emerald-50' : 'text-amber-700 bg-amber-100'}`}>
-                        {status === 'success' ? 'Active' : 'Setting Up'}
-                      </span>
+                {/* Signature strip */}
+                <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.14em]">Authorized by K&amp;A Clinic</span>
+                  <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full transition-colors ${
+                    status === 'success' ? 'text-emerald-700 bg-emerald-100' : 'text-amber-700 bg-amber-100'
+                  }`}>
+                    {status === 'success' ? 'ISSUED' : 'PENDING'}
+                  </span>
+                </div>
+
+                {/* Approval stamp — the one authored moment, landing only once
+                    the form is genuinely complete or the account is live. */}
+                {stampVisible && (
+                  <div className="animate-stamp absolute right-5 bottom-16 pointer-events-none select-none">
+                    <div className={`px-3.5 py-1.5 rounded-md border-[2.5px] -rotate-[11deg] ${
+                      status === 'success' ? 'border-emerald-600/70 text-emerald-700' : 'border-[#1d4ed8]/60 text-[#1d4ed8]'
+                    }`}>
+                      <div className="text-[11px] font-black tracking-[0.16em]">
+                        {status === 'success' ? 'ISSUED' : 'VERIFIED'}
+                      </div>
                     </div>
                   </div>
-                </>
+                )}
+              </div>
+
+              {/* Invalid invite: the badge is voided rather than replaced */}
+              {status === 'invalid' && (
+                <div className="absolute inset-0 rounded-[26px] bg-slate-900/70 backdrop-blur-[2px] flex flex-col items-center justify-center gap-2 text-center px-8">
+                  <Lock className="w-6 h-6 text-slate-200" />
+                  <div className="text-sm font-extrabold text-white">Credential unavailable</div>
+                  <div className="text-[11.5px] text-slate-300 leading-relaxed">This invite can no longer issue a staff badge.</div>
+                </div>
               )}
             </div>
           </div>
 
-          <div key={`copy-${status}`} className="relative z-10 pt-3 text-center md:text-left animate-in fade-in slide-in-from-bottom-1 duration-500">
+          <div key={`copy-${status}`} className="relative z-10 pt-8 animate-in fade-in slide-in-from-bottom-1 duration-500">
             <h2 className="font-display text-2xl font-extrabold text-white mb-2 tracking-tight">
               {rightCopy.title}
             </h2>
-            <p className="text-slate-300 text-sm leading-relaxed font-medium max-w-md">
+            <p className="text-blue-100/80 text-sm leading-relaxed font-medium max-w-md">
               {rightCopy.desc}
             </p>
           </div>

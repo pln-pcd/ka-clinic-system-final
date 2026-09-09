@@ -38,6 +38,7 @@ function htmlToText(html) {
 
 export async function sendMail({ to, subject, html, text, attachments, headers }) {
   try {
+    const sender = process.env.GMAIL_USER;
     await transporter.sendMail({
       from: FROM,
       to,
@@ -45,12 +46,22 @@ export async function sendMail({ to, subject, html, text, attachments, headers }
       html,
       // Plaintext alternative — see htmlToText above.
       text: text || htmlToText(html),
-      // Transactional mail sent one-to-one in response to a user action.
-      // Auto-Submitted and the unsubscribe pair tell filters this is
-      // triggered mail rather than a bulk campaign.
+      // A real reply address matters to spam filters (and to recipients):
+      // mail that can't be replied to reads as bulk.
+      replyTo: FROM,
+      // Envelope sender matched to the From address keeps SPF/DMARC aligned.
+      envelope: sender ? { from: sender, to } : undefined,
+      // Everything here is one-to-one mail a person triggered for one named
+      // recipient, and it needs to land in the Primary tab — so the headers
+      // that mark a message as *bulk* are deliberately absent. List-Unsubscribe
+      // and Auto-Submitted are what a mailing list sets; on a personal invite
+      // they tell Gmail to file this under Promotions/Updates, which is the
+      // opposite of what this mail is for. X-Auto-Response-Suppress only stops
+      // out-of-office replies bouncing back, and the per-message ref id keeps
+      // Gmail from collapsing repeat sends into one thread.
       headers: {
-        'Auto-Submitted': 'auto-generated',
         'X-Auto-Response-Suppress': 'All',
+        'X-Entity-Ref-ID': `kna-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
         ...(headers || {}),
       },
       ...(attachments ? { attachments } : {}),

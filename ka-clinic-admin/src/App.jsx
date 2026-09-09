@@ -1,6 +1,5 @@
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import React, { useEffect, useState } from "react";
-import LandingPage from "./pages/LandingPage.jsx";
 import AdminLogin from "./pages/adm-loginsign.jsx";
 import AdminDashboard from "./pages/AdminDashboard.jsx";
 import AcceptInvite from "./pages/AcceptInvite.jsx";
@@ -37,7 +36,7 @@ export default function App() {
       initialCheckDone = true;
 
       if (!fbUser) {
-        setView('landing');
+        setView('login');
         return;
       }
       try {
@@ -46,11 +45,11 @@ export default function App() {
           setView('dashboard');
         } else {
           await signOut(auth).catch(() => {});
-          setView('landing');
+          setView('login');
         }
       } catch {
         await signOut(auth).catch(() => {});
-        setView('landing');
+        setView('login');
       }
     });
     return () => unsub();
@@ -64,10 +63,6 @@ export default function App() {
         </div>
       )}
 
-      {view === 'landing' && (
-        <LandingPage onAdminClick={() => setView('login')} />
-      )}
-
       {view === 'accept-invite' && (
         <AcceptInvite
           onDone={() => {
@@ -78,10 +73,7 @@ export default function App() {
       )}
 
       {view === 'login' && (
-        <AdminLogin
-          onBack={() => setView('landing')}
-          onSuccess={() => setView('dashboard')}
-        />
+        <AdminLogin onSuccess={() => setView('dashboard')} />
       )}
 
       {view === 'dashboard' && (

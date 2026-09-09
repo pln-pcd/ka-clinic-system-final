@@ -61,7 +61,7 @@ ${body}
               <td style="padding:20px 34px;background-color:${FOOTER_BG};border-top:1px solid ${FOOTER_BORDER};">
                 <p style="margin:0;font-size:11px;color:${FOOTER_TEXT};line-height:1.65;">
                   <span style="color:${MUTED};font-weight:bold;">${CLINIC_FOOTER}</span><br>
-                  This is an automated message sent because of activity on your account. Please do not reply.
+                  Sent automatically because of activity on your account. Reply to this email if you need help from the clinic.
                 </p>
               </td>
             </tr>
@@ -115,10 +115,30 @@ function footnote(text) {
 }
 
 function button(href, label) {
-  return `                <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;">
+  return `                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 26px;">
                   <tr>
-                    <td align="center" bgcolor="${BRAND_NAVY}" style="border-radius:10px;background-color:${BRAND_NAVY};background:linear-gradient(135deg,${BRAND_NAVY} 0%,${BRAND_NAVY_LIGHT} 100%);">
-                      <a href="${href}" style="display:inline-block;padding:14px 34px;font-size:15px;font-weight:bold;color:#FFFFFF;text-decoration:none;border-radius:10px;">${label}</a>
+                    <td align="center">
+                      <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                        <tr>
+                          <td align="center" bgcolor="${BRAND_NAVY}" style="border-radius:10px;background-color:${BRAND_NAVY};background:linear-gradient(135deg,${BRAND_NAVY} 0%,${BRAND_NAVY_LIGHT} 100%);">
+                            <a href="${href}" style="display:inline-block;padding:15px 44px;font-size:15px;font-weight:bold;color:#FFFFFF;text-decoration:none;border-radius:10px;letter-spacing:.2px;">${label}</a>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                </table>`;
+}
+
+// The invite's fallback URL is long and token-bearing. Left as a bare link it
+// overflowed the card and read as link-spam; boxed and wrapped, it stays
+// inside the layout and looks like what it is.
+function fallbackLink(href) {
+  return `                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 22px;">
+                  <tr>
+                    <td style="padding:14px 16px;background-color:${FOOTER_BG};border:1px solid ${DIVIDER};border-radius:10px;">
+                      <div style="font-size:12px;color:${MUTED};margin-bottom:7px;">Button not working? Paste this link into your browser:</div>
+                      <a href="${href}" style="font-size:12px;color:${BRAND_BLUE};text-decoration:none;word-break:break-all;line-height:1.5;">${href}</a>
                     </td>
                   </tr>
                 </table>`;
@@ -161,9 +181,9 @@ export function buildInviteEmailHtml({ inviteUrl, inviterName }) {
     preheader: 'Set up your K&amp;A Clinic Admin Dashboard account. This invite expires in 48 hours.',
     body: [
       heading('You are invited to K&amp;A Clinic Admin'),
-      paragraph(`${invitedBy} to join the K&amp;A Clinic Admin Dashboard as staff. Use the button below to set up your account.`),
+      paragraph(`${invitedBy} to join the K&amp;A Clinic Admin Dashboard as staff. Use the button below to set your password and finish setting up your account.`, 26),
       button(inviteUrl, 'Accept Invite'),
-      paragraph(`If the button does not work, copy and paste this link into your browser:<br><span style="color:${MUTED};font-size:12.5px;word-break:break-all;">${inviteUrl}</span>`, 4),
+      fallbackLink(inviteUrl),
       footnote('This invite expires in 48 hours. If you were not expecting it, you can safely ignore this email.'),
     ].join('\n'),
   });

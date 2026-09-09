@@ -82,12 +82,25 @@ async function invite(req, res, caller) {
     used: false,
   });
 
-  const appUrl = process.env.APP_URL || 'http://localhost:5173';
+  // A localhost invite link is both useless to the recipient and a strong
+  // spam signal (the link's host doesn't resolve and matches nothing about
+  // the sender), and APP_URL is easy to forget in a new deployment — so the
+  // deployment's own host is used when no URL is configured, and localhost
+  // survives only for local development.
+  const configuredUrl = (process.env.APP_URL || process.env.PUBLIC_SITE_URL || '').replace(/\/+$/, '');
+  const forwardedHost = req.headers['x-forwarded-host'] || req.headers.host || '';
+  const forwardedProto = req.headers['x-forwarded-proto'] || 'https';
+  const appUrl = configuredUrl
+    || (forwardedHost ? `${forwardedProto}://${forwardedHost}` : 'http://localhost:5173');
   const inviteUrl = `${appUrl}/accept-invite?token=${token}`;
 
   const { error: sendError } = await sendMail({
     to: email,
-    subject: "You're invited to K&A Clinic Admin",
+    // Naming the person who sent it reads as one-to-one correspondence rather
+    // than an announcement, which is what keeps it out of Promotions.
+    subject: manager.name
+      ? `${manager.name} invited you to the K&A Clinic Admin Dashboard`
+      : 'Your invite to the K&A Clinic Admin Dashboard',
     html: buildInviteEmailHtml({ inviteUrl, inviterName: manager.name }),
   });
 
