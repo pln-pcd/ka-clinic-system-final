@@ -25,9 +25,9 @@ const FOOTER_BG = '#F8FAFC';
 const FOOTER_BORDER = '#E7EBF2';
 const DIVIDER = '#E7EBF2';
 
-const CLINIC_NAME = 'K&amp;A Anti-Rabies Clinic';
-const CLINIC_TAGLINE = 'ANTI-RABIES CARE SYSTEM';
-const CLINIC_FOOTER = 'K&amp;A Anti-Rabies Vaccine Clinic — Libon, Albay';
+const CLINIC_NAME = 'K&amp;A Animal Bite Center';
+const CLINIC_TAGLINE = 'ANTI-RABIES CARE &amp; VACCINATION SYSTEM';
+const CLINIC_FOOTER = 'K&amp;A Animal Bite Center — Libon, Albay';
 
 // `preheader` is the grey snippet the inbox shows next to the subject. Without
 // one, clients scrape the first visible text, which reads badly in the list.
@@ -171,20 +171,64 @@ export function buildAdminOtpEmailHtml({ otp }) {
   });
 }
 
-// Manager → staff invite email — includes the accept-invite link (valid 48 hours).
+// Manager → staff invite email — mirrors the staff credential interface in AcceptInvite.jsx
 export function buildInviteEmailHtml({ inviteUrl, inviterName }) {
   const invitedBy = inviterName
-    ? `${inviterName} has invited you`
+    ? `<strong>${inviterName}</strong> has invited you`
     : 'You have been invited';
+
+  const credentialCard = `                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0 24px;background-color:#F8FAFC;border:1px solid #E2E8F0;border-radius:14px;overflow:hidden;">
+                  <tr>
+                    <td style="padding:18px 22px;background-color:#FFFFFF;border-bottom:1px solid #EDF2F7;">
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                        <tr>
+                          <td>
+                            <div style="font-size:10px;font-weight:bold;color:#64748B;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:4px;">Position / Credential</div>
+                            <div style="font-size:16px;font-weight:bold;color:#0F172A;">Clinic Staff</div>
+                          </td>
+                          <td align="right">
+                            <span style="display:inline-block;padding:4px 10px;background-color:#FEF3C7;color:#92400E;font-size:10px;font-weight:bold;border-radius:999px;letter-spacing:0.5px;text-transform:uppercase;">Pending Setup</span>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:18px 22px;">
+                      <div style="font-size:10px;font-weight:bold;color:#64748B;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;">Grants Access To</div>
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-size:13px;color:#334155;line-height:2;">
+                        <tr>
+                          <td style="width:22px;color:#1D4ED8;font-weight:bold;font-size:15px;">&#10003;</td>
+                          <td><strong>Patient Records</strong> — Consultations &amp; Medical History</td>
+                        </tr>
+                        <tr>
+                          <td style="width:22px;color:#1D4ED8;font-weight:bold;font-size:15px;">&#10003;</td>
+                          <td><strong>Dose Tracking</strong> — PEP &amp; PrEP Vaccine Schedules</td>
+                        </tr>
+                        <tr>
+                          <td style="width:22px;color:#1D4ED8;font-weight:bold;font-size:15px;">&#10003;</td>
+                          <td><strong>Bite Incident Reports</strong> — Emergency Triage &amp; Intake</td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:10px 22px;background-color:#F1F5F9;border-top:1px solid #E2E8F0;font-size:10.5px;color:#64748B;font-weight:600;letter-spacing:0.2px;">
+                      Authorized by K&amp;A Clinic Care Team &bull; Expires in 48 Hours
+                    </td>
+                  </tr>
+                </table>`;
+
   return shell({
-    title: 'You are invited to K&amp;A Clinic Admin',
-    preheader: 'Set up your K&amp;A Clinic Admin Dashboard account. This invite expires in 48 hours.',
+    title: 'Staff Credential Invitation — K&amp;A Animal Bite Center',
+    preheader: 'You have been invited to join the K&A Animal Bite Center staff portal. Complete setup within 48 hours.',
     body: [
-      heading('You are invited to K&amp;A Clinic Admin'),
-      paragraph(`${invitedBy} to join the K&amp;A Clinic Admin Dashboard as staff. Use the button below to set your password and finish setting up your account.`, 26),
-      button(inviteUrl, 'Accept Invite'),
+      heading('Welcome to the Team'),
+      paragraph(`${invitedBy} to join the <strong>K&amp;A Animal Bite Center</strong> administration dashboard. Activate your staff credential below to set your password and access the clinic system.`),
+      credentialCard,
+      button(inviteUrl, 'Accept Invite & Set Password'),
       fallbackLink(inviteUrl),
-      footnote('This invite expires in 48 hours. If you were not expecting it, you can safely ignore this email.'),
+      footnote('This invitation expires in 48 hours. If you were not expecting this, you can safely ignore this email.'),
     ].join('\n'),
   });
 }
@@ -255,15 +299,22 @@ export function buildAdminOtpEmailText({ otp }) {
 export function buildInviteEmailText({ inviteUrl, inviterName }) {
   const invitedBy = inviterName ? `${inviterName} has invited you` : 'You have been invited';
   return [
-    'Hello,',
+    'K&A Animal Bite Center — Staff Invitation',
+    '========================================',
     '',
-    `${invitedBy} to join the K&A Clinic Admin Dashboard as staff.`,
-    'Open the link below to set your password and activate your account:',
+    `${invitedBy} to join the K&A Animal Bite Center Admin Dashboard as staff.`,
     '',
+    'Credential: Clinic Staff',
+    'Grants Access To:',
+    '  - Patient Records (Consultations & Medical History)',
+    '  - Dose Tracking (PEP & PrEP Schedules)',
+    '  - Bite Incident Reports (Emergency Intake)',
+    '',
+    'Activate your account and set your password here:',
     inviteUrl,
     '',
-    'This invite expires in 48 hours. If you were not expecting it, you can ignore this email.',
+    'Note: This invite expires in 48 hours.',
     '',
-    'K&A Anti-Rabies Vaccine Clinic - Libon, Albay',
+    'K&A Animal Bite Center — Libon, Albay',
   ].join('\n');
 }

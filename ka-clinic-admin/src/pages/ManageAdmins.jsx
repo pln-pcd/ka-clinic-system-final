@@ -82,6 +82,16 @@ export default function ManageAdmins() {
     setTimeout(() => setCopiedUid(null), 2000);
   }
 
+  function formatLocalInviteUrl(inviteUrl) {
+    if (!inviteUrl) return '';
+    try {
+      const url = new URL(inviteUrl);
+      return `${window.location.origin}${url.pathname}${url.search}`;
+    } catch {
+      return inviteUrl;
+    }
+  }
+
   async function handleInvite(e) {
     if (e) e.preventDefault();
     const email = inviteEmail.trim().toLowerCase();
@@ -91,7 +101,14 @@ export default function ManageAdmins() {
       const idToken = await auth.currentUser.getIdToken();
       const data = await postJson('/api/admin-invites', { action: 'invite', email }, idToken);
       if (!data.success) { showToast('error', data.error || 'Could not send the invite.'); return; }
-      showToast('success', data.message || 'Invite sent.');
+      if (data.warning) {
+        showToast('warning', data.warning);
+      } else {
+        showToast('success', data.message || 'Invite sent.');
+      }
+      if (data.inviteUrl) {
+        navigator.clipboard?.writeText(formatLocalInviteUrl(data.inviteUrl));
+      }
       setInviteEmail('');
       setInviteOpen(false);
     } catch {
@@ -101,17 +118,43 @@ export default function ManageAdmins() {
     }
   }
 
-  // Sends the invite again to the same address. The toast is the whole of
-  // the feedback — the row's invite date updates from the server write.
+  // Sends the invite again to the same address.
   async function handleResend(admin) {
     setBusyUid(admin.uid);
     try {
       const idToken = await auth.currentUser.getIdToken();
       const data = await postJson('/api/admin-invites', { action: 'invite', email: admin.email }, idToken);
-      showToast(
-        data.success ? 'success' : 'error',
-        data.success ? `Invite sent to ${admin.email}.` : (data.error || 'Could not resend the invite.'),
-      );
+      if (data.success) {
+        if (data.warning) {
+          showToast('warning', data.warning);
+        } else {
+          showToast('success', `Invite sent to ${admin.email}.`);
+        }
+        if (data.inviteUrl) {
+          navigator.clipboard?.writeText(formatLocalInviteUrl(data.inviteUrl));
+        }
+      } else {
+        showToast('error', data.error || 'Could not resend the invite.');
+      }
+    } catch {
+      showToast('error', 'Network error. Please try again.');
+    } finally {
+      setBusyUid(null);
+    }
+  }
+
+  async function handleCopyInviteLink(admin) {
+    setBusyUid(admin.uid);
+    try {
+      const idToken = await auth.currentUser.getIdToken();
+      const data = await postJson('/api/admin-invites', { action: 'get-link', email: admin.email }, idToken);
+      if (data.success && data.inviteUrl) {
+        const link = formatLocalInviteUrl(data.inviteUrl);
+        navigator.clipboard?.writeText(link);
+        showToast('success', `Invite link for ${admin.email} copied to clipboard!`);
+      } else {
+        showToast('error', data.error || 'Could not retrieve invite link.');
+      }
     } catch {
       showToast('error', 'Network error. Please try again.');
     } finally {
@@ -351,8 +394,16 @@ export default function ManageAdmins() {
                                 <span className="text-xs text-slate-400 font-medium italic">—</span>
                               )
                             ) : activeTab === 'invited' ? (
-                              /* Invited tab: Resend button AND Cancel Invite button */
+                              /* Invited tab: Copy Link, Resend, and Cancel Invite */
                               <>
+                                <button
+                                  onClick={() => handleCopyInviteLink(admin)}
+                                  disabled={busyUid === admin.uid}
+                                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-[#3B50DF] bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 transition-colors disabled:opacity-50 cursor-pointer"
+                                  title="Copy invite link to clipboard"
+                                >
+                                  <Copy size={13} /> Copy Link
+                                </button>
                                 <button
                                   onClick={() => handleResend(admin)}
                                   disabled={busyUid === admin.uid}

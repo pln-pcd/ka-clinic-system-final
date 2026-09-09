@@ -131,6 +131,8 @@ type FirestoreAppt = {
   status: 'pending' | 'confirmed' | 'accepted' | 'done' | 'cancelled' | 'cancellation_pending';
   note?: string;
   cancellationReason?: string;
+  declineReason?: string;
+  declinedAt?: number;
   age: string;
   gender: string;
   address: string;
@@ -812,7 +814,12 @@ export default function AppointmentsScreen() {
             </View>
             <View style={s.section}>
               {pastApts.map(appt => (
-                <View key={appt.id} style={[s.apptCard, { opacity: 0.7 }]}>
+                <TouchableOpacity
+                  key={appt.id}
+                  style={[s.apptCard, { opacity: 0.7 }]}
+                  activeOpacity={0.85}
+                  onPress={() => setSelectedApptDetail(appt)}
+                >
                   <View style={[s.apptDateBox, { backgroundColor: C.greenFaint }]}>
                     <Text style={[s.apptDateNum, { color: C.green }]}>{new Date(appt.date + 'T00:00:00').getDate()}</Text>
                     <Text style={[s.apptDateMon, { color: C.green }]}>{new Date(appt.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short' })}</Text>
@@ -830,7 +837,7 @@ export default function AppointmentsScreen() {
                       <Text style={s.doneTxt}>Done</Text>
                     </View>
                   </View>
-                </View>
+                </TouchableOpacity>
               ))}
             </View>
           </>
@@ -849,29 +856,39 @@ export default function AppointmentsScreen() {
             <View style={s.section}>
               {cancelledApts.map(appt => (
                 <View key={appt.id} style={{ marginBottom: verticalScale(10) }}>
-                  <View style={[s.apptCard, { opacity: 0.6 }]}>
+                  <TouchableOpacity
+                    style={[s.apptCard, { opacity: 0.9 }]}
+                    activeOpacity={0.85}
+                    onPress={() => setSelectedApptDetail(appt)}
+                  >
                     <View style={[s.apptDateBox, { backgroundColor: C.redFaint }]}>
                       <Text style={[s.apptDateNum, { color: C.red }]}>{new Date(appt.date + 'T00:00:00').getDate()}</Text>
                       <Text style={[s.apptDateMon, { color: C.red }]}>{new Date(appt.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short' })}</Text>
                     </View>
                     <View style={s.apptInfo}>
                       <Text style={s.apptInfoTitle}>{shortKeyWithDay(appt.date)}</Text>
-                      {appt.note ? (
+                      <View style={s.apptInfoRow}>
+                        <Ionicons name="time-outline" size={11} color={C.muted}/>
+                        <Text style={s.apptInfoSub}>{appt.time}</Text>
+                      </View>
+                      {(appt.declineReason || appt.cancellationReason) ? (
+                        <View style={[s.adminNoteBox, { backgroundColor: '#FEF2F2', borderColor: '#FECACA', borderWidth: 0.5, marginTop: 4 }]}>
+                          <Ionicons name="alert-circle-outline" size={11} color={C.red}/>
+                          <Text style={[s.adminNoteTxt, { color: '#B91C1C', fontWeight: '600' }]} numberOfLines={2}>
+                            {appt.declineReason ? `Declined: ${appt.declineReason}` : `Reason: ${appt.cancellationReason}`}
+                          </Text>
+                        </View>
+                      ) : appt.note ? (
                         <View style={s.adminNoteBox}>
                           <Ionicons name="chatbubble-ellipses-outline" size={11} color={C.red}/>
                           <Text style={s.adminNoteTxt}>Clinic: {appt.note}</Text>
                         </View>
-                      ) : (
-                        <View style={s.apptInfoRow}>
-                          <Ionicons name="time-outline" size={11} color={C.muted}/>
-                          <Text style={s.apptInfoSub}>{appt.time}</Text>
-                        </View>
-                      )}
+                      ) : null}
                     </View>
                     <View style={s.apptRight}>
                       <StatusBadge status="cancelled"/>
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 </View>
               ))}
             </View>
@@ -1285,7 +1302,19 @@ export default function AppointmentsScreen() {
                   ) : null}
                 </View>
 
-                {selectedApptDetail.cancellationReason ? (
+                {(selectedApptDetail.declineReason || (selectedApptDetail.status === 'cancelled' && selectedApptDetail.cancellationReason)) ? (
+                  <View style={[s.noteBox, { backgroundColor: '#FEF2F2', borderColor: '#FCA5A5', borderWidth: 1, marginTop: verticalScale(12) }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6), marginBottom: verticalScale(4) }}>
+                      <Ionicons name="close-circle" size={16} color="#DC2626" />
+                      <Text style={{ fontSize: moderateScale(12), fontWeight: '800', color: '#991B1B' }}>
+                        {selectedApptDetail.declineReason ? 'Reason for Decline' : 'Cancellation Reason'}
+                      </Text>
+                    </View>
+                    <Text style={{ fontSize: moderateScale(13), color: '#7F1D1D', fontWeight: '600', lineHeight: moderateScale(18) }}>
+                      {selectedApptDetail.declineReason || selectedApptDetail.cancellationReason}
+                    </Text>
+                  </View>
+                ) : selectedApptDetail.cancellationReason ? (
                   <View style={[s.noteBox, { backgroundColor: C.orangeFaint, marginTop: verticalScale(12) }]}>
                     <Ionicons name="alert-circle-outline" size={16} color={C.orange} />
                     <Text style={[s.noteTxt, { color: C.orange }]}>

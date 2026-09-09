@@ -96,22 +96,18 @@ async function invite(req, res, caller) {
     used: false,
   });
 
-  // A localhost invite link is both useless to the recipient and a strong
-  // spam signal (the link's host doesn't resolve and matches nothing about
-  // the sender), and APP_URL is easy to forget in a new deployment — so the
-  // deployment's own host is used when no URL is configured, and localhost
-  // survives only for local development.
+  // Derive app URL from request origin (matches caller's current environment) or configured public URL
+  const requestOrigin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : '');
   const configuredUrl = (process.env.APP_URL || process.env.PUBLIC_SITE_URL || '').replace(/\/+$/, '');
   const forwardedHost = req.headers['x-forwarded-host'] || req.headers.host || '';
   const forwardedProto = req.headers['x-forwarded-proto'] || 'https';
-  const appUrl = configuredUrl
-    || (forwardedHost ? `${forwardedProto}://${forwardedHost}` : 'http://localhost:5173');
-  const inviteUrl = `${appUrl}/accept-invite?token=${token}`;
+  let appUrl = requestOrigin
+    || (configuredUrl && !configuredUrl.includes('localhost') ? configuredUrl : '')
+    || (forwardedHost ? `${forwardedProto}://${forwardedHost}` : 'https://ka-clinic-admin.vercel.app');
+  const inviteUrl = `${appUrl.replace(/\/+$/, '')}/accept-invite?token=${token}`;
 
   const { error: sendError } = await sendMail({
     to: email,
-    // Naming the person who sent it reads as one-to-one correspondence rather
-    // than an announcement, which is what keeps it out of Promotions.
     subject: manager.name
       ? `${manager.name} invited you to the K&A Clinic Admin Dashboard`
       : 'Your invite to the K&A Clinic Admin Dashboard',
@@ -121,11 +117,53 @@ async function invite(req, res, caller) {
 
   if (sendError) {
     console.error('Gmail send error:', sendError);
-    res.status(502).json({ success: false, error: 'Failed to send the invite email. Please try again.' });
+    const errText = sendError.message || String(sendError);
+    const isLimitError = errText.includes('550') || errText.includes('limit') || errText.includes('EENVELOPE');
+    if (isLimitError) {
+      res.status(200).json({
+        success: true,
+        warning: 'Invite created, but Gmail daily sending limit was reached. You can copy and send the invite link directly.',
+        email,
+        inviteUrl,
+        sentAt: Date.now(),
+      });
+      return;
+    }
+    res.status(502).json({ success: false, error: 'Failed to send the invite email. Please try again.', inviteUrl });
     return;
   }
 
-  res.status(200).json({ success: true, message: `Invite sent to ${email}.`, email, sentAt: Date.now() });
+  res.status(200).json({ success: true, message: `Invite sent to ${email}.`, email, inviteUrl, sentAt: Date.now() });
+}
+
+// Manager retrieves active invite link for a pending admin.
+async function getLink(req, res, caller) {
+  const email = (req.body?.email || '').trim().toLowerCase();
+  if (!email) {
+    res.status(400).json({ success: false, error: 'Missing email.' });
+    return;
+  }
+  const snap = await db.collection('invites')
+    .where('email', '==', email)
+    .where('used', '==', false)
+    .limit(1)
+    .get();
+
+  if (snap.empty) {
+    res.status(404).json({ success: false, error: 'No active invite found for this email.' });
+    return;
+  }
+
+  const token = snap.docs[0].id;
+  const requestOrigin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : '');
+  const configuredUrl = (process.env.APP_URL || process.env.PUBLIC_SITE_URL || '').replace(/\/+$/, '');
+  const forwardedHost = req.headers['x-forwarded-host'] || req.headers.host || '';
+  const forwardedProto = req.headers['x-forwarded-proto'] || 'https';
+  let appUrl = requestOrigin
+    || (configuredUrl && !configuredUrl.includes('localhost') ? configuredUrl : '')
+    || (forwardedHost ? `${forwardedProto}://${forwardedHost}` : 'https://ka-clinic-admin.vercel.app');
+  const inviteUrl = `${appUrl.replace(/\/+$/, '')}/accept-invite?token=${token}`;
+  res.status(200).json({ success: true, inviteUrl });
 }
 
 // Manager revokes a staff (or another manager's) account. Sets
@@ -213,7 +251,7 @@ async function cancel(req, res, caller) {
   res.status(200).json({ success: true, message: `Invitation for ${target.email || 'user'} has been cancelled.` });
 }
 
-const ACTIONS = { invite, revoke, cancel };
+const ACTIONS = { invite, revoke, cancel, getLink, 'get-link': getLink };
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -233,6 +271,9 @@ export default async function handler(req, res) {
     // authenticated, active manager.
     const caller = await requireActiveManager(req);
     if (caller.error) {
+      try {
+        import('node:fs').then(fs => fs.appendFileSync('api-debug.log', `[${new Date().toISOString()}] auth error: ${caller.status} ${caller.error}\n`));
+      } catch {}
       res.status(caller.status).json({ success: false, error: caller.error });
       return;
     }
@@ -240,6 +281,9 @@ export default async function handler(req, res) {
     await run(req, res, caller);
   } catch (err) {
     console.error(`admin-invites (${action}) error:`, err);
-    res.status(500).json({ success: false, error: 'Something went wrong. Please try again.' });
+    try {
+      import('node:fs').then(fs => fs.appendFileSync('api-debug.log', `[${new Date().toISOString()}] ${action} catch error: ${err?.stack || err}\n`));
+    } catch {}
+    res.status(500).json({ success: false, error: err?.message || 'Something went wrong. Please try again.' });
   }
 }

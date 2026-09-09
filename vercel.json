@@ -13,6 +13,10 @@
     {
       "path": "/api/archive-read-conversations",
       "schedule": "0 16 * * *"
+    },
+    {
+      "path": "/api/notifications?action=dose-sweep",
+      "schedule": "0 21 * * *"
     }
   ],
   "headers": [

@@ -1,7 +1,7 @@
 // kna-admin/src/vaccination.jsx
 import {
   collection, doc, getDocs,
-  increment, onSnapshot, orderBy, query, updateDoc, where
+  increment, onSnapshot, orderBy, query, runTransaction, updateDoc, where
 } from 'firebase/firestore';
 import {
   AlertCircle, Bell, CheckCircle, ChevronDown, ChevronLeft,
@@ -13,48 +13,20 @@ import Toast from '../components/Toast';
 import { authedPostJson } from '../lib/apiClient';
 import { db } from '../lib/firebase';
 import { formatDateShort as fmtDate, addDaysToDateString, getTodayDateString } from '../lib/dates';
+import { buildScheduleDates } from '../lib/doseSchedules';
 import { createPortal } from 'react-dom';
 
 /* ─────────────────────────────────────────────────────────── */
 /* CONSTANTS                                                   */
 /* ─────────────────────────────────────────────────────────── */
-// Fallback schedules, used only for a record that somehow has no stored
-// doses. They mirror buildInitialDoses() in patients.jsx, which is what
-// actually writes a new patient's schedule — a PrEP patient must never be
-// given the 5-dose post-exposure series just because it was the default.
-const ARV_SCHEDULE = [
-  { key: 'd1', label: 'Dose 1 (ARV)', day: 0  },
-  { key: 'd2', label: 'Dose 2 (ARV)', day: 3  },
-  { key: 'd3', label: 'Dose 3 (ARV)', day: 7  },
-  { key: 'd4', label: 'Dose 4 (ARV)', day: 14 },
-  { key: 'd5', label: 'Dose 5 (ARV)', day: 28 },
-];
-
-const SERVICE_SCHEDULES = {
-  PEP: ARV_SCHEDULE,
-  PrEP: [
-    { key: 'd1', label: 'Dose 1 (Day 0)', day: 0 },
-    { key: 'd2', label: 'Dose 2 (Day 7)', day: 7 },
-  ],
-  Tetanus: [
-    { key: 'd1', label: 'Primary Dose', day: 0 },
-    { key: 'd2', label: 'Follow-up Booster (1 Month)', day: 30 },
-  ],
-  Hepatitis: [
-    { key: 'd1', label: 'Dose 1 (Day 0)', day: 0 },
-    { key: 'd2', label: 'Dose 2 (1 Month)', day: 30 },
-    { key: 'd3', label: 'Dose 3 (6 Months)', day: 180 },
-  ],
-};
-
-const scheduleForService = (service) => {
-  const s = String(service || '').trim().toLowerCase();
-  if (s === 'prep') return SERVICE_SCHEDULES.PrEP;
-  if (s.includes('tetan')) return SERVICE_SCHEDULES.Tetanus;
-  if (s.includes('hepa')) return SERVICE_SCHEDULES.Hepatitis;
-  if (s.includes('pneumo')) return [{ key: 'd1', label: 'Initial Dose', day: 0 }];
-  return ARV_SCHEDULE;
-};
+// A record with no stored doses falls back to the shared schedule definitions
+// in src/lib/doseSchedules.js — the same ones registration writes from, so a
+// PrEP patient can never be handed the post-exposure series by default.
+const scheduleDatesFor = (p) => buildScheduleDates(p?.service, {
+  day0: p?.date || getTodayStr(),
+  dob: p?.dob,
+  ageGroup: p?.ageGroup,
+});
 
 const CAT_STYLE = {
   'I':   { bg: '#ECFDF5', color: '#065F46', border: '#A7F3D0', label: 'Category I'   },
@@ -108,7 +80,23 @@ export const buildDoses = (p) => {
         : (rawStatus === 'miss' || rawStatus === 'missed' || rawStatus === 'overdue')
         ? 'miss'
         : 'pending';
-      const overdueFlag = status === 'pending' && isOverdue(d.date);
+
+      // Normalize date to standard YYYY-MM-DD
+      let normalizedDate = '';
+      const rawDate = d.date;
+      if (rawDate) {
+        if (typeof rawDate === 'string') {
+          normalizedDate = rawDate.includes('T') ? rawDate.split('T')[0] : rawDate;
+        } else if (rawDate?.toDate && typeof rawDate.toDate === 'function') {
+          normalizedDate = getTodayDateString(rawDate.toDate());
+        } else if (rawDate instanceof Date) {
+          normalizedDate = getTodayDateString(rawDate);
+        } else if (typeof rawDate === 'number') {
+          normalizedDate = getTodayDateString(new Date(rawDate));
+        }
+      }
+
+      const overdueFlag = status === 'pending' && isOverdue(normalizedDate);
       if (overdueFlag) status = 'miss';
       const label = d.n || d.label || d.dose || d.name || `Dose ${i + 1}`;
       return {
@@ -116,7 +104,7 @@ export const buildDoses = (p) => {
         label,
         n:          label,
         dose:       label,
-        date:       d.date || null,
+        date:       normalizedDate || null,
         status,
         s:          status,
         note:       d.note || '',
@@ -124,14 +112,33 @@ export const buildDoses = (p) => {
       };
     });
   }
-  const regDate = p.date || getTodayStr();
-  return scheduleForService(p.service).map(s => {
-    const scheduledDate = addDays(regDate, s.day);
-    const overdueFlag = isOverdue(scheduledDate);
+
+  // Derive registration date accurately: never fallback to today if record has createdAt or no date!
+  let regDate = p?.date || p?.regDate || '';
+  if (!regDate && p?.createdAt) {
+    if (typeof p.createdAt === 'object' && p.createdAt?.toDate) {
+      regDate = getTodayDateString(p.createdAt.toDate());
+    } else if (typeof p.createdAt === 'number') {
+      regDate = getTodayDateString(new Date(p.createdAt));
+    } else if (typeof p.createdAt === 'string') {
+      regDate = p.createdAt.split('T')[0];
+    }
+  }
+
+  // If patient has absolutely no registration date or creation timestamp, do not invent doses!
+  if (!regDate) {
+    return [];
+  }
+  if (typeof regDate === 'string' && regDate.includes('T')) {
+    regDate = regDate.split('T')[0];
+  }
+
+  return scheduleDatesFor({ ...p, date: regDate }).map(s => {
+    const overdueFlag = isOverdue(s.date);
     return {
       key:        s.key,
       label:      s.label,
-      date:       scheduledDate,
+      date:       s.date,
       status:     overdueFlag ? 'miss' : 'pending',
       note:       '',
       autoMissed: overdueFlag,
@@ -161,7 +168,7 @@ const nextDose = (p) => {
 let cachedVaccinationPatients = null;
 
 /* ─────────────────────────────────────────────────────────── */
-export default function VaccinationTrackerPage({ selectedPatientId, initialPatients = [] }) {
+export default function VaccinationTrackerPage({ selectedPatientId, onClearSelectedPatient, initialPatients = [] }) {
   const [patients,     setPatients]     = useState(() => {
     if (initialPatients && initialPatients.length > 0) return initialPatients;
     if (cachedVaccinationPatients && cachedVaccinationPatients.length > 0) return cachedVaccinationPatients;
@@ -180,6 +187,12 @@ export default function VaccinationTrackerPage({ selectedPatientId, initialPatie
   const [detailPt,     setDetailPt]     = useState(null);
   const [saving,       setSaving]       = useState({});
   const itemsPerPage = 10;
+
+  const closeModal = () => {
+    setDetailPt(null);
+    autoOpenedRef.current = null;
+    if (onClearSelectedPatient) onClearSelectedPatient();
+  };
 
   // Auto-select patient when opened from Overdue Dose Tracker or direct link
   const autoOpenedRef = useRef(null);
@@ -218,66 +231,22 @@ export default function VaccinationTrackerPage({ selectedPatientId, initialPatie
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
-  // ── Automatic due-dose notifications ───────────────────────────────────
-  // Runs once per patient list refresh. Any patient whose next dose falls due
-  // today (or is already overdue) is notified in the app and by email through
-  // the same endpoint the manual "Send Follow-up" button uses.
-  //
-  // `notifiedDoses` on the patient doc records which dose keys have already
-  // triggered a send, so a patient is never re-notified for the same dose no
-  // matter how many times an admin opens this page.
-  const autoNotifyRunning = useRef(false);
-  useEffect(() => {
-    if (loading || patients.length === 0) return;
-    if (autoNotifyRunning.current) return;
+  // Dose reminders are sent by the daily server-side sweep
+  // (/api/notifications?action=dose-sweep, scheduled in vercel.json), which
+  // covers both the day before and the day of. This page used to run that
+  // job itself in a useEffect, so reminders only went out when a staff member
+  // happened to have the tracker open — and never a day ahead.
 
+  const hasDoseToday = (p) => {
+    if (!p || p.isArchived) return false;
     const todayStr = getTodayStr();
-    const due = patients.filter(p => {
-      const doses = buildDoses(p);
-      const next = doses.find(d => d.status === 'pending' || d.status === 'miss');
-      if (!next || !next.date) return false;
-      if (next.date > todayStr) return false;                 // not due yet
-      const already = p.notifiedDoses || [];
-      return !already.includes(next.key);
-    });
-    if (due.length === 0) return;
-
-    autoNotifyRunning.current = true;
-    (async () => {
-      for (const p of due) {
-        const doses = buildDoses(p);
-        const next = doses.find(d => d.status === 'pending' || d.status === 'miss');
-        if (!next) continue;
-        const overdue = next.date < todayStr;
-        try {
-          const result = await authedPostJson('/api/notifications', {
-            action: 'send-followup',
-            patientId: p.firestoreId,
-            title: overdue ? 'Missed dose reminder' : 'Dose due today',
-            message: overdue
-              ? `Our records show ${next.label} was scheduled for ${fmtDate(next.date)} and has not been recorded yet. Please visit K&A Clinic as soon as possible.`
-              : `${next.label} is due today. Please visit K&A Clinic to keep your treatment on schedule.`,
-            doseLabel: next.label,
-            dueDate: fmtDate(next.date),
-            source: 'auto',
-          });
-          if (result?.success) {
-            // Mark before moving on so a mid-sweep failure cannot cause a
-            // duplicate send for the doses already handled.
-            await updateDoc(doc(db, 'vaccinations', p.firestoreId), {
-              notifiedDoses: [...(p.notifiedDoses || []), next.key],
-            });
-          }
-        } catch (err) {
-          console.warn('Auto dose notification failed for', p.firestoreId, err);
-        }
-      }
-      autoNotifyRunning.current = false;
-    })();
-  }, [patients, loading]);
+    const doses = buildDoses(p);
+    return doses.some(d => (d.date || '').slice(0, 10) === todayStr);
+  };
 
   const FILTER_OPTIONS = [
     { key: 'all', label: 'All Records' },
+    { key: 'today', label: 'Dose Today' },
     { key: 'in-progress', label: 'In Progress' },
     { key: 'completed', label: 'Completed' },
     { key: 'overdue', label: 'Overdue' },
@@ -290,6 +259,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, initialPatie
   const SORT_OPTIONS = [
     { key: 'newest', label: 'Registered (Newest)' },
     { key: 'oldest', label: 'Registered (Oldest)' },
+    { key: 'dose_today', label: 'Dose Today First' },
     { key: 'name_asc', label: 'Name (A–Z)' },
     { key: 'progress_desc', label: 'Dose Progress (Highest)' },
   ];
@@ -309,19 +279,29 @@ export default function VaccinationTrackerPage({ selectedPatientId, initialPatie
       try {
         const q = query(collection(db, 'vaccinations'), orderBy('createdAt', 'desc'));
         unsub = onSnapshot(q, snap => {
-          const data = snap.docs.map(d => ({ firestoreId: d.id, ...d.data() }));
+          const data = snap.docs.map(d => ({ id: d.id, firestoreId: d.id, ...d.data() }));
           cachedVaccinationPatients = data;
           setPatients(data);
-          setDetailPt(prev => prev ? data.find(p => p.firestoreId === prev.firestoreId) || null : null);
+          setDetailPt(prev => {
+            if (!prev) return null;
+            const targetId = prev.firestoreId || prev.id;
+            const updated = data.find(p => (p.firestoreId && p.firestoreId === targetId) || (p.id && p.id === targetId));
+            return updated || prev;
+          });
           setLoading(false);
         }, err => {
           console.warn('Ordered query failed, falling back to unordered query:', err);
           const fallbackQ = query(collection(db, 'vaccinations'));
           unsub = onSnapshot(fallbackQ, snap => {
-            const data = snap.docs.map(d => ({ firestoreId: d.id, ...d.data() }));
+            const data = snap.docs.map(d => ({ id: d.id, firestoreId: d.id, ...d.data() }));
             cachedVaccinationPatients = data;
             setPatients(data);
-            setDetailPt(prev => prev ? data.find(p => p.firestoreId === prev.firestoreId) || null : null);
+            setDetailPt(prev => {
+              if (!prev) return null;
+              const targetId = prev.firestoreId || prev.id;
+              const updated = data.find(p => (p.firestoreId && p.firestoreId === targetId) || (p.id && p.id === targetId));
+              return updated || prev;
+            });
             setLoading(false);
           });
         });
@@ -329,10 +309,15 @@ export default function VaccinationTrackerPage({ selectedPatientId, initialPatie
         console.warn('Query catch fallback:', err);
         const fallbackQ = query(collection(db, 'vaccinations'));
         unsub = onSnapshot(fallbackQ, snap => {
-          const data = snap.docs.map(d => ({ firestoreId: d.id, ...d.data() }));
+          const data = snap.docs.map(d => ({ id: d.id, firestoreId: d.id, ...d.data() }));
           cachedVaccinationPatients = data;
           setPatients(data);
-          setDetailPt(prev => prev ? data.find(p => p.firestoreId === prev.firestoreId) || null : null);
+          setDetailPt(prev => {
+            if (!prev) return null;
+            const targetId = prev.firestoreId || prev.id;
+            const updated = data.find(p => (p.firestoreId && p.firestoreId === targetId) || (p.id && p.id === targetId));
+            return updated || prev;
+          });
           setLoading(false);
         });
       }
@@ -477,48 +462,106 @@ export default function VaccinationTrackerPage({ selectedPatientId, initialPatie
         : prev
     );
 
-    // ── BACKGROUND FIREBASE DOSE UPDATE ──
-    updateDoc(doc(db, 'vaccinations', p.firestoreId), {
-      doses: updatedDoses.map(d => ({
-        key:    d.key,
-        n:      d.label,
-        date:   d.date,
-        status: d.status,
-        s:      d.status,
-        note:   d.note || '',
-      })),
-      dose:   `${doneCount}/${totalDoses}`,
-      status: newStatus,
-    }).catch(err => console.error('cycleStatus error:', err));
+    // ── PERSIST THE DOSE ──
+    // Awaited deliberately. This used to be fire-and-forget while the stock
+    // write below was awaited, so a failed dose write still deducted a vial —
+    // the vial was gone and the dose was never recorded.
+    try {
+      await updateDoc(doc(db, 'vaccinations', p.firestoreId), {
+        doses: updatedDoses.map(d => ({
+          key:    d.key,
+          n:      d.label,
+          date:   d.date,
+          status: d.status,
+          s:      d.status,
+          note:   d.note || '',
+        })),
+        dose:   `${doneCount}/${totalDoses}`,
+        status: newStatus,
+      });
+    } catch (err) {
+      console.error('cycleStatus error:', err);
+      showToast('Could not save the dose. Please try again.', 'error');
+      // Roll the optimistic UI back so the screen matches what is stored.
+      setPatients(prev => prev.map(x => (x.firestoreId === p.firestoreId ? fresh : x)));
+      setDetailPt(prev => (prev && prev.firestoreId === p.firestoreId ? fresh : prev));
+      return;
+    }
 
     // ── AUTO-REDUCE / RESTORE INVENTORY STOCK ──
     const vaccineBrand = fresh.vaccineBrand;
     if (!vaccineBrand && nextStatus === 'done') {
-      showToast(`Dose marked done, but no vaccine brand is assigned to this patient. Please select a Vaccine Brand in Patient Info to track stock.`, 'warning');
-      return;
+      // Without a brand there is nothing to deduct, and the dose would be
+      // recorded as administered with no vial ever leaving stock — the gap
+      // that made inventory impossible to reconcile against doses given.
+      showToast('Assign a Vaccine Brand in Patient Info before recording this dose, so the vial is deducted from stock.', 'warning');
     }
 
     if (vaccineBrand) {
+      const delta = nextStatus === 'done' ? -1 : 1;
       try {
         const invQ = query(collection(db, 'inventory'), where('name', '==', vaccineBrand));
         const invSnap = await getDocs(invQ);
-        if (!invSnap.empty) {
-          const invDoc = invSnap.docs[0];
-          const currentStock = parseInt(invDoc.data().stock) || 0;
-          if (!isCurrentlyDone && nextStatus === 'done') {
-            const newStock = Math.max(0, currentStock - 1);
-            await updateDoc(doc(db, 'inventory', invDoc.id), { stock: newStock });
-            showToast(`Dose ${di + 1} completed! ${vaccineBrand} stock reduced to ${newStock}.`, 'success');
-          } else if (isCurrentlyDone && nextStatus === 'pending') {
-            const newStock = currentStock + 1;
-            await updateDoc(doc(db, 'inventory', invDoc.id), { stock: newStock });
-            showToast(`Dose ${di + 1} marked pending. ${vaccineBrand} stock restored to ${newStock}.`, 'info');
-          }
+        if (invSnap.empty) {
+          showToast(`Vaccine brand "${vaccineBrand}" not found in inventory. The dose was saved but stock was not adjusted.`, 'error');
+          return;
+        }
+
+        const invRef = doc(db, 'inventory', invSnap.docs[0].id);
+        const movementId = `${p.firestoreId}_${doseKey}_${nextStatus}`;
+
+        // One transaction so the read and the write cannot interleave with
+        // another member of staff doing the same thing — the old read-then-
+        // write lost a deduction whenever two doses were ticked at once. The
+        // ledger entry is written in the same transaction and keyed by
+        // patient+dose+direction, so re-running the same toggle is a no-op
+        // rather than a second deduction.
+        const newStock = await runTransaction(db, async (tx) => {
+          const movementRef = doc(db, 'stockMovements', movementId);
+          const [invSnapTx, movementSnap] = await Promise.all([tx.get(invRef), tx.get(movementRef)]);
+          if (movementSnap.exists()) return null;             // already applied
+          if (!invSnapTx.exists()) throw new Error('inventory item vanished');
+
+          const current = parseInt(invSnapTx.data().stock) || 0;
+          const next = Math.max(0, current + delta);
+          tx.update(invRef, { stock: next });
+          tx.set(movementRef, {
+            patientId: p.firestoreId,
+            patientName: getName(fresh),
+            doseKey,
+            doseLabel: cur.label,
+            brand: vaccineBrand,
+            delta,
+            resultingStock: next,
+            at: Date.now(),
+          });
+          return next;
+        });
+
+        if (newStock === null) {
+          showToast(`Dose ${di + 1} saved. Stock was already adjusted for this dose.`, 'info');
+        } else if (delta < 0) {
+          showToast(`Dose ${di + 1} completed. ${vaccineBrand} stock reduced to ${newStock}.`, 'success');
         } else {
-          showToast(`Vaccine brand "${vaccineBrand}" not found in inventory.`, 'error');
+          showToast(`Dose ${di + 1} marked pending. ${vaccineBrand} stock restored to ${newStock}.`, 'info');
         }
       } catch (invErr) {
-        console.warn('Inventory stock update failed:', invErr);
+        // The ledger lives in stockMovements, which needs its own security
+        // rule. Until that rule is deployed the transaction is rejected, and
+        // refusing to move stock at all would be worse than moving it without
+        // an audit row — so fall back to an atomic increment and say so.
+        console.warn('Ledgered stock update failed, falling back to increment:', invErr);
+        try {
+          const invQ2 = query(collection(db, 'inventory'), where('name', '==', vaccineBrand));
+          const invSnap2 = await getDocs(invQ2);
+          if (!invSnap2.empty) {
+            await updateDoc(doc(db, 'inventory', invSnap2.docs[0].id), { stock: increment(delta) });
+            showToast(`Dose ${di + 1} saved and ${vaccineBrand} stock adjusted (audit entry unavailable).`, 'info');
+          }
+        } catch (fallbackErr) {
+          console.error('Inventory stock update failed:', fallbackErr);
+          showToast('The dose was saved, but the stock count could not be updated.', 'error');
+        }
       }
     }
   };
@@ -535,6 +578,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, initialPatie
     const pSvc = (p.service || 'PEP').toLowerCase();
     const matchStatus =
       filterStatus === 'all'         ? true :
+      filterStatus === 'today'       ? hasDoseToday(p) :
       filterStatus === 'overdue'     ? status === 'overdue' :
       filterStatus === 'in-progress' ? status === 'in-progress' :
       filterStatus === 'completed'   ? status === 'completed' :
@@ -546,6 +590,12 @@ export default function VaccinationTrackerPage({ selectedPatientId, initialPatie
 
     return matchSearch && matchStatus;
   }).sort((a, b) => {
+    if (sortBy === 'dose_today') {
+      const aToday = hasDoseToday(a) ? 1 : 0;
+      const bToday = hasDoseToday(b) ? 1 : 0;
+      if (aToday !== bToday) return bToday - aToday;
+      return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
+    }
     if (sortBy === 'newest') return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
     if (sortBy === 'oldest') return (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0);
     if (sortBy === 'name_asc') return getName(a).localeCompare(getName(b));
@@ -694,18 +744,29 @@ export default function VaccinationTrackerPage({ selectedPatientId, initialPatie
                     </div>
                     {[
                       { key: 'all', label: 'All Records' },
+                      { key: 'today', label: 'Dose Today' },
                       { key: 'in-progress', label: 'In Progress' },
                       { key: 'completed', label: 'Completed' },
                       { key: 'overdue', label: 'Overdue' },
-                    ].map(opt => (
-                      <button key={opt.key} type="button"
-                        onClick={() => { setFilterStatus(opt.key); setCurrentPage(1); setFilterMenuOpen(false); }}
-                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', textAlign: 'left', padding: '6px 8px', borderRadius: 6, border: 'none', background: filterStatus === opt.key ? '#EEF2FF' : 'transparent', color: filterStatus === opt.key ? '#3B50DF' : '#334155', fontSize: '.78125rem', fontWeight: filterStatus === opt.key ? 700 : 500, cursor: 'pointer' }}
-                      >
-                        {opt.label}
-                        {filterStatus === opt.key && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
-                      </button>
-                    ))}
+                    ].map(opt => {
+                      const todayCount = opt.key === 'today' ? patients.filter(hasDoseToday).length : null;
+                      return (
+                        <button key={opt.key} type="button"
+                          onClick={() => { setFilterStatus(opt.key); setCurrentPage(1); setFilterMenuOpen(false); }}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', textAlign: 'left', padding: '6px 8px', borderRadius: 6, border: 'none', background: filterStatus === opt.key ? '#EEF2FF' : 'transparent', color: filterStatus === opt.key ? '#3B50DF' : '#334155', fontSize: '.78125rem', fontWeight: filterStatus === opt.key ? 700 : 500, cursor: 'pointer' }}
+                        >
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {opt.label}
+                            {todayCount !== null && todayCount > 0 && (
+                              <span style={{ fontSize: '.65625rem', fontWeight: 700, padding: '1px 6px', borderRadius: 9999, background: '#DBEAFE', color: '#1D4ED8' }}>
+                                {todayCount}
+                              </span>
+                            )}
+                          </span>
+                          {filterStatus === opt.key && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
+                        </button>
+                      );
+                    })}
 
                     <div style={{ margin: '4px 0', borderTop: '1px solid #F1F5F9' }} />
                     <div style={{ padding: '4px 8px 2px', fontSize: '.6875rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
@@ -796,7 +857,10 @@ export default function VaccinationTrackerPage({ selectedPatientId, initialPatie
                   const doneNum  = doses.filter(d => d.status === 'done').length;
                   const pct      = Math.round((doneNum / doses.length) * 100);
                   const status   = deriveStatus(p);
-                  const nextDose = doses.find(d => d.status !== 'done');
+                  const todayDose = doses.find(d => (d.date || '').slice(0, 10) === getTodayStr());
+                  const nextDose = (filterStatus === 'today' && todayDose)
+                    ? todayDose
+                    : doses.find(d => d.status !== 'done');
 
                   return (
                     <tr
@@ -846,8 +910,32 @@ export default function VaccinationTrackerPage({ selectedPatientId, initialPatie
                       <td style={{ padding: '16px 12px', maxWidth: 0 }}>
                         {nextDose ? (
                           <>
-                            <div style={{ fontWeight: 600, color: nextDose.status === 'miss' ? '#DC2626' : '#0F172A', fontSize: '.8125rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={nextDose.label}>{nextDose.label}</div>
-                            <div style={{ fontSize: '.75rem', color: '#64748B', marginTop: 2, whiteSpace: 'nowrap' }}>{fmtDate(nextDose.date)}</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+                              <span style={{
+                                fontWeight: 600,
+                                color: (nextDose.date || '').slice(0, 10) === getTodayStr() ? '#1D4ED8' : nextDose.status === 'miss' ? '#DC2626' : '#0F172A',
+                                fontSize: '.8125rem',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis'
+                              }} title={nextDose.label}>
+                                {nextDose.label}
+                              </span>
+                              {(nextDose.date || '').slice(0, 10) === getTodayStr() && (
+                                <span style={{ fontSize: '.625rem', fontWeight: 700, padding: '1px 5px', borderRadius: 9999, background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', flexShrink: 0 }}>
+                                  Today
+                                </span>
+                              )}
+                            </div>
+                            <div style={{
+                              fontSize: '.75rem',
+                              color: (nextDose.date || '').slice(0, 10) === getTodayStr() ? '#1D4ED8' : '#64748B',
+                              fontWeight: (nextDose.date || '').slice(0, 10) === getTodayStr() ? 700 : 400,
+                              marginTop: 2,
+                              whiteSpace: 'nowrap'
+                            }}>
+                              {(nextDose.date || '').slice(0, 10) === getTodayStr() ? `Today (${fmtDate(nextDose.date)})` : fmtDate(nextDose.date)}
+                            </div>
                           </>
                         ) : (
                           <span style={{ fontSize: '.8125rem', color: '#059669', fontWeight: 600, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title="All doses complete">All doses complete</span>
@@ -993,7 +1081,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, initialPatie
           <div
             className="fixed inset-0 bg-slate-900/50 z-[9999] flex items-center justify-center p-4 transition-all duration-200"
             style={{ backdropFilter: 'blur(6px)' }}
-            onClick={e => e.target === e.currentTarget && setDetailPt(null)}
+            onClick={e => e.target === e.currentTarget && closeModal()}
           >
             <div
               className="bg-white rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-slate-200/90 transition-all transform duration-200 scale-100"
@@ -1026,7 +1114,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, initialPatie
                   </button>
                   <button
                     type="button"
-                    onClick={() => setDetailPt(null)}
+                    onClick={closeModal}
                     className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-xl transition-all cursor-pointer"
                     aria-label="Close modal"
                   >
@@ -1047,7 +1135,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, initialPatie
                     <button
                       type="button"
                       onClick={() => {
-                        setDetailPt(null);
+                        closeModal();
                         window.dispatchEvent(new CustomEvent('open-patient-record', { detail: p }));
                       }}
                       className="inline-flex items-center gap-1.5 text-xs font-bold text-[#3B50DF] bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/90 px-3 py-1 rounded-xl transition-all cursor-pointer shadow-2xs"
@@ -1180,8 +1268,13 @@ export default function VaccinationTrackerPage({ selectedPatientId, initialPatie
                                 <div className={`text-xs font-bold truncate leading-tight ${isDone ? 'text-slate-700 line-through decoration-emerald-500/60' : 'text-slate-900'}`}>
                                   {d.label}
                                 </div>
-                                <div className="text-[11px] text-slate-500 font-medium mt-0.5">
-                                  {fmtDate(d.date)}
+                                <div className={`text-[11px] font-medium mt-0.5 flex items-center gap-1.5 ${(d.date || '').slice(0, 10) === getTodayStr() ? 'text-[#1D4ED8] font-bold' : 'text-slate-500'}`}>
+                                  <span>{fmtDate(d.date)}</span>
+                                  {(d.date || '').slice(0, 10) === getTodayStr() && (
+                                    <span className="text-[9.5px] px-1.5 py-0.2 rounded-full bg-blue-100 text-[#1D4ED8] font-bold border border-blue-200/60">
+                                      Today
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -1214,7 +1307,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, initialPatie
               <div className="px-6 py-3.5 border-t border-slate-100 bg-slate-50/90 flex items-center justify-end">
                 <button
                   type="button"
-                  onClick={() => setDetailPt(null)}
+                  onClick={closeModal}
                   className="bg-[#0F172A] hover:bg-[#1E293B] text-white font-bold text-xs py-2.5 px-5 rounded-xl shadow-2xs transition-all cursor-pointer"
                 >
                   Close Record

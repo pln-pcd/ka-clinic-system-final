@@ -7,7 +7,7 @@ import {
   ChevronLeft, ChevronRight as ChevronRightIcon,
   Edit2, Eye, Filter, Home, Info, LogOut, MapPin as MapIcon, Menu,
   MessageSquare, Moon, MoreVertical, Package, Phone, Plus,
-  RotateCcw, Search, Settings, Shield, Sun, Sunset, UserPlus,
+  RotateCcw, Search, Settings, Shield, Sun, Sunset, Syringe, UserPlus,
   Users, Wrench, X
 } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
@@ -190,7 +190,6 @@ export default function AdminDashboard({ onLogout }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activePage,  setActivePage]  = useState('dashboard');
   const [openAddPatientModal, setOpenAddPatientModal] = useState(false);
-  const [currentMonth,setCurrentMonth]= useState(new Date());
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // Batch 5/6 — role drives the Manage Admins sidebar item + route guard
@@ -211,6 +210,12 @@ export default function AdminDashboard({ onLogout }) {
     }
   }, [activePage, role]);
 
+  // Keep --sidebar-width and --header-height CSS variables synchronized for dynamic modal centering
+  useEffect(() => {
+    document.documentElement.style.setProperty('--sidebar-width', sidebarOpen ? '256px' : '76px');
+    document.documentElement.style.setProperty('--header-height', '80px');
+  }, [sidebarOpen]);
+
   const [stats, setStats] = useState({ patients: 0, todayApts: 0, unreadMessages: 0, lowStock: 0, patientsThisWeek: 0 });
   const [recentPatients, setRecentPatients] = useState([]);
   const [allPatients, setAllPatients] = useState([]);
@@ -218,7 +223,6 @@ export default function AdminDashboard({ onLogout }) {
   const [recentActivity, setRecentActivity] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [allAppointments, setAllAppointments] = useState([]);
-  const [selectedCalendarDay, setSelectedCalendarDay] = useState(null);
   const [inventoryList, setInventoryList] = useState([]);
   const [incidentList, setIncidentList] = useState([]);
 
@@ -413,7 +417,7 @@ export default function AdminDashboard({ onLogout }) {
   useEffect(() => {
     const q = query(collection(db, 'vaccinations'), orderBy('createdAt', 'desc'));
     return onSnapshot(q, snap => {
-      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const docs = snap.docs.map(d => ({ id: d.id, firestoreId: d.id, ...d.data() }));
       setRecentPatients(docs.slice(0, 5));
       setAllPatients(docs);
 
@@ -423,7 +427,11 @@ export default function AdminDashboard({ onLogout }) {
         return ts >= oneWeekAgo;
       }).length;
 
-      setStats(p => ({ ...p, patients: snap.size, patientsThisWeek: registeredThisWeek }));
+      // Archived records are excluded, matching the Patients page. Counting
+      // snap.size meant the dashboard headline and the Patients page disagreed
+      // about how many patients the clinic has.
+      const activePatients = docs.filter(d => !d.isArchived).length;
+      setStats(p => ({ ...p, patients: activePatients, patientsThisWeek: registeredThisWeek }));
 
       // Real-time overdue patient notifications
       const overdueNotifs = docs
@@ -681,47 +689,7 @@ export default function AdminDashboard({ onLogout }) {
     }
   };
 
-  const getDaysInMonth    = d => new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-  const getFirstDayOfMonth= d => new Date(d.getFullYear(), d.getMonth(), 1).getDay();
-  const getAptsForDay     = day => {
-    const y = currentMonth.getFullYear();
-    const m = String(currentMonth.getMonth() + 1).padStart(2, '0');
-    const ds = String(day).padStart(2, '0');
-    const target = `${y}-${m}-${ds}`;
-    return allAppointments.filter(a => a.date === target);
-  };
 
-  const renderCalendarDays = () => {
-    const days = [];
-    const firstDay = getFirstDayOfMonth(currentMonth);
-    const total = getDaysInMonth(currentMonth);
-    const today = new Date();
-
-    for (let i = 0; i < firstDay; i++) days.push(<div key={`e-${i}`} />);
-
-    for (let day = 1; day <= total; day++) {
-      const isToday = day === today.getDate() && currentMonth.getMonth() === today.getMonth() && currentMonth.getFullYear() === today.getFullYear();
-      const isSelected = selectedCalendarDay === day;
-
-      days.push(
-        <div
-          key={day}
-          onClick={() => setSelectedCalendarDay(isSelected ? null : day)}
-          className="relative p-2 text-center rounded-xl text-xs font-bold cursor-pointer select-none transition-all"
-          style={{
-            background: isSelected ? '#06122c' : isToday ? '#1D4ED8' : 'transparent',
-            color: isSelected || isToday ? '#ffffff' : '#334155',
-            boxShadow: isToday ? '0 2px 8px rgba(29,78,216,0.35)' : 'none',
-          }}
-          onMouseEnter={e => { if (!isSelected && !isToday) { e.currentTarget.style.background = '#EFF6FF'; e.currentTarget.style.transform = 'scale(1.08)'; } }}
-          onMouseLeave={e => { if (!isSelected && !isToday) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.transform = 'scale(1)'; } }}
-        >
-          {day}
-        </div>
-      );
-    }
-    return days;
-  };
 
   const menuItems = [
     { id: 'dashboard',   label: 'Dashboard',          icon: Home },
@@ -761,6 +729,31 @@ export default function AdminDashboard({ onLogout }) {
     .filter(Boolean)
     .sort((a, b) => b.daysOverdue - a.daysOverdue);
 
+  // Today's Doses — patients that have a vaccination dose scheduled strictly for today
+  const todayStr = getTodayDateString();
+  const todayDosesList = allPatients
+    .flatMap(p => {
+      if (p.isArchived) return [];
+      const doses = buildDoses(p);
+      // Strictly match date against current date in YYYY-MM-DD
+      const dosesToday = doses.filter(d => (d.date || '').slice(0, 10) === todayStr);
+      return dosesToday.map(d => ({
+        id: `${p.firestoreId || p.id}-${d.key || d.label}`,
+        patientId: p.firestoreId || p.id || p.name,
+        name: getName(p),
+        doseLabel: d.label,
+        dueDate: d.date,
+        status: d.status,
+        done: d.status === 'done',
+        service: p.service || '',
+        category: p.category || '',
+      }));
+    })
+    .sort((a, b) => {
+      if (a.done !== b.done) return a.done ? 1 : -1;
+      return a.name.localeCompare(b.name);
+    });
+
   // Colored duotone cards (matches the Vaccination Tracker's summary cards)
   // — a progress ring only where the metric is a genuine rate (confirmed
   // apts, inventory health), a plain icon where it's just a running count
@@ -774,7 +767,7 @@ export default function AdminDashboard({ onLogout }) {
     {
       label: 'Total Patients',
       value: stats.patients,
-      sub: `${stats.patientsThisWeek} registered this week`,
+      sub: `${stats.patientsThisWeek} registered this week · excludes archived`,
       color: '#1D4ED8', tint: '#EFF6FF', border: '#DBEAFE',
       Icon: Users,
       progress: null,
@@ -1358,208 +1351,172 @@ export default function AdminDashboard({ onLogout }) {
                   </div>
 
                   {/* ── MAIN DASHBOARD GRID ── */}
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                  {/* ── MAIN DASHBOARD GRID (3 EQUAL COLUMNS: OVERDUE, TODAY'S DOSES, TODAY'S SCHEDULE) ── */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
 
-                    {/* LEFT COLUMN: OVERDUE DOSE TRACKER */}
-                    <div className="lg:col-span-5 xl:col-span-4 flex flex-col gap-6">
-
-                      {/* 1. Overdue Dose Tracker Card */}
-                      <div className="rounded-3xl border overflow-hidden bg-white border-blue-100/80 shadow-2xs text-slate-900"
-                        style={{ animation: 'kna-section-in 0.46s cubic-bezier(0.22,1,0.36,1) 0.10s both' }}>
-                        <div className="p-5 border-b border-blue-50 bg-blue-50/40 flex items-center justify-between">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h3 className="text-sm font-bold tracking-tight text-[#0a1d47]">Overdue Dose Tracker</h3>
-                              {overdueList.length > 0 && (
-                                <span className="bg-rose-50 text-rose-600 text-[10px] font-bold px-2 py-0.5 rounded-full border border-rose-200">
-                                  {overdueList.length} Action Needed
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-[11px] mt-0.5 text-slate-500 font-normal">Patients past due on scheduled doses</p>
-                          </div>
-                          <button onClick={() => setActivePage('vaccination')}
-                            className="text-xs font-bold text-[#1D4ED8] hover:underline cursor-pointer">
-                            View All →
-                          </button>
-                        </div>
-
-                        {overdueList.length === 0 ? (
-                          <div className="py-12 text-center p-5">
-                            <CheckCircle size={28} className="text-emerald-500 mx-auto mb-2" />
-                            <p className="text-sm font-bold text-slate-800">All patients on schedule!</p>
-                            <p className="text-xs text-slate-400 mt-0.5 font-normal">No overdue doses detected.</p>
-                          </div>
-                        ) : (
-                          <div className="p-3.5 space-y-2.5">
-                            {overdueList.slice(0, 7).map(o => (
-                              <button key={o.id} onClick={() => { setSelectedOverduePatientId(o.firestoreId || o.id || o.name); setActivePage('vaccination'); }}
-                                className="w-full flex items-center justify-between gap-2.5 p-3 rounded-2xl transition-all cursor-pointer text-left bg-slate-50/50 hover:bg-blue-50/50 border border-slate-100 hover:border-blue-200 group">
-                                <div className="flex items-center gap-2.5 min-w-0">
-                                  <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 bg-rose-100/80 text-rose-600 border border-rose-200/60">
-                                    <AlertCircle size={15} />
-                                  </div>
-                                  <div className="min-w-0">
-                                    <p className="text-xs font-bold text-[#0a1d47] group-hover:text-[#1D4ED8] transition-colors truncate">{o.name}</p>
-                                    <p className="text-[10.5px] text-slate-500 font-normal truncate">{o.doseLabel} · <span className="font-semibold text-rose-600">{fmtDate(o.dueDate)}</span></p>
-                                  </div>
-                                </div>
-                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border flex-shrink-0 bg-rose-50 text-rose-600 border-rose-200">
-                                  {o.daysOverdue}d overdue
-                                </span>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* RIGHT COLUMN: TODAY'S SCHEDULE & CALENDAR (ROW 1) + VACCINE INVENTORY (ROW 2) */}
-                    <div className="lg:col-span-7 xl:col-span-8 flex flex-col gap-6">
-
-                      {/* TOP ROW: TODAY'S SCHEDULE + STANDALONE CALENDAR */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
-
-                        {/* 1. Today's Schedule Card */}
-                        <div className="rounded-3xl border p-5 bg-white border-blue-100/80 shadow-2xs text-slate-900 flex flex-col justify-between h-full"
-                          style={{ animation: 'kna-section-in 0.46s cubic-bezier(0.22,1,0.36,1) 0.14s both' }}>
-                          <div>
-                            <div className="flex items-center justify-between mb-4">
-                              <div>
-                                <h3 className="text-sm font-bold tracking-tight text-[#0a1d47]">Today's Schedule</h3>
-                                <p className="text-[11px] text-slate-500 font-normal mt-0.5">{todayApts.length} appointment{todayApts.length !== 1 ? 's' : ''} today</p>
-                              </div>
-                              <button onClick={() => setActivePage('appointments')} className="text-xs font-bold text-[#1D4ED8] hover:underline cursor-pointer">View All →</button>
-                            </div>
-
-                            {todayApts.length === 0 ? (
-                              <div className="flex-1 flex flex-col items-center justify-center py-12 text-center bg-blue-50/30 rounded-2xl border border-dashed border-blue-100 min-h-[220px]">
-                                <Calendar size={26} className="text-blue-300 mx-auto mb-2" />
-                                <p className="text-xs font-bold text-slate-700">No appointments today</p>
-                                <p className="text-[11px] text-slate-400 mt-0.5 font-normal">All clear for today</p>
-                              </div>
-                            ) : (
-                              <div className="relative pl-3 space-y-3.5 before:absolute before:left-1.5 before:top-3 before:bottom-3 before:w-0.5 before:bg-blue-100">
-                                {[...todayApts].sort((a, b) => (a.time || '').localeCompare(b.time || '')).slice(0, 4).map((apt, idx) => {
-                                  const isTop = idx === 0;
-                                  return isTop ? (
-                                    <div key={apt.id} onClick={() => setActivePage('appointments')}
-                                      className="relative z-10 w-full p-3.5 rounded-2xl bg-gradient-to-r from-[#0a1d47] via-[#0e2a6d] to-[#1D4ED8] text-white shadow-xs cursor-pointer transition-transform hover:scale-[1.01]">
-                                      <div className="flex items-center justify-between gap-2 mb-1">
-                                        <span className="text-[11px] font-bold text-sky-200 flex items-center gap-1.5">
-                                          <Clock size={13} /> {apt.time || '10:00 AM'}
-                                        </span>
-                                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-white/20 text-white uppercase tracking-wider">
-                                          {apt.status || 'Scheduled'}
-                                        </span>
-                                      </div>
-                                      <h4 className="text-xs font-bold text-white truncate">{apt.name || apt.patient || 'Patient'}</h4>
-                                      <p className="text-[11px] text-sky-100/90 mt-0.5 truncate">{apt.type || apt.purpose || 'Consultation'}</p>
-                                    </div>
-                                  ) : (
-                                    <div key={apt.id} onClick={() => setActivePage('appointments')}
-                                      className="relative z-10 flex items-center justify-between gap-3 p-2.5 rounded-2xl bg-slate-50/80 hover:bg-blue-50/60 border border-slate-100 hover:border-blue-100 cursor-pointer transition-colors group">
-                                      <div className="flex items-center gap-2.5 min-w-0">
-                                        <div className="w-2.5 h-2.5 rounded-full bg-[#1D4ED8] shrink-0" />
-                                        <div className="min-w-0">
-                                          <p className="text-xs font-bold text-[#0a1d47] group-hover:text-[#1D4ED8] transition-colors truncate">{apt.name || apt.patient}</p>
-                                          <p className="text-[10.5px] text-slate-500 font-normal mt-0.5 truncate">{apt.time || '—'} · {apt.type || apt.purpose || 'Consultation'}</p>
-                                        </div>
-                                      </div>
-                                      <ChevronRightIcon size={14} className="text-slate-400 group-hover:text-[#1D4ED8] transition-transform group-hover:translate-x-0.5 shrink-0" />
-                                    </div>
-                                  );
-                                })}
-                              </div>
+                    {/* 1. Overdue Dose Tracker Card */}
+                    <div className="rounded-3xl border overflow-hidden bg-white border-blue-100/80 shadow-2xs text-slate-900 flex flex-col h-full"
+                      style={{ animation: 'kna-section-in 0.46s cubic-bezier(0.22,1,0.36,1) 0.10s both' }}>
+                      <div className="p-5 border-b border-blue-50 bg-blue-50/40 flex items-center justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-bold tracking-tight text-[#0a1d47]">Overdue Dose Tracker</h3>
+                            {overdueList.length > 0 && (
+                              <span className="bg-rose-50 text-rose-600 text-[10px] font-bold px-2 py-0.5 rounded-full border border-rose-200">
+                                {overdueList.length} Action Needed
+                              </span>
                             )}
                           </div>
+                          <p className="text-[11px] mt-0.5 text-slate-500 font-normal">Patients past due on scheduled doses</p>
                         </div>
+                        <button onClick={() => setActivePage('vaccination')}
+                          className="text-xs font-bold text-[#1D4ED8] hover:underline cursor-pointer">
+                          View All →
+                        </button>
+                      </div>
 
-                        {/* 2. Standalone Interactive Calendar Widget */}
-                        <div className="rounded-3xl border overflow-hidden bg-white border-blue-100/80 shadow-2xs text-slate-900 flex flex-col justify-between h-full"
-                          style={{ animation: 'kna-section-in 0.46s cubic-bezier(0.22,1,0.36,1) 0.18s both' }}>
-                          <div>
-                            <div className="flex items-center justify-between px-5 py-3.5 border-b border-blue-50 bg-blue-50/40">
-                              <button onClick={() => { setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1)); setSelectedCalendarDay(null); }}
-                                className="w-7 h-7 flex items-center justify-center rounded-xl cursor-pointer transition-colors text-slate-500 hover:bg-white hover:shadow-2xs border border-transparent hover:border-blue-100">
-                                <ChevronLeft size={15}/>
-                              </button>
-                              <div className="text-center">
-                                <h3 className="text-xs font-bold text-[#0a1d47]">{currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</h3>
-                                <p className="text-[10px] text-slate-400 font-normal">Clinic Calendar</p>
+                      {overdueList.length === 0 ? (
+                        <div className="py-12 text-center p-5 flex-1 flex flex-col items-center justify-center min-h-[260px]">
+                          <CheckCircle size={28} className="text-emerald-500 mx-auto mb-2" />
+                          <p className="text-sm font-bold text-slate-800">All patients on schedule!</p>
+                          <p className="text-xs text-slate-400 mt-0.5 font-normal">No overdue doses detected.</p>
+                        </div>
+                      ) : (
+                        <div className="p-3.5 space-y-2.5 flex-1 overflow-y-auto max-h-[440px] custom-scrollbar">
+                          {overdueList.slice(0, 8).map(o => (
+                            <button key={o.id} onClick={() => { setSelectedOverduePatientId(o.firestoreId || o.id || o.name); setActivePage('vaccination'); }}
+                              className="w-full flex items-center justify-between gap-2.5 p-3 rounded-2xl transition-all cursor-pointer text-left bg-slate-50/50 hover:bg-blue-50/50 border border-slate-100 hover:border-blue-200 group">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 bg-rose-100/80 text-rose-600 border border-rose-200/60">
+                                  <AlertCircle size={15} />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-xs font-bold text-[#0a1d47] group-hover:text-[#1D4ED8] transition-colors truncate">{o.name}</p>
+                                  <p className="text-[10.5px] text-slate-500 font-normal truncate">{o.doseLabel} · <span className="font-semibold text-rose-600">{fmtDate(o.dueDate)}</span></p>
+                                </div>
                               </div>
-                              <button onClick={() => { setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1)); setSelectedCalendarDay(null); }}
-                                className="w-7 h-7 flex items-center justify-center rounded-xl cursor-pointer transition-colors text-slate-500 hover:bg-white hover:shadow-2xs border border-transparent hover:border-blue-100">
-                                <ChevronRightIcon size={15}/>
-                              </button>
-                            </div>
-                            <div className="p-4">
-                              <div className="grid grid-cols-7 mb-2">{['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map((d, i) => (<div key={i} className="text-center text-[10px] font-bold py-0.5 text-slate-400">{d}</div>))}</div>
-                              <div className="grid grid-cols-7 gap-1">{renderCalendarDays()}</div>
-                            </div>
-                          </div>
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border flex-shrink-0 bg-rose-50 text-rose-600 border-rose-200">
+                                {o.daysOverdue}d overdue
+                              </span>
+                            </button>
+                          ))}
                         </div>
-                      </div>
-
-                      {/* BOTTOM ROW: VACCINE INVENTORY OVERVIEW */}
-                      <div className="rounded-3xl border overflow-hidden bg-white border-blue-100/80 shadow-2xs text-slate-900 mt-2"
-                        style={{ animation: 'kna-section-in 0.46s cubic-bezier(0.22,1,0.36,1) 0.22s both' }}>
-                        <div className="flex items-center justify-between px-6 py-4 border-b border-blue-50 bg-blue-50/40">
-                          <div>
-                            <h3 className="text-sm font-bold tracking-tight text-[#0a1d47]">Vaccine Inventory Overview</h3>
-                            <p className="text-xs mt-0.5 text-slate-500 font-normal">Real-time clinical stock status</p>
-                          </div>
-                          <button onClick={() => setActivePage('inventory')}
-                            className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-[#0a1d47] bg-blue-50 hover:bg-blue-100 hover:text-[#1D4ED8] transition-all cursor-pointer shadow-2xs border border-blue-100">
-                            Manage Inventory →
-                          </button>
-                        </div>
-
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-left border-collapse">
-                            <thead>
-                              <tr className="border-b border-blue-50 bg-blue-50/30">
-                                <th className="px-6 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Item Name</th>
-                                <th className="px-6 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Category</th>
-                                <th className="px-6 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Stock Level</th>
-                                <th className="px-6 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                              {(inventoryList.length > 0 ? inventoryList.slice(0, 5) : [
-                                { id: 'v1', name: 'Rabipur (PCEC Vaccine)', category: 'Vaccine', stock: 45, unit: 'Vials', status: 'optimal' },
-                                { id: 'v2', name: 'Verorab (PVRV Vaccine)', category: 'Vaccine', stock: 12, unit: 'Vials', status: 'warning' },
-                                { id: 'v3', name: 'Equirab (RIG Immunoglobulin)', category: 'Immunoglobulin', stock: 8, unit: 'Vials', status: 'critical' },
-                                { id: 'v4', name: 'Auto-Disable Syringes 1mL', category: 'Supplies', stock: 150, unit: 'Pcs', status: 'optimal' },
-                                { id: 'v5', name: 'Tetanus Toxoid 0.5mL', category: 'Vaccine', stock: 60, unit: 'Vials', status: 'optimal' }
-                              ]).map((item) => {
-                                const qty = parseInt(item.stock ?? item.quantity) || 0;
-                                const isOut = qty <= 0;
-                                const isLow = qty < 15 || item.status === 'warning' || item.status === 'critical';
-                                const badgeStyle = isOut
-                                  ? 'bg-rose-50 text-rose-700 border-rose-200'
-                                  : isLow
-                                  ? 'bg-amber-50 text-amber-700 border-amber-200'
-                                  : 'bg-emerald-50 text-emerald-700 border-emerald-200';
-
-                                return (
-                                  <tr key={item.id} className="transition-colors hover:bg-blue-50/30">
-                                    <td className="px-6 py-3.5 text-xs font-semibold text-[#0a1d47]">{item.name}</td>
-                                    <td className="px-6 py-3.5 text-xs text-slate-500 font-normal">{item.category || 'Vaccine'}</td>
-                                    <td className="px-6 py-3.5 text-xs font-bold text-slate-800 tabular-nums">{qty} {item.unit || 'units'}</td>
-                                    <td className="px-6 py-3.5">
-                                      <span className={`inline-flex items-center px-3 py-0.5 rounded-full border text-[11px] font-bold ${badgeStyle}`}>
-                                        {isOut ? 'Out of Stock' : isLow ? 'Low Stock' : 'Optimal'}
-                                      </span>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
+                      )}
                     </div>
+
+                    {/* 2. Today's Doses Card (In Between) */}
+                    <div className="rounded-3xl border overflow-hidden bg-white border-blue-100/80 shadow-2xs text-slate-900 flex flex-col h-full"
+                      style={{ animation: 'kna-section-in 0.46s cubic-bezier(0.22,1,0.36,1) 0.14s both' }}>
+                      <div className="p-5 border-b border-blue-50 bg-blue-50/40 flex items-center justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-bold tracking-tight text-[#0a1d47]">Today's Doses</h3>
+                            {todayDosesList.length > 0 && (
+                              <span className="bg-blue-50 text-[#1D4ED8] text-[10px] font-bold px-2 py-0.5 rounded-full border border-blue-200">
+                                {todayDosesList.length} Due Today
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] mt-0.5 text-slate-500 font-normal">
+                            Patients scheduled for today · <span className="font-semibold text-[#1D4ED8]">{fmtDate(todayStr)}</span>
+                          </p>
+                        </div>
+                        <button onClick={() => setActivePage('vaccination')}
+                          className="text-xs font-bold text-[#1D4ED8] hover:underline cursor-pointer">
+                          View All →
+                        </button>
+                      </div>
+
+                      {todayDosesList.length === 0 ? (
+                        <div className="py-12 text-center p-5 flex-1 flex flex-col items-center justify-center min-h-[260px]">
+                          <CheckCircle size={28} className="text-blue-400 mx-auto mb-2" />
+                          <p className="text-sm font-bold text-slate-800">No doses due today</p>
+                          <p className="text-xs text-slate-400 mt-0.5 font-normal">No patients scheduled for {fmtDate(todayStr)}.</p>
+                        </div>
+                      ) : (
+                        <div className="p-3.5 space-y-2.5 flex-1 overflow-y-auto max-h-[440px] custom-scrollbar">
+                          {todayDosesList.slice(0, 8).map(d => (
+                            <button key={d.id} onClick={() => { setSelectedOverduePatientId(d.patientId); setActivePage('vaccination'); }}
+                              className="w-full flex items-center justify-between gap-2.5 p-3 rounded-2xl transition-all cursor-pointer text-left bg-slate-50/50 hover:bg-blue-50/50 border border-slate-100 hover:border-blue-200 group">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                                  d.done ? 'bg-emerald-100/80 text-emerald-600 border border-emerald-200/60' : 'bg-blue-100/80 text-[#1D4ED8] border border-blue-200/60'
+                                }`}>
+                                  {d.done ? <CheckCircle size={15} /> : <Syringe size={15} />}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-xs font-bold text-[#0a1d47] group-hover:text-[#1D4ED8] transition-colors truncate">{d.name}</p>
+                                  <p className="text-[10.5px] text-slate-500 font-normal truncate">{d.doseLabel}{d.service ? ` · ${d.service}` : ''}</p>
+                                </div>
+                              </div>
+                              <div className="flex flex-col items-end flex-shrink-0 gap-1">
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex-shrink-0 ${
+                                  d.done ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'
+                                }`}>
+                                  {d.done ? 'Administered' : 'Due Today'}
+                                </span>
+                                <span className="text-[10px] font-bold text-[#1D4ED8] bg-blue-50/80 px-1.5 py-0.5 rounded-md border border-blue-200/60">
+                                  {fmtDate(d.dueDate)}
+                                </span>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 3. Today's Schedule Card (Same Size) */}
+                    <div className="rounded-3xl border overflow-hidden bg-white border-blue-100/80 shadow-2xs text-slate-900 flex flex-col h-full"
+                      style={{ animation: 'kna-section-in 0.46s cubic-bezier(0.22,1,0.36,1) 0.18s both' }}>
+                      <div className="p-5 border-b border-blue-50 bg-blue-50/40 flex items-center justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-bold tracking-tight text-[#0a1d47]">Today's Schedule</h3>
+                            {todayApts.length > 0 && (
+                              <span className="bg-indigo-50 text-indigo-600 text-[10px] font-bold px-2 py-0.5 rounded-full border border-indigo-200">
+                                {todayApts.length} Appointment{todayApts.length !== 1 ? 's' : ''}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] mt-0.5 text-slate-500 font-normal">Confirmed & pending clinic visits</p>
+                        </div>
+                        <button onClick={() => setActivePage('appointments')}
+                          className="text-xs font-bold text-[#1D4ED8] hover:underline cursor-pointer">
+                          View All →
+                        </button>
+                      </div>
+
+                      {todayApts.length === 0 ? (
+                        <div className="py-12 text-center p-5 flex-1 flex flex-col items-center justify-center min-h-[260px]">
+                          <Calendar size={28} className="text-slate-300 mx-auto mb-2" />
+                          <p className="text-sm font-bold text-slate-800">No appointments today</p>
+                          <p className="text-xs text-slate-400 mt-0.5 font-normal">All clear for today</p>
+                        </div>
+                      ) : (
+                        <div className="p-3.5 space-y-2.5 flex-1 overflow-y-auto max-h-[440px] custom-scrollbar">
+                          {[...todayApts].sort((a, b) => (a.time || '').localeCompare(b.time || '')).slice(0, 8).map((apt, idx) => (
+                            <button key={apt.id || idx} onClick={() => setActivePage('appointments')}
+                              className="w-full flex items-center justify-between gap-2.5 p-3 rounded-2xl transition-all cursor-pointer text-left bg-slate-50/50 hover:bg-blue-50/50 border border-slate-100 hover:border-blue-200 group">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 bg-indigo-100/80 text-indigo-600 border border-indigo-200/60">
+                                  <Clock size={15} />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-xs font-bold text-[#0a1d47] group-hover:text-[#1D4ED8] transition-colors truncate">{apt.name || apt.patient || 'Patient'}</p>
+                                  <p className="text-[10.5px] text-slate-500 font-normal truncate">{apt.time || '10:00 AM'} · {apt.type || apt.purpose || 'Consultation'}</p>
+                                </div>
+                              </div>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex-shrink-0 ${
+                                apt.status === 'confirmed' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-blue-50 text-blue-600 border-blue-200'
+                              }`}>
+                                {apt.status || 'Scheduled'}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
                   </div>
                 </div>
               </div>
@@ -1578,6 +1535,7 @@ export default function AdminDashboard({ onLogout }) {
               <div className="h-full overflow-y-auto">
                 <VaccinationTrackerPage
                   selectedPatientId={selectedOverduePatientId}
+                  onClearSelectedPatient={() => setSelectedOverduePatientId(null)}
                   initialPatients={allPatients}
                 />
               </div>

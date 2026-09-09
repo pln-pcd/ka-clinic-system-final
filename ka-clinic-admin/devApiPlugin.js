@@ -21,7 +21,7 @@ const ENV_FILES = ['.env', '.env.local'];
 // Minimal .env loader. The api handlers read process.env directly (GEMINI_API_KEY,
 // CRON_SECRET, FIREBASE_*), and Vite's own loadEnv only exposes VITE_-prefixed
 // vars to the client — it does not populate process.env for server code.
-async function loadRepoEnv() {
+async function loadRepoEnv(force = false) {
   for (const name of ENV_FILES) {
     const file = resolve(HERE, '..', name);
     if (!existsSync(file)) continue;
@@ -37,9 +37,7 @@ async function loadRepoEnv() {
       if (value.length > 1 && ((value[0] === '"' && value.at(-1) === '"') || (value[0] === "'" && value.at(-1) === "'"))) {
         value = value.slice(1, -1);
       }
-      // First file wins, and a real environment variable always wins, so an
-      // explicit shell override is never clobbered by the file.
-      if (process.env[key] === undefined) process.env[key] = value;
+      if (force || process.env[key] === undefined) process.env[key] = value;
     }
   }
 }
@@ -87,6 +85,8 @@ export function devApiPlugin() {
       server.middlewares.use(async (req, res, next) => {
         const url = new URL(req.url, 'http://localhost');
         if (!url.pathname.startsWith('/api/')) return next();
+
+        await loadRepoEnv(true);
 
         const route = url.pathname.slice('/api/'.length).replace(/\/+$/, '');
         // Guard against path traversal reaching outside api/.

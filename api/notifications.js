@@ -279,19 +279,165 @@ function ackPage(ok) {
 </body></html>`;
 }
 
+
+// ── Daily dose-reminder sweep (Vercel cron) ─────────────────────────────────
+// Replaces a reminder that lived as a useEffect inside the Vaccination Tracker
+// page: it fired only while a staff member had that page open, and only on or
+// after the due date, so a dose falling due on a quiet day was never announced
+// and there was no day-before reminder at all.
+//
+// Two triggers per dose, recorded separately on the patient record so neither
+// can fire twice:
+//   <doseKey>:pre — the day before the dose is due
+//   <doseKey>:due — the day itself
+//
+// Overdue doses are deliberately not chased here; that stays a clinical
+// judgement made through the tracker's Send Follow-up button.
+
+const CLINIC_TZ = 'Asia/Manila';
+
+// The clinic's civil date, not the server's UTC date — a sweep running at
+// 16:00 UTC is already tomorrow in Manila, which is the exact off-by-one this
+// guards against.
+function clinicDateString(offsetDays = 0) {
+  const local = new Date(new Date().toLocaleString('en-US', { timeZone: CLINIC_TZ }));
+  local.setDate(local.getDate() + offsetDays);
+  return [
+    local.getFullYear(),
+    String(local.getMonth() + 1).padStart(2, '0'),
+    String(local.getDate()).padStart(2, '0'),
+  ].join('-');
+}
+
+function longDate(dStr) {
+  const [y, m, d] = String(dStr).slice(0, 10).split('-').map(Number);
+  if (!y || !m || !d) return dStr;
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-PH', {
+    timeZone: 'UTC', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+  });
+}
+
+const doseIsDone = (dose) => {
+  const st = String(dose?.status || dose?.s || '').toLowerCase();
+  return st === 'done' || st === 'completed' || dose?.done === true;
+};
+
+async function doseSweep(req, res) {
+  const today = clinicDateString(0);
+  const tomorrow = clinicDateString(1);
+
+  const snap = await db.collection('vaccinations').get();
+  const jobs = [];
+
+  for (const docSnap of snap.docs) {
+    const patient = docSnap.data();
+    if (patient.isArchived) continue;
+
+    const doses = Array.isArray(patient.doses) ? patient.doses : [];
+    const notified = Array.isArray(patient.notifiedDoses) ? patient.notifiedDoses : [];
+
+    for (const dose of doses) {
+      if (doseIsDone(dose)) continue;
+      const date = String(dose?.date || '').slice(0, 10);
+      if (!date) continue;
+
+      const when = date === tomorrow ? 'pre' : date === today ? 'due' : null;
+      if (!when) continue;
+
+      const marker = `${dose.key || dose.n || dose.label || 'dose'}:${when}`;
+      if (notified.includes(marker)) continue;
+
+      jobs.push({ ref: docSnap.ref, patient, dose, when, marker, date });
+    }
+  }
+
+  let sent = 0;
+  const failed = [];
+
+  for (const { ref, patient, dose, when, marker, date } of jobs) {
+    const doseLabel = dose.n || dose.label || dose.dose || 'Your next dose';
+    const dueDate = longDate(date);
+    const name = patient.name || '';
+    const service = patient.service || 'vaccination';
+    const title = when === 'pre' ? 'Dose due tomorrow' : 'Dose due today';
+    const message = when === 'pre'
+      ? `Reminder${name ? ` for ${name}` : ''}: ${doseLabel} of your ${service} schedule is due tomorrow, ${dueDate}. Please visit K&A Clinic to stay on schedule.`
+      : `Reminder${name ? ` for ${name}` : ''}: ${doseLabel} of your ${service} schedule is due today, ${dueDate}. Please visit K&A Clinic today.`;
+
+    try {
+      const notifRef = db.collection('patientNotifications').doc();
+      await notifRef.set({
+        patientId: ref.id,
+        patientName: name,
+        title,
+        message,
+        doseLabel,
+        dueDate,
+        source: when === 'pre' ? 'auto-day-before' : 'auto-day-of',
+        createdAt: Date.now(),
+        acknowledged: false,
+        acknowledgedAt: null,
+        acknowledgedVia: null,
+        read: false,
+      });
+
+      await sendExpoPush(patient.pushTokens || [], {
+        title,
+        body: message,
+        data: { notificationId: notifRef.id, type: 'dose-reminder' },
+      });
+
+      const email = (patient.email || '').trim();
+      if (email && isValidEmail(email)) {
+        await sendMail({
+          to: email,
+          subject: `K&A Clinic — ${title}`,
+          html: buildFollowUpEmailHtml({ patientName: name, message, doseLabel, dueDate }),
+        });
+      }
+
+      // Marked only after a successful send, so a mid-sweep failure retries on
+      // the next run rather than skipping that patient permanently.
+      await ref.update({ notifiedDoses: FieldValue.arrayUnion(marker) });
+      sent++;
+    } catch (err) {
+      console.error(`[dose-sweep] ${ref.id} ${marker} failed:`, err);
+      failed.push(marker);
+    }
+  }
+
+  console.log(`[dose-sweep] ${sent} sent, ${failed.length} failed (today=${today}, tomorrow=${tomorrow})`);
+  res.status(200).json({ success: true, sent, failed: failed.length, today, tomorrow });
+}
+
 const ADMIN_ACTIONS = { 'send-followup': sendFollowUp };
 const OPEN_ACTIONS = { 'register-token': registerToken, ack: acknowledge };
+// Runs unattended on a schedule, so it authenticates with CRON_SECRET rather
+// than an admin's ID token.
+const CRON_ACTIONS = { 'dose-sweep': doseSweep };
 
 export default async function handler(req, res) {
   const action = (req.query?.action || req.body?.action || '').trim();
 
-  // The email acknowledgement link is a GET; everything else is POST.
-  if (req.method !== 'POST' && !(req.method === 'GET' && action === 'ack')) {
+  // The email acknowledgement link and the cron sweep are GETs; everything
+  // else is POST.
+  const getAllowed = action === 'ack' || action === 'dose-sweep';
+  if (req.method !== 'POST' && !(req.method === 'GET' && getAllowed)) {
     res.status(405).json({ success: false, error: 'Method not allowed.' });
     return;
   }
 
   try {
+    if (Object.prototype.hasOwnProperty.call(CRON_ACTIONS, action)) {
+      const secret = process.env.CRON_SECRET;
+      if (secret && (req.headers.authorization || '') !== `Bearer ${secret}`) {
+        res.status(401).json({ success: false, error: 'Unauthorized.' });
+        return;
+      }
+      await CRON_ACTIONS[action](req, res);
+      return;
+    }
+
     if (Object.prototype.hasOwnProperty.call(OPEN_ACTIONS, action)) {
       await OPEN_ACTIONS[action](req, res);
       return;

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { auth, db } from "../lib/firebase";
 import { buildDoses } from "./vaccination";
+import { buildInitialDoses, buildScheduleDates, isAgeGrouped, scheduleLabel } from "../lib/doseSchedules";
 import { formatDateLong, formatDateLong as fmtDate, formatDateShort, formatDateNumeric, getTodayDateString, today, addDaysToDateString } from "../lib/dates";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
@@ -139,8 +140,8 @@ const globalCSS = `
   .icon-btn.danger:hover{border-color:var(--red);color:var(--red);background:var(--red-soft);}
 
   /* Modal */
-  .modal-overlay{position:fixed;inset:0;background:rgba(26,34,64,.45);z-index:999;display:flex;align-items:flex-start;justify-content:center;padding-top:6vh;overflow-y:auto;backdrop-filter:blur(8px);}
-  .modal{background:var(--white);border-radius:1.25rem;padding:28px;width:32.5rem;max-width:95vw;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(26,34,64,.18);margin-bottom:6vh;}
+  .modal-overlay, .admin-modal-overlay{position:fixed;top:max(80px, var(--header-height, 80px));bottom:0;right:0;left:var(--sidebar-width, 256px);width:calc(100vw - var(--sidebar-width, 256px));height:calc(100vh - max(80px, var(--header-height, 80px)));background:rgba(26,34,64,.45);z-index:999;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto;box-sizing:border-box;backdrop-filter:blur(8px);transition:left 0.4s cubic-bezier(0.22,1,0.36,1),width 0.4s cubic-bezier(0.22,1,0.36,1),top 0.4s cubic-bezier(0.22,1,0.36,1),height 0.4s cubic-bezier(0.22,1,0.36,1);}
+  .modal{background:var(--white);border-radius:1.25rem;padding:28px;width:32.5rem;max-width:min(32.5rem, calc(100% - 32px));max-height:calc(100vh - 130px);overflow-y:auto;box-shadow:0 20px 60px rgba(26,34,64,.18);transition:all 0.4s cubic-bezier(0.22,1,0.36,1);}
   .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;}
   .modal-head h2{font-size:1.0625rem;font-weight:900;}
   .modal-close{width:2rem;height:2rem;border-radius:50%;border:1px solid #E2E8F0;background:#FFFFFF;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#64748B;transition:all .15s ease;box-shadow:0 1px 2px rgba(0,0,0,0.04);}
@@ -517,47 +518,28 @@ function ServiceSelector({ value, onChange }) {
 
 
 /* ─────────────────────────── SCHEDULE SUMMARY CALCULATION ─────────────────────────── */
-function ScheduleSummary({ service, baseDate }) {
+function ScheduleSummary({ service, baseDate, dob, ageGroup }) {
   if (!baseDate) return (
     <div style={{ gridColumn: 'span 2', marginTop: 14, padding: '12px', background: 'var(--bg-2)', borderRadius: 'var(--r-md)', fontSize: '.75rem', color: 'var(--muted)', textAlign: 'center' }}>
       Select a date above to preview the vaccination schedule.
     </div>
   );
 
-  const addDays = (days) => {
-    return formatDateShort(addDaysToDateString(baseDate, days));
-  };
-
-  let schedule = [];
-  // Mirrors buildInitialDoses() below — the preview must not promise a
-  // schedule different from the one actually written to the record.
-  if (service === 'PEP') {
-    schedule = [
-      { label: 'Dose 1 (Day 0)', date: addDays(0) },
-      { label: 'Dose 2 (Day 3)', date: addDays(3) },
-      { label: 'Dose 3 (Day 7)', date: addDays(7) },
-      { label: 'Dose 4 (Day 14)', date: addDays(14) },
-      { label: 'Dose 5 (Day 28)', date: addDays(28) },
-    ];
-  } else if (service === 'PrEP') {
-    schedule = [
-      { label: 'Dose 1 (Day 0)', date: addDays(0) },
-      { label: 'Dose 2 (Day 7)', date: addDays(7) },
-    ];
-  } else if (service === 'Tetanus') {
-    schedule = [
-      { label: 'Dose 1 (Day 0)', date: addDays(0) },
-      { label: 'Dose 2 (Day 7)', date: addDays(7) },
-    ];
-  } else {
-    schedule = [
-      { label: 'Initial Dose (Day 0)', date: addDays(0) }
-    ];
-  }
+  // Resolved from src/lib/doseSchedules.js — the same definitions the record
+  // is written from, so a preview can never promise a different schedule.
+  const schedule = buildScheduleDates(service, { day0: baseDate, dob, ageGroup })
+    .map(d => ({ label: d.label, date: formatDateShort(d.date) || d.date }));
+  const needsDob = isAgeGrouped(service) && ageGroup === 'infant' && !dob;
 
   return (
     <div style={{ gridColumn: 'span 2', marginTop: 8, background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 'var(--r-md)', padding: '14px 16px' }}>
-      <div style={{ fontSize: '.6875rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.6px', color: '#475569', marginBottom: 12 }}>Estimated Vaccination Schedule</div>
+      <div style={{ fontSize: '.6875rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.6px', color: '#475569', marginBottom: 4 }}>Estimated Vaccination Schedule</div>
+      <div style={{ fontSize: '.6875rem', color: '#64748B', marginBottom: 12 }}>{scheduleLabel(service, ageGroup)}</div>
+      {needsDob && (
+        <div style={{ fontSize: '.71875rem', color: '#B45309', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '8px 10px', marginBottom: 10 }}>
+          Enter the date of birth above — these dates are spaced correctly but anchored to today until it is set.
+        </div>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
         {schedule.map((s, i) => (
           <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 10px', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 6, fontSize: '.75rem' }}>
@@ -593,12 +575,27 @@ function ServiceFields({ service, form, set }) {
       <div className="form-field full"><label>Past Vaccination History</label><input type="text" value={form.pastVaccines || ''} onChange={e => set('pastVaccines', e.target.value)} placeholder="e.g. None" /></div>
       <div className="form-field full"><label>Allergies</label><input type="text" value={form.allergies || ''} onChange={e => set('allergies', e.target.value)} placeholder="e.g. No known allergies" /></div>
       <div className="form-field full"><label>Clinical Notes</label><textarea value={form.notes || ''} onChange={e => set('notes', e.target.value)} placeholder="Optional observations..." /></div>
-      <ScheduleSummary service={service} baseDate={form.date} />
+      <ScheduleSummary service={service} baseDate={form.date} dob={form.dob} ageGroup={form.ageGroup} />
     </>
   );
 
   if (service === 'Tetanus') return (
     <>
+      <div className="form-field full"><label>Age Group <span style={{ color: '#C8151A' }}>*</span> <span style={{ fontWeight: 400, color: '#64748B', fontSize: '.6875rem' }}>(sets the dose schedule)</span></label>
+        <select value={form.ageGroup || 'adult'} onChange={e => set('ageGroup', e.target.value)}>
+          <option value="adult">Adult / Older child — schedule counts from today</option>
+          <option value="infant">Infant / Child series — schedule counts from date of birth</option>
+        </select>
+      </div>
+      {form.ageGroup === 'infant' && (
+        <div className="form-field full"><label>Date of Birth <span style={{ color: '#C8151A' }}>*</span></label>
+          <input type="date" value={form.dob || ''} max={today()} onChange={e => set('dob', e.target.value)} />
+          <span style={{ fontSize: '.6875rem', color: '#64748B', marginTop: 4 }}>
+            Required: the childhood series is scheduled by the patient's age, not by the visit date.
+          </span>
+        </div>
+      )}
+
       <div className="form-field"><label>Wound / Injury Type</label><select value={form.woundType || 'Laceration'} onChange={e => set('woundType', e.target.value)}>
         <option>Laceration</option><option>Puncture</option><option>Abrasion</option><option>Burn</option><option>Crush injury</option><option>Other</option>
       </select></div>
@@ -634,6 +631,20 @@ function ServiceFields({ service, form, set }) {
 
   if (service === 'Pneumonia') return (
     <>
+      <div className="form-field full"><label>Age Group <span style={{ color: '#C8151A' }}>*</span> <span style={{ fontWeight: 400, color: '#64748B', fontSize: '.6875rem' }}>(sets the dose schedule)</span></label>
+        <select value={form.ageGroup || 'adult'} onChange={e => set('ageGroup', e.target.value)}>
+          <option value="adult">Adult / Older child — schedule counts from today</option>
+          <option value="infant">Infant / Child series — schedule counts from date of birth</option>
+        </select>
+      </div>
+      {form.ageGroup === 'infant' && (
+        <div className="form-field full"><label>Date of Birth <span style={{ color: '#C8151A' }}>*</span></label>
+          <input type="date" value={form.dob || ''} max={today()} onChange={e => set('dob', e.target.value)} />
+          <span style={{ fontSize: '.6875rem', color: '#64748B', marginTop: 4 }}>
+            Required: the childhood series is scheduled by the patient's age, not by the visit date.
+          </span>
+        </div>
+      )}
       <div className="form-field"><label>Vaccine Type</label><select value={form.pneumoVaccine || 'PCV15'} onChange={e => set('pneumoVaccine', e.target.value)}>
         <option>PCV13 (Prevnar 13)</option><option>PCV15 (Vaxneuvance)</option><option>PCV20 (Prevnar 20)</option><option>PPSV23 (Pneumovax)</option>
       </select></div>
@@ -679,6 +690,9 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [] }) {
     hepaVariant: 'Hepatitis B', riskFactor: 'None stated', priorHepa: 'None',
     /* Pneumonia */
     pneumoVaccine: 'PCV15', riskCondition: 'None', priorPneumo: 'None',
+    /* Tetanus and pneumococcal run different series for infants; the childhood
+       series is scheduled from date of birth rather than the visit date. */
+    ageGroup: 'adult',
   });
 
   const vaccineItems = inventoryItems.filter(i => i.category === 'Vaccine' && (parseInt(i.stock) || 0) > 0);
@@ -767,16 +781,26 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [] }) {
   return (
     <div
       className="modal-overlay"
-      style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }}
+      style={{
+        background: 'rgba(0,0,0,0.55)',
+        backdropFilter: 'blur(6px)',
+        top: 'max(80px, var(--header-height, 80px))',
+        height: 'calc(100vh - max(80px, var(--header-height, 80px)))',
+        left: 'var(--sidebar-width, 256px)',
+        width: 'calc(100vw - var(--sidebar-width, 256px))',
+        paddingTop: '20px',
+        paddingBottom: '20px',
+        boxSizing: 'border-box',
+        transition: 'left 0.4s cubic-bezier(0.22,1,0.36,1), width 0.4s cubic-bezier(0.22,1,0.36,1), top 0.4s cubic-bezier(0.22,1,0.36,1), height 0.4s cubic-bezier(0.22,1,0.36,1)',
+      }}
       onClick={e => { if (e.target.classList.contains('modal-overlay')) onClose(); }}
     >
-      <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden" style={{
+      <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden m-auto flex flex-col" style={{
         width: '64rem',
-        maxWidth: '95vw',
+        maxWidth: 'min(64rem, calc(100% - 32px))',
         height: '680px',
-        maxHeight: '90vh',
-        display: 'flex',
-        flexDirection: 'column',
+        maxHeight: 'calc(100vh - 128px)',
+        transition: 'all 0.4s cubic-bezier(0.22,1,0.36,1)',
       }}>
 
         {/* ── Modal Top Header — same light card head as the Add Report pop-up ── */}
@@ -1287,8 +1311,32 @@ function EditPatientModal({ patient, onClose, onSave, inventoryItems = [] }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto" style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }} onClick={onClose}>
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-200 my-8 max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+    <div
+      className="admin-modal-overlay fixed z-50 flex items-center justify-center p-4 overflow-y-auto"
+      style={{
+        background: 'rgba(0,0,0,0.55)',
+        backdropFilter: 'blur(6px)',
+        top: 'max(80px, var(--header-height, 80px))',
+        height: 'calc(100vh - max(80px, var(--header-height, 80px)))',
+        left: 'var(--sidebar-width, 256px)',
+        width: 'calc(100vw - var(--sidebar-width, 256px))',
+        paddingTop: '20px',
+        paddingBottom: '20px',
+        boxSizing: 'border-box',
+        transition: 'left 0.4s cubic-bezier(0.22,1,0.36,1), width 0.4s cubic-bezier(0.22,1,0.36,1), top 0.4s cubic-bezier(0.22,1,0.36,1), height 0.4s cubic-bezier(0.22,1,0.36,1)',
+      }}
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200 m-auto flex flex-col"
+        style={{
+          width: '70rem',
+          maxWidth: 'min(70rem, calc(100% - 32px))',
+          maxHeight: 'calc(100vh - 128px)',
+          transition: 'all 0.4s cubic-bezier(0.22,1,0.36,1)',
+        }}
+        onClick={e => e.stopPropagation()}
+      >
         {/* Light Clean Header Bar (Matching Add Report Style) */}
         <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between flex-shrink-0">
           <div>
@@ -1304,386 +1352,401 @@ function EditPatientModal({ patient, onClose, onSave, inventoryItems = [] }) {
           </button>
         </div>
 
-        {/* Scrollable Form Body */}
-        <div className="p-6 space-y-5 text-xs font-semibold text-slate-700 overflow-y-auto flex-1">
-          {/* Patient Identity */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 pb-1 border-b border-slate-100">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Patient Identity</span>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="sm:col-span-2">
-                <label className="block mb-1.5 text-slate-500">Full Name <span style={{ color: '#C8151A' }}>*</span></label>
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={e => set('name', e.target.value)}
-                  placeholder="e.g. Juan Dela Cruz"
-                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                />
-              </div>
-              <div>
-                <label className="block mb-1.5 text-slate-500">Age <span style={{ color: '#C8151A' }}>*</span></label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={form.age}
-                  onChange={e => set('age', e.target.value.replace(/\D/g, '').slice(0, 3))}
-                  placeholder="e.g. 25"
-                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                />
-              </div>
-              <div>
-                <label className="block mb-1.5 text-slate-500">Sex</label>
-                <select
-                  value={form.sex}
-                  onChange={e => set('sex', e.target.value)}
-                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                >
-                  <option>Male</option>
-                  <option>Female</option>
-                </select>
-              </div>
-              <div>
-                <label className="block mb-1.5 text-slate-500">Date of Birth</label>
-                <input
-                  type="date"
-                  value={form.dob || ''}
-                  max={today()}
-                  onChange={e => set('dob', e.target.value)}
-                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                />
-              </div>
-              <div>
-                <label className="block mb-1.5 text-slate-500">Blood Pressure</label>
-                <input
-                  type="text"
-                  value={form.bloodPressure || ''}
-                  onChange={e => set('bloodPressure', e.target.value)}
-                  placeholder="e.g. 120/80"
-                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                />
-              </div>
-              <div>
-                <label className="block mb-1.5 text-slate-500">Height (cm)</label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={form.height || ''}
-                  onChange={e => set('height', e.target.value.replace(/[^0-9.]/g, '').slice(0, 5))}
-                  placeholder="e.g. 165"
-                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                />
-              </div>
-              <div>
-                <label className="block mb-1.5 text-slate-500">Weight (kg)</label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={form.weight || ''}
-                  onChange={e => set('weight', e.target.value.replace(/[^0-9.]/g, '').slice(0, 5))}
-                  placeholder="e.g. 58"
-                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                />
-              </div>
-              <div className="sm:col-span-2">
-                <label className="block mb-1.5 text-slate-500">Email Address</label>
-                <input
-                  type="email"
-                  value={form.email}
-                  onChange={e => set('email', e.target.value)}
-                  placeholder="patient@gmail.com"
-                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                />
-              </div>
-              <div>
-                <label className="block mb-1.5 text-slate-500">Contact Number</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={form.contact}
-                  onChange={e => set('contact', e.target.value.replace(/[^\d+\s-]/g, ''))}
-                  placeholder="+63 9XX XXX XXXX"
-                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                />
-                {form.contact && !isValidPHPhone(form.contact) && (
-                  <span style={{ fontSize: '.6875rem', color: '#C8151A', marginTop: 4, display: 'block' }}>Enter a valid Philippine mobile number</span>
-                )}
-              </div>
-              <div>
-                <label className="block mb-1.5 text-slate-500">Address</label>
-                <input
-                  type="text"
-                  value={form.address}
-                  onChange={e => set('address', e.target.value)}
-                  placeholder="Zone, Brgy., Libon, Albay"
-                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                />
-              </div>
-            </div>
-          </div>
+        {/* Scrollable Landscape Form Body */}
+        <div className="p-6 overflow-y-auto flex-1 text-xs font-semibold text-slate-700">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
 
-          {/* Service & Vaccine Brand */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 pb-1 border-b border-slate-100">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Service & Vaccine Brand</span>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block mb-1.5 text-slate-500">Service</label>
-                <select
-                  value={form.service}
-                  onChange={e => set('service', e.target.value)}
-                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                >
-                  <option>PEP</option>
-                  <option>PrEP</option>
-                  <option>Tetanus</option>
-                  <option>Hepatitis</option>
-                  <option>Pneumonia</option>
-                </select>
-              </div>
-              <div>
-                <label className="block mb-1.5 text-slate-500">Vaccine Brand</label>
-                <select
-                  value={form.vaccineBrand}
-                  onChange={e => set('vaccineBrand', e.target.value)}
-                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                >
-                  <option value="">— Select brand —</option>
-                  {vaccineItems.map(item => (
-                    <option key={item.id} value={item.name}>{item.name} ({item.stock} {item.unit || 'pcs'} available)</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* PrEP Information Notice */}
-          {form.service === 'PrEP' && (
-            <div className="bg-indigo-50/70 border border-indigo-200/80 rounded-2xl p-3.5 text-xs text-indigo-900">
-              <p className="font-bold flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-[#3B50DF]" />
-                Pre-Exposure Prophylaxis (PrEP)
-              </p>
-              <p className="mt-1 text-slate-600 font-normal">
-                Preventive rabies immunization schedule before exposure (2 doses: Days 0 and 7). No animal bite exposure details required.
-              </p>
-            </div>
-          )}
-
-          {/* PEP Exposure Details */}
-          {isPep && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 pb-1 border-b border-slate-100">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Exposure Details</span>
+            {/* LEFT COLUMN: Patient Identity */}
+            <div className="space-y-4 bg-slate-50/70 p-5 rounded-2xl border border-slate-200/80 shadow-2xs">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#0a1d47] flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[#1D4ED8]" />
+                  Patient Identity
+                </span>
+                <span className="text-[10px] text-slate-400 font-normal">Personal details & contact</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block mb-1.5 text-slate-500">Date of Exposure</label>
+                <div className="sm:col-span-2">
+                  <label className="block mb-1.5 text-slate-500">Full Name <span style={{ color: '#C8151A' }}>*</span></label>
                   <input
-                    type="date"
-                    value={form.date}
-                    onChange={e => set('date', e.target.value)}
+                    type="text"
+                    value={form.name}
+                    onChange={e => set('name', e.target.value)}
+                    placeholder="e.g. Juan Dela Cruz"
                     className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
                   />
                 </div>
                 <div>
-                  <label className="block mb-1.5 text-slate-500">Biting Animal</label>
+                  <label className="block mb-1.5 text-slate-500">Age <span style={{ color: '#C8151A' }}>*</span></label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={form.age}
+                    onChange={e => set('age', e.target.value.replace(/\D/g, '').slice(0, 3))}
+                    placeholder="e.g. 25"
+                    className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1.5 text-slate-500">Sex</label>
                   <select
-                    value={form.animal}
-                    onChange={e => set('animal', e.target.value)}
+                    value={form.sex}
+                    onChange={e => set('sex', e.target.value)}
                     className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
                   >
-                    <option>Dog</option><option>Cat</option><option>Monkey</option><option>Bat</option><option>Rat</option><option>Other</option>
+                    <option>Male</option>
+                    <option>Female</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block mb-1.5 text-slate-500">Exposure Category</label>
-                  <select
-                    value={form.cat}
-                    onChange={e => set('cat', e.target.value)}
+                  <label className="block mb-1.5 text-slate-500">Date of Birth</label>
+                  <input
+                    type="date"
+                    value={form.dob || ''}
+                    max={today()}
+                    onChange={e => set('dob', e.target.value)}
                     className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                  >
-                    <option>Category I</option><option>Category II</option><option>Category III</option>
-                  </select>
+                  />
                 </div>
                 <div>
-                  <label className="block mb-1.5 text-slate-500">No. of Bites / Wounds</label>
-                  <select
-                    value={form.numberOfBites}
-                    onChange={e => set('numberOfBites', e.target.value)}
+                  <label className="block mb-1.5 text-slate-500">Blood Pressure</label>
+                  <input
+                    type="text"
+                    value={form.bloodPressure || ''}
+                    onChange={e => set('bloodPressure', e.target.value)}
+                    placeholder="e.g. 120/80"
                     className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                  >
-                    <option>1</option><option>2</option><option>3</option><option>4+</option>
-                  </select>
+                  />
                 </div>
                 <div>
-                  <label className="block mb-1.5 text-slate-500">Wound Location</label>
-                  <select
-                    value={form.woundLocation || ''}
-                    onChange={e => set('woundLocation', e.target.value)}
+                  <label className="block mb-1.5 text-slate-500">Height (cm)</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={form.height || ''}
+                    onChange={e => set('height', e.target.value.replace(/[^0-9.]/g, '').slice(0, 5))}
+                    placeholder="e.g. 165"
                     className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                  >
-                    <option value="">— Select location —</option>
-                    {WOUND_LOCATION_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                  </select>
+                  />
                 </div>
                 <div>
-                  <label className="block mb-1.5 text-slate-500">Wound Depth</label>
-                  <select
-                    value={form.woundDepth}
-                    onChange={e => set('woundDepth', e.target.value)}
+                  <label className="block mb-1.5 text-slate-500">Weight (kg)</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={form.weight || ''}
+                    onChange={e => set('weight', e.target.value.replace(/[^0-9.]/g, '').slice(0, 5))}
+                    placeholder="e.g. 58"
                     className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                  >
-                    <option>Superficial</option><option>Deep / Penetrating</option><option>Multiple</option><option>Unknown</option>
-                  </select>
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block mb-1.5 text-slate-500">Email Address</label>
+                  <input
+                    type="email"
+                    value={form.email}
+                    onChange={e => set('email', e.target.value)}
+                    placeholder="patient@gmail.com"
+                    className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block mb-1.5 text-slate-500">Contact Number</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={form.contact}
+                    onChange={e => set('contact', e.target.value.replace(/[^\d+\s-]/g, ''))}
+                    placeholder="+63 9XX XXX XXXX"
+                    className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                  />
+                  {form.contact && !isValidPHPhone(form.contact) && (
+                    <span style={{ fontSize: '.6875rem', color: '#C8151A', marginTop: 4, display: 'block' }}>Enter a valid Philippine mobile number</span>
+                  )}
+                </div>
+                <div>
+                  <label className="block mb-1.5 text-slate-500">Address</label>
+                  <input
+                    type="text"
+                    value={form.address}
+                    onChange={e => set('address', e.target.value)}
+                    placeholder="Zone, Brgy., Libon, Albay"
+                    className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                  />
                 </div>
               </div>
             </div>
-          )}
 
-          {/* Medical History & Notes */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 pb-1 border-b border-slate-100">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Medical History & Notes</span>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="sm:col-span-2">
-                <label className="block mb-1.5 text-slate-500">Past Vaccination History</label>
-                <select
-                  value={form.pastVaccines || ''}
-                  onChange={e => set('pastVaccines', e.target.value)}
-                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                >
-                  <option value="">— Select history —</option>
-                  {PAST_VACCINE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
+            {/* RIGHT COLUMN: Service, Exposure & Medical History */}
+            <div className="space-y-4">
+              {/* Service & Vaccine Brand */}
+              <div className="space-y-3 bg-slate-50/70 p-5 rounded-2xl border border-slate-200/80 shadow-2xs">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#0a1d47] flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-[#1D4ED8]" />
+                    Service & Vaccine Brand
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block mb-1.5 text-slate-500">Service</label>
+                    <select
+                      value={form.service}
+                      onChange={e => set('service', e.target.value)}
+                      className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                    >
+                      <option>PEP</option>
+                      <option>PrEP</option>
+                      <option>Tetanus</option>
+                      <option>Hepatitis</option>
+                      <option>Pneumonia</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block mb-1.5 text-slate-500">Vaccine Brand</label>
+                    <select
+                      value={form.vaccineBrand}
+                      onChange={e => set('vaccineBrand', e.target.value)}
+                      className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                    >
+                      <option value="">— Select brand —</option>
+                      {vaccineItems.map(item => (
+                        <option key={item.id} value={item.name}>{item.name} ({item.stock} {item.unit || 'pcs'} available)</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* PrEP Information Notice */}
+                {form.service === 'PrEP' && (
+                  <div className="bg-indigo-50/70 border border-indigo-200/80 rounded-xl p-3 text-xs text-indigo-900 mt-2">
+                    <p className="font-bold flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-[#3B50DF]" />
+                      Pre-Exposure Prophylaxis (PrEP)
+                    </p>
+                    <p className="mt-1 text-slate-600 font-normal leading-relaxed">
+                      Preventive rabies immunization schedule before exposure (2 doses: Days 0 and 7). No animal bite exposure details required.
+                    </p>
+                  </div>
+                )}
+
+                {/* PEP Exposure Details */}
+                {isPep && (
+                  <div className="pt-2 border-t border-slate-200/70 space-y-3">
+                    <span className="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">Exposure Details</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block mb-1.5 text-slate-500">Date of Exposure</label>
+                        <input
+                          type="date"
+                          value={form.date}
+                          onChange={e => set('date', e.target.value)}
+                          className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                        />
+                      </div>
+                      <div>
+                        <label className="block mb-1.5 text-slate-500">Biting Animal</label>
+                        <select
+                          value={form.animal}
+                          onChange={e => set('animal', e.target.value)}
+                          className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                        >
+                          <option>Dog</option><option>Cat</option><option>Monkey</option><option>Bat</option><option>Rat</option><option>Other</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block mb-1.5 text-slate-500">Exposure Category</label>
+                        <select
+                          value={form.cat}
+                          onChange={e => set('cat', e.target.value)}
+                          className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                        >
+                          <option>Category I</option><option>Category II</option><option>Category III</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block mb-1.5 text-slate-500">No. of Bites / Wounds</label>
+                        <select
+                          value={form.numberOfBites}
+                          onChange={e => set('numberOfBites', e.target.value)}
+                          className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                        >
+                          <option>1</option><option>2</option><option>3</option><option>4+</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block mb-1.5 text-slate-500">Wound Location</label>
+                        <select
+                          value={form.woundLocation || ''}
+                          onChange={e => set('woundLocation', e.target.value)}
+                          className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                        >
+                          <option value="">— Select location —</option>
+                          {WOUND_LOCATION_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block mb-1.5 text-slate-500">Wound Depth</label>
+                        <select
+                          value={form.woundDepth}
+                          onChange={e => set('woundDepth', e.target.value)}
+                          className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                        >
+                          <option>Superficial</option><option>Deep / Penetrating</option><option>Multiple</option><option>Unknown</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="sm:col-span-2">
-                <label className="block mb-1.5 text-slate-500">Allergies</label>
-                <select
-                  value={form.allergies || ''}
-                  onChange={e => set('allergies', e.target.value)}
-                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                >
-                  <option value="">— Select allergy —</option>
-                  {ALLERGY_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
-              </div>
 
-              {form.service === 'Tetanus' && (
-                <>
+              {/* Medical History & Notes */}
+              <div className="space-y-3 bg-slate-50/70 p-5 rounded-2xl border border-slate-200/80 shadow-2xs">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#0a1d47] flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-[#1D4ED8]" />
+                    Medical History & Clinical Notes
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block mb-1.5 text-slate-500">Wound / Injury Type</label>
+                    <label className="block mb-1.5 text-slate-500">Past Vaccination History</label>
                     <select
-                      value={form.woundType}
-                      onChange={e => set('woundType', e.target.value)}
+                      value={form.pastVaccines || ''}
+                      onChange={e => set('pastVaccines', e.target.value)}
                       className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
                     >
-                      <option>Laceration</option><option>Puncture</option><option>Abrasion</option><option>Burn</option><option>Crush injury</option><option>Other</option>
+                      <option value="">— Select history —</option>
+                      {PAST_VACCINE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block mb-1.5 text-slate-500">Last Tetanus Shot</label>
+                    <label className="block mb-1.5 text-slate-500">Allergies</label>
                     <select
-                      value={form.lastTetanus}
-                      onChange={e => set('lastTetanus', e.target.value)}
+                      value={form.allergies || ''}
+                      onChange={e => set('allergies', e.target.value)}
                       className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
                     >
-                      <option>Unknown</option><option>Less than 5 years ago</option><option>5–10 years ago</option><option>More than 10 years ago</option><option>Never vaccinated</option>
+                      <option value="">— Select allergy —</option>
+                      {ALLERGY_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
                     </select>
                   </div>
-                </>
-              )}
 
-              {form.service === 'Hepatitis' && (
-                <>
-                  <div>
-                    <label className="block mb-1.5 text-slate-500">Hepatitis Variant</label>
-                    <select
-                      value={form.hepaVariant}
-                      onChange={e => set('hepaVariant', e.target.value)}
-                      className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                    >
-                      <option>Hepatitis A</option><option>Hepatitis B</option><option>Hepatitis A+B (Combined)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block mb-1.5 text-slate-500">Risk Factor</label>
-                    <select
-                      value={form.riskFactor}
-                      onChange={e => set('riskFactor', e.target.value)}
-                      className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                    >
-                      <option>None stated</option><option>Healthcare worker</option><option>Travel exposure</option><option>Household contact</option><option>Food handler</option><option>IV drug use history</option><option>Other</option>
-                    </select>
-                  </div>
+                  {form.service === 'Tetanus' && (
+                    <>
+                      <div>
+                        <label className="block mb-1.5 text-slate-500">Wound / Injury Type</label>
+                        <select
+                          value={form.woundType}
+                          onChange={e => set('woundType', e.target.value)}
+                          className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                        >
+                          <option>Laceration</option><option>Puncture</option><option>Abrasion</option><option>Burn</option><option>Crush injury</option><option>Other</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block mb-1.5 text-slate-500">Last Tetanus Shot</label>
+                        <select
+                          value={form.lastTetanus}
+                          onChange={e => set('lastTetanus', e.target.value)}
+                          className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                        >
+                          <option>Unknown</option><option>Less than 5 years ago</option><option>5–10 years ago</option><option>More than 10 years ago</option><option>Never vaccinated</option>
+                        </select>
+                      </div>
+                    </>
+                  )}
+
+                  {form.service === 'Hepatitis' && (
+                    <>
+                      <div>
+                        <label className="block mb-1.5 text-slate-500">Hepatitis Variant</label>
+                        <select
+                          value={form.hepaVariant}
+                          onChange={e => set('hepaVariant', e.target.value)}
+                          className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                        >
+                          <option>Hepatitis A</option><option>Hepatitis B</option><option>Hepatitis A+B (Combined)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block mb-1.5 text-slate-500">Risk Factor</label>
+                        <select
+                          value={form.riskFactor}
+                          onChange={e => set('riskFactor', e.target.value)}
+                          className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                        >
+                          <option>None stated</option><option>Healthcare worker</option><option>Travel exposure</option><option>Household contact</option><option>Food handler</option><option>IV drug use history</option><option>Other</option>
+                        </select>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block mb-1.5 text-slate-500">Prior Hepa Vaccination</label>
+                        <select
+                          value={form.priorHepa}
+                          onChange={e => set('priorHepa', e.target.value)}
+                          className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                        >
+                          <option>None</option><option>Partially vaccinated</option><option>Fully vaccinated (booster only)</option><option>Unknown</option>
+                        </select>
+                      </div>
+                    </>
+                  )}
+
+                  {form.service === 'Pneumonia' && (
+                    <>
+                      <div>
+                        <label className="block mb-1.5 text-slate-500">Vaccine Variant</label>
+                        <select
+                          value={form.pneumoVaccine}
+                          onChange={e => set('pneumoVaccine', e.target.value)}
+                          className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                        >
+                          <option>PCV13 (Prevnar 13)</option><option>PCV15 (Vaxneuvance)</option><option>PCV20 (Prevnar 20)</option><option>PPSV23 (Pneumovax)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block mb-1.5 text-slate-500">High-Risk Condition</label>
+                        <select
+                          value={form.riskCondition}
+                          onChange={e => set('riskCondition', e.target.value)}
+                          className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                        >
+                          <option>None</option><option>Asthma / COPD</option><option>Diabetes</option><option>Heart disease</option><option>Immunocompromised</option><option>Chronic kidney disease</option><option>Smoker</option><option>Age ≥ 65</option><option>Other</option>
+                        </select>
+                      </div>
+                    </>
+                  )}
+
                   <div className="sm:col-span-2">
-                    <label className="block mb-1.5 text-slate-500">Prior Hepa Vaccination</label>
-                    <select
-                      value={form.priorHepa}
-                      onChange={e => set('priorHepa', e.target.value)}
-                      className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                    >
-                      <option>None</option><option>Partially vaccinated</option><option>Fully vaccinated (booster only)</option><option>Unknown</option>
-                    </select>
+                    <label className="block mb-1.5 text-slate-500">Clinical Notes</label>
+                    <textarea
+                      value={form.notes}
+                      onChange={e => set('notes', e.target.value)}
+                      placeholder="Add any relevant observations, lab results, or clinical assessment notes..."
+                      rows={2}
+                      className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800 resize-y"
+                    />
                   </div>
-                </>
-              )}
-
-              {form.service === 'Pneumonia' && (
-                <>
-                  <div>
-                    <label className="block mb-1.5 text-slate-500">Vaccine Variant</label>
-                    <select
-                      value={form.pneumoVaccine}
-                      onChange={e => set('pneumoVaccine', e.target.value)}
-                      className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                    >
-                      <option>PCV13 (Prevnar 13)</option><option>PCV15 (Vaxneuvance)</option><option>PCV20 (Prevnar 20)</option><option>PPSV23 (Pneumovax)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block mb-1.5 text-slate-500">High-Risk Condition</label>
-                    <select
-                      value={form.riskCondition}
-                      onChange={e => set('riskCondition', e.target.value)}
-                      className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                    >
-                      <option>None</option><option>Asthma / COPD</option><option>Diabetes</option><option>Heart disease</option><option>Immunocompromised</option><option>Chronic kidney disease</option><option>Smoker</option><option>Age ≥ 65</option><option>Other</option>
-                    </select>
-                  </div>
-                </>
-              )}
-
-              <div className="sm:col-span-2">
-                <label className="block mb-1.5 text-slate-500">Clinical Notes</label>
-                <textarea
-                  value={form.notes}
-                  onChange={e => set('notes', e.target.value)}
-                  placeholder="Add any relevant observations, lab results, or clinical assessment notes..."
-                  rows={3}
-                  className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                />
+                </div>
               </div>
             </div>
+
           </div>
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3 flex-shrink-0">
+        <div className="px-6 py-3.5 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3 flex-shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="px-3.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 text-slate-700 cursor-pointer hover:bg-slate-100 transition-colors"
+            className="px-4 py-2 text-xs font-semibold rounded-xl border border-slate-300 text-slate-700 bg-white cursor-pointer hover:bg-slate-100 transition-colors shadow-2xs"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={handleSave}
-            className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-[#3B50DF] hover:bg-[#2F40B5] text-white cursor-pointer shadow-xs transition-colors"
+            className="px-5 py-2 text-xs font-bold rounded-xl bg-[#3B50DF] hover:bg-[#2F40B5] text-white cursor-pointer shadow-xs transition-colors"
           >
             Save Changes
           </button>
@@ -1703,7 +1766,7 @@ function PinMapConfirmModal({ patient, saving, onConfirm, onCancel }) {
   const exposureTypeVal = patient.service === 'PEP' ? `${patient.animal || 'Dog'} Bite` : (patient.service || 'Bite Incident');
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md" onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
+    <div className="admin-modal-overlay fixed z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md" onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
       <div style={{
         background: '#FFFFFF',
         borderRadius: '1.25rem',
@@ -2716,15 +2779,27 @@ function ConfirmReportCard({ patient, report, saving, onBack, onConfirm }) {
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4 overflow-y-auto"
-      style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }}
+      className="admin-modal-overlay fixed z-[60] flex items-center justify-center p-4 overflow-y-auto"
+      style={{
+        background: 'rgba(0,0,0,0.55)',
+        backdropFilter: 'blur(6px)',
+        top: 'max(80px, var(--header-height, 80px))',
+        height: 'calc(100vh - max(80px, var(--header-height, 80px)))',
+        left: 'var(--sidebar-width, 256px)',
+        width: 'calc(100vw - var(--sidebar-width, 256px))',
+        paddingTop: '20px',
+        paddingBottom: '20px',
+        boxSizing: 'border-box',
+        transition: 'left 0.4s cubic-bezier(0.22,1,0.36,1), width 0.4s cubic-bezier(0.22,1,0.36,1), top 0.4s cubic-bezier(0.22,1,0.36,1), height 0.4s cubic-bezier(0.22,1,0.36,1)',
+      }}
       onClick={saving ? undefined : onBack}
       role="dialog"
       aria-modal="true"
       aria-label="Confirm clinical report"
     >
       <div
-        className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden border border-slate-200 my-8"
+        className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden border border-slate-200 m-auto flex flex-col"
+        style={{ maxHeight: 'calc(100vh - 128px)', transition: 'all 0.4s cubic-bezier(0.22,1,0.36,1)' }}
         onClick={e => e.stopPropagation()}
       >
         <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
@@ -2937,9 +3012,28 @@ function AddReportModal({ patient, doses = [], existingReports = [], onClose, on
 
   return (
     <>
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto" style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }} onClick={onClose}>
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden border border-slate-200 my-8" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
+    <div
+      className="admin-modal-overlay fixed z-50 flex items-center justify-center p-4 overflow-y-auto"
+      style={{
+        background: 'rgba(0,0,0,0.55)',
+        backdropFilter: 'blur(6px)',
+        top: 'max(80px, var(--header-height, 80px))',
+        height: 'calc(100vh - max(80px, var(--header-height, 80px)))',
+        left: 'var(--sidebar-width, 256px)',
+        width: 'calc(100vw - var(--sidebar-width, 256px))',
+        paddingTop: '20px',
+        paddingBottom: '20px',
+        boxSizing: 'border-box',
+        transition: 'left 0.4s cubic-bezier(0.22,1,0.36,1), width 0.4s cubic-bezier(0.22,1,0.36,1), top 0.4s cubic-bezier(0.22,1,0.36,1), height 0.4s cubic-bezier(0.22,1,0.36,1)',
+      }}
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden border border-slate-200 m-auto flex flex-col"
+        style={{ maxHeight: 'calc(100vh - 128px)', transition: 'all 0.4s cubic-bezier(0.22,1,0.36,1)' }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between flex-shrink-0">
           <div>
             <h3 className="text-sm font-bold text-slate-900">Add Clinical Report / Dose Vitals</h3>
             <p className="text-[11px] text-slate-400 font-normal mt-0.5">Log vitals, injection route, and clinical observations for {patient.name}</p>
@@ -2947,7 +3041,7 @@ function AddReportModal({ patient, doses = [], existingReports = [], onClose, on
           <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"><X size={16}/></button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs font-semibold text-slate-700">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs font-semibold text-slate-700 overflow-y-auto flex-1">
           {/* Report Stage / Type Dropdown */}
           <div>
             <label className="block mb-1.5 text-slate-500">Report Stage / Assessment Type</label>
@@ -3559,7 +3653,20 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
       const isOverdue = liveSt !== 'completed' && (liveSt === 'overdue' || p.status === 'overdue' || buildDoses(p).some(d => d.status === 'miss'));
       return liveSt === 'completed' ? 'completed' : isOverdue ? 'overdue' : 'ongoing';
     };
-    rows.forEach(p => { const st = statusFor(p); statusCount[st] = (statusCount[st] || 0) + 1; });
+    // Service mix, counted from the same rows the table prints. This was
+    // computed and then thrown away before, so the report carried no service
+    // breakdown at all.
+    const serviceCount = {};
+    rows.forEach(p => {
+      const st = statusFor(p);
+      statusCount[st] = (statusCount[st] || 0) + 1;
+      const svc = (p.service || 'Unspecified').trim() || 'Unspecified';
+      serviceCount[svc] = (serviceCount[svc] || 0) + 1;
+    });
+    const servicePct = (n) => (rows.length ? `${Math.round((n / rows.length) * 1000) / 10}%` : '0%');
+    const serviceRows = Object.entries(serviceCount)
+      .sort((a, b) => b[1] - a[1])
+      .map(([svc, n]) => [svc, n, servicePct(n)]);
 
     const headers = ['#', 'Barangay / Address', 'Patient ID', 'Patient Name', 'Age', 'Sex', 'Contact No.', 'Service Type', 'Exposure', 'Status', 'Date Registered'];
 
@@ -3571,6 +3678,10 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
       [],
       ['SUMMARY METRICS'],
       ['Total Patients', rows.length, 'Ongoing', statusCount.ongoing || 0, 'Overdue', statusCount.overdue || 0, 'Completed', statusCount.completed || 0],
+      [],
+      ['SERVICE BREAKDOWN'],
+      ['Service', 'Patients', 'Share'],
+      ...serviceRows,
       [],
       headers,
     ];
@@ -5265,58 +5376,11 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
     return cleaned;
   }
 
-  function generateDefaultDoses(service, baseDate) {
-    const d0 = baseDate || today();
-    const addDays = (dStr, days) => addDaysToDateString(dStr, days);
-
-    const makeDose = (key, label, date, isDone) => ({
-      key,
-      n: label,
-      label,
-      dose: label,
-      name: label,
-      date,
-      status: isDone ? 'done' : 'pending',
-      s: isDone ? 'done' : 'pending',
-      statusText: isDone ? 'Completed' : 'Scheduled',
-      done: isDone,
-    });
-
-    if (service === 'PEP') {
-      return [
-        makeDose('d1', 'Dose 1 (Day 0)', d0, true),
-        makeDose('d2', 'Dose 2 (Day 3)', addDays(d0, 3), false),
-        makeDose('d3', 'Dose 3 (Day 7)', addDays(d0, 7), false),
-        makeDose('d4', 'Dose 4 (Day 14)', addDays(d0, 14), false),
-        makeDose('d5', 'Dose 5 (Day 28)', addDays(d0, 28), false),
-      ];
-    }
-    // WHO's abridged 2-visit PrEP series. Records registered before this
-    // change keep the 3-dose schedule they were created with — the doses
-    // stored on the record are always what the app and reports display.
-    if (service === 'PrEP') {
-      return [
-        makeDose('d1', 'Dose 1 (Day 0)', d0, true),
-        makeDose('d2', 'Dose 2 (Day 7)', addDays(d0, 7), false),
-      ];
-    }
-    if (service === 'Tetanus') {
-      return [
-        makeDose('d1', 'Primary Dose', d0, true),
-        makeDose('d2', 'Follow-up Booster (1 Month)', addDays(d0, 30), false),
-      ];
-    }
-    if (service === 'Hepatitis') {
-      return [
-        makeDose('d1', 'Dose 1 (Day 0)', d0, true),
-        makeDose('d2', 'Dose 2 (1 Month)', addDays(d0, 30), false),
-        makeDose('d3', 'Dose 3 (6 Months)', addDays(d0, 180), false),
-      ];
-    }
-    return [
-      makeDose('d1', 'Initial Dose', d0, true),
-    ];
+  // Kept as a thin wrapper so every call site reads the shared definitions.
+  function generateDefaultDoses(service, baseDate, opts = {}) {
+    return buildInitialDoses(service, { day0: baseDate, dob: opts.dob, ageGroup: opts.ageGroup });
   }
+
 
   async function handleAddPatient(form, setSaving) {
     if (!form.fname.trim() || !form.lname.trim()) { showToast('Please fill in first and last name', 'error'); return; }
@@ -5324,6 +5388,10 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(form.email.trim())) { showToast('Please enter a valid email address', 'error'); return; }
     if (!form.age) { showToast('Age is required', 'error'); return; }
+    if (form.ageGroup === 'infant' && !form.dob) {
+      showToast('Date of birth is required for the infant/child series — the schedule is counted from it.', 'error');
+      return;
+    }
     if (form.contact && !isValidPHPhone(form.contact)) { showToast('Enter a valid Philippine mobile number', 'error'); return; }
 
     const normalEmail = form.email.toLowerCase().trim();
@@ -5359,7 +5427,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
       const selectedBarangay = form.barangay || 'San Juan';
       const enteredZone = form.zone || 'Zone 1';
       const baseDate = form.date || today();
-      const defaultDoseArray = generateDefaultDoses(form.service || 'PEP', baseDate);
+      const defaultDoseArray = generateDefaultDoses(form.service || 'PEP', baseDate, { dob: form.dob, ageGroup: form.ageGroup });
 
       const vaxDoc = {
         id: caseNo,
@@ -5401,10 +5469,11 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
         riskFactor: form.riskFactor || '',
         priorHepa: form.priorHepa || '',
         pneumoVaccine: form.pneumoVaccine || '',
+        ageGroup: form.ageGroup || 'adult',
         riskCondition: form.riskCondition || '',
         priorPneumo: form.priorPneumo || '',
         status: 'ongoing',
-        dose: `1/${defaultDoseArray.length}`,
+        dose: `0/${defaultDoseArray.length}`,
         doses: defaultDoseArray,
         woundImages: [],
         createdAt: serverTimestamp(),

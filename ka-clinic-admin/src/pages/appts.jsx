@@ -616,7 +616,12 @@ const globalCSS = `
   /* Modal Overlay */
   .modal-overlay {
     position: fixed;
-    inset: 0;
+    top: var(--header-height, 80px);
+    bottom: 0;
+    right: 0;
+    left: var(--sidebar-width, 256px);
+    width: calc(100vw - var(--sidebar-width, 256px));
+    height: calc(100vh - var(--header-height, 80px));
     background: rgba(17, 24, 39, 0.5);
     z-index: 999;
     display: flex;
@@ -624,6 +629,8 @@ const globalCSS = `
     justify-content: center;
     backdrop-filter: blur(8px);
     padding: 16px;
+    overflow-y: auto;
+    transition: left 0.4s cubic-bezier(0.22,1,0.36,1), width 0.4s cubic-bezier(0.22,1,0.36,1), top 0.4s cubic-bezier(0.22,1,0.36,1), height 0.4s cubic-bezier(0.22,1,0.36,1);
   }
   .modal-card {
     background: var(--bg-card);
@@ -877,6 +884,83 @@ export default function AppointmentPage() {
   const [saving, setSaving] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
 
+  // Decline Reason Modal States
+  const [declineModalOpen, setDeclineModalOpen] = useState(false);
+  const [declineTargetApt, setDeclineTargetApt] = useState(null);
+  const [declineReason, setDeclineReason] = useState('');
+  const [declinePreset, setDeclinePreset] = useState('');
+  const [declineSaving, setDeclineSaving] = useState(false);
+
+  const DECLINE_REASONS = [
+    'Fully booked for this date and time slot',
+    'Clinic closed / Special holiday schedule',
+    'Attending physician unavailable',
+    'Duplicate appointment booking',
+    'Incomplete patient contact details',
+    'Emergency cases prioritized at the clinic',
+  ];
+
+  const promptDecline = (apt) => {
+    setDeclineTargetApt(apt);
+    setDeclinePreset(DECLINE_REASONS[0]);
+    setDeclineReason(DECLINE_REASONS[0]);
+    setDeclineModalOpen(true);
+  };
+
+  const notifyAppointmentDeclined = async (apt, reason) => {
+    const patientId = apt?.patientId || apt?.userId;
+    if (!patientId) return;
+    const whenDate = formatDateLong(apt.date) || apt.date || 'your scheduled date';
+    const whenTime = apt.time ? ` at ${apt.time}` : '';
+    const reasonMsg = reason ? ` Reason: ${reason}` : '';
+    try {
+      await authedPostJson('/api/notifications', {
+        action: 'send-followup',
+        patientId,
+        title: 'Appointment request declined',
+        message: `Your appointment request for ${apt.type || 'Consultation'} on ${whenDate}${whenTime} could not be approved.${reasonMsg}`,
+        dueDate: whenDate,
+        source: 'appointment-declined',
+      });
+    } catch (err) {
+      console.error('Appointment decline notification failed:', err);
+    }
+  };
+
+  const handleConfirmDecline = async () => {
+    if (!declineTargetApt) return;
+    const finalReason = (declineReason || '').trim() || declinePreset;
+    if (!finalReason) {
+      showToast('Please provide a reason for declining the appointment', 'error');
+      return;
+    }
+    setDeclineSaving(true);
+    try {
+      const aptId = declineTargetApt.id;
+      const prevDate = declineTargetApt.date;
+      const prevTime = declineTargetApt.time;
+      await updateDoc(doc(db, 'appointments', aptId), {
+        status: 'cancelled',
+        declineReason: finalReason,
+        cancellationReason: finalReason,
+        declinedAt: Date.now(),
+        declinedBy: auth?.currentUser?.displayName || 'Admin',
+        updatedAt: Date.now(),
+      });
+      await releaseSlot(prevDate, prevTime);
+      await notifyAppointmentDeclined(declineTargetApt, finalReason);
+      showToast(`Appointment for ${declineTargetApt.name} declined`);
+      setDeclineModalOpen(false);
+      setDeclineTargetApt(null);
+      setDeclineReason('');
+    } catch (err) {
+      console.error('Failed to decline appointment:', err);
+      showToast('Failed to decline appointment', 'error');
+    } finally {
+      setDeclineSaving(false);
+    }
+  };
+
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast({ msg: '', type: '' }), 3000);
@@ -1046,7 +1130,7 @@ export default function AppointmentPage() {
       type: apt.type || SERVICE_TYPES[0],
       status: apt.status || 'confirmed',
       notes: apt.notes || '',
-      cancellationReason: apt.cancellationReason || '',
+      cancellationReason: apt.cancellationReason || apt.declineReason || '',
     });
     setEditModalOpen(true);
   };
@@ -1070,6 +1154,7 @@ export default function AppointmentPage() {
       status: editForm.status || 'confirmed',
       notes: (editForm.notes || '').trim(),
       cancellationReason: (editForm.cancellationReason || '').trim(),
+      declineReason: (editForm.cancellationReason || '').trim(),
       source: editingApt.source || 'walk-in',
       updatedAt: Date.now(),
     };
@@ -1294,7 +1379,7 @@ export default function AppointmentPage() {
                           <button className="btn-queue-action btn-queue-confirm" onClick={() => handleQuickAction(apt.id, 'confirmed')}>
                             <UserCheck size={13} /> Confirm
                           </button>
-                          <button className="btn-queue-action btn-queue-cancel" onClick={() => handleQuickAction(apt.id, 'cancelled')}>
+                          <button className="btn-queue-action btn-queue-cancel" onClick={() => promptDecline(apt)}>
                             <X size={13} /> Decline
                           </button>
                         </div>
@@ -1498,15 +1583,26 @@ export default function AppointmentPage() {
                         {/* Right Actions */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           {apt.status === 'pending' && (
-                            <button
-                              className="btn-queue-action btn-queue-confirm"
-                              onClick={() => handleQuickAction(apt.id, 'confirmed')}
-                              title="Accept / Confirm"
-                              style={{ padding: '5px 12px', fontSize: '0.71875rem' }}
-                            >
-                              <UserCheck size={12} />
-                              <span>Confirm</span>
-                            </button>
+                            <>
+                              <button
+                                className="btn-queue-action btn-queue-confirm"
+                                onClick={() => handleQuickAction(apt.id, 'confirmed')}
+                                title="Accept / Confirm"
+                                style={{ padding: '5px 12px', fontSize: '0.71875rem' }}
+                              >
+                                <UserCheck size={12} />
+                                <span>Confirm</span>
+                              </button>
+                              <button
+                                className="btn-queue-action btn-queue-cancel"
+                                onClick={() => promptDecline(apt)}
+                                title="Decline Appointment"
+                                style={{ padding: '5px 12px', fontSize: '0.71875rem' }}
+                              >
+                                <X size={12} />
+                                <span>Decline</span>
+                              </button>
+                            </>
                           )}
                         </div>
                       </div>
@@ -1538,8 +1634,24 @@ export default function AppointmentPage() {
 
       {/* Add Appointment Modal */}
       {addModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto" style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }} onClick={() => setAddModalOpen(false)}>
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200 my-8 max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div
+          className="admin-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto"
+          style={{
+            background: 'rgba(0,0,0,0.55)',
+            backdropFilter: 'blur(6px)',
+            top: 'var(--header-height, 80px)',
+            height: 'calc(100vh - var(--header-height, 80px))',
+            left: 'var(--sidebar-width, 256px)',
+            width: 'calc(100vw - var(--sidebar-width, 256px))',
+            transition: 'left 0.4s cubic-bezier(0.22,1,0.36,1), width 0.4s cubic-bezier(0.22,1,0.36,1), top 0.4s cubic-bezier(0.22,1,0.36,1), height 0.4s cubic-bezier(0.22,1,0.36,1)',
+          }}
+          onClick={() => setAddModalOpen(false)}
+        >
+          <div
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200 my-auto flex flex-col"
+            style={{ maxHeight: 'calc(100vh - 130px)', transition: 'all 0.4s cubic-bezier(0.22,1,0.36,1)' }}
+            onClick={e => e.stopPropagation()}
+          >
             {/* Light Clean Header Bar */}
             <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between flex-shrink-0">
               <div>
@@ -1828,6 +1940,150 @@ export default function AppointmentPage() {
                   {editSaving ? 'Updating...' : 'Save Changes'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Decline Appointment Reason Pop-up Modal */}
+      {declineModalOpen && declineTargetApt && (
+        <div className="modal-overlay" style={{ zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div
+            className="modal-card"
+            style={{
+              maxWidth: 480,
+              width: '100%',
+              padding: 0,
+              overflow: 'hidden',
+              borderRadius: 24,
+              border: '1px solid #FECACA',
+              boxShadow: '0 20px 40px -15px rgba(220, 38, 38, 0.25)',
+              background: '#FFFFFF'
+            }}
+          >
+            {/* Header */}
+            <div style={{ padding: '20px 24px', background: '#FEF2F2', borderBottom: '1px solid #FEE2E2', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 40, height: 40, borderRadius: 12, background: '#FEE2E2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#DC2626', border: '1px solid #FCA5A5' }}>
+                  <AlertCircle size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#991B1B' }}>Decline Appointment</h3>
+                  <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: '#B91C1C' }}>
+                    {declineTargetApt.name} · {declineTargetApt.date} ({declineTargetApt.time})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeclineModalOpen(false)}
+                style={{ background: 'transparent', border: 'none', color: '#991B1B', cursor: 'pointer', padding: 4 }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: '20px 24px', background: '#FFFFFF' }}>
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#475569', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Quick Select Reason
+                </label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {DECLINE_REASONS.map((r, i) => {
+                    const isSelected = declineReason === r;
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => { setDeclinePreset(r); setDeclineReason(r); }}
+                        style={{
+                          fontSize: '0.71875rem',
+                          fontWeight: isSelected ? 700 : 500,
+                          padding: '5px 10px',
+                          borderRadius: 9999,
+                          border: isSelected ? '1.5px solid #DC2626' : '1px solid #E2E8F0',
+                          background: isSelected ? '#FEF2F2' : '#F8FAFC',
+                          color: isSelected ? '#DC2626' : '#475569',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        {r}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 10 }}>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#1E293B', marginBottom: 6 }}>
+                  Reason for Decline <span style={{ color: '#DC2626' }}>*</span>
+                </label>
+                <textarea
+                  rows={3}
+                  value={declineReason}
+                  onChange={e => setDeclineReason(e.target.value)}
+                  placeholder="Explain why this appointment cannot be accepted..."
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: 12,
+                    border: '1.5px solid #CBD5E1',
+                    fontSize: '0.8125rem',
+                    color: '#0F172A',
+                    outline: 'none',
+                    resize: 'vertical',
+                    boxSizing: 'border-box',
+                    fontFamily: 'inherit',
+                    lineHeight: 1.4
+                  }}
+                  onFocus={e => e.target.style.borderColor = '#DC2626'}
+                  onBlur={e => e.target.style.borderColor = '#CBD5E1'}
+                />
+              </div>
+
+              <div style={{ padding: '8px 12px', background: '#F8FAFC', borderRadius: 10, border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: '0.71875rem', color: '#64748B' }}>
+                  ℹ️ This reason will be displayed in the patient's mobile app appointment details.
+                </span>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div style={{ padding: '16px 24px', background: '#F8FAFC', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => setDeclineModalOpen(false)}
+                disabled={declineSaving}
+                className="btn-secondary"
+                style={{ padding: '8px 16px', fontSize: '0.78125rem' }}
+              >
+                Keep Appointment
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDecline}
+                disabled={declineSaving || !declineReason.trim()}
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: 12,
+                  background: '#DC2626',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  fontSize: '0.78125rem',
+                  fontWeight: 700,
+                  cursor: (declineSaving || !declineReason.trim()) ? 'not-allowed' : 'pointer',
+                  opacity: (declineSaving || !declineReason.trim()) ? 0.6 : 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  boxShadow: '0 4px 12px rgba(220, 38, 38, 0.25)'
+                }}
+              >
+                <X size={14} />
+                <span>{declineSaving ? 'Declining...' : 'Confirm Decline'}</span>
+              </button>
             </div>
           </div>
         </div>

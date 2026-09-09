@@ -115,6 +115,8 @@ type ApptUpdate = {
   type?: string;
   status: string;
   note?: string;
+  declineReason?: string;
+  cancellationReason?: string;
   updatedAt?: number;
 };
 
@@ -261,9 +263,12 @@ export default function RabiesRecoveryApp() {
   const [chatThread, setChatThread] = useState<any | null>(null);
   // Appointments the clinic has accepted, newest decision first.
   const [confirmedAppts, setConfirmedAppts] = useState<ApptUpdate[]>([]);
+  // Appointments the clinic has declined or cancelled.
+  const [declinedAppts, setDeclinedAppts] = useState<ApptUpdate[]>([]);
   // Appointment ids already announced. `null` until the first snapshot lands so
   // the initial batch seeds the baseline instead of firing a burst of banners.
   const seenConfirmedIds = useRef<Set<string> | null>(null);
+  const seenDeclinedIds = useRef<Set<string> | null>(null);
   const mainScrollViewRef = useRef<ScrollView>(null);
 
   const [clinicNotifs, setClinicNotifs] = useState<ClinicNotification[]>([]);
@@ -490,14 +495,20 @@ export default function RabiesRecoveryApp() {
   useEffect(() => {
     if (!user) {
       setConfirmedAppts([]);
+      setDeclinedAppts([]);
       seenConfirmedIds.current = null;
+      seenDeclinedIds.current = null;
       return;
     }
     const q = query(collection(db, 'appointments'), where('userId', '==', user.uid));
     return onSnapshot(q, (snap) => {
-      const confirmed = snap.docs
-        .map(d => ({ id: d.id, ...(d.data() as any) } as ApptUpdate))
+      const allAppts = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) } as ApptUpdate));
+      const confirmed = allAppts
         .filter(a => CONFIRMED_STATUSES.includes(a.status))
+        .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+      const declined = allAppts
+        .filter(a => a.status === 'cancelled' && (a.declineReason || a.cancellationReason))
         .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
       // First snapshot only seeds the baseline — otherwise every appointment
@@ -516,10 +527,29 @@ export default function RabiesRecoveryApp() {
             );
           });
       }
+
+      if (seenDeclinedIds.current === null) {
+        seenDeclinedIds.current = new Set(declined.map(a => a.id));
+      } else {
+        declined
+          .filter(a => !seenDeclinedIds.current!.has(a.id))
+          .forEach(a => {
+            seenDeclinedIds.current!.add(a.id);
+            const reason = a.declineReason || a.cancellationReason;
+            presentLocalNotification(
+              'Appointment Declined',
+              `Your appointment on ${formatApptDate(a.date)} was declined.${reason ? ` Reason: ${reason}` : ''}`,
+              { appointmentId: a.id, screen: 'appt' },
+            );
+          });
+      }
+
       setConfirmedAppts(confirmed);
+      setDeclinedAppts(declined);
     }, (err) => {
       console.error('Appointment notification listener error:', err);
       setConfirmedAppts([]);
+      setDeclinedAppts([]);
     });
   }, [user?.uid]);
 
@@ -553,6 +583,17 @@ export default function RabiesRecoveryApp() {
         id: `appt-${a.id}`,
         title: 'Appointment Confirmed',
         message: `K&A Clinic accepted your ${a.type || 'appointment'} on ${formatApptDate(a.date)}${a.time ? ` at ${a.time}` : ''}.${a.note ? ` Clinic: ${a.note}` : ''}`,
+        time: formatApptDate(a.date),
+        unread: true,
+        type: 'appointment',
+      });
+    });
+    declinedAppts.slice(0, 3).forEach(a => {
+      const reason = a.declineReason || a.cancellationReason;
+      list.push({
+        id: `declined-${a.id}`,
+        title: 'Appointment Declined',
+        message: `Your ${a.type || 'appointment'} on ${formatApptDate(a.date)} was declined.${reason ? ` Reason: ${reason}` : ''}`,
         time: formatApptDate(a.date),
         unread: true,
         type: 'appointment',

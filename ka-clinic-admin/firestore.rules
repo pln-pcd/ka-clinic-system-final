@@ -142,6 +142,16 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // Append-only audit trail of every vial deducted or restored when a dose
+    // is recorded (see vaccination.jsx cycleStatus). Doc ids are
+    // patient_dose_direction, which is what makes a repeated toggle a no-op
+    // instead of a second deduction. Never updated or deleted: a stock
+    // movement that can be rewritten is not an audit trail.
+    match /stockMovements/{docId} {
+      allow read, create: if isAdmin();
+      allow update, delete: if false;
+    }
+
     // Clinic-sent follow-up notifications (api/notifications.js). Patients read
     // their own by MRN — the same MRN that is their vaccinations doc id — so
     // the notification centre in the app can list them.

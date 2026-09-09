@@ -170,21 +170,28 @@ export default function ProfileScreen() {
     }
   }, [user?.uid, isGuest, user?.isAnonymous]);
 
+  // The clinic record wins for anything the clinic maintains. This used to
+  // merge as record-or-cached with the cached value winning, and because that
+  // cache had already been seeded from AsyncStorage, a stale local copy beat a
+  // newer admin correction — the listener was live but its result was dropped.
+  // Local storage is now only the fallback for fields the record leaves empty.
   useEffect(() => {
     if (!patientRecord) return;
+    const fromRecord = (recordValue: any, cached: any) =>
+      recordValue !== undefined && recordValue !== null && recordValue !== '' ? recordValue : cached;
     setPersonalData(prev => ({
       ...prev,
-      fullName: patientRecord.name || prev.fullName,
-      age: patientRecord.age || prev.age,
-      gender: patientRecord.sex || prev.gender,
-      address: patientRecord.address || prev.address,
-      contact: patientRecord.contact || prev.contact,
+      fullName: fromRecord(patientRecord.name, prev.fullName),
+      age: fromRecord(patientRecord.age, prev.age),
+      gender: fromRecord(patientRecord.sex, prev.gender),
+      address: fromRecord(patientRecord.address, prev.address),
+      contact: fromRecord(patientRecord.contact, prev.contact),
       religion: patientRecord.religion || prev.religion,
       education: patientRecord.education || prev.education,
       occupation: patientRecord.occupation || prev.occupation,
-      height: patientRecord.height || prev.height,
-      weight: patientRecord.weight || prev.weight,
-      bp: patientRecord.bp || prev.bp,
+      height: fromRecord(patientRecord.height, prev.height),
+      weight: fromRecord(patientRecord.weight, prev.weight),
+      bp: fromRecord(patientRecord.bloodPressure ?? patientRecord.bp, prev.bp),
       emergencyName: patientRecord.emergencyName || prev.emergencyName,
       emergencyRel: patientRecord.emergencyRel || prev.emergencyRel,
       emergencyPhone: patientRecord.emergencyPhone || prev.emergencyPhone,
