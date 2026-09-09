@@ -220,11 +220,11 @@ export const verifyEmailOTP = async (mrnInput: string, enteredCode: string): Pro
 // identity going forward.
 export const completeEmailSignup = async (record: AuthorizedPatient, password: string) => {
   // The account is created (or adopted, when a previous attempt left an
-  // orphaned Auth user behind) by /api/complete-signup, which has the Admin
-  // SDK and can tell "your own half-finished signup" apart from "somebody
-  // else's account" — a distinction the client SDK cannot make, and which
-  // used to lock patients out of their own email address permanently.
-  await postToApi<{ uid: string }>('/api/complete-signup', { mrn: record.mrn, password });
+  // orphaned Auth user behind) by /api/verify-otp's complete-signup action,
+  // which has the Admin SDK and can tell "your own half-finished signup"
+  // apart from "somebody else's account" — a distinction the client SDK
+  // cannot make, and which used to lock patients out of their own email.
+  await postToApi<{ uid: string }>('/api/verify-otp', { action: 'complete-signup', mrn: record.mrn, password });
   const credential = await _signInWithEmailAndPassword(auth, (record.email || '').toLowerCase().trim(), password);
   if (record.name && credential.user.displayName !== record.name) {
     await _updateProfile(credential.user, { displayName: record.name }).catch(() => {});
