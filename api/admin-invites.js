@@ -58,8 +58,11 @@ async function invite(req, res, caller) {
   }
 
   if (existing.exists) {
-    // Re-invite: keep createdAt/name, just reset the invite state.
-    await adminRef.update({ status: 'invited', invitedBy: manager.uid });
+    // Re-invite: keep createdAt/name, reset the invite state, and stamp when
+    // this invite was actually sent. Without invitedAt a resend changed nothing
+    // the dashboard could show — the list kept displaying the original invite
+    // date, so the button looked like it had done nothing at all.
+    await adminRef.update({ status: 'invited', invitedBy: manager.uid, invitedAt: Timestamp.now() });
   } else {
     await adminRef.set({
       name: '',
@@ -68,11 +71,22 @@ async function invite(req, res, caller) {
       invitedBy: manager.uid,
       status: 'invited',
       createdAt: Timestamp.now(),
+      invitedAt: Timestamp.now(),
       trustedDevices: {},
       failedLoginAttempts: 0,
       lockedUntil: null,
     });
   }
+
+  // Any invite link already out there for this address is retired first.
+  // Minting a second token while the first stayed live meant a resend left
+  // several working links, including the one in whatever mail prompted the
+  // resend in the first place.
+  const outstanding = await db.collection('invites')
+    .where('email', '==', email)
+    .where('used', '==', false)
+    .get();
+  await Promise.all(outstanding.docs.map(d => d.ref.delete()));
 
   const token = crypto.randomBytes(24).toString('base64url');
   await db.collection('invites').doc(token).set({

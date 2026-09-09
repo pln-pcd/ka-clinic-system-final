@@ -323,9 +323,10 @@ export default function ManageAdmins() {
                           </span>
                         </td>
 
-                        {/* Date Invited Column */}
+                        {/* Date Invited Column — shows when the invite was last
+                            sent, so pressing Resend visibly updates the row. */}
                         <td className="px-6 py-3.5 text-xs font-semibold text-slate-500">
-                          {formatDate(admin.createdAt)}
+                          {formatDate(admin.invitedAt || admin.createdAt)}
                         </td>
 
                         {/* Actions Column */}
