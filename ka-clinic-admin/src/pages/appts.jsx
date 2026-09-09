@@ -29,6 +29,7 @@ import {
 import { useEffect, useState } from 'react';
 import { auth, db } from '../lib/firebase';
 import Toast from '../components/Toast';
+import { getTodayDateString, addDaysToDateString } from '../lib/dates';
 
 /* ─────────────────────────── CSS ─────────────────────────── */
 const globalCSS = `
@@ -821,11 +822,10 @@ const isWeekendDate = (dateStr) => {
 // default instead of handing the admin a date that will just get rejected.
 const nextAvailableDate = (dateStr) => {
   if (!dateStr || isWeekendDate(dateStr)) return dateStr;
-  const d = new Date(`${dateStr}T00:00:00`);
+  const d = new Date(`${dateStr}T12:00:00`);
   const day = d.getDay();
   const daysUntilSaturday = 6 - day;
-  d.setDate(d.getDate() + daysUntilSaturday);
-  return d.toISOString().split('T')[0];
+  return addDaysToDateString(dateStr, daysUntilSaturday);
 };
 
 const SERVICE_TYPES = [
@@ -843,7 +843,7 @@ const getInitials = (name = '') =>
 
 export default function AppointmentPage() {
   const [appointments, setAppointments] = useState([]);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(getTodayDateString());
   const [currentViewDate, setCurrentViewDate] = useState(new Date());
   const [rightPanelTab, setRightPanelTab] = useState('requests'); // 'requests' | 'cancellations'
 
@@ -937,7 +937,7 @@ export default function AppointmentPage() {
   const allCancelledApts = appointments.filter(a => a.status === 'cancelled' || a.status === 'cancellation_pending');
 
   // Metrics
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getTodayDateString();
   const confirmedToday = appointments.filter(a => a.date === todayStr && (a.status === 'confirmed' || a.status === 'accepted')).length;
 
   // Actions

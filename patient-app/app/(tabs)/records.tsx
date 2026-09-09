@@ -27,13 +27,13 @@ import { moderateScale, scale, verticalScale } from '../../constants/scale';
 import CustomAlertModal, { CustomAlertConfig } from '../../components/CustomAlertModal';
 
 const { width } = Dimensions.get('window');
-const MEDICAL_RED = '#EF4444';
+const MEDICAL_RED = '#1E3A8A';
 const SOFT_GRAY_BG = '#F4F6FA';
 
 const C = {
   red: MEDICAL_RED,
-  redLight: '#FFF0F1',
-  redDeep: '#B8102C',
+  redLight: '#EFF6FF',
+  redDeep: '#172554',
   white: '#FFFFFF',
   charcoal: '#1E293B',
   slate: '#475569',
@@ -376,7 +376,7 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#CBD5E1',
     borderTopWidth: 3,
-    borderTopColor: '#E31837',
+    borderTopColor: MEDICAL_RED,
     padding: scale(8),
     shadowColor: '#0F172A',
     shadowOpacity: 0.06,
@@ -471,7 +471,7 @@ const s = StyleSheet.create({
     backgroundColor: '#ECFDF5',
   },
   miniBadgePending: {
-    backgroundColor: '#FFF1F3',
+    backgroundColor: '#EFF6FF',
   },
   miniBadgeTxt: {
     fontSize: moderateScale(9.5),
@@ -481,7 +481,7 @@ const s = StyleSheet.create({
     color: '#059669',
   },
   miniBadgeTxtPending: {
-    color: '#EF4444',
+    color: MEDICAL_RED,
   },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: scale(24) },

@@ -17,17 +17,19 @@ import {
   View,
 } from 'react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getAuthErrorMessage, signInAsGuest, signInWithMRN } from '../../config/firebase';
 import { markOnboardingSeen, setKeepSignedIn } from '../../config/appPrefs';
 import { moderateScale, scale, verticalScale } from '../../constants/scale';
 
 const { height } = Dimensions.get('window');
-const MEDICAL_RED = '#E31837';
+const NAVY_BLUE = '#1E3A8A';
 const SOFT_GRAY_BG = '#F8FAFC';
 const BORDER_INACTIVE = '#E2E8F0';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [mrnInput, setMrnInput] = useState('');
@@ -95,23 +97,32 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={['#FFFFFF', '#FFF1F2', '#F8FAFC']} style={styles.background}>
+      <LinearGradient colors={['#FFFFFF', '#F0F6FE', '#F8FAFC']} style={styles.background}>
         <View style={styles.patternOverlay}>
-          <Ionicons name="medical" size={120} color="#FEE2E2" style={styles.bgIcon1} />
-          <Ionicons name="heart" size={90} color="#FEE2E2" style={styles.bgIcon2} />
-          <Ionicons name="pulse" size={130} color="#FEE2E2" style={styles.bgIcon3} />
+          <Ionicons name="medical" size={120} color="#DBEAFE" style={styles.bgIcon1} />
+          <Ionicons name="heart" size={90} color="#DBEAFE" style={styles.bgIcon2} />
+          <Ionicons name="pulse" size={130} color="#DBEAFE" style={styles.bgIcon3} />
         </View>
       </LinearGradient>
 
       {/* TOP NAVIGATION */}
-      <View style={styles.navHeader}>
+      <View style={[styles.navHeader, { top: Math.max(insets.top + (Platform.OS === 'android' ? 12 : 8), verticalScale(42)) }]}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()} activeOpacity={0.7}>
           <Ionicons name="chevron-back" size={22} color="#1E293B" />
         </TouchableOpacity>
       </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <ScrollView 
+          showsVerticalScrollIndicator={false} 
+          contentContainerStyle={[
+            styles.scrollContent,
+            {
+              paddingTop: Math.max(insets.top + verticalScale(35), verticalScale(90)),
+              paddingBottom: Math.max(insets.bottom + (Platform.OS === 'android' ? 24 : 16), verticalScale(40)),
+            },
+          ]}
+        >
 
           {/* BRANDING HEADER */}
           <Animated.View entering={FadeInUp.duration(800)} style={styles.header}>
@@ -119,7 +130,7 @@ export default function LoginScreen() {
               <Image source={require('../../assets/logo-white-nobg.png')} style={styles.logo} resizeMode="contain" />
             </View>
             <Text style={styles.brandName}>
-              <Text style={{ color: MEDICAL_RED }}>K&A</Text> CLINIC
+              <Text style={{ color: NAVY_BLUE }}>K&A</Text> CLINIC
             </Text>
             <Text style={styles.brandSubtitle}>ANTI-RABIES CARE SYSTEM</Text>
           </Animated.View>
@@ -142,7 +153,7 @@ export default function LoginScreen() {
               <View style={styles.inputWrapper}>
                 <Text style={styles.inputLabel}>Medical Record Number (MRN)</Text>
                 <View style={[styles.inputBox, focusedField === 'mrn' && styles.inputBoxFocused]}>
-                  <Ionicons name="card-outline" size={20} color={focusedField === 'mrn' ? MEDICAL_RED : '#94A3B8'} />
+                  <Ionicons name="card-outline" size={20} color={focusedField === 'mrn' ? NAVY_BLUE : '#94A3B8'} />
                   <TextInput
                     style={styles.textInput}
                     placeholder="Medical Record Number (MRN)"
@@ -160,7 +171,7 @@ export default function LoginScreen() {
               <View style={styles.inputWrapper}>
                 <Text style={styles.inputLabel}>Password</Text>
                 <View style={[styles.inputBox, focusedField === 'pass' && styles.inputBoxFocused]}>
-                  <Ionicons name="lock-closed-outline" size={20} color={focusedField === 'pass' ? MEDICAL_RED : '#94A3B8'} />
+                  <Ionicons name="lock-closed-outline" size={20} color={focusedField === 'pass' ? NAVY_BLUE : '#94A3B8'} />
                   <TextInput
                     style={styles.textInput}
                     placeholder="Password"
@@ -215,7 +226,7 @@ export default function LoginScreen() {
               disabled={loading}
             >
               <LinearGradient 
-                colors={[MEDICAL_RED, '#C2152E']} 
+                colors={[NAVY_BLUE, '#172554']} 
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.loginGradient}
@@ -246,7 +257,7 @@ export default function LoginScreen() {
               disabled={guestLoading}
             >
               <Text style={styles.guestButtonText}>{guestLoading ? 'Signing in...' : 'Continue as a Guest'}</Text>
-              {!guestLoading && <Ionicons name="arrow-forward" size={16} color={MEDICAL_RED} />}
+              {!guestLoading && <Ionicons name="arrow-forward" size={16} color={NAVY_BLUE} />}
             </TouchableOpacity>
 
             <TouchableOpacity 
@@ -299,17 +310,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: MEDICAL_RED,
+    shadowColor: NAVY_BLUE,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.12,
     shadowRadius: 16,
     elevation: 6,
     borderWidth: 1,
-    borderColor: '#FEE2E2',
+    borderColor: '#DBEAFE',
   },
-  logo: { width: scale(85), height: scale(85), tintColor: MEDICAL_RED },
+  // No tint: the clinic mark is red by design.
+  logo: { width: scale(85), height: scale(85) },
   brandName: { fontSize: moderateScale(26), fontWeight: '900', color: '#1E293B', letterSpacing: 4, marginTop: verticalScale(12), fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif-medium' },
-  brandSubtitle: { fontSize: moderateScale(10.5), fontWeight: '800', color: MEDICAL_RED, letterSpacing: 2, marginTop: verticalScale(2) },
+  brandSubtitle: { fontSize: moderateScale(10.5), fontWeight: '800', color: NAVY_BLUE, letterSpacing: 2, marginTop: verticalScale(2) },
   formCard: {
     backgroundColor: '#FFF', borderRadius: scale(32), paddingHorizontal: scale(26), paddingTop: verticalScale(26), paddingBottom: verticalScale(28),
     shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 20,
@@ -331,7 +343,7 @@ const styles = StyleSheet.create({
     borderColor: BORDER_INACTIVE, borderRadius: scale(16),
     paddingHorizontal: scale(16), height: verticalScale(58),
   },
-  inputBoxFocused: { borderColor: MEDICAL_RED, backgroundColor: '#FFF', borderWidth: 1.5 },
+  inputBoxFocused: { borderColor: NAVY_BLUE, backgroundColor: '#FFF', borderWidth: 1.5 },
   textInput: { flex: 1, marginLeft: scale(12), fontSize: moderateScale(15.5), color: '#1E293B' },
   optionsRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -344,7 +356,7 @@ const styles = StyleSheet.create({
     width: scale(20), height: scale(20), borderRadius: scale(6), borderWidth: 1.5, borderColor: '#CBD5E1',
     backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center',
   },
-  checkboxChecked: { backgroundColor: MEDICAL_RED, borderColor: MEDICAL_RED },
+  checkboxChecked: { backgroundColor: NAVY_BLUE, borderColor: NAVY_BLUE },
   keepSignedInText: { fontSize: moderateScale(13.5), fontWeight: '600', color: '#334155' },
   keepSignedInNote: {
     flexDirection: 'row', alignItems: 'flex-start', gap: scale(6),
@@ -354,7 +366,7 @@ const styles = StyleSheet.create({
   forgotText: { fontSize: moderateScale(13), fontWeight: '700', color: '#0369A1' },
   loginButton: {
     borderRadius: scale(16), overflow: 'hidden', elevation: 5,
-    shadowColor: MEDICAL_RED, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.25, shadowRadius: 10,
+    shadowColor: NAVY_BLUE, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.25, shadowRadius: 10,
   },
   loginGradient: {
     flexDirection: 'row', height: verticalScale(56), justifyContent: 'center', alignItems: 'center',
@@ -365,18 +377,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: verticalScale(20),
   },
   secondaryLinkText: { fontSize: moderateScale(13.5), color: '#64748B' },
-  linkBold: { color: MEDICAL_RED, fontWeight: '800', fontSize: moderateScale(14) },
+  linkBold: { color: NAVY_BLUE, fontWeight: '800', fontSize: moderateScale(14) },
   divider: { flexDirection: 'row', alignItems: 'center', marginVertical: verticalScale(20) },
   line: { flex: 1, height: 1, backgroundColor: '#E2E8F0' },
   orText: { marginHorizontal: scale(12), color: '#64748B', fontSize: moderateScale(11.5), fontWeight: '700' },
   guestButton: {
     flexDirection: 'row', height: verticalScale(54), borderRadius: scale(16),
-    borderWidth: 1.5, borderColor: '#FECDD3',
+    borderWidth: 1.5, borderColor: '#BFDBFE',
     justifyContent: 'center', alignItems: 'center',
-    gap: scale(8), backgroundColor: '#FFF1F3',
+    gap: scale(8), backgroundColor: '#EFF6FF',
   },
-  guestButtonText: { color: MEDICAL_RED, fontSize: moderateScale(14.5), fontWeight: '800' },
+  guestButtonText: { color: NAVY_BLUE, fontSize: moderateScale(14.5), fontWeight: '800' },
   troubleLink: { marginTop: verticalScale(22), alignItems: 'center' },
   troubleText: { fontSize: moderateScale(13), color: '#64748B' },
-  troubleBold: { color: MEDICAL_RED, fontWeight: '700' },
+  troubleBold: { color: NAVY_BLUE, fontWeight: '700' },
 });

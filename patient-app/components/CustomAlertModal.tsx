@@ -33,9 +33,9 @@ interface Props {
 const TYPE_CONFIG = {
   info: {
     icon: 'information-circle-outline' as const,
-    iconColor: '#3B50DF',
-    iconBg: '#EEF2FF',
-    primaryBtnBg: '#3B50DF',
+    iconColor: '#1E3A8A',
+    iconBg: '#EFF6FF',
+    primaryBtnBg: '#1E3A8A',
   },
   success: {
     icon: 'checkmark-circle-outline' as const,
@@ -47,7 +47,7 @@ const TYPE_CONFIG = {
     icon: 'alert-circle-outline' as const,
     iconColor: '#F59E0B',
     iconBg: '#FEF3C7',
-    primaryBtnBg: '#3B50DF',
+    primaryBtnBg: '#1E3A8A',
   },
   error: {
     icon: 'close-circle-outline' as const,
@@ -57,15 +57,15 @@ const TYPE_CONFIG = {
   },
   guest: {
     icon: 'lock-closed-outline' as const,
-    iconColor: '#3B50DF',
-    iconBg: '#EEF2FF',
-    primaryBtnBg: '#3B50DF',
+    iconColor: '#1E3A8A',
+    iconBg: '#EFF6FF',
+    primaryBtnBg: '#1E3A8A',
   },
   signout: {
     icon: 'log-out-outline' as const,
-    iconColor: '#EF4444',
-    iconBg: '#FEE2E2',
-    primaryBtnBg: '#EF4444',
+    iconColor: '#1E3A8A',
+    iconBg: '#EFF6FF',
+    primaryBtnBg: '#1E3A8A',
   },
 };
 

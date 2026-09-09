@@ -54,13 +54,13 @@ const STAFF_SENDER_LABEL = 'K&A Staff';
 const PATIENT_SENDER_LABEL = 'You';
 
 const C = {
-  red: '#3B50DF',
-  redLight: '#EEF2FF',
+  red: '#1E3A8A',
+  redLight: '#EFF6FF',
   bg: '#F8F9FA',
   border: '#E9ECEF',
   text: '#1A1D1F',
   textSub: '#6C757D',
-  userBubble: '#3B50DF',
+  userBubble: '#1E3A8A',
   aiBubble: '#F1F3F5',
 };
 
@@ -689,12 +689,12 @@ const s = StyleSheet.create({
     width: scale(72),
     height: scale(72),
     borderRadius: scale(24),
-    backgroundColor: '#FFF0F1',
+    backgroundColor: '#EFF6FF',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: verticalScale(16),
     borderWidth: 1,
-    borderColor: '#FECDD3',
+    borderColor: '#BFDBFE',
   },
 
   heroTitle: {
@@ -737,7 +737,7 @@ const s = StyleSheet.create({
     width: scale(38),
     height: scale(38),
     borderRadius: scale(12),
-    backgroundColor: '#FFF0F1',
+    backgroundColor: '#EFF6FF',
     justifyContent: 'center',
     alignItems: 'center',
   },

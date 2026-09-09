@@ -7,6 +7,7 @@ import { Calendar, CheckCircle2, ChevronDown, Layers, Lock, MapPin, Repeat, Shie
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '../lib/firebase';
 import { LIBON_BARANGAYS, geocodeLibonAddress } from './patients';
+import { getTodayDateString } from '../lib/dates';
 
 const INCIDENT_TYPES = ['Dog Bite', 'Cat Scratch', 'Bat Contact', 'Other Animal Bite'];
 
@@ -28,7 +29,7 @@ const EMPTY_FORM = {
   category: 'Category III',
   description: '',
   status: 'active',
-  date: new Date().toISOString().split('T')[0],
+  date: getTodayDateString(),
 };
 
 const inputCls =
@@ -257,14 +258,18 @@ export default function IncidentMapPage() {
   );
 
   // ── Layer filter — applied to both the map and the feed list so the two
-  // never disagree about what's currently shown. ─────────────────────────
   const filteredIncidents = useMemo(() => {
-    return incidents.filter(inc => {
+    const list = incidents.filter(inc => {
       if (layerFilter === 'highrisk') {
-        const key = (inc.barangay || inc.location || '').trim().toLowerCase();
+        const key = (inc.barangay || inc.address || inc.location || '').trim().toLowerCase();
         return repeatZoneKeys.has(key);
       }
       return true;
+    });
+    return list.sort((a, b) => {
+      const dateA = a.date || a.exposureDate || '';
+      const dateB = b.date || b.exposureDate || '';
+      return dateB.localeCompare(dateA) || (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
     });
   }, [incidents, layerFilter, repeatZoneKeys]);
 
@@ -276,12 +281,13 @@ export default function IncidentMapPage() {
       if (!lat || !lng) return null;
 
       const color = categoryColor(inc.category);
+      const loc = inc.address || inc.location || (inc.barangay ? `${inc.zone ? inc.zone + ', ' : ''}Brgy. ${inc.barangay}, Libon, Albay` : 'Libon, Albay');
 
       const popupContent = `
         <div style="font-family:'Roboto',system-ui,sans-serif;padding:6px 4px;min-width:200px">
           <div style="display:flex;align-items:center;gap:5px;font-weight:800;font-size:13px;color:#1E293B;margin-bottom:4px">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-            ${inc.location || 'Libon, Albay'}
+            ${loc}
           </div>
           <div style="font-size:11px;color:${color};font-weight:700;margin-bottom:3px">Type: ${inc.type || 'Dog Bite'} ${inc.category ? '(' + inc.category + ')' : ''}</div>
           <div style="font-size:10px;color:#64748B;margin-bottom:4px">Exposure Date: ${inc.date || 'N/A'}</div>
@@ -357,7 +363,7 @@ export default function IncidentMapPage() {
       type: form.type || 'Dog Bite',
       category: form.category || 'Category III',
       description: form.description?.trim() || '',
-      date: form.date || new Date().toISOString().split('T')[0],
+      date: form.date || getTodayDateString(),
       status: 'active',
       lat: finalLat,
       lng: finalLng,
@@ -496,6 +502,7 @@ export default function IncidentMapPage() {
               </div>
             ) : filteredIncidents.map(inc => {
               const catColor = categoryColor(inc.category);
+              const loc = inc.address || inc.location || (inc.barangay ? `${inc.zone ? inc.zone + ', ' : ''}Brgy. ${inc.barangay}, Libon, Albay` : 'Libon, Albay');
               return (
                 <div
                   key={inc.id}
@@ -506,11 +513,11 @@ export default function IncidentMapPage() {
                     <div className="flex-1 min-w-0">
                       {/* iOS Notes Primary Title Line */}
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-[13px] font-bold text-slate-900 group-hover:text-red-600 transition-colors truncate">
-                          {inc.location || 'Libon, Albay'}
+                        <span className="text-[13px] font-bold text-slate-900 group-hover:text-red-600 transition-colors truncate" title={loc}>
+                          {loc}
                         </span>
                         <span className="text-[10px] font-normal text-slate-400 flex-shrink-0">
-                          {inc.date || 'Today'}
+                          {inc.date || inc.exposureDate || 'Today'}
                         </span>
                       </div>
 

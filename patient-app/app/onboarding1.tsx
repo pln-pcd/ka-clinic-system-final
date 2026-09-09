@@ -9,13 +9,15 @@ import Animated, {
   useSharedValue,
   withTiming
 } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { moderateScale, scale, verticalScale } from '../constants/scale';
 
 const { width } = Dimensions.get('window');
-const MEDICAL_RED = '#E31837';
+const NAVY_BLUE = '#1E3A8A';
 
 export default function Onboarding1() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const fadeAnim = useSharedValue(0);
   const translateY = useSharedValue(20);
@@ -34,20 +36,31 @@ export default function Onboarding1() {
     opacity: fadeAnim.value,
   }));
 
+  // Guarantees button is safely elevated above Android 3-button nav / gesture bar
+  const bottomPadding = Math.max(
+    insets.bottom + (Platform.OS === 'android' ? 24 : verticalScale(16)),
+    Platform.OS === 'android' ? 76 : verticalScale(36)
+  );
+
+  const topPadding = Math.max(
+    insets.top + (Platform.OS === 'android' ? 10 : 8),
+    Platform.OS === 'ios' ? verticalScale(52) : verticalScale(40)
+  );
+
   return (
     <View style={styles.container}>
-      <LinearGradient colors={['#FFFFFF', '#FDF2F3', '#FFFFFF']} style={styles.background}>
+      <LinearGradient colors={['#FFFFFF', '#F0F6FE', '#FFFFFF']} style={styles.background}>
         
         {/* HEADER: Centered Clinic Logo Badge */}
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: topPadding }]}>
           <View style={styles.headerBrand}>
             <Text style={styles.headerBrandText}>
-              <Text style={{ color: MEDICAL_RED }}>K&A</Text> CLINIC
+              <Text style={{ color: NAVY_BLUE }}>K&A</Text> CLINIC
             </Text>
           </View>
         </View>
 
-        {/* ILLUSTRATION AREA - 63% SCREEN HEIGHT */}
+        {/* ILLUSTRATION AREA - 54% SCREEN HEIGHT */}
         <View style={styles.illustrationWrapper}>
           <View style={styles.glassEffect} />
           <Animated.Image 
@@ -57,8 +70,8 @@ export default function Onboarding1() {
           />
         </View>
 
-        {/* WHITE CARD - 37% SCREEN HEIGHT (BUTTON ELEVATED) */}
-        <Animated.View style={[styles.card, animatedStyle]}>
+        {/* WHITE CARD - 46% SCREEN HEIGHT (BUTTON ELEVATED ABOVE NAV BAR) */}
+        <Animated.View style={[styles.card, animatedStyle, { paddingBottom: bottomPadding }]}>
           <View style={styles.cardContent}>
             <View style={styles.indicatorContainer}>
               <View style={[styles.indicator, styles.activeIndicator]} />
@@ -79,7 +92,7 @@ export default function Onboarding1() {
             style={styles.buttonShadow}
           >
             <LinearGradient 
-              colors={[MEDICAL_RED, '#C2152E']} 
+              colors={[NAVY_BLUE, '#172554']} 
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={styles.button}
@@ -100,7 +113,6 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: Platform.OS === 'ios' ? verticalScale(52) : verticalScale(40),
     paddingHorizontal: scale(24),
     zIndex: 10,
   },
@@ -114,32 +126,32 @@ const styles = StyleSheet.create({
     letterSpacing: 2.5,
   },
   illustrationWrapper: { 
-    flex: 0.63, 
+    flex: 0.54, 
     justifyContent: 'center', 
     alignItems: 'center', 
     position: 'relative',
   },
   image: { 
-    width: width * 0.78, 
-    height: width * 0.78, 
+    width: width * 0.70, 
+    height: width * 0.70, 
+    maxHeight: '85%',
     zIndex: 2 
   },
   glassEffect: {
     position: 'absolute',
-    width: width * 0.68,
-    height: width * 0.68,
-    backgroundColor: 'rgba(227, 24, 55, 0.04)',
+    width: width * 0.60,
+    height: width * 0.60,
+    backgroundColor: 'rgba(30, 58, 138, 0.05)',
     borderRadius: scale(40),
     transform: [{ rotate: '12deg' }],
   },
   card: {
-    flex: 0.37,
+    flex: 0.46,
     backgroundColor: '#FFF',
     borderTopLeftRadius: scale(36),
     borderTopRightRadius: scale(36),
     paddingHorizontal: scale(26),
-    paddingTop: verticalScale(20),
-    paddingBottom: Platform.OS === 'ios' ? verticalScale(44) : verticalScale(34),
+    paddingTop: verticalScale(22),
     shadowColor: '#000',
     shadowOpacity: 0.07,
     shadowRadius: 18,
@@ -151,12 +163,12 @@ const styles = StyleSheet.create({
   },
   indicatorContainer: { flexDirection: 'row', marginBottom: verticalScale(12), alignItems: 'center' },
   indicator: { width: scale(7), height: scale(7), borderRadius: scale(3.5), backgroundColor: '#E2E8F0', marginRight: scale(8) },
-  activeIndicator: { width: scale(24), height: scale(7), borderRadius: scale(3.5), backgroundColor: MEDICAL_RED },
-  tag: { fontSize: moderateScale(11), fontWeight: '800', color: MEDICAL_RED, letterSpacing: 1.5, marginBottom: verticalScale(5), textTransform: 'uppercase' },
-  title: { fontSize: moderateScale(29), fontWeight: '900', color: '#1E293B', lineHeight: moderateScale(34), marginBottom: verticalScale(8) },
-  description: { fontSize: moderateScale(15), color: '#64748B', lineHeight: moderateScale(22), fontWeight: '400' },
+  activeIndicator: { width: scale(24), height: scale(7), borderRadius: scale(3.5), backgroundColor: NAVY_BLUE },
+  tag: { fontSize: moderateScale(11), fontWeight: '800', color: NAVY_BLUE, letterSpacing: 1.5, marginBottom: verticalScale(5), textTransform: 'uppercase' },
+  title: { fontSize: moderateScale(28), fontWeight: '900', color: '#1E293B', lineHeight: moderateScale(33), marginBottom: verticalScale(8) },
+  description: { fontSize: moderateScale(14.5), color: '#64748B', lineHeight: moderateScale(21), fontWeight: '400' },
   buttonShadow: {
-    shadowColor: MEDICAL_RED,
+    shadowColor: NAVY_BLUE,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.22,
     shadowRadius: 10,

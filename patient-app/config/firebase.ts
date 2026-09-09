@@ -1,8 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL } from './apiBase';
 import { initializeApp } from 'firebase/app';
 import {
   browserLocalPersistence,
-  createUserWithEmailAndPassword as _createUserWithEmailAndPassword,
   initializeAuth,
   onAuthStateChanged as _onAuthStateChanged,
   sendPasswordResetEmail as _sendPasswordResetEmail,
@@ -52,7 +52,7 @@ export const signInAsGuest = () => signInAnonymously(auth);
 // A mobile app has no "same origin" to fall back to the way the web admin
 // dashboard does with a plain relative fetch, so this must be set explicitly
 // once deployed — see patient-app/.env.example.
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || '';
+// Resolution (env var, then app.json manifest fallback) lives in ./apiBase.
 
 // ── MRN-linked auth ────────────────────────────────────────────────
 // The clinic's `authorizedPatients/{mrn}` doc (written by the Admin Dashboard
@@ -144,11 +144,23 @@ export const getAuthErrorMessage = (e: any): string => {
     case 'auth/network-request-failed':
       return 'Network error. Please check your connection and try again.';
     case 'auth/email-already-in-use':
-      return 'An account for this MRN already exists. Please sign in instead.';
+      return 'This email address is already registered to another patient record. Each patient must have a unique email address.';
     case 'auth/weak-password':
       return 'Password must be at least 6 characters long.';
     default:
       return e?.message || 'Something went wrong. Please try again.';
+  }
+};
+
+// Ensures no two patient accounts share the same registered email
+export const checkPatientEmailAvailability = async (email: string, currentMrn?: string): Promise<void> => {
+  const emailClean = (email || '').toLowerCase().trim();
+  if (!emailClean) return;
+  const snap = await getDocs(
+    query(collection(db, 'authorizedPatients'), where('email', '==', emailClean), where('registered', '==', true))
+  );
+  if (!snap.empty && snap.docs.some(d => d.id !== currentMrn)) {
+    throw new Error('This email address is already registered to another patient record. Each patient must have a unique email address.');
   }
 };
 
@@ -171,7 +183,7 @@ export type SendOtpResult = {
 // message). Fail fast with an actionable error instead.
 async function postToApi<T>(path: string, body: unknown): Promise<T> {
   if (!API_BASE_URL) {
-    throw new Error('The clinic server address is not configured for this app build (EXPO_PUBLIC_API_BASE_URL is missing). Contact the clinic if this keeps happening.');
+    throw new Error('The clinic server address is not configured for this app build (no EXPO_PUBLIC_API_BASE_URL and no app.json extra.apiBaseUrl). Contact the clinic if this keeps happening.');
   }
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method: 'POST',
@@ -207,11 +219,16 @@ export const verifyEmailOTP = async (mrnInput: string, enteredCode: string): Pro
 // authorizedPatients record — this uid is now this patient's permanent
 // identity going forward.
 export const completeEmailSignup = async (record: AuthorizedPatient, password: string) => {
-  const credential = await _createUserWithEmailAndPassword(auth, record.email, password);
-  await _updateProfile(credential.user, { displayName: record.name });
-  // request.auth.uid == request.resource.data.uid, satisfying the
-  // authorizedPatients update rule for a non-admin caller.
-  await setDoc(doc(db, 'authorizedPatients', record.mrn), { registered: true, uid: credential.user.uid }, { merge: true });
+  // The account is created (or adopted, when a previous attempt left an
+  // orphaned Auth user behind) by /api/complete-signup, which has the Admin
+  // SDK and can tell "your own half-finished signup" apart from "somebody
+  // else's account" — a distinction the client SDK cannot make, and which
+  // used to lock patients out of their own email address permanently.
+  await postToApi<{ uid: string }>('/api/complete-signup', { mrn: record.mrn, password });
+  const credential = await _signInWithEmailAndPassword(auth, (record.email || '').toLowerCase().trim(), password);
+  if (record.name && credential.user.displayName !== record.name) {
+    await _updateProfile(credential.user, { displayName: record.name }).catch(() => {});
+  }
   return credential.user;
 };
 

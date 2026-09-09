@@ -19,16 +19,18 @@ import {
   View,
 } from 'react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AccountNotRegisteredError, getAuthErrorMessage, maskEmail, requestPasswordReset } from '../../config/firebase';
 import { moderateScale, scale, verticalScale } from '../../constants/scale';
 
 const { height } = Dimensions.get('window');
-const MEDICAL_RED = '#E31837';
+const NAVY_BLUE = '#1E3A8A';
 const SOFT_GRAY_BG = '#F8FAFC';
 const BORDER_INACTIVE = '#E2E8F0';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   // Login passes along whatever MRN was already typed there.
   const { mrn: mrnParam } = useLocalSearchParams<{ mrn?: string }>();
 
@@ -66,23 +68,32 @@ export default function ForgotPasswordScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient colors={['#FFFFFF', '#FFF1F2', '#F8FAFC']} style={styles.background}>
+      <LinearGradient colors={['#FFFFFF', '#F0F6FE', '#F8FAFC']} style={styles.background}>
         <View style={styles.patternOverlay}>
-          <Ionicons name="medical" size={120} color="#FEE2E2" style={styles.bgIcon1} />
-          <Ionicons name="heart" size={90} color="#FEE2E2" style={styles.bgIcon2} />
-          <Ionicons name="pulse" size={130} color="#FEE2E2" style={styles.bgIcon3} />
+          <Ionicons name="medical" size={120} color="#DBEAFE" style={styles.bgIcon1} />
+          <Ionicons name="heart" size={90} color="#DBEAFE" style={styles.bgIcon2} />
+          <Ionicons name="pulse" size={130} color="#DBEAFE" style={styles.bgIcon3} />
         </View>
       </LinearGradient>
 
       {/* TOP NAVIGATION */}
-      <View style={styles.navHeader}>
+      <View style={[styles.navHeader, { top: Math.max(insets.top + (Platform.OS === 'android' ? 12 : 8), verticalScale(42)) }]}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()} activeOpacity={0.7}>
           <Ionicons name="chevron-back" size={22} color="#1E293B" />
         </TouchableOpacity>
       </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <ScrollView 
+          showsVerticalScrollIndicator={false} 
+          contentContainerStyle={[
+            styles.scrollContent,
+            {
+              paddingTop: Math.max(insets.top + verticalScale(35), verticalScale(90)),
+              paddingBottom: Math.max(insets.bottom + (Platform.OS === 'android' ? 24 : 16), verticalScale(40)),
+            },
+          ]}
+        >
 
           {/* BRANDING HEADER */}
           <Animated.View entering={FadeInUp.duration(800)} style={styles.header}>
@@ -90,7 +101,7 @@ export default function ForgotPasswordScreen() {
               <Image source={require('../../assets/logo-white-nobg.png')} style={styles.logo} resizeMode="contain" />
             </View>
             <Text style={styles.brandName}>
-              <Text style={{ color: MEDICAL_RED }}>K&A</Text> CLINIC
+              <Text style={{ color: NAVY_BLUE }}>K&A</Text> CLINIC
             </Text>
             <Text style={styles.brandSubtitle}>ANTI-RABIES CARE SYSTEM</Text>
           </Animated.View>
@@ -101,7 +112,7 @@ export default function ForgotPasswordScreen() {
               <>
                 <View style={styles.successIconWrap}>
                   <View style={styles.successIconBg}>
-                    <Ionicons name="mail-open-outline" size={scale(38)} color={MEDICAL_RED} />
+                    <Ionicons name="mail-open-outline" size={scale(38)} color={NAVY_BLUE} />
                   </View>
                 </View>
                 <Text style={styles.title}>Check Your Email</Text>
@@ -124,7 +135,7 @@ export default function ForgotPasswordScreen() {
                   activeOpacity={0.85}
                 >
                   <LinearGradient
-                    colors={[MEDICAL_RED, '#B91C1C']}
+                    colors={[NAVY_BLUE, '#172554']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                     style={styles.primaryGradient}
@@ -168,16 +179,16 @@ export default function ForgotPasswordScreen() {
                     })}
                     activeOpacity={0.85}
                   >
-                    <Ionicons name="person-add-outline" size={scale(19)} color={MEDICAL_RED} />
+                    <Ionicons name="person-add-outline" size={scale(19)} color={NAVY_BLUE} />
                     <Text style={styles.signupInsteadText}>Sign Up Instead</Text>
-                    <Ionicons name="arrow-forward" size={scale(17)} color={MEDICAL_RED} />
+                    <Ionicons name="arrow-forward" size={scale(17)} color={NAVY_BLUE} />
                   </TouchableOpacity>
                 )}
 
                 <View style={styles.inputWrapper}>
                   <Text style={styles.inputLabel}>Medical Record Number (MRN)</Text>
                   <View style={[styles.inputBox, focused && styles.inputBoxFocused]}>
-                    <Ionicons name="card-outline" size={20} color={focused ? MEDICAL_RED : '#94A3B8'} />
+                    <Ionicons name="card-outline" size={20} color={focused ? NAVY_BLUE : '#94A3B8'} />
                     <TextInput
                       style={styles.textInput}
                       placeholder="Medical Record Number (MRN)"
@@ -202,7 +213,7 @@ export default function ForgotPasswordScreen() {
                   activeOpacity={0.85}
                 >
                   <LinearGradient
-                    colors={[MEDICAL_RED, '#B91C1C']}
+                    colors={[NAVY_BLUE, '#172554']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                     style={styles.primaryGradient}
@@ -266,17 +277,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: MEDICAL_RED,
+    shadowColor: NAVY_BLUE,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.12,
     shadowRadius: 16,
     elevation: 6,
     borderWidth: 1,
-    borderColor: '#FEE2E2',
+    borderColor: '#DBEAFE',
   },
-  logo: { width: scale(85), height: scale(85), tintColor: MEDICAL_RED },
+  // No tint: the clinic mark is red by design.
+  logo: { width: scale(85), height: scale(85) },
   brandName: { fontSize: moderateScale(26), fontWeight: '900', color: '#1E293B', letterSpacing: 4, marginTop: verticalScale(12), fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif-medium' },
-  brandSubtitle: { fontSize: moderateScale(10.5), fontWeight: '800', color: MEDICAL_RED, letterSpacing: 2, marginTop: verticalScale(2) },
+  brandSubtitle: { fontSize: moderateScale(10.5), fontWeight: '800', color: NAVY_BLUE, letterSpacing: 2, marginTop: verticalScale(2) },
   formCard: {
     backgroundColor: '#FFF', borderRadius: scale(32), paddingHorizontal: scale(30), paddingTop: verticalScale(32), paddingBottom: verticalScale(34),
     shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 20,
@@ -293,10 +305,10 @@ const styles = StyleSheet.create({
   signupInsteadBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: scale(8), height: verticalScale(52), borderRadius: scale(16),
-    borderWidth: 1.5, borderColor: '#FECDD3', backgroundColor: '#FFF1F3',
+    borderWidth: 1.5, borderColor: '#BFDBFE', backgroundColor: '#EFF6FF',
     marginBottom: verticalScale(18),
   },
-  signupInsteadText: { color: MEDICAL_RED, fontSize: moderateScale(14.5), fontWeight: '800' },
+  signupInsteadText: { color: NAVY_BLUE, fontSize: moderateScale(14.5), fontWeight: '800' },
   inputWrapper: { marginBottom: verticalScale(18) },
   inputLabel: { fontSize: moderateScale(13), fontWeight: '700', color: '#334155', marginBottom: verticalScale(6), marginLeft: scale(2) },
   inputBox: {
@@ -305,14 +317,14 @@ const styles = StyleSheet.create({
     borderColor: BORDER_INACTIVE, borderRadius: scale(16),
     paddingHorizontal: scale(16), height: verticalScale(58),
   },
-  inputBoxFocused: { borderColor: MEDICAL_RED, backgroundColor: '#FFF', borderWidth: 1.5 },
+  inputBoxFocused: { borderColor: NAVY_BLUE, backgroundColor: '#FFF', borderWidth: 1.5 },
   textInput: {
     flex: 1, marginLeft: scale(12), fontSize: moderateScale(15.5), color: '#1E293B',
     paddingVertical: 0, textAlignVertical: 'center', includeFontPadding: false,
   },
   primaryButton: {
     borderRadius: scale(16), overflow: 'hidden', elevation: 5, marginTop: verticalScale(4),
-    shadowColor: MEDICAL_RED, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.25, shadowRadius: 10,
+    shadowColor: NAVY_BLUE, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.25, shadowRadius: 10,
   },
   primaryGradient: {
     flexDirection: 'row', height: verticalScale(56), justifyContent: 'center', alignItems: 'center',
@@ -323,12 +335,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: verticalScale(20),
   },
   secondaryLinkText: { fontSize: moderateScale(13.5), color: '#64748B', textAlign: 'center' },
-  linkBold: { color: MEDICAL_RED, fontWeight: '800', fontSize: moderateScale(14) },
+  linkBold: { color: NAVY_BLUE, fontWeight: '800', fontSize: moderateScale(14) },
   successIconWrap: { alignItems: 'center', marginBottom: verticalScale(16) },
   successIconBg: {
     width: scale(76), height: scale(76), borderRadius: scale(38),
-    backgroundColor: '#FFF1F3', justifyContent: 'center', alignItems: 'center',
-    borderWidth: 1.5, borderColor: '#FECDD3',
+    backgroundColor: '#EFF6FF', justifyContent: 'center', alignItems: 'center',
+    borderWidth: 1.5, borderColor: '#BFDBFE',
   },
   noticeBox: {
     flexDirection: 'row', gap: scale(10), alignItems: 'flex-start',

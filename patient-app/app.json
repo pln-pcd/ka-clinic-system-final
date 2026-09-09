@@ -50,7 +50,8 @@
     "extra": {
       "eas": {
         "projectId": "62297c13-8ceb-4918-9d9e-a9113cbf5acf"
-      }
+      },
+      "apiBaseUrl": "https://ka-clinic-system.vercel.app"
     }
   }
 }

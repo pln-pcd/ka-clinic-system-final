@@ -59,9 +59,24 @@ export default async function handler(req, res) {
       return;
     }
 
-    await otpRef.update({ verified: true });
+    // verifiedAt bounds how long this proof stays usable — see complete-signup.js
+    await otpRef.update({ verified: true, verifiedAt: Date.now() });
 
     const patient = await findAuthorizedPatient(mrn);
+    const email = (patient?.email || '').toLowerCase().trim();
+    if (email) {
+      const dupQuery = await db.collection('authorizedPatients')
+        .where('email', '==', email)
+        .where('registered', '==', true)
+        .get();
+      if (!dupQuery.empty && dupQuery.docs.some(d => d.id !== mrn)) {
+        res.status(409).json({
+          success: false,
+          error: 'This email address is already registered to another patient record. Each patient must have a unique email address.'
+        });
+        return;
+      }
+    }
 
     res.status(200).json({ success: true, verified: true, patient });
   } catch (err) {

@@ -52,12 +52,12 @@ const deviceIcon = (platform?: string) =>
   : platform === 'web' ? 'desktop-outline'
   : 'help-circle-outline';
 
-const MEDICAL_RED = '#EF4444';
+const MEDICAL_RED = '#1E3A8A';
 const SOFT_GRAY_BG = '#F4F6FA';
 
 const C = {
   red: MEDICAL_RED,
-  redLight: '#FFF0F1',
+  redLight: '#EFF6FF',
   charcoal: '#1E293B',
   slate: '#475569',
   muted: '#94A3B8',
@@ -101,9 +101,10 @@ export default function ProfileScreen() {
   const [isEditingPersonal, setIsEditingPersonal] = useState(false);
   const [personalData, setPersonalData] = useState(EMPTY_PERSONAL_DATA);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [profileImage, setProfileImage] = useState(
-    `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.displayName || 'Patient')}&background=E31837&color=fff&size=128`
-  );
+  // Null until the patient actually has a picture. The placeholder used to be
+  // a remote initials service, which needed the network to render and turned a
+  // nameless account into a meaningless "PA" monogram.
+  const [profileImage, setProfileImage] = useState<string | null>(null);
 
   // ── Custom Alert Modal State ──────────────────────────────────────────────
   const [alertConfig, setAlertConfig] = useState<CustomAlertConfig>({
@@ -160,10 +161,14 @@ export default function ProfileScreen() {
       }
     }).catch(() => {});
 
-    AsyncStorage.getItem(`kna:pushNotifs:${uid}`).then(val => {
-      if (val !== null) setNotificationsEnabled(val === 'true');
-    }).catch(() => {});
-  }, [user?.uid]);
+    if (isGuest || user?.isAnonymous) {
+      setNotificationsEnabled(false);
+    } else {
+      AsyncStorage.getItem(`kna:pushNotifs:${uid}`).then(val => {
+        if (val !== null) setNotificationsEnabled(val === 'true');
+      }).catch(() => {});
+    }
+  }, [user?.uid, isGuest, user?.isAnonymous]);
 
   useEffect(() => {
     if (!patientRecord) return;
@@ -403,6 +408,21 @@ export default function ProfileScreen() {
   };
 
   const toggleNotifications = async (value: boolean) => {
+    if (isGuest || user?.isAnonymous) {
+      showAlert({
+        type: 'guest',
+        title: 'Guest Mode',
+        message: 'Push notifications are available for registered patients only. Please sign in or register to enable dose reminders and alerts.',
+        primaryButtonText: 'Sign In / Register',
+        onPrimaryPress: () => {
+          hideAlert();
+          router.push('/auth/login');
+        },
+        secondaryButtonText: 'Dismiss',
+        onSecondaryPress: hideAlert,
+      });
+      return;
+    }
     setNotificationsEnabled(value);
     const uid = user?.uid || 'guest';
     await AsyncStorage.setItem(`kna:pushNotifs:${uid}`, value ? 'true' : 'false').catch(() => {});
@@ -797,7 +817,13 @@ export default function ProfileScreen() {
             {/* Profile card */}
             <View style={s.profileCard}>
               <TouchableOpacity onPress={handleAvatarPress} style={s.avatarWrap} activeOpacity={0.8}>
-                <Image source={{ uri: profileImage }} style={s.avatar} />
+                {profileImage ? (
+                  <Image source={{ uri: profileImage }} style={s.avatar} />
+                ) : (
+                  <View style={[s.avatar, s.avatarPlaceholder]}>
+                    <Ionicons name="person" size={scale(46)} color={C.white} />
+                  </View>
+                )}
                 <View style={s.cameraBadge}>
                   <Ionicons name="camera" size={12} color={C.white} />
                 </View>
@@ -842,19 +868,58 @@ export default function ProfileScreen() {
             <View style={s.sectionWrap}>
               <Text style={s.sectionHeader}>Settings & Support</Text>
               <View style={s.card}>
-                <View style={s.item}>
-                  <View style={[s.iconBox, { backgroundColor: `${C.slate}10` }]}>
-                    <Ionicons name="notifications-outline" size={19} color={C.slate} />
+                {isGuest || user?.isAnonymous ? (
+                  <TouchableOpacity
+                    style={s.item}
+                    onPress={() => {
+                      showAlert({
+                        type: 'guest',
+                        title: 'Guest Mode',
+                        message: 'Push notifications are available for registered patients only. Please sign in or register to enable dose reminders and alerts.',
+                        primaryButtonText: 'Sign In / Register',
+                        onPrimaryPress: () => {
+                          hideAlert();
+                          router.push('/auth/login');
+                        },
+                        secondaryButtonText: 'Dismiss',
+                        onSecondaryPress: hideAlert,
+                      });
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[s.iconBox, { backgroundColor: `${C.slate}10` }]}>
+                      <Ionicons name="notifications-outline" size={19} color={C.slate} />
+                    </View>
+                    <View style={{ flex: 1, marginLeft: scale(14) }}>
+                      <Text style={s.itemLabel}>Push Notifications</Text>
+                      <Text style={{ fontSize: moderateScale(11), color: C.muted, marginTop: verticalScale(1) }}>Registered patients only</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6) }}>
+                      <Ionicons name="lock-closed" size={14} color={C.muted} />
+                      <Switch
+                        value={false}
+                        disabled={true}
+                        trackColor={{ false: '#E2E8F0', true: C.red }}
+                        thumbColor="#CBD5E1"
+                        style={{ opacity: 0.55 }}
+                      />
+                    </View>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={s.item}>
+                    <View style={[s.iconBox, { backgroundColor: `${C.slate}10` }]}>
+                      <Ionicons name="notifications-outline" size={19} color={C.slate} />
+                    </View>
+                    <Text style={[s.itemLabel, { flex: 1, marginLeft: scale(14) }]}>Push Notifications</Text>
+                    <Switch
+                      value={notificationsEnabled}
+                      onValueChange={toggleNotifications}
+                      trackColor={{ false: '#CBD5E1', true: C.red }}
+                      thumbColor={C.white}
+                    />
                   </View>
-                  <Text style={[s.itemLabel, { flex: 1, marginLeft: scale(14) }]}>Push Notifications</Text>
-                  <Switch
-                    value={notificationsEnabled}
-                    onValueChange={toggleNotifications}
-                    trackColor={{ false: '#CBD5E1', true: C.red }}
-                    thumbColor={C.white}
-                  />
-                </View>
-                {!user?.isAnonymous && (
+                )}
+                {!user?.isAnonymous && !isGuest && (
                   <ProfileItem icon="phone-portrait-outline" label="Logged-in Devices" color={C.slate} onPress={() => setCurrentView('devices')} />
                 )}
                 <ProfileItem icon="document-text-outline" label="Privacy Policy" color={C.slate} onPress={() => setCurrentView('privacy')} />
@@ -995,6 +1060,7 @@ const s = StyleSheet.create({
   },
   avatarWrap: { marginBottom: verticalScale(14), position: 'relative' },
   avatar: { width: scale(88), height: scale(88), borderRadius: scale(44), backgroundColor: '#F1F5F9' },
+  avatarPlaceholder: { backgroundColor: '#1E3A8A', alignItems: 'center', justifyContent: 'center' },
   cameraBadge: {
     position: 'absolute', bottom: 0, right: 0,
     width: scale(26), height: scale(26), borderRadius: scale(13),
@@ -1113,10 +1179,10 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'flex-start',
     gap: scale(10), marginTop: verticalScale(16),
     backgroundColor: C.redLight, borderRadius: scale(14), padding: scale(14),
-    borderWidth: 1, borderColor: '#FECDD3',
+    borderWidth: 1, borderColor: '#BFDBFE',
   },
   alertIcon: { marginTop: verticalScale(1) },
-  alertText: { flex: 1, fontSize: moderateScale(12), color: '#9F1239', lineHeight: moderateScale(18), fontWeight: '600' },
+  alertText: { flex: 1, fontSize: moderateScale(12), color: '#1E3A8A', lineHeight: moderateScale(18), fontWeight: '600' },
 
   // Policy
   policyBlock: { paddingVertical: verticalScale(16), borderBottomWidth: 1, borderBottomColor: '#F4F6FA' },
@@ -1144,7 +1210,7 @@ const s = StyleSheet.create({
     padding: scale(16),
     marginBottom: verticalScale(16),
     borderWidth: 1,
-    borderColor: '#FECDD3',
+    borderColor: '#BFDBFE',
     shadowColor: '#0F172A',
     shadowOpacity: 0.03,
     shadowRadius: 8,

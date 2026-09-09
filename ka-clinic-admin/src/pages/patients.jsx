@@ -1,12 +1,16 @@
 import { authedPostJson } from "../lib/apiClient";
-import { addDoc, collection, doc, getDocs, limit, onSnapshot, orderBy, query, runTransaction, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
+import { addDoc, collection, doc, getDocs, limit, onSnapshot, orderBy, query, runTransaction, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { auth, db } from "../lib/firebase";
 import { buildDoses } from "./vaccination";
-import { formatDateLong as fmtDate } from "../lib/dates";
+import { formatDateLong, formatDateLong as fmtDate, formatDateShort, formatDateNumeric, getTodayDateString, today, addDaysToDateString } from "../lib/dates";
 import jsPDF from "jspdf";
+import * as XLSX from "xlsx";
 import autoTable from "jspdf-autotable";
 import Toast from "../components/Toast";
+import { CLINIC_LOGO_BASE64 } from "../assets/clinicLogoBase64";
+import { Printer, Download, MapPin } from "lucide-react";
 
 /* ─────────────────────────── CSS ─────────────────────────── */
 const globalCSS = `
@@ -139,8 +143,8 @@ const globalCSS = `
   .modal{background:var(--white);border-radius:1.25rem;padding:28px;width:32.5rem;max-width:95vw;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(26,34,64,.18);margin-bottom:6vh;}
   .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;}
   .modal-head h2{font-size:1.0625rem;font-weight:900;}
-  .modal-close{width:2rem;height:2rem;border-radius:50%;border:none;background:var(--bg);cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center;color:var(--muted);transition:background .15s;}
-  .modal-close:hover{background:var(--red-soft);color:var(--red);}
+  .modal-close{width:2rem;height:2rem;border-radius:50%;border:1px solid #E2E8F0;background:#FFFFFF;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#64748B;transition:all .15s ease;box-shadow:0 1px 2px rgba(0,0,0,0.04);}
+  .modal-close:hover{background:#FEE2E2;color:#DC2626;border-color:#FECACA;}
   .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
   .form-field{display:flex;flex-direction:column;gap:6px;}
   .form-field.full{grid-column:span 2;}
@@ -362,20 +366,25 @@ export function geocodeLibonAddress(barangay, zone) {
 const getInitials = name => name.split(' ').map(w => w[0]).join('').slice(0, 2);
 const statusBadgeClass = { ongoing: 'badge-blue', completed: 'badge-green' };
 const doseBadgeClass = { done: 'badge-green', miss: 'badge-red', pending: 'badge-orange' };
-const today = () => new Date().toISOString().slice(0, 10);
 const derivePatientStatus = (patient) => {
-  if (patient?.isArchived || patient?.status === 'archived') return 'completed';
-  const doses = patient?.doses || [];
-  if (doses.length > 0 && patient?.status) return patient.status;
-  if (doses.length === 0) return patient?.status || 'ongoing';
-  const allDone = doses.every(d => (d.s || d.status) === 'done');
-  return allDone ? 'completed' : 'ongoing';
+  if (!patient) return 'ongoing';
+  if (patient.isArchived || patient.status === 'archived' || patient.status === 'completed') return 'completed';
+  const doses = patient.doses || [];
+  if (doses.length > 0) {
+    const allDone = doses.every(d => {
+      const st = String(d.s || d.status || '').toLowerCase();
+      return st === 'done' || st === 'completed' || d.done === true;
+    });
+    if (allDone) return 'completed';
+  }
+  if (patient.status === 'overdue') return 'overdue';
+  return patient.status || 'ongoing';
 };
 
 const getDOHRetentionYear = (patient) => {
   if (!patient) return new Date().getFullYear() + 10;
   if (patient.retentionExpiryYear) return patient.retentionExpiryYear;
-  const dStr = patient.completedDate || patient.date || (patient.createdAt?.toDate ? patient.createdAt.toDate().toISOString().slice(0, 10) : today());
+  const dStr = patient.completedDate || patient.date || (patient.createdAt?.toDate ? getTodayDateString(patient.createdAt.toDate()) : today());
   const d = new Date(dStr);
   const yr = isNaN(d.getTime()) ? new Date().getFullYear() : d.getFullYear();
   return yr + 10;
@@ -433,6 +442,34 @@ function isValidPHPhone(v) {
   );
 }
 
+/* ─────────────────────────── RABIES / BITE INCIDENT CHECK ─────────────────────────── */
+export function isRabiesOrBiteIncident(patient) {
+  if (!patient) return false;
+  const s = (patient.service || '').trim().toLowerCase();
+
+  // Explicit non-rabies services
+  if (s.includes('tetanus') || s.includes('hepa') || s.includes('pneumo')) {
+    return false;
+  }
+
+  // Has explicit biting / animal exposure data
+  const hasBiteData = Boolean(
+    patient.animal ||
+    (patient.typeOfExposure && patient.typeOfExposure.toLowerCase().includes('bite')) ||
+    patient.numberOfBites ||
+    patient.woundLocation ||
+    patient.placeOfExposure
+  );
+  if (hasBiteData) return true;
+
+  // Rabies services: PEP (Post-Exposure Prophylaxis) and PrEP (Pre-Exposure Prophylaxis)
+  if (s === 'pep' || s === 'prep' || s.includes('pep') || s.includes('prep') || s.includes('rabies')) {
+    return true;
+  }
+
+  return false;
+}
+
 /* ─────────────────────────── SERVICE BADGE ─────────────────────────── */
 function ServiceBadge({ service }) {
   const found = SERVICE_TYPES.find(s => s.key === service);
@@ -488,9 +525,7 @@ function ScheduleSummary({ service, baseDate }) {
   );
 
   const addDays = (days) => {
-    const d = new Date(baseDate);
-    d.setDate(d.getDate() + days);
-    return d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+    return formatDateShort(addDaysToDateString(baseDate, days));
   };
 
   let schedule = [];
@@ -1602,8 +1637,8 @@ function PinMapConfirmModal({ patient, saving, onConfirm, onCancel }) {
   const locationStr = `${zoneVal ? zoneVal + ', ' : ''}Brgy. ${barangayVal}, Libon, Albay`;
   const exposureTypeVal = patient.service === 'PEP' ? `${patient.animal || 'Dog'} Bite` : (patient.service || 'Bite Incident');
 
-  return (
-    <div className="modal-overlay" style={{ alignItems: 'center' }} onClick={e => { if (e.target.classList.contains('modal-overlay')) onCancel(); }}>
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md" onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
       <div style={{
         background: '#FFFFFF',
         borderRadius: '1.25rem',
@@ -1624,7 +1659,9 @@ function PinMapConfirmModal({ patient, saving, onConfirm, onCancel }) {
               <p style={{ fontSize: '.71875rem', color: '#64748B', margin: 0 }}>Publish anonymized bite/exposure incident to public health map</p>
             </div>
           </div>
-          <button className="modal-close" onClick={onCancel}>×</button>
+          <button type="button" className="modal-close" onClick={onCancel} title="Close" aria-label="Close">
+            <X size={16} strokeWidth={2.2} />
+          </button>
         </div>
 
         {/* Content Body — Landscape Side-by-Side Grid */}
@@ -1688,7 +1725,8 @@ function PinMapConfirmModal({ patient, saving, onConfirm, onCancel }) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -1744,7 +1782,12 @@ function VaccineModal({ patientName, patientId, onClose, onSave }) {
   return (
     <div className="modal-overlay" onClick={e => { if (e.target.classList.contains('modal-overlay')) onClose(); }}>
       <div className="modal" style={{ width: '560px' }}>
-        <div className="modal-head"><h2>Add Vaccination Record</h2><button className="modal-close" onClick={onClose}>×</button></div>
+        <div className="modal-head">
+          <h2>Add Vaccination Record</h2>
+          <button type="button" className="modal-close" onClick={onClose} title="Close" aria-label="Close">
+            <X size={16} strokeWidth={2.2} />
+          </button>
+        </div>
 
         {step === 1 && (
           <div>
@@ -1839,7 +1882,7 @@ function VaccineModal({ patientName, patientId, onClose, onSave }) {
 }
 
 /* ─────────────────────────── MEDICAL RECORD DETAIL (DOC-CENTER LAYOUT + DOSE SCHEDULE) ─────────────────────────── */
-function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEdit }) {
+function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEdit, onPinMap, isArchiveView = false }) {
   const [patientApts, setPatientApts] = useState([]);
   const [aptsLoading, setAptsLoading] = useState(true);
   const [aptTab, setAptTab] = useState('all'); // 'all' | 'upcoming' | 'completed'
@@ -1962,19 +2005,26 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
         </button>
 
         <div className="flex items-center gap-3">
-          {isCompletedOrArchived && (
+          {!isArchiveView && !patient.isArchived && isCompletedOrArchived && (
             <button
               onClick={handleArchiveRecord}
-              disabled={archiving || patient.isArchived}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold border shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 ${
-                patient.isArchived
-                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300 cursor-default'
-                  : 'bg-white text-emerald-800 border-emerald-300 hover:bg-emerald-50'
-              }`}
+              disabled={archiving}
+              className="px-3.5 py-2 rounded-xl text-xs font-bold border shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 bg-white text-emerald-800 border-emerald-300 hover:bg-emerald-50"
               title="Archive Patient Record"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>
-              {patient.isArchived ? 'Archived ✓' : 'Archive'}
+              Archive
+            </button>
+          )}
+
+          {isRabiesOrBiteIncident(patient) && (
+            <button
+              className="px-4 py-2 rounded-xl text-xs font-bold text-[#0F172A] bg-white border border-slate-300 hover:bg-slate-50 shadow-2xs transition-all cursor-pointer flex items-center gap-2"
+              onClick={() => onPinMap?.(patient)}
+              title="Pin Incident Map"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+              Pin Incident Map
             </button>
           )}
 
@@ -2002,7 +2052,7 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
           {/* Profile Side (3 cols) */}
           <div className="lg:col-span-3 pr-0 lg:pr-6 flex flex-col justify-between items-center text-center">
             <div className="w-full flex flex-col items-center">
-              <div className="w-24 h-24 rounded-full bg-gradient-to-br from-indigo-50 to-slate-100 border-2 border-indigo-100 flex items-center justify-center shadow-xs overflow-hidden shrink-0 mb-3 relative">
+              <div className="w-24 h-24 rounded-full bg-slate-100 border-2 border-slate-200 flex items-center justify-center shadow-xs overflow-hidden shrink-0 mb-3 relative">
                 {patientPhoto ? (
                   <img
                     src={patientPhoto}
@@ -2011,7 +2061,7 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
                     onError={(e) => { e.currentTarget.style.display = 'none'; }}
                   />
                 ) : (
-                  <span className="text-xl font-black text-[#3B50DF] tracking-tight">{getInitials(patient.name || '?')}</span>
+                  <span className="text-xl font-extrabold text-[#0A1D47] tracking-tight">{getInitials(patient.name || '?')}</span>
                 )}
               </div>
 
@@ -2019,13 +2069,13 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
               <p className="text-xs text-slate-400 font-medium mt-1 truncate max-w-full">{patient.email || 'No email registered'}</p>
 
               <div className="grid grid-cols-2 gap-3 w-full mt-4 pt-3 border-t border-slate-100">
-                <div className="bg-indigo-50/50 rounded-2xl p-2.5 text-center border border-indigo-100/80 shadow-2xs">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Appointments</span>
+                <div className="bg-slate-50/80 rounded-xl p-2 text-center border border-slate-200/80 shadow-2xs">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Appointments</span>
                   <span className="text-sm font-extrabold text-slate-900 mt-0.5 block">{patientApts.length}</span>
                 </div>
-                <div className="bg-indigo-50/50 rounded-2xl p-2.5 text-center border border-indigo-100/80 shadow-2xs">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">MRN Code</span>
-                  <span className="text-xs font-extrabold text-[#3B50DF] mt-1 block truncate">{rec.id}</span>
+                <div className="bg-slate-50/80 rounded-xl p-2 text-center border border-slate-200/80 shadow-2xs">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">MRN Code</span>
+                  <span className="text-xs font-bold text-slate-900 mt-1 block truncate">{rec.id}</span>
                 </div>
               </div>
             </div>
@@ -2034,16 +2084,16 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
           {/* General Info Side (4 cols) */}
           <div className="lg:col-span-4 px-0 lg:px-6 pt-6 lg:pt-0 flex flex-col justify-between">
             <div>
-              <div className="flex items-center justify-between mb-3 pb-2.5 border-b border-indigo-50">
+              <div className="flex items-center justify-between mb-3 pb-2.5 border-b border-slate-100">
                 <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-lg bg-indigo-50 text-[#3B50DF] border border-indigo-100 flex items-center justify-center shrink-0 shadow-2xs">
+                  <div className="w-6 h-6 rounded-lg bg-slate-100 text-slate-700 border border-slate-200/80 flex items-center justify-center shrink-0 shadow-2xs">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                   </div>
                   <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider">General Information</h3>
                 </div>
                 <button
                   onClick={() => onEdit?.(r || patient)}
-                  className="w-6 h-6 rounded-full bg-slate-50 text-slate-500 hover:text-[#3B50DF] hover:bg-indigo-50 flex items-center justify-center transition-colors cursor-pointer"
+                  className="w-6 h-6 rounded-full bg-slate-50 text-slate-500 hover:text-slate-900 hover:bg-slate-100 flex items-center justify-center transition-colors cursor-pointer"
                   title="Edit Patient Info"
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
@@ -2096,14 +2146,14 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
           {/* Medical History & Exposure Details Side (5 cols) */}
           <div className="lg:col-span-5 pl-0 lg:pl-6 pt-6 lg:pt-0 flex flex-col justify-between">
             <div>
-              <div className="flex items-center justify-between mb-3 pb-2.5 border-b border-teal-50">
+              <div className="flex items-center justify-between mb-3 pb-2.5 border-b border-slate-100">
                 <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-lg bg-teal-50 text-teal-700 border border-teal-100 flex items-center justify-center shrink-0 shadow-2xs">
+                  <div className="w-6 h-6 rounded-lg bg-slate-100 text-slate-700 border border-slate-200/80 flex items-center justify-center shrink-0 shadow-2xs">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
                   </div>
                   <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider">Medical History &amp; Exposure Details</h3>
                 </div>
-                <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200/80">Clinical Data</span>
+                <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200/60">Clinical Data</span>
               </div>
 
               <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs font-semibold text-slate-700">
@@ -2124,7 +2174,7 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
 
                 <div>
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Vaccine Brand</span>
-                  <span className="text-xs font-bold text-[#3B50DF] mt-0.5 block truncate">{patient.vaccineBrand || 'Rabipur'}</span>
+                  <span className="text-xs font-bold text-slate-900 mt-0.5 block truncate">{patient.vaccineBrand || 'Rabipur'}</span>
                 </div>
 
                 <div>
@@ -2139,7 +2189,7 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
 
                 <div className="col-span-2 pt-1 border-t border-slate-100">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Doctor / Nurse Remarks</span>
-                  <p className="text-slate-700 font-normal leading-relaxed text-[11.5px] bg-teal-50/30 p-2.5 rounded-xl border border-teal-100/80 border-l-4 border-l-teal-500">
+                  <p className="text-slate-700 font-normal leading-relaxed text-[11.5px] bg-slate-50/80 p-2.5 rounded-xl border border-slate-200/80 border-l-4 border-l-[#0A1D47]">
                     {rec.notes || 'No custom clinical remarks noted.'}
                   </p>
                 </div>
@@ -2154,121 +2204,141 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6 items-start">
 
         {/* ── LEFT COLUMN (6 COLS): COMPACT VACCINATION DOSES TRACKER ── */}
-        <div className="lg:col-span-6 bg-white rounded-3xl border border-blue-100/90 ring-1 ring-blue-500/10 shadow-xs hover:shadow-sm transition-all p-5 sm:p-6 flex flex-col justify-between">
+        <div className="lg:col-span-6 bg-white rounded-2xl border border-blue-100/90 ring-1 ring-blue-500/10 shadow-xs hover:shadow-sm transition-all p-4 sm:p-4.5 flex flex-col justify-between">
           <div>
             {/* Clean Header */}
-            <div className="flex items-center justify-between pb-3.5 border-b border-blue-50 flex-wrap gap-2 mb-4">
+            <div className="flex items-center justify-between pb-2.5 border-b border-blue-50 flex-wrap gap-2 mb-2.5">
               <div>
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-indigo-50 text-[#3B50DF] border border-indigo-100/90 flex items-center justify-center shrink-0 shadow-2xs">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8v4l3 3" /><circle cx="12" cy="12" r="9" /></svg>
+                <div className="flex items-center gap-2">
+                  <div className="w-6.5 h-6.5 rounded-lg bg-indigo-50 text-[#3B50DF] border border-indigo-100/90 flex items-center justify-center shrink-0 shadow-2xs">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8v4l3 3" /><circle cx="12" cy="12" r="9" /></svg>
                   </div>
-                  <h3 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight">
+                  <h3 className="text-sm sm:text-[15px] font-bold text-slate-900 tracking-tight">
                     Vaccination Doses
                   </h3>
-                  <span className="text-xs font-bold text-[#3B50DF] bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-100/90">
+                  <span className="text-[10.5px] font-bold text-[#3B50DF] bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100/90">
                     {patient.service || 'PEP'} Protocol
                   </span>
                 </div>
-                <p className="text-xs sm:text-[13px] text-slate-500 font-medium mt-1 pl-10.5">Dose schedule timeline for {patient.name}</p>
+                <p className="text-[11px] text-slate-500 font-medium mt-0.5 pl-8">Dose schedule timeline for {patient.name}</p>
               </div>
             </div>
 
             {/* Dose Timeline List */}
-            {rec.doses.length === 0 ? (
-              <div className="py-6 text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 p-4">
-                <p className="text-sm font-bold text-slate-700">No vaccination doses recorded yet</p>
-                <p className="text-xs text-slate-400 font-normal mt-0.5">Doses appear here once the vaccination schedule is recorded.</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {rec.doses.map((d, i) => {
-                  const isDone = d.s === 'done';
-                  const isMiss = d.s === 'miss';
-                  const isNext = !isDone && !isMiss && (i === 0 || rec.doses[i - 1]?.s === 'done' || rec.doses[i - 1]?.s === 'miss');
+            {(() => {
+              const dosesList = (Array.isArray(patient?.doses) && patient.doses.length > 0)
+                ? patient.doses
+                : (Array.isArray(rec?.doses) && rec.doses.length > 0)
+                ? rec.doses
+                : [];
 
-                  const cardBg = isDone
-                    ? 'bg-emerald-50/40 border-emerald-200/80'
-                    : isMiss
-                    ? 'bg-rose-50/40 border-rose-200/80'
-                    : isNext
-                    ? 'bg-indigo-50/60 border-[#3B50DF] shadow-2xs ring-1 ring-[#3B50DF]/20'
-                    : 'bg-slate-50/60 border-slate-200/70';
+              if (dosesList.length === 0) {
+                return (
+                  <div className="py-4 text-center bg-slate-50/50 rounded-xl border border-dashed border-slate-200 p-3">
+                    <p className="text-xs font-bold text-slate-700">No vaccination doses recorded yet</p>
+                    <p className="text-[11px] text-slate-400 font-normal mt-0.5">Doses appear here once the vaccination schedule is recorded.</p>
+                  </div>
+                );
+              }
 
-                  const badgeBg = isDone
-                    ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                    : isMiss
-                    ? 'bg-rose-100 text-rose-800 border-rose-300'
-                    : isNext
-                    ? 'bg-[#3B50DF] text-white border-indigo-600'
-                    : 'bg-slate-200/80 text-slate-600 border-slate-300';
+              const normalizedDoses = dosesList.map((d, i) => {
+                const rawSt = String(d.s || d.status || 'pending').toLowerCase();
+                const isDone = rawSt === 'done' || rawSt === 'completed' || d.done === true;
+                const isMiss = rawSt === 'miss' || rawSt === 'missed' || rawSt === 'overdue' || (!isDone && d.date && d.date < getTodayDateString());
+                const label = d.n || d.label || d.dose || d.name || `Dose ${i + 1}`;
+                return {
+                  ...d,
+                  label,
+                  n: label,
+                  dose: label,
+                  isDone,
+                  isMiss,
+                };
+              });
 
-                  const statusLabel = isDone ? 'Completed' : isMiss ? 'Missed' : isNext ? 'Next Due' : 'Scheduled';
+              const nextDoseIndex = normalizedDoses.findIndex(d => !d.isDone);
 
-                  return (
-                    <div
-                      key={i}
-                      className={`py-2.5 px-3.5 sm:px-4 rounded-2xl border transition-all flex items-center justify-between gap-3 ${cardBg}`}
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        {/* Circle Badge Number or Icon */}
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs sm:text-sm shrink-0 shadow-2xs border ${badgeBg}`}>
-                          {isDone ? (
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                          ) : isMiss ? (
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                          ) : (
-                            <span>{i + 1}</span>
-                          )}
-                        </div>
+              return (
+                <div className="space-y-1.5">
+                  {normalizedDoses.map((d, i) => {
+                    const isDone = d.isDone;
+                    const isMiss = d.isMiss;
+                    const isNext = !isDone && (i === nextDoseIndex);
 
-                        {/* Dose Name & Date */}
-                        <div className="min-w-0">
-                          {d.n ? (
-                            <>
-                              <p className={`text-sm font-extrabold truncate leading-tight ${isDone ? 'text-slate-900 line-through decoration-emerald-500/60' : 'text-slate-900'}`}>
-                                {d.n}
-                              </p>
-                              <div className="flex items-center gap-1.5 text-xs sm:text-[13px] text-slate-500 font-semibold mt-0.5">
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
-                                <span>{d.date}</span>
-                              </div>
-                            </>
-                          ) : (
-                            <div className={`flex items-center gap-2 text-sm sm:text-base font-bold ${isDone ? 'text-slate-700 line-through decoration-emerald-500/60' : 'text-slate-900'}`}>
-                              <svg width="15" height="15" className="text-slate-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
-                              <span>{d.date}</span>
+                    const cardBg = isDone
+                      ? 'bg-emerald-50/40 border-emerald-200/80'
+                      : isMiss
+                      ? 'bg-rose-50/40 border-rose-200/80'
+                      : isNext
+                      ? 'bg-indigo-50/60 border-[#3B50DF] shadow-2xs ring-1 ring-[#3B50DF]/20'
+                      : 'bg-slate-50/60 border-slate-200/70';
+
+                    const badgeBg = isDone
+                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                      : isMiss
+                      ? 'bg-rose-100 text-rose-800 border-rose-300'
+                      : isNext
+                      ? 'bg-[#3B50DF] text-white border-indigo-600'
+                      : 'bg-slate-200/80 text-slate-600 border-slate-300';
+
+                    const statusLabel = isDone ? 'Completed' : isMiss ? 'Missed' : isNext ? 'Next Due' : 'Scheduled';
+
+                    return (
+                      <div
+                        key={i}
+                        className={`py-2 px-3 rounded-xl border transition-all flex items-center justify-between gap-2.5 ${cardBg}`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          {/* Circle Badge Number or Icon */}
+                          <div className={`w-6.5 h-6.5 rounded-full flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs border ${badgeBg}`}>
+                            {isDone ? (
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                            ) : isMiss ? (
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                            ) : (
+                              <span>{i + 1}</span>
+                            )}
+                          </div>
+
+                          {/* Dose Name & Date */}
+                          <div className="min-w-0">
+                            <p className="text-xs sm:text-[12.5px] font-bold truncate leading-tight text-slate-900">
+                              {d.label}
+                            </p>
+                            <div className="flex items-center gap-1 text-[11px] text-slate-500 font-medium mt-0.5">
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+                              <span>{d.date ? (formatDateShort(d.date) || d.date) : 'Not scheduled'}</span>
                             </div>
-                          )}
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Status Badge */}
-                      <span className={`text-xs font-black px-2.5 py-1 rounded-lg uppercase tracking-wider shrink-0 ${
-                        isDone
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/80'
-                          : isMiss
-                          ? 'bg-rose-50 text-rose-700 border border-rose-200/80'
-                          : isNext
-                          ? 'bg-indigo-50 text-[#3B50DF] border border-indigo-200/80'
-                          : 'bg-slate-100/80 text-slate-500 border border-slate-200/70'
-                      }`}>
-                        {statusLabel}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                        {/* Status Badge */}
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider shrink-0 ${
+                          isDone
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/80'
+                            : isMiss
+                            ? 'bg-rose-50 text-rose-700 border border-rose-200/80'
+                            : isNext
+                            ? 'bg-indigo-50 text-[#3B50DF] border border-indigo-200/80'
+                            : 'bg-slate-100/80 text-slate-500 border border-slate-200/70'
+                        }`}>
+                          {statusLabel}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
 
           {/* Status Legend Footer */}
-          {rec.doses.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-slate-600 flex-wrap gap-2">
-              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500" /> Completed</span>
-              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#3B50DF]" /> Next Due</span>
-              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-slate-300" /> Scheduled</span>
-              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-rose-500" /> Missed</span>
+          {((patient?.doses && patient.doses.length > 0) || (rec?.doses && rec.doses.length > 0)) && (
+            <div className="mt-2.5 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] font-semibold text-slate-500 flex-wrap gap-2">
+              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Completed</span>
+              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#3B50DF]" /> Next Due</span>
+              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-slate-300" /> Scheduled</span>
+              <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-rose-500" /> Missed</span>
             </div>
           )}
         </div>
@@ -2447,7 +2517,7 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
       {showAddReportModal && (
         <AddReportModal
           patient={patient}
-          doses={rec.doses}
+          doses={(Array.isArray(patient?.doses) && patient.doses.length > 0) ? patient.doses : (rec.doses || [])}
           existingReports={reportsList}
           onClose={() => setShowAddReportModal(false)}
           onSave={handleSaveReport}
@@ -2467,7 +2537,15 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
       {showExportModal && (
         <ExportReportModal
           patients={patients || records}
-          initialPatient={r || patient}
+          initialPatient={{
+            ...patient,
+            ...(r || {}),
+            doses: (Array.isArray(patient?.doses) && patient.doses.length > 0)
+              ? patient.doses
+              : (Array.isArray(r?.doses) && r.doses.length > 0)
+              ? r.doses
+              : (rec?.doses || [])
+          }}
           onClose={() => setShowExportModal(false)}
           onToast={onToast}
         />
@@ -2479,10 +2557,10 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
 /* ─────────────────────────── CLOSE ICON ───────────────────────────
    The modals below all render <X/>; this file uses inline SVGs rather than
    an icon package, so the close glyph is defined here. */
-function X({ size = 16 }) {
+function X({ size = 16, strokeWidth = 2.2 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M18 6L6 18" /><path d="M6 6l12 12" />
     </svg>
   );
@@ -2763,7 +2841,7 @@ function AddReportModal({ patient, doses = [], existingReports = [], onClose, on
       adverseEvent,
       notes: notes.trim(),
       author: author.trim(),
-      date: new Date().toISOString().split('T')[0],
+      date: getTodayDateString(),
       createdAt: Date.now()
     });
   }
@@ -2929,7 +3007,7 @@ function AddReportModal({ patient, doses = [], existingReports = [], onClose, on
 
 /* ─────────────────────────── ADD APPOINTMENT MODAL ─────────────────────────── */
 function AddAptModal({ patient, onClose, onSave }) {
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(getTodayDateString());
   const [time, setTime] = useState('10:00 AM');
   const [type, setType] = useState(patient.service ? `${patient.service} Follow-up Dose` : 'Anti-Rabies Vaccination');
   const [notes, setNotes] = useState('');
@@ -3071,17 +3149,46 @@ function SendMessageModal({ patient, onClose, onToast }) {
 
 
 /* ─────────────────────────── EXPORT REPORT MODAL ─────────────────────────── */
+let clinicLogoBase64Cache = CLINIC_LOGO_BASE64;
+async function getClinicLogoBase64() {
+  if (clinicLogoBase64Cache) return clinicLogoBase64Cache;
+  try {
+    const res = await fetch('/assets/dashboard/logo-white-nobg.png');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        clinicLogoBase64Cache = reader.result;
+        resolve(reader.result);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    clinicLogoBase64Cache = CLINIC_LOGO_BASE64;
+    return CLINIC_LOGO_BASE64;
+  }
+}
+
 function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
+  const [logoDataUrl, setLogoDataUrl] = useState(clinicLogoBase64Cache || CLINIC_LOGO_BASE64);
+  useEffect(() => {
+    getClinicLogoBase64().then(b64 => {
+      if (b64) setLogoDataUrl(b64);
+    });
+  }, []);
+
   const [mode, setMode] = useState(initialPatient ? 'single' : 'bulk'); // 'bulk' | 'single'
   const [period, setPeriod] = useState('monthly');
   const iconProps = { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round', strokeLinejoin: 'round' };
   const PERIODS = [
+    { key: 'monthly', label: 'Monthly', desc: 'This calendar month',
+      icon: <svg {...iconProps}><rect x="3" y="4" width="18" height="17" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="8" y1="13" x2="8" y2="13" /><line x1="12" y1="13" x2="12" y2="13" /><line x1="16" y1="13" x2="16" y2="13" /><line x1="8" y1="17" x2="8" y2="17" /><line x1="12" y1="17" x2="12" y2="17" /></svg> },
     { key: 'daily', label: 'Daily', desc: 'Today\'s registrations',
       icon: <svg {...iconProps}><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15 14" /></svg> },
     { key: 'weekly', label: 'Weekly', desc: 'Last 7 days',
       icon: <svg {...iconProps}><rect x="3" y="4" width="18" height="17" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="9" x2="21" y2="9" /></svg> },
-    { key: 'monthly', label: 'Monthly', desc: 'This calendar month',
-      icon: <svg {...iconProps}><rect x="3" y="4" width="18" height="17" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="8" y1="13" x2="8" y2="13" /><line x1="12" y1="13" x2="12" y2="13" /><line x1="16" y1="13" x2="16" y2="13" /><line x1="8" y1="17" x2="8" y2="17" /><line x1="12" y1="17" x2="12" y2="17" /></svg> },
     { key: 'yearly', label: 'Yearly', desc: 'This calendar year',
       icon: <svg {...iconProps}><line x1="6" y1="20" x2="6" y2="14" /><line x1="12" y1="20" x2="12" y2="8" /><line x1="18" y1="20" x2="18" y2="4" /></svg> },
   ];
@@ -3101,6 +3208,15 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
     return 'All Statuses';
   }
 
+  const [serviceFilter, setServiceFilter] = useState('all'); // 'all' | 'pep' | 'prep' | 'tetanus' | 'pneumonia'
+  function serviceFilterLabel() {
+    if (serviceFilter === 'pep') return 'PEP (Post-Exposure)';
+    if (serviceFilter === 'prep') return 'PrEP (Pre-Exposure)';
+    if (serviceFilter === 'tetanus') return 'Anti-Tetano (Tetanus)';
+    if (serviceFilter === 'pneumonia') return 'Pneumonia Vaccine';
+    return 'All Services';
+  }
+
   // Preview gate — nothing leaves the modal until the user has seen the
   // rendered report. 'form' = pick period/format, 'preview' = review it.
   const [step, setStep] = useState('form');
@@ -3111,6 +3227,14 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
   // here either, same limitation as the table's own search box). ─────────
   const [patientQuery, setPatientQuery] = useState(initialPatient ? formatTitleCase(initialPatient.name) : '');
   const [selectedPatient, setSelectedPatient] = useState(initialPatient || null);
+
+  useEffect(() => {
+    if (initialPatient) {
+      setSelectedPatient(initialPatient);
+      setPatientQuery(formatTitleCase(initialPatient.name || ''));
+      setMode('single');
+    }
+  }, [initialPatient]);
   const matchingPatients = (() => {
     const q = patientQuery.trim().toLowerCase();
     if (!q || selectedPatient) return [];
@@ -3125,6 +3249,9 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
   const [showEmailInput, setShowEmailInput] = useState(false);
   const [emailTo, setEmailTo] = useState('');
   const [sending, setSending] = useState(false);
+  // The toast renders under the modal's portal, so a send needs its own
+  // confirmation inside the card.
+  const [sentTo, setSentTo] = useState('');
 
   async function sendReportEmail(to, subject, html, attachment) {
     const trimmed = to.trim();
@@ -3146,7 +3273,7 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
       const data = await res.json();
       if (data?.success) {
         onToast(`Report emailed to ${trimmed}`, 'success');
-        setShowEmailInput(false);
+        setSentTo(trimmed);
         setEmailTo('');
       } else {
         onToast(data?.error || 'Failed to send the email.', 'error');
@@ -3159,28 +3286,47 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
   }
 
   function getFilteredPatients() {
+    const todayStr = getTodayDateString();
+    const curParts = todayStr.split('-');
+    const curYear = parseInt(curParts[0], 10);
+    const curMonth = parseInt(curParts[1], 10);
     const now = new Date();
+
     return patients.filter(p => {
-      const raw = p.createdAt?.toDate ? p.createdAt.toDate() : (p.date ? new Date(p.date + 'T00:00:00') : null);
-      if (!raw) return false;
-      let matchesPeriod = false;
+      const pDateStr = p.date ? String(p.date).split('T')[0] : (p.createdAt?.toDate ? getTodayDateString(p.createdAt.toDate()) : '');
+      const raw = p.createdAt?.toDate ? p.createdAt.toDate() : (pDateStr ? new Date(`${pDateStr}T12:00:00`) : null);
+      let matchesPeriod = true;
       if (period === 'daily') {
-        matchesPeriod = raw.toDateString() === now.toDateString();
+        matchesPeriod = pDateStr === todayStr;
       } else if (period === 'weekly') {
-        const msAgo = now - raw;
+        const msAgo = raw ? now - raw : Infinity;
         matchesPeriod = msAgo >= 0 && msAgo <= 7 * 24 * 60 * 60 * 1000;
       } else if (period === 'monthly') {
-        matchesPeriod = raw.getFullYear() === now.getFullYear() && raw.getMonth() === now.getMonth();
+        const pYear = pDateStr ? parseInt(pDateStr.slice(0, 4), 10) : (raw ? raw.getFullYear() : null);
+        const pMonth = pDateStr ? parseInt(pDateStr.slice(5, 7), 10) : (raw ? raw.getMonth() + 1 : null);
+        matchesPeriod = pYear === curYear && pMonth === curMonth;
       } else if (period === 'yearly') {
-        matchesPeriod = raw.getFullYear() === now.getFullYear();
+        const pYear = pDateStr ? parseInt(pDateStr.slice(0, 4), 10) : (raw ? raw.getFullYear() : null);
+        matchesPeriod = pYear === curYear;
+      } else if (period === 'all') {
+        matchesPeriod = true;
       }
       if (!matchesPeriod) return false;
 
-      if (statusFilter && statusFilter !== 'all') {
-        const liveSt = derivePatientStatus(p);
-        const isOverdue = liveSt !== 'completed' && buildDoses(p).some(d => d.status === 'miss');
-        const patientStatus = liveSt === 'completed' ? 'completed' : isOverdue ? 'overdue' : 'ongoing';
-        if (patientStatus !== statusFilter) return false;
+      const liveSt = derivePatientStatus(p);
+      const isOverdue = liveSt !== 'completed' && (liveSt === 'overdue' || p.status === 'overdue' || buildDoses(p).some(d => d.status === 'miss'));
+      const patientStatus = liveSt === 'completed' ? 'completed' : isOverdue ? 'overdue' : 'ongoing';
+
+      if (statusFilter === 'completed') return patientStatus === 'completed';
+      if (statusFilter === 'overdue') return patientStatus === 'overdue';
+      if (statusFilter === 'ongoing') return patientStatus === 'ongoing';
+
+      if (serviceFilter !== 'all') {
+        const s = (p.service || '').trim().toLowerCase();
+        if (serviceFilter === 'pep' && s !== 'pep') return false;
+        if (serviceFilter === 'prep' && s !== 'prep') return false;
+        if (serviceFilter === 'tetanus' && !s.includes('tetan')) return false;
+        if (serviceFilter === 'pneumonia' && !s.includes('pneumo')) return false;
       }
 
       return true;
@@ -3189,6 +3335,7 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
 
   function periodLabel() {
     const now = new Date();
+    if (period === 'all') return 'All Time (Full Registry)';
     if (period === 'daily') return now.toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     if (period === 'weekly') {
       const from = new Date(now); from.setDate(from.getDate() - 6);
@@ -3196,35 +3343,41 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
     }
     if (period === 'monthly') return now.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' });
     if (period === 'yearly') return String(now.getFullYear());
-    return '';
+    return 'All Records';
   }
   // Official Philippine Government / Institutional Rural Health Unit Letterhead
   function letterhead() {
     return `
-      <div style="display:flex;align-items:center;justify-content:center;gap:22px;padding-bottom:12px;margin-bottom:8px;">
-        <!-- Left White Clinic Logo Beside RHU Header Text -->
-        <div style="width:72px;height:72px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-          <img src="/assets/dashboard/logo-white-nobg.png" alt="K&A Clinic Logo" style="width:70px;height:70px;object-fit:contain;" />
-        </div>
-
-        <!-- Center Official Republic Letterhead Text -->
-        <div style="text-align:center;">
-          <div style="font-size:10px;color:#475569;letter-spacing:0.8px;font-weight:600;text-transform:uppercase;">Republic of the Philippines</div>
-          <div style="font-size:10px;color:#475569;letter-spacing:0.5px;font-weight:600;">Municipality of Polangui, Province of Albay</div>
-          <div style="font-size:13.5px;font-weight:900;color:#0F172A;letter-spacing:0.4px;margin-top:2px;">RURAL HEALTH UNIT &bull; ANIMAL BITE TREATMENT CENTER</div>
-        </div>
-      </div>
+      <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto 8px;border:none;font-family:'Plus Jakarta Sans','Inter',-apple-system,BlinkMacSystemFont,sans-serif;">
+        <tr>
+          <!-- Left: Clinic Logo directly beside Rural Unit text -->
+          <td style="vertical-align:middle;padding-right:16px;width:90px;text-align:right;">
+            <img src="${logoDataUrl || CLINIC_LOGO_BASE64 || '/assets/dashboard/logo-white-nobg.png'}" alt="K&A Clinic Logo" style="width:90px;height:90px;object-fit:contain;display:block;" />
+          </td>
+          <!-- Center: Clinic Letterhead Text -->
+          <td style="vertical-align:middle;text-align:center;padding:0;">
+            <div style="font-size:9.5px;color:#64748B;letter-spacing:0.8px;font-weight:700;text-transform:uppercase;">Municipality of Libon, Province of Albay</div>
+            <div style="font-size:16px;font-weight:900;color:#0F172A;letter-spacing:0.5px;margin-top:2px;text-transform:uppercase;">K&amp;A Animal Bite Center</div>
+          </td>
+          <!-- Right: Matching Counter-balance Spacer so Center Text is 100% Optical Center -->
+          <td style="vertical-align:middle;padding-left:16px;width:90px;">
+            <div style="width:90px;height:1px;"></div>
+          </td>
+        </tr>
+      </table>
     `;
   }
 
   // Realistic Microsoft Excel Live Table Preview HTML
   function buildExcelPreviewHtml(rows, periodLabelStr) {
     const serviceCount = {};
-    const statusCount = { ongoing: 0, completed: 0 };
+    const statusCount = { ongoing: 0, completed: 0, overdue: 0 };
     rows.forEach(p => {
       const svc = p.service || 'PEP';
       serviceCount[svc] = (serviceCount[svc] || 0) + 1;
-      const st = derivePatientStatus(p);
+      const liveSt = derivePatientStatus(p);
+      const isOverdue = liveSt !== 'completed' && (liveSt === 'overdue' || p.status === 'overdue' || buildDoses(p).some(d => d.status === 'miss'));
+      const st = liveSt === 'completed' ? 'completed' : isOverdue ? 'overdue' : 'ongoing';
       statusCount[st] = (statusCount[st] || 0) + 1;
     });
 
@@ -3235,13 +3388,13 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
       ? `<tr><td class="row-num">6</td><td colspan="10" style="text-align:center;padding:16px;color:#64748B;font-style:italic;">No ${statusFilter === 'all' ? '' : statusFilter + ' '}records found for this period.</td></tr>`
       : rows.map((p, idx) => {
       const liveSt = derivePatientStatus(p);
-      const isOverdue = liveSt !== 'completed' && buildDoses(p).some(d => d.status === 'miss');
+      const isOverdue = liveSt !== 'completed' && (liveSt === 'overdue' || p.status === 'overdue' || buildDoses(p).some(d => d.status === 'miss'));
       const stLabel = liveSt === 'completed' ? 'Completed' : isOverdue ? 'Overdue' : 'Ongoing';
       const rowNum = idx + 6;
       return `<tr>
         <td class="row-num">${rowNum}</td>
         <td style="text-align:center;">${idx + 1}</td>
-        <td>${p.barangay || p.address || 'Polangui'}</td>
+        <td>${p.barangay || p.address || 'Libon, Albay'}</td>
         <td style="font-weight:bold;color:#0F172A;">${p.id || p.mrn || '—'}</td>
         <td style="font-weight:bold;color:#0F172A;">${formatTitleCase(p.name || '—')}</td>
         <td style="text-align:center;">${p.age || '—'} / ${p.sex || '—'}</td>
@@ -3249,7 +3402,7 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
         <td style="text-align:center;font-weight:bold;">${p.service || 'PEP'}</td>
         <td style="text-align:center;">${p.cat ? `Cat ${p.cat}` : (p.animal || '—')}</td>
         <td style="text-align:center;font-weight:bold;color:${stLabel === 'Completed' ? '#15803D' : stLabel === 'Overdue' ? '#DC2626' : '#1D4ED8'};">${stLabel.toUpperCase()}</td>
-        <td style="text-align:center;">${p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString('en-PH') : (p.date || '—')}</td>
+        <td style="text-align:center;">${formatDateNumeric(p.date || p.createdAt)}</td>
       </tr>`;
     }).join('');
 
@@ -3285,9 +3438,10 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
             </tr>
             <tr>
               <td class="row-num">3</td>
-              <td colspan="3" style="background:#F1F5F9;font-weight:bold;">Total Patients: ${rows.length}</td>
-              <td colspan="3" style="background:#F1F5F9;font-weight:bold;color:#1D4ED8;">Ongoing Cases: ${statusCount.ongoing || 0}</td>
-              <td colspan="4" style="background:#F1F5F9;font-weight:bold;color:#15803D;">Completed Cases: ${statusCount.completed || 0}</td>
+              <td colspan="2" style="background:#F1F5F9;font-weight:bold;">Total Patients: ${rows.length}</td>
+              <td colspan="2" style="background:#F1F5F9;font-weight:bold;color:#1D4ED8;">Ongoing: ${statusCount.ongoing || 0}</td>
+              <td colspan="3" style="background:#F1F5F9;font-weight:bold;color:#DC2626;">Overdue: ${statusCount.overdue || 0}</td>
+              <td colspan="3" style="background:#F1F5F9;font-weight:bold;color:#15803D;">Completed: ${statusCount.completed || 0}</td>
             </tr>
             <tr>
               <td class="row-num">4</td>
@@ -3312,178 +3466,245 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
   }
 
   // Excel HTML Export — formatted structured spreadsheet table
+  // Real .xlsx via SheetJS. The old export wrote an HTML table with an .xls
+  // extension, which made Excel warn that the format and extension disagree
+  // and coerced phone numbers into scientific notation. The on-screen preview
+  // (buildExcelPreviewHtml) is unchanged — only the produced file is.
   function exportBulkXLS() {
     const rows = getFilteredPatients();
     if (rows.length === 0) { onToast('No patients found for this period', 'error'); return; }
-    
-    const serviceCount = {};
-    const statusCount = { ongoing: 0, completed: 0 };
-    rows.forEach(p => {
-      const svc = p.service || 'PEP';
-      serviceCount[svc] = (serviceCount[svc] || 0) + 1;
-      const st = derivePatientStatus(p);
-      statusCount[st] = (statusCount[st] || 0) + 1;
+
+    const statusCount = { ongoing: 0, completed: 0, overdue: 0 };
+    const statusFor = (p) => {
+      const liveSt = derivePatientStatus(p);
+      const isOverdue = liveSt !== 'completed' && (liveSt === 'overdue' || p.status === 'overdue' || buildDoses(p).some(d => d.status === 'miss'));
+      return liveSt === 'completed' ? 'completed' : isOverdue ? 'overdue' : 'ongoing';
+    };
+    rows.forEach(p => { const st = statusFor(p); statusCount[st] = (statusCount[st] || 0) + 1; });
+
+    const headers = ['#', 'Barangay / Address', 'Patient ID', 'Patient Name', 'Age', 'Sex', 'Contact No.', 'Service Type', 'Exposure', 'Status', 'Date Registered'];
+
+    // Title block, summary metrics, then the registry table.
+    const aoa = [
+      ['HEALTH MONITORING & PATIENT REGISTRY REPORT'],
+      ['RURAL HEALTH UNIT • ANIMAL BITE TREATMENT CENTER • LIBON, ALBAY'],
+      [`Period Covered: ${periodLabel()}`, `Service: ${serviceFilterLabel()}`, `Status: ${statusFilterLabel()}`, `Date Generated: ${new Date().toLocaleString('en-PH')}`],
+      [],
+      ['SUMMARY METRICS'],
+      ['Total Patients', rows.length, 'Ongoing', statusCount.ongoing || 0, 'Overdue', statusCount.overdue || 0, 'Completed', statusCount.completed || 0],
+      [],
+      headers,
+    ];
+
+    const HEADER_ROW = aoa.length - 1; // zero-based index of the header row
+    rows.forEach((p, idx) => {
+      const st = statusFor(p);
+      aoa.push([
+        idx + 1,
+        p.barangay || p.address || 'Libon, Albay',
+        p.id || p.mrn || '—',
+        formatTitleCase(p.name || '—'),
+        p.age === 0 || p.age ? Number(p.age) : '—',
+        (p.sex || '—').toUpperCase(),
+        p.contact || '—',
+        p.service || 'PEP',
+        ((p.service || '').trim().toUpperCase() === 'PEP') ? (p.cat ? `Cat ${p.cat}` : (p.animal || '—')) : '—',
+        st.charAt(0).toUpperCase() + st.slice(1),
+        formatDateNumeric(p.date || p.createdAt),
+      ]);
     });
 
-    const headers = ['#', 'Barangay / Address', 'Patient ID', 'Patient Name', 'Age / Sex', 'Contact No.', 'Service Type', 'Exposure', 'Status', 'Date Registered'];
-    const cols = headers.length;
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
 
-    const tableRows = rows.map((p, idx) => {
-      const liveSt = derivePatientStatus(p);
-      const isOverdue = liveSt !== 'completed' && buildDoses(p).some(d => d.status === 'miss');
-      const stLabel = liveSt === 'completed' ? 'Completed' : isOverdue ? 'Overdue' : 'Ongoing';
-      const bg = idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
-      return `<tr style="background-color:${bg};">
-        <td style="padding:6px;border:1px solid #CBD5E1;text-align:center;">${idx + 1}</td>
-        <td style="padding:6px;border:1px solid #CBD5E1;">${p.barangay || p.address || 'Polangui'}</td>
-        <td style="padding:6px;border:1px solid #CBD5E1;font-weight:bold;">${p.id || p.mrn || '—'}</td>
-        <td style="padding:6px;border:1px solid #CBD5E1;font-weight:bold;">${formatTitleCase(p.name || '—')}</td>
-        <td style="padding:6px;border:1px solid #CBD5E1;text-align:center;">${p.age || '—'} / ${p.sex || '—'}</td>
-        <td style="padding:6px;border:1px solid #CBD5E1;">${p.contact || '—'}</td>
-        <td style="padding:6px;border:1px solid #CBD5E1;text-align:center;font-weight:bold;">${p.service || 'PEP'}</td>
-        <td style="padding:6px;border:1px solid #CBD5E1;text-align:center;">${p.cat ? `Cat ${p.cat}` : (p.animal || '—')}</td>
-        <td style="padding:6px;border:1px solid #CBD5E1;text-align:center;font-weight:bold;color:${stLabel === 'Completed' ? '#15803D' : stLabel === 'Overdue' ? '#DC2626' : '#1D4ED8'};">${stLabel.toUpperCase()}</td>
-        <td style="padding:6px;border:1px solid #CBD5E1;text-align:center;">${p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString('en-PH') : (p.date || '—')}</td>
-      </tr>`;
-    }).join('');
+    // Phone numbers and IDs are identifiers, not quantities — forcing them to
+    // text is what stops "+639272401450" becoming 6.39272E+11.
+    const TEXT_COLUMNS = [2, 6, 10]; // Patient ID, Contact No., Date Registered
+    for (let r = HEADER_ROW + 1; r < aoa.length; r++) {
+      TEXT_COLUMNS.forEach(c => {
+        const ref = XLSX.utils.encode_cell({ r, c });
+        const cell = ws[ref];
+        if (cell) { cell.t = 's'; cell.z = '@'; cell.v = String(cell.v); }
+      });
+    }
 
-    const html = `<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8">
-      <style>
-        td,th{font-family:Calibri,Arial,sans-serif;font-size:10.5pt;}
-        .brand{font-size:16pt;font-weight:bold;color:#1D4ED8;}
-        .tagline{font-size:9.5pt;color:#475569;}
-        .meta{font-size:10pt;color:#334155;}
-        th.col{background:#1D4ED8;color:#FFFFFF;font-weight:bold;text-align:left;padding:8px;}
-        .card{background:#EFF6FF;border:1px solid #BFDBFE;font-weight:bold;text-align:center;color:#1D4ED8;}
-      </style></head><body>
-      <table border="0">
-        <tr><td class="brand" colspan="${cols}">HEALTH MONITORING &amp; PATIENT REGISTRY REPORT</td></tr>
-        <tr><td class="tagline" colspan="${cols}">RURAL HEALTH UNIT &bull; ANIMAL BITE TREATMENT CENTER &bull; POLANGUI, ALBAY</td></tr>
-        <tr><td class="meta" colspan="${cols}">Period Covered: ${periodLabel()} | Status: ${statusFilterLabel()} | Barangay: All Barangays | Date Generated: ${new Date().toLocaleString('en-PH')}</td></tr>
-        <tr><td colspan="${cols}"></td></tr>
-      </table>
-      <table border="1" style="margin-bottom:15px;">
-        <tr style="background:#EFF6FF;">
-          <th style="background:#EFF6FF;color:#1D4ED8;font-weight:bold;" colspan="3">SUMMARY METRICS</th>
-        </tr>
-        <tr>
-          <td class="card">Total Patients: ${rows.length}</td>
-          <td class="card">Ongoing Cases: ${statusCount.ongoing || 0}</td>
-          <td class="card">Completed Cases: ${statusCount.completed || 0}</td>
-        </tr>
-      </table>
-      <br/>
-      <table border="1">
-        <thead>
-          <tr>${headers.map(h => `<th class="col">${h}</th>`).join('')}</tr>
-        </thead>
-        <tbody>${tableRows}</tbody>
-      </table>
-      </body></html>`;
+    ws['!cols'] = [
+      { wch: 5 }, { wch: 22 }, { wch: 13 }, { wch: 26 }, { wch: 6 }, { wch: 8 },
+      { wch: 17 }, { wch: 13 }, { wch: 11 }, { wch: 12 }, { wch: 15 },
+    ];
+    ws['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: headers.length - 1 } },
+      { s: { r: 4, c: 0 }, e: { r: 4, c: headers.length - 1 } },
+    ];
+    // Header row stays visible while scrolling, and the table gets a filter.
+    ws['!freeze'] = { xSplit: 0, ySplit: HEADER_ROW + 1 };
+    ws['!autofilter'] = {
+      ref: `${XLSX.utils.encode_cell({ r: HEADER_ROW, c: 0 })}:${XLSX.utils.encode_cell({ r: aoa.length - 1, c: headers.length - 1 })}`,
+    };
 
-    const blob = new Blob(['\uFEFF' + html], { type: 'application/vnd.ms-excel' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Patient Registry');
+
     const statusSlug = statusFilter !== 'all' ? `-${statusFilter}` : '';
-    a.download = `clinic-report-${period}${statusSlug}-${new Date().toISOString().slice(0, 10)}.xls`;
-    a.click();
-    URL.revokeObjectURL(url);
+    XLSX.writeFile(wb, `clinic-report-${period}${statusSlug}-${getTodayDateString()}.xlsx`);
     onToast(`Excel report exported (${rows.length} patient${rows.length !== 1 ? 's' : ''})`, 'success');
   }
 
-  // Exact Landscape HTML Report matching user example image with Blue theme
-  function buildBulkReportHtml(rows) {
-    const tableRows = rows.length === 0
-      ? `<tr><td colspan="10" style="text-align:center;padding:24px;color:#64748B;font-style:italic;">No ${statusFilter === 'all' ? '' : statusFilter + ' '}records found for this period.</td></tr>`
-      : rows.map((p, i) => {
-      const liveSt = derivePatientStatus(p);
-      const isOverdue = liveSt !== 'completed' && buildDoses(p).some(d => d.status === 'miss');
-      const stBadge = liveSt === 'completed'
-        ? `<span class="badge-completed">✔ Completed</span>`
-        : isOverdue
-        ? `<span class="badge-overdue">▲ Overdue</span>`
-        : `<span class="badge-ongoing">● Ongoing</span>`;
+  const PAGE_1_ROWS = 24;
+  const CONT_PAGE_ROWS = 24;
+
+  function chunkPatientsIntoPages(rows) {
+    if (!rows || rows.length === 0) return [[]];
+    const pages = [];
+    pages.push(rows.slice(0, PAGE_1_ROWS));
+    let idx = PAGE_1_ROWS;
+    while (idx < rows.length) {
+      pages.push(rows.slice(idx, idx + CONT_PAGE_ROWS));
+      idx += CONT_PAGE_ROWS;
+    }
+    return pages;
+  }
+
+  // Exact Landscape Multi-Page HTML Report with physical cut lines and page breaks (Matching Downloaded PDF Design Exactly)
+  function buildBulkReportHtml(rows, logoSrc = CLINIC_LOGO_BASE64) {
+    const pages = chunkPatientsIntoPages(rows);
+    const totalPages = pages.length;
+    const dateGeneratedStr = new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const currentLogo = logoSrc || clinicLogoBase64Cache || CLINIC_LOGO_BASE64;
+
+    const renderedPagesHtml = pages.map((pageRows, pIdx) => {
+      const pageNum = pIdx + 1;
+      const startNum = pIdx === 0 ? 0 : PAGE_1_ROWS + (pIdx - 1) * CONT_PAGE_ROWS;
+
+      const tableRows = pageRows.length === 0
+        ? `<tr><td colspan="10" style="text-align:center;padding:24px;color:#64748B;font-style:italic;">No ${statusFilter === 'all' ? '' : statusFilter + ' '}records found for this period.</td></tr>`
+        : pageRows.map((p, i) => {
+            const liveSt = derivePatientStatus(p);
+            const isOverdue = liveSt !== 'completed' && (liveSt === 'overdue' || p.status === 'overdue' || buildDoses(p).some(d => d.status === 'miss'));
+            const stLabel = liveSt === 'completed' ? 'Completed' : isOverdue ? 'Overdue' : 'Ongoing';
+            const stColor = liveSt === 'completed' ? '#15803D' : isOverdue ? '#DC2626' : '#1D4ED8';
+            const dateStr = formatDateNumeric(p.date || p.createdAt);
+
+            return `
+            <tr>
+              <td class="col-center">${startNum + i + 1}</td>
+              <td class="col-left">${p.barangay || p.address || 'Libon, Albay'}</td>
+              <td class="col-left">${p.id || p.mrn || '—'}</td>
+              <td class="col-left">${formatTitleCase(p.name || '—')}</td>
+              <td class="col-center">${p.age || '—'} / ${p.sex || '—'}</td>
+              <td class="col-left">${p.contact || '—'}</td>
+              <td class="col-center">${p.service || 'PEP'}</td>
+              <td class="col-center">${((p.service || '').trim().toUpperCase() === 'PEP') ? (p.cat ? `Cat ${p.cat}` : (p.animal || '—')) : '—'}</td>
+              <td class="col-center" style="font-weight:700;color:${stColor};">${stLabel}</td>
+              <td class="col-center">${dateStr}</td>
+            </tr>`;
+          }).join('');
+
+      const pageHeader = `
+        <!-- Minimal Institutional Text Header with Logo on Left (Matches Downloaded PDF Exactly) -->
+        <div class="report-header">
+          <div class="header-left">
+            <img src="${currentLogo}" alt="K&A Clinic Logo" class="header-logo" />
+            <div>
+              <div class="header-muni">Municipality of Libon, Province of Albay</div>
+              <div class="header-brand">K&amp;A ANIMAL BITE CENTER &mdash; HEALTH MONITORING REPORT</div>
+              <div class="header-sub">Barangay Summary &mdash; ${periodLabel()}${pIdx > 0 ? ' &bull; Continuation' : ''}</div>
+            </div>
+          </div>
+          <div class="header-right">
+            <span>Service: ${serviceFilterLabel()}</span> &nbsp;|&nbsp; <span>Status: ${statusFilterLabel()}</span> &nbsp;|&nbsp; <span>Date: ${dateGeneratedStr}</span>
+          </div>
+        </div>
+        <div class="header-line"></div>
+      `;
+
+      const cutSeparator = pIdx > 0
+        ? `
+          <div class="page-cut-separator">
+            <span class="cut-scissors">✂</span>
+            <span class="cut-label">Page ${pageNum} of ${totalPages} &mdash; Separate Sheet</span>
+          </div>
+        `
+        : '';
 
       return `
-      <tr>
-        <td style="text-align:center;color:#64748B;">${i + 1}</td>
-        <td style="font-weight:600;">${p.barangay || p.address || 'Polangui'}</td>
-        <td style="color:#0F172A;font-weight:500;">${p.id || p.mrn || '—'}</td>
-        <td style="font-weight:700;color:#0F172A;">${formatTitleCase(p.name || '—')}</td>
-        <td style="text-align:center;">${p.age || '—'} / ${p.sex || '—'}</td>
-        <td>${p.contact || '—'}</td>
-        <td style="text-align:center;font-weight:700;">${p.service || 'PEP'}</td>
-        <td style="text-align:center;">${p.cat ? `Cat ${p.cat}` : (p.animal || '—')}</td>
-        <td style="text-align:center;">${stBadge}</td>
-        <td style="text-align:center;">${p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString('en-PH') : (p.date || '—')}</td>
-      </tr>`;
+        ${cutSeparator}
+        <div class="report-page" id="page-${pageNum}">
+          <div>
+            ${pageHeader}
+            <table class="report-table">
+              <thead>
+                <tr>
+                  <th style="width:4%;text-align:center;">#</th>
+                  <th style="width:15%;text-align:left;">Barangay / Address</th>
+                  <th style="width:10%;text-align:left;">Patient ID</th>
+                  <th style="width:18%;text-align:left;">Patient Name</th>
+                  <th style="width:8%;text-align:center;">Age / Sex</th>
+                  <th style="width:13%;text-align:left;">Contact No.</th>
+                  <th style="width:7%;text-align:center;">Service</th>
+                  <th style="width:7%;text-align:center;">Exposure</th>
+                  <th style="width:8%;text-align:center;">Status</th>
+                  <th style="width:10%;text-align:center;">Date Registered</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${tableRows}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="footer">
+            <span>K&amp;A Animal Bite Treatment Center &bull; Rural Health Unit &bull; Confidential Clinical Report</span>
+            <span>Page ${pageNum} of ${totalPages}</span>
+          </div>
+        </div>
+      `;
     }).join('');
 
     return `<!DOCTYPE html><html><head><title>Health Monitoring Report — ${periodLabel()}</title>
+    <base href="${typeof window !== 'undefined' ? window.location.origin : ''}/">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
       *{box-sizing:border-box;}
-      body{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,Helvetica,Arial,sans-serif;color:#0F172A;padding:24px 32px;margin:0;font-size:11px;line-height:1.4;background:#FFFFFF;}
-      .header-meta{display:flex;align-items:center;justify-content:center;gap:24px;font-size:9.5px;color:#475569;margin-top:6px;font-weight:600;}
-      .header-meta strong{color:#0F172A;}
-      .blue-divider{border-bottom:2.5px solid #1D4ED8;margin:10px 0 14px;}
-      .section-heading{display:flex;align-items:flex-start;gap:6px;margin-bottom:12px;}
-      .section-title{font-size:11.5px;font-weight:800;color:#0F172A;margin:0;}
-      .section-subtitle{font-size:9.5px;color:#64748B;margin:2px 0 0;}
-      table.report-table{width:100%;border-collapse:collapse;font-size:10px;table-layout:fixed;}
-      table.report-table th{background:#EFF6FF;color:#1D4ED8;font-size:8.5px;font-weight:800;text-transform:uppercase;letter-spacing:0.4px;padding:8px 8px;border-bottom:1.5px solid #BFDBFE;text-align:left;}
-      table.report-table td{padding:7px 8px;border-bottom:1px solid #F1F5F9;vertical-align:middle;color:#1E293B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-      .badge-completed{background:#DCFCE7;color:#15803D;border:1px solid #86EFAC;padding:2px 8px;border-radius:999px;font-weight:700;font-size:8.5px;display:inline-flex;align-items:center;gap:3px;}
-      .badge-ongoing{background:#EFF6FF;color:#1D4ED8;border:1px solid #93C5FD;padding:2px 8px;border-radius:999px;font-weight:700;font-size:8.5px;display:inline-flex;align-items:center;gap:3px;}
-      .badge-overdue{background:#FEF2F2;color:#DC2626;border:1px solid #FCA5A5;padding:2px 8px;border-radius:999px;font-weight:700;font-size:8.5px;display:inline-flex;align-items:center;gap:3px;}
-      .footer{font-size:8.5px;color:#94A3B8;margin-top:16px;border-top:1px solid #E2E8F0;padding-top:8px;display:flex;justify-content:space-between;}
-    </style></head><body>
-      ${letterhead()}
+      html, body{margin:0;padding:0;font-family:'Plus Jakarta Sans','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0F172A;background:#EDF0FA;}
+      .pages-wrapper{display:flex;flex-direction:column;align-items:center;padding:0 0 4px;}
+      .page-cut-separator{width:1060px;display:flex;align-items:center;justify-content:center;gap:12px;color:#64748B;font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;margin:18px 0;user-select:none;}
+      .page-cut-separator::before, .page-cut-separator::after{content:'';flex:1;border-bottom:2px dashed #CBD5E1;}
+      .cut-scissors{font-size:13px;color:#3B50DF;}
+      .cut-label{background:#FFFFFF;padding:4px 12px;border-radius:999px;border:1px solid #CBD5E1;box-shadow:0 1px 3px rgba(0,0,0,0.05);}
+      .report-page{width:1060px;height:750px;min-height:750px;max-height:750px;background:#FFFFFF;border-radius:6px;border:1px solid #D8DEF0;box-shadow:0 4px 18px rgba(15,23,42,0.10);padding:16px 26px 14px;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;margin:0 auto;box-sizing:border-box;}
       
-      <div style="text-align:center;margin-top:12px;margin-bottom:10px;">
-        <h2 style="margin:0 0 5px;font-size:14.5px;font-weight:900;color:#0F172A;letter-spacing:0.5px;text-transform:uppercase;">HEALTH MONITORING REPORT</h2>
-        <div style="font-size:10.5px;color:#64748B;font-weight:500;">Barangay Summary — ${periodLabel()}</div>
-      </div>
+      .report-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;}
+      .header-left{display:flex;align-items:center;gap:12px;}
+      .header-logo{width:38px;height:38px;object-fit:contain;display:block;flex-shrink:0;}
+      .header-muni{font-size:8.5px;color:#64748B;font-weight:600;letter-spacing:0.3px;text-transform:uppercase;}
+      .header-brand{font-size:13px;font-weight:900;color:#0F172A;letter-spacing:0.3px;margin:1px 0;text-transform:uppercase;}
+      .header-sub{font-size:9.5px;color:#475569;font-weight:600;font-style:italic;}
+      .header-right{font-size:8.5px;color:#475569;font-weight:600;text-align:right;white-space:nowrap;}
+      .header-line{border-bottom:1.5px solid #0A1D47;margin:4px 0 8px;}
 
-      <div class="header-meta" style="margin-top:10px;margin-bottom:12px;gap:24px;">
-        <span><strong>Period Covered:</strong> ${periodLabel()}</span>
-        <span><strong>Status:</strong> ${statusFilterLabel()}</span>
-        <span><strong>Barangay:</strong> All Barangays</span>
-        <span><strong>Date Generated:</strong> ${new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
-      </div>
+      table.report-table{width:100%;border-collapse:collapse;font-size:9px;table-layout:fixed;border:1px solid #CBD5E1;}
+      table.report-table th, table.report-table td{border:1px solid #CBD5E1;vertical-align:middle;}
+      table.report-table th{background:#EFF6FF;color:#000000;font-size:8.5px;font-weight:800;padding:6px 8px;white-space:nowrap;}
+      table.report-table td{padding:5.8px 8px;color:#0F172A;font-size:9px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+      
+      .col-center{text-align:center;}
+      .col-left{text-align:left;}
 
-      <div class="blue-divider" style="margin:12px 0 16px;"></div>
-
-      <div class="section-heading">
-        <div>
-          <div class="section-title">📍 Barangay Health &amp; Patient Registry Summary</div>
-          <div class="section-subtitle">Comprehensive patient demographic, vaccination course, exposure category, and completion tracking</div>
-        </div>
-      </div>
-
-      <table class="report-table">
-        <thead>
-          <tr>
-            <th style="width:4%;text-align:center;">#</th>
-            <th style="width:14%;">Barangay / Address</th>
-            <th style="width:10%;">Patient ID</th>
-            <th style="width:16%;">Patient Name</th>
-            <th style="width:8%;text-align:center;">Age / Sex</th>
-            <th style="width:11%;">Contact</th>
-            <th style="width:7%;text-align:center;">Service</th>
-            <th style="width:9%;text-align:center;">Exposure</th>
-            <th style="width:10%;text-align:center;">Status</th>
-            <th style="width:11%;text-align:center;">Date Registered</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${tableRows}
-        </tbody>
-      </table>
-
-      <div class="footer">
-        <span>K&amp;A Animal Bite Treatment Center &bull; Official Clinical Record</span>
-        <span>Page 1 of 1</span>
+      .footer{font-size:8px;color:#94A3B8;margin-top:auto;padding-top:8px;display:flex;justify-content:space-between;}
+      @media print{
+        @page{size:A4 landscape;margin:8mm 10mm;}
+        html,body{background:#FFFFFF!important;padding:0!important;margin:0!important;}
+        .pages-wrapper{display:block!important;padding:0!important;}
+        .page-cut-separator{display:none!important;}
+        .report-page{width:100%!important;min-height:100vh!important;height:100vh!important;margin:0!important;box-shadow:none!important;border:none!important;border-radius:0!important;padding:8mm 10mm!important;page-break-after:always!important;break-after:page!important;}
+        .report-page:last-child{page-break-after:auto!important;break-after:auto!important;}
+      }
+    </style></head><body>
+      <div class="pages-wrapper">
+        ${renderedPagesHtml}
       </div>
     </body></html>`;
   }
@@ -3492,128 +3713,165 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
     const rows = getFilteredPatients();
     if (rows.length === 0) { onToast('No patients found for this period', 'error'); return; }
     const w = window.open('', '_blank');
-    w.document.write(buildBulkReportHtml(rows));
+    w.document.write(buildBulkReportHtml(rows, logoDataUrl || CLINIC_LOGO_BASE64));
     w.document.close();
-    w.print();
+    w.focus();
+    setTimeout(() => {
+      w.print();
+    }, 250);
     onToast(`${period.charAt(0).toUpperCase() + period.slice(1)} report opened for printing`, 'success');
   }
 
-  // Professional Landscape A4 PDF Generation (Blue Theme)
-  function buildBulkPdf(rows) {
+  // Landscape A4 registry export. Deliberately mirrors buildBulkReportHtml:
+  // the same chunkPatientsIntoPages() split, the same column proportions, the
+  // same header/footer furniture — so the downloaded file matches the preview
+  // page for page instead of reflowing to its own rhythm.
+  function buildBulkPdf(rows, logoDataUrl = CLINIC_LOGO_BASE64) {
     const doc = new jsPDF({ orientation: 'landscape', format: 'a4', unit: 'mm' });
     const pageWidth = doc.internal.pageSize.getWidth(); // 297mm
     const pageHeight = doc.internal.pageSize.getHeight(); // 210mm
+    const dateGeneratedStr = new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const logoToUse = logoDataUrl || clinicLogoBase64Cache || CLINIC_LOGO_BASE64;
 
-    // Header Institutional Text
-    doc.setFontSize(8);
-    doc.setFont(undefined, 'normal');
-    doc.setTextColor(71, 85, 105);
-    doc.text('Republic of the Philippines', pageWidth / 2, 11, { align: 'center' });
-    doc.text('Municipality of Polangui, Province of Albay', pageWidth / 2, 15, { align: 'center' });
+    const MARGIN = 14;
+    const CONTENT_WIDTH = pageWidth - MARGIN * 2;
+    // The percentage widths the preview table uses, resolved against the
+    // printable width so both render the same column rhythm.
+    const COL_PERCENT = [4, 15, 10, 18, 8, 13, 7, 7, 8, 10];
+    const COL_ALIGN = ['center', 'left', 'left', 'left', 'center', 'left', 'center', 'center', 'center', 'center'];
+    const columnStyles = COL_PERCENT.reduce((acc, pct, i) => {
+      acc[i] = {
+        halign: COL_ALIGN[i],
+        cellWidth: (CONTENT_WIDTH * pct) / 100,
+        ...(i === 8 ? { fontStyle: 'bold' } : {}),
+      };
+      return acc;
+    }, {});
 
-    doc.setFontSize(10.5);
-    doc.setFont(undefined, 'bold');
-    doc.setTextColor(15, 23, 42);
-    doc.text('RURAL HEALTH UNIT · ANIMAL BITE TREATMENT CENTER', pageWidth / 2, 20, { align: 'center' });
+    function drawPdfHeader(isContinuation) {
+      const hasLogo = Boolean(logoToUse);
+      const textX = hasLogo ? 27 : MARGIN;
 
-    // Document Title (Blue)
-    doc.setFontSize(13);
-    doc.setFont(undefined, 'bold');
-    doc.setTextColor(29, 78, 216);
-    doc.text('HEALTH MONITORING REPORT', pageWidth / 2, 28.5, { align: 'center' });
-
-    doc.setFontSize(8.5);
-    doc.setFont(undefined, 'normal');
-    doc.setTextColor(100, 116, 139);
-    doc.text(`Barangay Summary — ${periodLabel()}`, pageWidth / 2, 33.5, { align: 'center' });
-
-    // Metadata row
-    doc.setFontSize(7.5);
-    doc.setTextColor(51, 65, 85);
-    const metaStr = `Period Covered: ${periodLabel()}    |    Status: ${statusFilterLabel()}    |    Barangay: All Barangays    |    Date Generated: ${new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`;
-    doc.text(metaStr, pageWidth / 2, 39.5, { align: 'center' });
-
-    // Blue separator line
-    doc.setDrawColor(29, 78, 216);
-    doc.setLineWidth(0.6);
-    doc.line(14, 43, pageWidth - 14, 43);
-
-    // Section Subtitle
-    doc.setFontSize(9);
-    doc.setFont(undefined, 'bold');
-    doc.setTextColor(15, 23, 42);
-    doc.text('Barangay Health & Patient Registry Summary', 14, 48.5);
-    doc.setFontSize(7);
-    doc.setFont(undefined, 'normal');
-    doc.setTextColor(100, 116, 139);
-    doc.text('Comprehensive patient demographic, vaccination course, exposure category, and completion tracking', 14, 52);
-
-    autoTable(doc, {
-      startY: 55,
-      head: [['#', 'Barangay / Address', 'Patient ID', 'Patient Name', 'Age / Sex', 'Contact No.', 'Service', 'Exposure', 'Status', 'Date Registered']],
-      body: rows.map((p, i) => {
-        const liveSt = derivePatientStatus(p);
-        const isOverdue = liveSt !== 'completed' && buildDoses(p).some(d => d.status === 'miss');
-        const stLabel = liveSt === 'completed' ? 'Completed' : isOverdue ? 'Overdue' : 'Ongoing';
-        return [
-          i + 1,
-          p.barangay || p.address || 'Polangui',
-          p.id || p.mrn || '—',
-          formatTitleCase(p.name || '—'),
-          `${p.age || '—'} / ${p.sex || '—'}`,
-          p.contact || '—',
-          p.service || 'PEP',
-          p.cat ? `Cat ${p.cat}` : (p.animal || '—'),
-          stLabel,
-          p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString('en-PH') : (p.date || '—'),
-        ];
-      }),
-      headStyles: {
-        fillColor: [239, 246, 255],
-        textColor: [29, 78, 216],
-        fontSize: 7.5,
-        fontStyle: 'bold',
-        halign: 'left',
-      },
-      styles: {
-        fontSize: 7.5,
-        cellPadding: 2.5,
-        textColor: [15, 23, 42],
-        lineColor: [226, 232, 240],
-        lineWidth: 0.1,
-      },
-      columnStyles: {
-        0: { halign: 'center', cellWidth: 8 },
-        4: { halign: 'center', cellWidth: 16 },
-        6: { halign: 'center', cellWidth: 14 },
-        7: { halign: 'center', cellWidth: 18 },
-        8: { halign: 'center', fontStyle: 'bold', cellWidth: 20 },
-        9: { halign: 'center', cellWidth: 24 },
-      },
-      didParseCell: function (data) {
-        if (data.section === 'body' && data.column.index === 8) {
-          if (data.cell.raw === 'Completed') {
-            data.cell.styles.textColor = [21, 128, 61];
-          } else if (data.cell.raw === 'Overdue') {
-            data.cell.styles.textColor = [220, 38, 38];
-          } else {
-            data.cell.styles.textColor = [29, 78, 216];
-          }
+      if (hasLogo) {
+        try {
+          doc.addImage(logoToUse, 'PNG', MARGIN, 5.8, 10.5, 10.5);
+        } catch (e) {
+          console.warn('Could not add logo to PDF:', e);
         }
-      },
+      }
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(6.5);
+      doc.setTextColor(100, 116, 139);
+      doc.text('MUNICIPALITY OF LIBON, PROVINCE OF ALBAY', textX, 8);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(15, 23, 42);
+      doc.text('K&A ANIMAL BITE CENTER — HEALTH MONITORING REPORT', textX, 12.5);
+
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(7.5);
+      doc.setTextColor(71, 85, 105);
+      doc.text(`Barangay Summary — ${periodLabel()}${isContinuation ? ' • Continuation' : ''}`, textX, 16.8);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
+      doc.setTextColor(71, 85, 105);
+      doc.text(`Service: ${serviceFilterLabel()}  |  Status: ${statusFilterLabel()}  |  Date: ${dateGeneratedStr}`, pageWidth - MARGIN, 16.8, { align: 'right' });
+
+      doc.setDrawColor(10, 29, 71);
+      doc.setLineWidth(0.5);
+      doc.line(MARGIN, 19.5, pageWidth - MARGIN, 19.5);
+    }
+
+    const bodyForChunk = (pageRows, startNum) => pageRows.map((p, i) => {
+      const liveSt = derivePatientStatus(p);
+      const isOverdue = liveSt !== 'completed' && (liveSt === 'overdue' || p.status === 'overdue' || buildDoses(p).some(d => d.status === 'miss'));
+      const stLabel = liveSt === 'completed' ? 'Completed' : isOverdue ? 'Overdue' : 'Ongoing';
+      return [
+        startNum + i + 1,
+        p.barangay || p.address || 'Libon, Albay',
+        p.id || p.mrn || '—',
+        formatTitleCase(p.name || '—'),
+        `${p.age || '—'} / ${p.sex || '—'}`,
+        p.contact || '—',
+        p.service || 'PEP',
+        ((p.service || '').trim().toUpperCase() === 'PEP') ? (p.cat ? `Cat ${p.cat}` : (p.animal || '—')) : '—',
+        stLabel,
+        formatDateNumeric(p.date || p.createdAt),
+      ];
     });
 
-    doc.setFontSize(7);
-    doc.setTextColor(148, 163, 184);
-    doc.text(`K&A Animal Bite Treatment Center · Rural Health Unit · Confidential Clinical Report`, pageWidth / 2, pageHeight - 6, { align: 'center' });
+    // One autoTable call per preview page, so the row that starts page 2 here
+    // is the row that starts page 2 there.
+    const pages = chunkPatientsIntoPages(rows);
+    pages.forEach((pageRows, pIdx) => {
+      if (pIdx > 0) doc.addPage();
+      drawPdfHeader(pIdx > 0);
+
+      const startNum = pIdx === 0 ? 0 : PAGE_1_ROWS + (pIdx - 1) * CONT_PAGE_ROWS;
+      autoTable(doc, {
+        startY: 21.5,
+        margin: { top: 21.5, bottom: 12, left: MARGIN, right: MARGIN },
+        head: [['#', 'Barangay / Address', 'Patient ID', 'Patient Name', 'Age / Sex', 'Contact No.', 'Service', 'Exposure', 'Status', 'Date Registered']],
+        body: pageRows.length
+          ? bodyForChunk(pageRows, startNum)
+          : [[{ content: `No ${statusFilter === 'all' ? '' : statusFilter + ' '}records found for this period.`, colSpan: 10, styles: { halign: 'center', textColor: [100, 116, 139], fontStyle: 'italic' } }]],
+        theme: 'grid',
+        headStyles: {
+          fillColor: [239, 246, 255],
+          textColor: [0, 0, 0],
+          fontSize: 7.5,
+          fontStyle: 'bold',
+          cellPadding: 1.9,
+          lineColor: [203, 213, 225],
+          lineWidth: 0.1,
+        },
+        styles: {
+          fontSize: 7.5,
+          cellPadding: 1.6,
+          textColor: [15, 23, 42],
+          lineColor: [203, 213, 225],
+          lineWidth: 0.1,
+          overflow: 'ellipsize',
+          valign: 'middle',
+        },
+        columnStyles,
+        didParseCell: function (data) {
+          if (data.section === 'body' && data.column.index === 8) {
+            if (data.cell.raw === 'Completed') {
+              data.cell.styles.textColor = [21, 128, 61];
+            } else if (data.cell.raw === 'Overdue') {
+              data.cell.styles.textColor = [220, 38, 38];
+            } else {
+              data.cell.styles.textColor = [29, 78, 216];
+            }
+          }
+        },
+      });
+    });
+
+    // Stamping running footers on all pages: "Page X of Y"
+    const totalPages = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
+      doc.setTextColor(148, 163, 184);
+      doc.text('K&A Animal Bite Treatment Center · Rural Health Unit · Confidential Clinical Report', MARGIN, pageHeight - 6);
+      doc.text(`Page ${i} of ${totalPages}`, pageWidth - MARGIN, pageHeight - 6, { align: 'right' });
+    }
+
     return doc;
   }
 
-  function exportBulkPdf() {
+  async function exportBulkPdf() {
     const rows = getFilteredPatients();
     if (rows.length === 0) { onToast('No patients found for this period', 'error'); return; }
+    const logoToUse = logoDataUrl || clinicLogoBase64Cache || CLINIC_LOGO_BASE64;
     const statusSlug = statusFilter !== 'all' ? `-${statusFilter}` : '';
-    buildBulkPdf(rows).save(`health-monitoring-report-${period}${statusSlug}-${new Date().toISOString().slice(0, 10)}.pdf`);
+    buildBulkPdf(rows, logoToUse).save(`health-monitoring-report-${period}${statusSlug}-${new Date().toISOString().slice(0, 10)}.pdf`);
     onToast(`Landscape PDF exported (${rows.length} patient${rows.length !== 1 ? 's' : ''})`, 'success');
   }
 
@@ -3622,498 +3880,584 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
     else exportBulkPdf();
   }
 
-  const [includeRecord, setIncludeRecord] = useState(true);
-  const [includeCertificate, setIncludeCertificate] = useState(false);
-  const docType = includeRecord && includeCertificate ? 'both' : includeCertificate ? 'certificate' : 'record';
-  const toggleIncludeRecord = () => setIncludeRecord(v => (v && !includeCertificate) ? v : !v);
-  const toggleIncludeCertificate = () => setIncludeCertificate(v => (v && !includeRecord) ? v : !v);
+  const docType = 'record';
+  const [zoomLevel, setZoomLevel] = useState(0.85);
+  const [rotation] = useState(0);
+  // A single patient record is usually well short of a full page, and a fixed
+  // portrait sheet left a band of blank paper under the footer. The sheet is
+  // measured from the rendered document instead, so it ends where the
+  // content ends. Null until the iframe reports back.
+  const [docSheetHeight, setDocSheetHeight] = useState(null);
 
   function getProtocolLabel(p) {
-    const doses = p.doses || [];
-    const doneCount = doses.filter(d => (d.s || d.status) === 'done').length;
-    if (p.service === 'PEP') {
+    const doses = buildDoses(p);
+    const doneCount = doses.filter(d => (d.s || d.status) === 'done' || d.done === true).length;
+    if (p?.service === 'PEP') {
       const hasERIG = doses.some(d => (d.n || d.label || '').includes('ERIG'));
-      return hasERIG ? `ERIG + ARV ${doneCount}-dose series` : (doneCount ? `ARV ${doneCount}-dose series (Days 0, 3, 7, 14, 28)` : 'ARV vaccination series');
+      return hasERIG ? `ERIG + ARV ${doneCount}-dose series` : (doneCount ? `ARV ${doneCount}-dose series (Days 0, 3, 7, 14, 28)` : 'ARV vaccination series (Days 0, 3, 7, 14, 28)');
     }
-    if (p.service === 'PrEP') return `Rabies PrEP preventive series${doneCount ? ` (${doneCount} dose${doneCount > 1 ? 's' : ''} completed)` : ' (Days 0, 7, 21)'}`;
-    if (p.service === 'Tetanus') return `Anti-Tetanus vaccination${doneCount ? ` (${doneCount} dose${doneCount > 1 ? 's' : ''} completed)` : ''}`;
-    if (p.service === 'Hepatitis') return `Hepatitis vaccination series${doneCount ? ` (${doneCount} dose${doneCount > 1 ? 's' : ''} completed)` : ''}`;
-    if (p.service === 'Pneumonia') return `Pneumococcal vaccination${doneCount ? ` (${doneCount} dose${doneCount > 1 ? 's' : ''} completed)` : ''}`;
-    return `${p.service || 'Vaccination'} treatment`;
+    if (p?.service === 'PrEP') return `Rabies PrEP preventive series${doneCount ? ` (${doneCount} dose${doneCount > 1 ? 's' : ''} completed)` : ' (Days 0, 7, 21)'}`;
+    if (p?.service === 'Tetanus') return `Anti-Tetanus vaccination${doneCount ? ` (${doneCount} dose${doneCount > 1 ? 's' : ''} completed)` : ''}`;
+    if (p?.service === 'Hepatitis') return `Hepatitis vaccination series${doneCount ? ` (${doneCount} dose${doneCount > 1 ? 's' : ''} completed)` : ''}`;
+    if (p?.service === 'Pneumonia') return `Pneumococcal vaccination${doneCount ? ` (${doneCount} dose${doneCount > 1 ? 's' : ''} completed)` : ''}`;
+    return `${p?.service || 'Vaccination'} treatment`;
   }
 
   const PATIENT_HIDDEN_NOTE = 'Wound assessment details are held in your clinical file at K&A Clinic.';
 
-  function medicalRecordBodyHtml(p, audience = 'clinic') {
+  // ── ONE MODEL, TWO RENDERERS ──────────────────────────────────────────
+  // The on-screen preview and the downloaded PDF used to be written out
+  // separately and had drifted: the preview carried sections the PDF never
+  // printed. Both now render this single description of the record, so what
+  // the preview shows is what the file contains.
+  function buildMedicalRecordModel(p, audience = 'clinic') {
     const showWoundDetail = audience !== 'patient';
-    const doses = p.doses || [];
-    const doseRows = doses.map(d => {
-      const st = d.s || d.status || 'pending';
-      const stColor = st === 'done' ? '#15803D' : st === 'miss' ? '#C8151A' : '#D97706';
-      const stBg = st === 'done' ? '#DCFCE7' : st === 'miss' ? '#FEE2E2' : '#FEF3C7';
-      return `
-      <tr>
-        <td style="padding:8px 10px;border:1px solid #CBD5E1;font-weight:700;color:#0F172A;">${d.n || d.label || ''}</td>
-        <td style="padding:8px 10px;border:1px solid #CBD5E1;color:#334155;">${d.date || '—'}</td>
-        <td style="padding:8px 10px;border:1px solid #CBD5E1;text-align:center;">
-          <span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:9px;font-weight:700;text-transform:uppercase;background:${stBg};color:${stColor};">${st === 'miss' ? 'Overdue' : st}</span>
-        </td>
-      </tr>`;
-    }).join('');
-    const registered = p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString('en-PH') : (p.date || '—');
-    const st = derivePatientStatus(p);
-
-    return `
-      <div style="font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,sans-serif;color:#0F172A;font-size:11.5px;line-height:1.5;padding:24px 28px;background:#FFFFFF;border:1px solid #0F172A;">
-        ${letterhead()}
-        
-        <!-- Inline Metadata Row -->
-        <div style="text-align:center;margin-bottom:14px;font-size:11px;color:#0F172A;line-height:1.8;">
-          <strong>Name:</strong> <span style="text-decoration:underline;margin-right:16px;font-weight:700;">${formatTitleCase(p.name)}</span>
-          <strong>Case No:</strong> <span style="text-decoration:underline;margin-right:16px;">${p.id || p.mrn || '—'}</span>
-          <strong>Service:</strong> <span style="text-decoration:underline;margin-right:16px;">${p.service || '—'}</span>
-          <strong>Status:</strong> <span style="text-decoration:underline;font-weight:700;color:${st === 'completed' ? '#15803D' : '#1D4ED8'};">${st.toUpperCase()}</span>
-        </div>
-
-        <!-- Centered Document Title -->
-        <div style="text-align:center;font-size:14px;font-weight:800;color:#0F172A;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:18px;text-decoration:underline;">
-          OFFICIAL PATIENT CLINICAL MEDICAL RECORD
-        </div>
-
-        <!-- Section I: Patient Profile & Demographics -->
-        <div style="font-size:10.5px;font-weight:800;color:#0F172A;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">I. Patient Profile &amp; Demographics</div>
-        <table style="width:100%;border-collapse:collapse;margin-bottom:20px;border:1px solid #CBD5E1;">
-          <tr>
-            <td style="padding:7px 10px;background:#F1F5F9;font-weight:700;color:#334155;width:20%;border:1px solid #CBD5E1;">Full Name</td>
-            <td style="padding:7px 10px;font-weight:700;color:#0F172A;width:30%;border:1px solid #CBD5E1;">${formatTitleCase(p.name)}</td>
-            <td style="padding:7px 10px;background:#F1F5F9;font-weight:700;color:#334155;width:20%;border:1px solid #CBD5E1;">Age / Sex</td>
-            <td style="padding:7px 10px;font-weight:700;color:#0F172A;width:30%;border:1px solid #CBD5E1;">${p.age || '—'} yrs &bull; ${(p.sex || '—').toUpperCase()}</td>
-          </tr>
-          <tr>
-            <td style="padding:7px 10px;background:#F1F5F9;font-weight:700;color:#334155;border:1px solid #CBD5E1;">Address</td>
-            <td style="padding:7px 10px;border:1px solid #CBD5E1;">${p.address || '—'}</td>
-            <td style="padding:7px 10px;background:#F1F5F9;font-weight:700;color:#334155;border:1px solid #CBD5E1;">Contact No.</td>
-            <td style="padding:7px 10px;border:1px solid #CBD5E1;">${p.contact || '—'}</td>
-          </tr>
-          <tr>
-            <td style="padding:7px 10px;background:#F1F5F9;font-weight:700;color:#334155;border:1px solid #CBD5E1;">Email Address</td>
-            <td style="padding:7px 10px;border:1px solid #CBD5E1;">${p.email || '—'}</td>
-            <td style="padding:7px 10px;background:#F1F5F9;font-weight:700;color:#334155;border:1px solid #CBD5E1;">Registration Date</td>
-            <td style="padding:7px 10px;border:1px solid #CBD5E1;">${registered}</td>
-          </tr>
-        </table>
-
-        <!-- Section II: Service & Exposure Assessment -->
-        <div style="font-size:10.5px;font-weight:800;color:#0F172A;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">II. Service &amp; Clinical Details</div>
-        <table style="width:100%;border-collapse:collapse;margin-bottom:20px;border:1px solid #CBD5E1;">
-          <tr>
-            <td style="padding:7px 10px;background:#F1F5F9;font-weight:700;color:#334155;width:20%;border:1px solid #CBD5E1;">Service Type</td>
-            <td style="padding:7px 10px;font-weight:700;color:#0F172A;width:30%;border:1px solid #CBD5E1;">${p.service || '—'}</td>
-            <td style="padding:7px 10px;background:#F1F5F9;font-weight:700;color:#334155;width:20%;border:1px solid #CBD5E1;">Vaccine Brand</td>
-            <td style="padding:7px 10px;font-weight:700;color:#0F172A;width:30%;border:1px solid #CBD5E1;">${p.vaccineBrand || '—'}</td>
-          </tr>
-          ${p.service === 'PEP' ? `
-          <tr>
-            <td style="padding:7px 10px;background:#F1F5F9;font-weight:700;color:#334155;border:1px solid #CBD5E1;">Biting Animal</td>
-            <td style="padding:7px 10px;border:1px solid #CBD5E1;">${p.animal || '—'}</td>
-            <td style="padding:7px 10px;background:#F1F5F9;font-weight:700;color:#334155;border:1px solid #CBD5E1;">Exposure Category</td>
-            <td style="padding:7px 10px;font-weight:800;color:#B91C1C;border:1px solid #CBD5E1;">Category ${p.cat || '—'}</td>
-          </tr>
-          <tr>
-            ${showWoundDetail ? `
-              <td style="padding:7px 10px;background:#F1F5F9;font-weight:700;color:#334155;border:1px solid #CBD5E1;">Wound Details</td>
-              <td style="padding:7px 10px;border:1px solid #CBD5E1;">${p.woundLocation || '—'} (${p.woundDepth || '—'})</td>
-            ` : `
-              <td style="padding:7px 10px;background:#F1F5F9;font-weight:700;color:#334155;border:1px solid #CBD5E1;">Exposure Date</td>
-              <td style="padding:7px 10px;border:1px solid #CBD5E1;">${fmtDate(p.date)}</td>
-            `}
-            <td style="padding:7px 10px;background:#F1F5F9;font-weight:700;color:#334155;border:1px solid #CBD5E1;">No. of Bites</td>
-            <td style="padding:7px 10px;border:1px solid #CBD5E1;">${p.numberOfBites || '—'}</td>
-          </tr>
-          ` : ''}
-          <tr>
-            <td style="padding:7px 10px;background:#F1F5F9;font-weight:700;color:#334155;border:1px solid #CBD5E1;">Past Vaccines</td>
-            <td style="padding:7px 10px;border:1px solid #CBD5E1;">${p.pastVaccines || '—'}</td>
-            <td style="padding:7px 10px;background:#F1F5F9;font-weight:700;color:#334155;border:1px solid #CBD5E1;">Allergies</td>
-            <td style="padding:7px 10px;border:1px solid #CBD5E1;">${p.allergies || 'None recorded'}</td>
-          </tr>
-        </table>
-
-        <!-- Section III: Dose Schedule & Status -->
-        <div style="font-size:10.5px;font-weight:800;color:#0F172A;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">III. Dose Schedule &amp; Vaccination Status</div>
-        <table style="width:100%;border-collapse:collapse;margin-bottom:24px;border:1px solid #CBD5E1;">
-          <thead><tr>
-            <th style="background:#F1F5F9;padding:8px 10px;text-align:left;border:1px solid #CBD5E1;font-size:9px;text-transform:uppercase;">Dose Designation</th>
-            <th style="background:#F1F5F9;padding:8px 10px;text-align:left;border:1px solid #CBD5E1;font-size:9px;text-transform:uppercase;">Scheduled Administration Date</th>
-            <th style="background:#F1F5F9;padding:8px 10px;text-align:center;border:1px solid #CBD5E1;font-size:9px;text-transform:uppercase;">Status</th>
-          </tr></thead>
-          <tbody>${doseRows || '<tr><td colspan="3" style="padding:10px;border:1px solid #CBD5E1;text-align:center;color:#64748B;">No dose schedule recorded</td></tr>'}</tbody>
-        </table>
-
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:36px;padding-top:20px;">
-          <div style="text-align:center;">
-            <div style="border-top:1.5px solid #0F172A;padding-top:6px;font-size:11px;width:80%;margin:0 auto;">
-              <strong>MARIA F. JOHNSON, RN</strong><br>
-              <span style="font-size:9.5px;color:#64748B;">Attending Clinic Nurse &bull; PRC Lic. No. 0654321</span>
-            </div>
-          </div>
-          <div style="text-align:center;">
-            <div style="border-top:1.5px solid #0F172A;padding-top:6px;font-size:11px;width:80%;margin:0 auto;">
-              <strong>DR. FRANCIS R. REYES, MD</strong><br>
-              <span style="font-size:9.5px;color:#64748B;">Medical Officer &bull; PRC Lic. No. 0123456</span>
-            </div>
-          </div>
-        </div>
-
-        <div style="margin-top:30px;border-top:1px solid #E2E8F0;padding-top:10px;font-size:9px;color:#94A3B8;text-align:center;">
-          K&amp;A Anti-Rabies Vaccine Clinic &bull; Official Confidential Patient Record &bull; ${new Date().getFullYear()}
-        </div>
-      </div>`;
-  }
-
-  function certificateBodyHtml(p) {
-    const isCompleted = derivePatientStatus(p) === 'completed';
-    const protocol = getProtocolLabel(p);
-    const registered = p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString('en-PH') : (p.date || '—');
-    const issuedDate = new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
-
-    return `
-      <div style="font-family:'Times New Roman',Times,Georgia,serif;color:#0F172A;font-size:12.5px;line-height:1.8;background:#FFFFFF;padding:28px 36px;border:2px solid #0F172A;position:relative;">
-        ${letterhead()}
-        
-        <div style="text-align:center;margin:22px 0 20px;">
-          <h2 style="font-family:'Times New Roman',Georgia,serif;font-size:18px;font-weight:800;color:#0F172A;text-transform:uppercase;letter-spacing:1px;margin:0 0 4px;text-decoration:underline;">
-            MEDICAL CERTIFICATE
-          </h2>
-          <div style="font-size:10px;font-weight:700;color:#64748B;letter-spacing:0.5px;text-transform:uppercase;font-family:'Segoe UI',sans-serif;">
-            OFFICIAL CLINICAL CERTIFICATION
-          </div>
-        </div>
-
-        <div style="margin-bottom:18px;font-weight:700;font-size:12px;color:#0F172A;">
-          TO WHOM IT MAY CONCERN:
-        </div>
-
-        <p style="text-align:justify;text-indent:36px;margin-bottom:16px;">
-          THIS IS TO CERTIFY that <strong style="text-decoration:underline;text-transform:uppercase;">${formatTitleCase(p.name)}</strong>, 
-          <strong>${p.age || '___'}</strong> years old, <strong>${(p.sex || '___').toUpperCase()}</strong>, 
-          residing at <strong>${p.address || '___'}</strong>, has been officially examined, evaluated, and administered 
-          medical treatment at <strong>K&amp;A Anti-Rabies Vaccine Clinic</strong> from 
-          <strong>${registered}</strong> to <strong>${issuedDate}</strong>.
-        </p>
-
-        <p style="text-align:justify;text-indent:36px;margin-bottom:18px;">
-          Clinical evaluation indicates treatment for <strong>${p.service === 'PEP' ? `Category ${p.cat || 'III'} Exposure (${p.animal || 'Animal'} Bite)` : (p.service || 'Vaccination')}</strong> 
-          under the prescribed protocol: <strong style="text-decoration:underline;">${protocol}</strong>. 
-          ${isCompleted ? 'The patient has successfully COMPLETED the full course of post-exposure prophylaxis with no adverse systemic reactions observed.' : 'The patient is currently adhering to the scheduled vaccination dosage protocol.'}
-        </p>
-
-        <!-- Formal Assessment Table -->
-        <table style="width:100%;border-collapse:collapse;margin:20px 0 24px;font-size:11px;font-family:'Segoe UI',sans-serif;border:1px solid #CBD5E1;">
-          <tr style="background:#F8FAFC;">
-            <td style="padding:8px 12px;font-weight:700;color:#334155;border:1px solid #CBD5E1;width:30%;">Clinical Diagnosis</td>
-            <td style="padding:8px 12px;font-weight:700;color:#0F172A;border:1px solid #CBD5E1;">${p.service === 'PEP' ? `Rabies Exposure (Category ${p.cat || 'III'}), ${p.animal || 'Animal'} Bite` : `${p.service || 'Vaccination'} Protocol`}</td>
-          </tr>
-          <tr>
-            <td style="padding:8px 12px;font-weight:700;color:#334155;border:1px solid #CBD5E1;">Vaccine Regimen</td>
-            <td style="padding:8px 12px;color:#0F172A;border:1px solid #CBD5E1;">${p.vaccineBrand || 'Purified Chick Embryo Cell Vaccine (PCECV)'} (${protocol})</td>
-          </tr>
-          <tr style="background:#F8FAFC;">
-            <td style="padding:8px 12px;font-weight:700;color:#334155;border:1px solid #CBD5E1;">Fitness Status</td>
-            <td style="padding:8px 12px;font-weight:700;color:${isCompleted ? '#15803D' : '#D97706'};border:1px solid #CBD5E1;">${isCompleted ? 'CLEARED &amp; FIT TO RESUME REGULAR ACTIVITIES' : 'UNDER ONGOING TREATMENT &amp; OBSERVATION'}</td>
-          </tr>
-        </table>
-
-        <p style="text-indent:36px;margin-bottom:32px;">
-          This certification is issued upon the request of the above-named patient for whatever legal, medical, or administrative purpose it may serve.
-        </p>
-
-        <!-- Signatures Block -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:36px;font-family:'Segoe UI',sans-serif;">
-          <div style="text-align:center;">
-            <div style="border-top:1.5px solid #0F172A;padding-top:6px;font-size:11px;width:80%;margin:0 auto;">
-              <strong>MARIA F. JOHNSON, RN</strong><br>
-              <span style="font-size:9.5px;color:#64748B;">Attending Clinic Nurse</span><br>
-              <span style="font-size:9px;color:#94A3B8;">PRC Lic. No. 0654321</span>
-            </div>
-          </div>
-          <div style="text-align:center;">
-            <div style="border-top:1.5px solid #0F172A;padding-top:6px;font-size:11px;width:80%;margin:0 auto;">
-              <strong>DR. FRANCIS R. REYES, MD</strong><br>
-              <span style="font-size:9.5px;color:#64748B;">Attending Physician / Medical Officer</span><br>
-              <span style="font-size:9px;color:#94A3B8;">PRC Lic. No. 0123456 &bull; PTR No. 9876543</span>
-            </div>
-          </div>
-        </div>
-
-        <div style="margin-top:24px;padding-top:10px;border-top:1px solid #E2E8F0;text-align:center;font-size:9px;color:#94A3B8;font-family:'Segoe UI',sans-serif;">
-          K&amp;A Anti-Rabies Vaccine Clinic &bull; Official Medical Certificate &bull; Issued: ${issuedDate} &bull; Ref ID: ${p.id || p.mrn || '—'}
-        </div>
-      </div>`;
-  }
-
-  function buildDocumentHtml(p, type, audience = 'clinic') {
-    const sections = [];
-    if (type !== 'certificate') sections.push(`<div>${medicalRecordBodyHtml(p, audience)}</div>`);
-    if (type !== 'record') sections.push(`<div style="${type === 'both' ? 'page-break-before:always;margin-top:20px;' : ''}">${certificateBodyHtml(p)}</div>`);
-    const titleMap = { record: 'Medical Record', certificate: 'Medical Certificate', both: 'Medical Record & Certificate' };
-    return `<!DOCTYPE html><html><head><title>${titleMap[type]} — ${formatTitleCase(p.name)}</title>
-    <style>*{box-sizing:border-box;} body{margin:0;padding:0;background:#FFFFFF;} @media print{@page{margin:10mm 15mm;}}</style>
-    </head><body>${sections.join('')}</body></html>`;
-  }
-
-  function drawMedicalRecordPdf(doc, p, audience = 'clinic') {
-    const showWoundDetail = audience !== 'patient';
-    const pageWidth = doc.internal.pageSize.getWidth();
     const doses = buildDoses(p);
-    const registered = p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString('en-PH') : (p.date || '—');
+    const rawDate = p.date || (p.createdAt?.toDate ? p.createdAt.toDate() : p.createdAt);
+    const registered = rawDate
+      ? (formatDateLong(rawDate) || formatDateShort(rawDate) || String(rawDate).split('T')[0])
+      : (p.date || '—');
+    const st = derivePatientStatus(p);
+    const isPEP = (p.service || '').trim().toUpperCase() === 'PEP';
+    const caseNo = p.firestoreId ? p.firestoreId.slice(0, 8).toUpperCase() : (p.id || '—');
 
-    doc.setFillColor(15, 23, 42);
-    doc.rect(0, 0, pageWidth, 22, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(13);
-    doc.setFont(undefined, 'bold');
-    doc.text('K&A Clinic', 14, 12);
-    doc.setFontSize(8);
-    doc.setFont(undefined, 'normal');
-    doc.setTextColor(203, 213, 225);
-    doc.text('ANTI-RABIES & ANIMAL BITE CENTER', 14, 17);
+    const admin = [
+      ['Date', registered, 'MRN', p.id || p.mrn || '—'],
+      ['Account / Case No.', caseNo, 'Ward / Service', `${p.service || 'PEP'} (Animal Bite Clinic)`],
+      ['Primary Attending', 'Dr. Francis R. Reyes, MD', 'Status', st.toUpperCase()],
+    ];
 
-    doc.setTextColor(15, 23, 42);
-    doc.setFontSize(13);
-    doc.setFont(undefined, 'bold');
-    doc.text('Medical Record', 14, 32);
-    doc.setFontSize(9);
-    doc.setFont(undefined, 'normal');
-    doc.setTextColor(100, 116, 139);
-    doc.text(`Generated: ${new Date().toLocaleString('en-PH')}`, 14, 38);
+    const complaintRows = isPEP
+      ? [
+          ['Presenting Complaint', `Clinical evaluation and post-exposure prophylaxis following exposure to ${p.animal || 'animal'} on ${fmtDate(p.date) || registered}. Assessed as Category ${p.cat || '—'} bite exposure.`],
+          ['Exposure Category', `Category ${p.cat || '—'}`],
+          ...(showWoundDetail
+            ? [['Wound Site / Depth', `${p.woundLocation || '—'} · ${p.woundDepth || '—'} · Bites: ${p.numberOfBites || '1'}`]]
+            : [['Wound Assessment', PATIENT_HIDDEN_NOTE]]),
+        ]
+      : [
+          ['Presenting Complaint', `Patient received clinical assessment and vaccination administration under the ${p.service || 'vaccination'} protocol.`],
+        ];
 
-    autoTable(doc, {
-      startY: 44,
-      body: [
-        ['Patient ID', p.id || p.mrn || '—', 'Status', derivePatientStatus(p)],
-        ['Name', formatTitleCase(p.name), 'Service', p.service || '—'],
-        ['Age / Sex', `${p.age || '—'} yrs · ${p.sex || '—'}`, 'Vaccine Brand', p.vaccineBrand || '—'],
-        ['Contact', p.contact || '—', 'Email', p.email || '—'],
-        ['Address', p.address || '—', 'Registered', registered],
+    const sections = [
+      {
+        title: '1. PATIENT DEMOGRAPHICS',
+        rows: [
+          ['Name', formatTitleCase(p.name)],
+          ['Age / Gender', `${p.age || '—'} yrs · ${(p.sex || '—').toUpperCase()}`],
+          ['Contact / Address', `${p.contact || '—'} · ${p.address || '—'}`],
+          ['Guarantor / Next of Kin', p.guardian || p.emergencyContact || '—'],
+        ],
+      },
+      {
+        title: '2. ENCOUNTER SUMMARY',
+        rows: [
+          ['Encounter Type', 'Outpatient Clinical Consultation & Prophylaxis'],
+          ['Protocol / Reason', isPEP ? `Animal Bite Exposure (${p.animal || 'Animal'} Bite)` : `${p.service || 'Vaccination'} Protocol`],
+          ['Registration Date', registered],
+          ['Treatment Protocol', getProtocolLabel(p)],
+          ['Attending Facility', 'K&A Animal Bite Treatment Center · Municipality of Libon, Province of Albay'],
+        ],
+      },
+      {
+        title: '3. CHIEF COMPLAINT & CLINICAL DETAILS',
+        rows: complaintRows,
+      },
+      {
+        title: '4. MEDICAL HISTORY',
+        rows: [
+          ['Past Vaccines', p.pastVaccines || 'None reported'],
+          ['Allergies', p.allergies || 'No known allergies'],
+        ],
+      },
+    ];
+
+    const doseRows = doses.map(d => {
+      const rawStatus = String(d.status || d.s || 'pending').toLowerCase();
+      const isDone = rawStatus === 'done' || rawStatus === 'completed' || d.done === true;
+      const isMiss = rawStatus === 'miss' || rawStatus === 'missed' || rawStatus === 'overdue';
+      return {
+        label: d.label || d.n || d.dose || d.name || 'Dose',
+        date: d.date ? (formatDateShort(d.date) || d.date) : '—',
+        status: isMiss ? 'Overdue' : isDone ? 'Completed' : 'Scheduled',
+        kind: isMiss ? 'miss' : isDone ? 'done' : 'pending',
+      };
+    });
+
+    const assessment = [
+      ['Assessment', st === 'completed'
+        ? 'Successfully completed full prescribed post-exposure prophylaxis regimen with no adverse reactions.'
+        : 'Ongoing vaccination treatment. Patient is adhering to protocol.'],
+      ['Plan & Recommendations', 'Complete remaining scheduled vaccine doses on designated dates. Maintain proper wound care hygiene. Avoid applying irritants or traditional remedies to bite wound. Report any fever, malaise, or neurological symptoms immediately.'],
+    ];
+
+    return {
+      registered,
+      status: st,
+      admin,
+      sections,
+      doseSectionTitle: '5. VACCINATION DOSING SCHEDULE',
+      doseRows,
+      assessmentTitle: '6. ASSESSMENTS & RECOMMENDATIONS',
+      assessment,
+      officer: {
+        name: 'Dr. Francis R. Reyes, MD',
+        license: 'PRC License # 0123456 · Animal Bite Treatment Specialist',
+        issued: `Date Issued: ${new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}`,
+        badge: 'VERIFIED EHR CLINICAL RECORD',
+      },
+      footer: [
+        `Generated by K&A Clinic EHR System · Confidential Patient Information · ${new Date().getFullYear()}`,
+        'K&A Animal Bite Center · Municipality of Libon, Province of Albay',
       ],
+    };
+  }
+
+  const escapeHtml = (v) => String(v ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  function medicalRecordBodyHtml(p, audience = 'clinic', logo = (logoDataUrl || CLINIC_LOGO_BASE64)) {
+    if (!p) return '<div style="padding:40px;text-align:center;color:#64748B;">No patient record selected.</div>';
+    const m = buildMedicalRecordModel(p, audience);
+
+    const CELL = 'padding:4.5px 8px;border:1px solid #CBD5E1;font-size:9.5px;line-height:1.45;';
+    const LABEL_CELL = `${CELL}background:#F8FAFC;color:#475569;font-weight:700;width:26%;vertical-align:top;`;
+    const VALUE_CELL = `${CELL}color:#0F172A;vertical-align:top;`;
+    const statusColor = m.status === 'completed' ? '#15803D' : m.status === 'overdue' ? '#DC2626' : '#1D4ED8';
+
+    // Administrative box: two label/value pairs per row, the same 4-column
+    // shape autoTable draws in the PDF.
+    const adminRows = m.admin.map(([l1, v1, l2, v2]) => `
+      <tr>
+        <td style="${LABEL_CELL}width:22%;">${escapeHtml(l1)}</td>
+        <td style="${VALUE_CELL}width:28%;">${escapeHtml(v1)}</td>
+        <td style="${LABEL_CELL}width:22%;">${escapeHtml(l2)}</td>
+        <td style="${VALUE_CELL}width:28%;${l2 === 'Status' ? `font-weight:700;color:${statusColor};` : ''}">${escapeHtml(v2)}</td>
+      </tr>`).join('');
+
+    const sectionHtml = (title, rows) => `
+      <table style="width:100%;border-collapse:collapse;margin-bottom:8px;table-layout:fixed;">
+        <thead>
+          <tr><th colspan="2" style="${CELL}background:#0A1D47;color:#FFFFFF;text-align:left;font-weight:700;letter-spacing:.3px;">${escapeHtml(title)}</th></tr>
+        </thead>
+        <tbody>
+          ${rows.map(([label, value]) => `
+          <tr>
+            <td style="${LABEL_CELL}">${escapeHtml(label)}</td>
+            <td style="${VALUE_CELL}">${escapeHtml(value)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+
+    const doseTable = `
+      <table style="width:100%;border-collapse:collapse;margin-bottom:8px;table-layout:fixed;">
+        <thead>
+          <tr>
+            <th style="${CELL}background:#1D4ED8;color:#FFFFFF;text-align:left;font-weight:700;width:40%;">Dose</th>
+            <th style="${CELL}background:#1D4ED8;color:#FFFFFF;text-align:left;font-weight:700;width:35%;">Scheduled Date</th>
+            <th style="${CELL}background:#1D4ED8;color:#FFFFFF;text-align:left;font-weight:700;width:25%;">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${m.doseRows.length
+            ? m.doseRows.map((d, i) => `
+          <tr style="background:${i % 2 ? '#FAFAFC' : '#FFFFFF'};">
+            <td style="${VALUE_CELL}">${escapeHtml(d.label)}</td>
+            <td style="${VALUE_CELL}">${escapeHtml(d.date)}</td>
+            <td style="${VALUE_CELL}font-weight:700;">${escapeHtml(d.status)}</td>
+          </tr>`).join('')
+            : `<tr><td colspan="3" style="${VALUE_CELL}text-align:center;color:#64748B;">No dose schedule on file.</td></tr>`}
+        </tbody>
+      </table>`;
+
+    return `
+      <div style="font-family:'Plus Jakarta Sans','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0F172A;font-size:10px;line-height:1.5;padding:20px 24px;background:#FFFFFF;">
+
+        <!-- Institutional letterhead -->
+        <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto 4px;border:none;">
+          <tr>
+            <td style="vertical-align:middle;padding-right:14px;width:62px;text-align:right;">
+              <img src="${logo || '/assets/dashboard/logo-white-nobg.png'}" alt="K&A Clinic Logo" style="width:58px;height:58px;object-fit:contain;display:block;" />
+            </td>
+            <td style="vertical-align:middle;text-align:center;padding:0 6px;">
+              <div style="font-size:15px;font-weight:900;color:#0F172A;letter-spacing:0.6px;text-transform:uppercase;">K&amp;A ANIMAL BITE CENTER</div>
+              <div style="font-size:8.5px;color:#1D4ED8;font-weight:700;margin-top:2px;">Caring for Life &bull; Animal Bite Treatment &amp; Care</div>
+              <div style="font-size:8px;color:#64748B;margin-top:2px;">Municipality of Libon, Province of Albay | Ph: (052) 742-0123 | ka.animalbitecenter@gmail.com</div>
+            </td>
+            <td style="vertical-align:middle;padding-left:14px;width:62px;">
+              <div style="width:62px;height:1px;"></div>
+            </td>
+          </tr>
+        </table>
+
+        <div style="border-top:1.6px solid #0A1D47;border-bottom:.6px solid #0A1D47;height:2px;margin:6px 0 10px;"></div>
+
+        <div style="text-align:center;margin-bottom:10px;">
+          <h1 style="margin:0;font-size:13px;font-weight:900;color:#0A1D47;letter-spacing:1px;text-transform:uppercase;">PATIENT MEDICAL REPORT</h1>
+        </div>
+
+        <!-- Administrative information -->
+        <table style="width:100%;border-collapse:collapse;margin-bottom:8px;table-layout:fixed;">
+          <thead>
+            <tr><th colspan="4" style="${CELL}background:#F1F5F9;color:#0A1D47;text-align:center;font-weight:700;letter-spacing:.3px;">ADMINISTRATIVE INFORMATION</th></tr>
+          </thead>
+          <tbody>${adminRows}</tbody>
+        </table>
+
+        ${m.sections.map(s => sectionHtml(s.title, s.rows)).join('')}
+
+        <div style="font-size:9.5px;font-weight:800;color:#0F172A;letter-spacing:.3px;margin:10px 0 4px;">${escapeHtml(m.doseSectionTitle)}</div>
+        ${doseTable}
+
+        ${sectionHtml(m.assessmentTitle, m.assessment)}
+
+        <!-- Attending officer & verification -->
+        <table style="width:100%;border-collapse:collapse;margin-top:10px;border-top:1px solid #CBD5E1;">
+          <tr>
+            <td style="padding-top:8px;font-size:9px;color:#334155;vertical-align:bottom;">
+              <div><strong>Attending Medical Officer:</strong> ${escapeHtml(m.officer.name)}</div>
+              <div style="font-size:8px;color:#64748B;">${escapeHtml(m.officer.license)}</div>
+              <div style="font-size:8px;color:#64748B;">${escapeHtml(m.officer.issued)}</div>
+            </td>
+            <td style="padding-top:8px;text-align:right;vertical-align:bottom;">
+              <span style="display:inline-block;padding:3px 8px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:4px;font-size:8px;font-weight:700;color:#1D4ED8;">${escapeHtml(m.officer.badge)}</span>
+            </td>
+          </tr>
+        </table>
+
+        <div style="margin-top:12px;font-size:7.5px;color:#94A3B8;text-align:center;line-height:1.5;">
+          ${escapeHtml(m.footer[0])}<br>${escapeHtml(m.footer[1])}
+        </div>
+      </div>`;
+  }
+
+  function buildDocumentHtml(p, type = 'record', audience = 'clinic') {
+    if (!p) return '<!DOCTYPE html><html><body><div style="padding:40px;text-align:center;color:#64748B;">No patient selected.</div></body></html>';
+    return `<!DOCTYPE html><html><head><title>Patient Medical Report — ${formatTitleCase(p.name || '')}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      /* Browsers drop table fills when printing unless colour adjustment is
+         forced, which is what turned the navy section bars pale grey on paper. */
+      *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact;}
+      body{font-family:'Plus Jakarta Sans','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;margin:0;padding:0;background:#FFFFFF;}
+      @media print{
+        @page{size:A4 portrait;margin:8mm 10mm;}
+        html,body{margin:0!important;padding:0!important;background:#FFFFFF!important;}
+        /* Keeps the record on one sheet and stops a section splitting across
+           the page break. */
+        body{zoom:0.88;}
+        table{page-break-inside:avoid;break-inside:avoid;}
+        tr,td,th{page-break-inside:avoid;break-inside:avoid;}
+        thead{display:table-header-group;}
+      }
+    </style>
+    </head><body><div>${medicalRecordBodyHtml(p, audience, logoDataUrl || CLINIC_LOGO_BASE64)}</div></body></html>`;
+  }
+
+  // `density` scales the table metrics so a long record can be squeezed onto
+  // one sheet — buildDocumentPdf steps through the presets until the whole
+  // report fits, matching the preview, which never paginates.
+  function drawMedicalRecordPdf(doc, p, audience = 'clinic', logoDataUrl = clinicLogoBase64Cache || CLINIC_LOGO_BASE64, density = { fontSize: 8, cellPadding: 2.5, gap: 4 }) {
+    if (!p) return;
+    const m = buildMedicalRecordModel(p, audience);
+    const pageWidth = doc.internal.pageSize.getWidth();
+
+    if (logoDataUrl) {
+      try {
+        doc.addImage(logoDataUrl, 'PNG', 14, 8, 14, 14);
+      } catch (e) {
+        console.warn('Could not add logo to single report PDF:', e);
+      }
+    }
+
+    // Clean institutional header matching report format
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(13);
+    doc.setTextColor(15, 23, 42);
+    doc.text('K&A ANIMAL BITE CENTER', pageWidth / 2, 13, { align: 'center' });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(29, 78, 216);
+    doc.text('Caring for Life · Animal Bite Treatment & Care', pageWidth / 2, 17, { align: 'center' });
+
+    doc.setFontSize(7);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Municipality of Libon, Province of Albay | Ph: (052) 742-0123 | ka.animalbitecenter@gmail.com', pageWidth / 2, 21, { align: 'center' });
+
+    // Double divider line
+    doc.setDrawColor(10, 29, 71);
+    doc.setLineWidth(0.6);
+    doc.line(14, 24, pageWidth - 14, 24);
+    doc.setLineWidth(0.2);
+    doc.line(14, 25.5, pageWidth - 14, 25.5);
+
+    // Document Title
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(10, 29, 71);
+    doc.text('PATIENT MEDICAL REPORT', pageWidth / 2, 31, { align: 'center' });
+
+    const baseStyles = { fontSize: density.fontSize, cellPadding: density.cellPadding, overflow: 'linebreak', valign: 'top' };
+    const GAP = density.gap;
+    const labelColumn = { 0: { fontStyle: 'bold', fillColor: [248, 250, 252], textColor: [71, 85, 105], cellWidth: 45 } };
+
+    // Administrative Information Box
+    autoTable(doc, {
+      startY: 34,
+      head: [['ADMINISTRATIVE INFORMATION', '', '', '']],
+      body: m.admin,
       theme: 'grid',
-      styles: { fontSize: 9, cellPadding: 4 },
+      headStyles: { fillColor: [241, 245, 249], textColor: [10, 29, 71], fontStyle: 'bold', fontSize: density.fontSize, halign: 'center' },
+      styles: baseStyles,
       columnStyles: {
-        0: { fontStyle: 'bold', fillColor: [248, 250, 252], textColor: [71, 85, 105] },
-        2: { fontStyle: 'bold', fillColor: [248, 250, 252], textColor: [71, 85, 105] },
+        0: { fontStyle: 'bold', fillColor: [248, 250, 252], textColor: [71, 85, 105], cellWidth: 35 },
+        2: { fontStyle: 'bold', fillColor: [248, 250, 252], textColor: [71, 85, 105], cellWidth: 35 },
       },
     });
 
-    const historyRows = p.service === 'PEP'
-      ? [
-          ['Biting Animal', p.animal || '—'],
-          ['Exposure Category', `Category ${p.cat || '—'}`],
-          ...(showWoundDetail
-            ? [['Wound Location / Depth', `${p.woundLocation || '—'} (${p.woundDepth || '—'})`]]
-            : []),
-          ['No. of Bites', p.numberOfBites || '—'],
-          ['Past Vaccines', p.pastVaccines || '—'],
-          ['Allergies', p.allergies || '—'],
-          ...(showWoundDetail ? [] : [['Wound Assessment', PATIENT_HIDDEN_NOTE]]),
-        ]
-      : [
-          ['Past Vaccines', p.pastVaccines || '—'],
-          ['Allergies', p.allergies || '—'],
-        ];
-    autoTable(doc, {
-      startY: doc.lastAutoTable.finalY + 6,
-      head: [['Clinical History & Details', '']],
-      body: historyRows,
-      theme: 'grid',
-      headStyles: { fillColor: [185, 28, 28], textColor: 255, fontSize: 8 },
-      styles: { fontSize: 9, cellPadding: 4 },
-      columnStyles: { 0: { fontStyle: 'bold', fillColor: [255, 245, 245], textColor: [127, 29, 29], cellWidth: 60 } },
+    // Sections 1–4, straight off the shared model so the PDF carries every
+    // field the preview shows.
+    m.sections.forEach(section => {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + GAP,
+        head: [[section.title, '']],
+        body: section.rows,
+        theme: 'grid',
+        headStyles: { fillColor: [10, 29, 71], textColor: 255, fontSize: density.fontSize, fontStyle: 'bold' },
+        styles: baseStyles,
+        columnStyles: labelColumn,
+      });
     });
 
+    // 5. Vaccination Dosing Schedule
     autoTable(doc, {
-      startY: doc.lastAutoTable.finalY + 10,
-      head: [['Dose', 'Date', 'Status']],
-      body: doses.length
-        ? doses.map(d => [d.label, fmtDate(d.date), d.status === 'miss' ? 'Overdue' : d.status.charAt(0).toUpperCase() + d.status.slice(1)])
+      startY: doc.lastAutoTable.finalY + GAP,
+      head: [['Dose', 'Scheduled Date', 'Status']],
+      body: m.doseRows.length
+        ? m.doseRows.map(d => [d.label, d.date, d.status])
         : [['No dose schedule on file.', '', '']],
-      headStyles: { fillColor: [200, 21, 26], textColor: 255, fontSize: 8 },
-      styles: { fontSize: 8, cellPadding: 3 },
+      headStyles: { fillColor: [29, 78, 216], textColor: 255, fontSize: density.fontSize, fontStyle: 'bold' },
+      styles: baseStyles,
       alternateRowStyles: { fillColor: [250, 250, 252] },
     });
 
-    doc.setFontSize(8);
-    doc.setTextColor(148, 163, 184);
-    doc.text(`K&A Clinic — Confidential Patient Report — ${new Date().getFullYear()}`, 14, doc.internal.pageSize.getHeight() - 10);
-  }
-
-  function drawCertificatePdf(doc, p) {
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const isCompleted = derivePatientStatus(p) === 'completed';
-    const protocol = getProtocolLabel(p);
-    const registered = p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString('en-PH') : (p.date || '—');
-    const issuedDate = new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
-    const title = p.service === 'PEP'
-      ? `CERTIFICATE OF ${isCompleted ? 'COMPLETED' : 'ONGOING'} ANTI-RABIES VACCINATION`
-      : `CERTIFICATE OF ${isCompleted ? 'COMPLETED' : 'ONGOING'} ${(p.service || 'VACCINATION').toUpperCase()} TREATMENT`;
-
-    doc.setDrawColor(200, 21, 26);
-    doc.setLineWidth(0.8);
-    doc.line(20, 30, pageWidth - 20, 30);
-
-    doc.setTextColor(136, 136, 136);
-    doc.setFontSize(8);
-    doc.setFont('times', 'normal');
-    doc.text('REPUBLIC OF THE PHILIPPINES', pageWidth / 2, 13, { align: 'center' });
-    doc.setTextColor(200, 21, 26);
-    doc.setFontSize(15);
-    doc.setFont('times', 'bold');
-    doc.text('K&A Anti-Rabies Vaccine Clinic', pageWidth / 2, 20, { align: 'center' });
-    doc.setTextColor(136, 136, 136);
-    doc.setFontSize(8);
-    doc.setFont('times', 'normal');
-    doc.text('Animal Bite Treatment Center', pageWidth / 2, 25, { align: 'center' });
-
-    doc.setTextColor(17, 17, 17);
-    doc.setFontSize(12);
-    doc.setFont('times', 'bold');
-    const titleLines = doc.splitTextToSize(title, pageWidth - 44);
-    doc.text(titleLines, pageWidth / 2, 42, { align: 'center' });
-
-    let y = 42 + titleLines.length * 6 + 10;
-    doc.setFont('times', 'normal');
-    doc.setFontSize(11);
-    doc.setTextColor(17, 17, 17);
-    const bodyText = `This is to certify that ${formatTitleCase(p.name)}, ${p.age || '—'} years old, ${p.sex || '—'}, residing at ${p.address || '—'}, ${isCompleted ? 'has successfully completed' : 'is currently undergoing'} the prescribed ${protocol} at K&A Anti-Rabies Vaccine Clinic.`;
-    const bodyLines = doc.splitTextToSize(bodyText, pageWidth - 40);
-    doc.text(bodyLines, 20, y);
-    y += bodyLines.length * 6.5 + 8;
-
-    const rows = [['Patient ID', p.id || p.mrn || '—']];
-    if (p.service === 'PEP') {
-      rows.push(['Exposure Type', `${p.animal || 'Dog'} Bite`]);
-      rows.push(['Wound Category', `Category ${p.cat || '—'}`]);
-    }
-    rows.push(['Date Registered', registered], ['Date Issued', issuedDate], ['Attending Nurse', 'Maria F. Johnson, RN'], ['Physician / Med. Officer', '___________']);
-
+    // 6. Assessments & Recommendations
     autoTable(doc, {
-      startY: y,
-      body: rows,
+      startY: doc.lastAutoTable.finalY + GAP,
+      head: [[m.assessmentTitle, '']],
+      body: m.assessment,
       theme: 'grid',
-      styles: { fontSize: 9, cellPadding: 4, font: 'times' },
-      columnStyles: { 0: { fontStyle: 'bold', fillColor: [250, 250, 250], cellWidth: 60 } },
+      headStyles: { fillColor: [10, 29, 71], textColor: 255, fontSize: density.fontSize, fontStyle: 'bold' },
+      styles: baseStyles,
+      columnStyles: labelColumn,
     });
 
-    y = doc.lastAutoTable.finalY + 14;
-    doc.setFontSize(9);
-    doc.setFont('times', 'normal');
-    doc.setTextColor(85, 85, 85);
-    doc.text('This certificate is issued for official purposes.', 20, y);
+    // Attending officer & verification. The block is pinned above the footer
+    // rather than pushed to a second page — buildDocumentPdf re-renders at a
+    // tighter density instead, so the report stays a single sheet.
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const y = Math.min(doc.lastAutoTable.finalY + 8, pageHeight - 26);
+    doc.setDrawColor(203, 213, 225);
+    doc.setLineWidth(0.2);
+    doc.line(14, y, pageWidth - 14, y);
 
-    y += 24;
-    const colWidth = (pageWidth - 40 - 20) / 2;
-    doc.setDrawColor(51, 51, 51);
-    doc.line(20, y, 20 + colWidth, y);
-    doc.line(pageWidth - 20 - colWidth, y, pageWidth - 20, y);
-    doc.setFontSize(10);
-    doc.setTextColor(17, 17, 17);
-    doc.setFont('times', 'bold');
-    doc.text('Maria F. Johnson, RN', 20 + colWidth / 2, y + 6, { align: 'center' });
-doc.text('___________', pageWidth - 20 - colWidth / 2, y + 6, { align: 'center' });
-    doc.setFont('times', 'normal');
-    doc.setFontSize(8.5);
-    doc.setTextColor(102, 102, 102);
-    doc.text('Attending Nurse · RN', 20 + colWidth / 2, y + 11, { align: 'center' });
-    doc.text('Physician / Medical Officer', pageWidth - 20 - colWidth / 2, y + 11, { align: 'center' });
-
+    const yText = y + 5;
+    doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
-    doc.setTextColor(153, 153, 153);
-    doc.text(`K&A Anti-Rabies Vaccine Clinic · Issued: ${issuedDate} · Patient ID: ${p.id || p.mrn || '—'}`, pageWidth / 2, doc.internal.pageSize.getHeight() - 12, { align: 'center' });
+    doc.setTextColor(51, 65, 85);
+    doc.text('Attending Medical Officer:', 14, yText);
+    const officerLabelWidth = doc.getTextWidth('Attending Medical Officer: ');
+    doc.setFont('helvetica', 'normal');
+    doc.text(m.officer.name, 14 + officerLabelWidth, yText);
+
+    doc.setFontSize(7);
+    doc.setTextColor(100, 116, 139);
+    doc.text(m.officer.license, 14, yText + 4);
+    doc.text(m.officer.issued, 14, yText + 8);
+
+    // Verified badge, right-aligned against the officer block
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'bold');
+    const badgeWidth = doc.getTextWidth(m.officer.badge) + 6;
+    const badgeX = pageWidth - 14 - badgeWidth;
+    doc.setFillColor(239, 246, 255);
+    doc.setDrawColor(191, 219, 254);
+    doc.roundedRect(badgeX, yText + 1, badgeWidth, 6, 1, 1, 'FD');
+    doc.setTextColor(29, 78, 216);
+    doc.text(m.officer.badge, badgeX + 3, yText + 5);
+
+    // Footer on every page
+    const totalPages = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
+      doc.setTextColor(148, 163, 184);
+      doc.text(m.footer[0], pageWidth / 2, pageHeight - 11, { align: 'center' });
+      doc.text(m.footer[1], pageWidth / 2, pageHeight - 7.5, { align: 'center' });
+    }
   }
 
-  function buildDocumentPdf(p, type, audience = 'clinic') {
-    const doc = new jsPDF();
-    let started = false;
-    if (type !== 'certificate') { drawMedicalRecordPdf(doc, p, audience); started = true; }
-    if (type !== 'record') {
-      if (started) doc.addPage();
-      drawCertificatePdf(doc, p);
+  // Preview and print show the whole record in one continuous sheet, so the
+  // download must not split mid-table. Each preset is drawn into a throwaway
+  // document; the first that lands on a single page is the one returned, and
+  // the tightest is used as-is if even that overflows.
+  const PDF_DENSITIES = [
+    { fontSize: 8, cellPadding: 2.5, gap: 4 },
+    { fontSize: 7.5, cellPadding: 2, gap: 3.5 },
+    { fontSize: 7, cellPadding: 1.6, gap: 3 },
+    { fontSize: 6.5, cellPadding: 1.2, gap: 2.5 },
+    { fontSize: 6, cellPadding: 1, gap: 2 },
+  ];
+
+  function buildDocumentPdf(p, type = 'record', audience = 'clinic', logoDataUrl = clinicLogoBase64Cache || CLINIC_LOGO_BASE64) {
+    let doc;
+    for (let i = 0; i < PDF_DENSITIES.length; i++) {
+      doc = new jsPDF();
+      drawMedicalRecordPdf(doc, p, audience, logoDataUrl, PDF_DENSITIES[i]);
+      if (doc.internal.getNumberOfPages() === 1) return doc;
     }
     return doc;
   }
 
-  function docTypeLabel(type) {
-    return type === 'record' ? 'Medical Record' : type === 'certificate' ? 'Medical Certificate' : 'Medical Record & Certificate';
+  function docTypeLabel() {
+    return 'Patient Medical Report';
   }
 
-  function exportSinglePatientPdf(p) {
-    buildDocumentPdf(p, docType, 'clinic').save(`${docType}-${p.id || p.firestoreId}-${new Date().toISOString().slice(0, 10)}.pdf`);
-    onToast(`${docTypeLabel(docType)} exported for ${formatTitleCase(p.name)}`, 'success');
+  async function exportSinglePatientPdf(p) {
+    if (!p) return;
+    const logo = (await getClinicLogoBase64()) || logoDataUrl || CLINIC_LOGO_BASE64;
+    buildDocumentPdf(p, docType, 'clinic', logo).save(`medical-report-${p.id || p.mrn || p.firestoreId || 'patient'}-${new Date().toISOString().slice(0, 10)}.pdf`);
+    onToast(`Medical Report exported for ${formatTitleCase(p.name)}`, 'success');
   }
 
   function printSinglePatientReport(p) {
+    if (!p) return;
     const w = window.open('', '_blank');
+    if (!w) {
+      onToast('Pop-up was blocked. Please allow pop-ups for this site.', 'error');
+      return;
+    }
     w.document.write(buildDocumentHtml(p, docType, 'clinic'));
     w.document.close();
-    w.print();
-    onToast(`${docTypeLabel(docType)} opened for printing — ${formatTitleCase(p.name)}`, 'success');
+    w.focus();
+    setTimeout(() => {
+      try { w.print(); } catch (e) { console.error('Print error:', e); }
+    }, 250);
+    onToast(`Medical Report opened for printing — ${formatTitleCase(p.name)}`, 'success');
   }
 
-  async function emailSinglePatientPdf(p, to) {
-    const base64 = buildDocumentPdf(p, docType, 'patient').output('base64');
-    const label = docTypeLabel(docType);
+  // jsPDF 4.x has no 'base64' output type — it returns null, which is how the
+  // report used to arrive as an email with no attachment at all. The data URI
+  // carries the same bytes with a prefix to strip.
+  function pdfToBase64(doc) {
+    const uri = doc.output('datauristring');
+    const comma = uri.indexOf(',');
+    return comma === -1 ? '' : uri.slice(comma + 1);
+  }
+
+  // The clinic report used to be mailed as its own rendered HTML page. With a
+  // base64 logo on every page that body ran to megabytes and the send silently
+  // failed, so the registry now travels as the same PDF the Export button
+  // produces, with a short covering note as the body.
+  async function emailBulkReportPdf(to) {
+    const rows = getFilteredPatients();
+    if (rows.length === 0) {
+      onToast('No patients found for this period', 'error');
+      return;
+    }
+    const logo = (await getClinicLogoBase64()) || logoDataUrl || CLINIC_LOGO_BASE64;
+    const base64 = pdfToBase64(buildBulkPdf(rows, logo));
+    if (!base64) {
+      onToast('Could not generate the PDF report. Please try again.', 'error');
+      return;
+    }
+    const statusSlug = statusFilter !== 'all' ? `-${statusFilter}` : '';
     await sendReportEmail(
       to,
-      `K&A Clinic — Your ${label}`,
-      `<p>Dear ${formatTitleCase(p.name)},</p><p>Please find your ${label.toLowerCase()} from K&amp;A Clinic attached as a PDF.</p><p>&mdash; K&amp;A Anti-Rabies Clinic</p>`,
-      { base64, filename: `${docType}-${p.id || p.firestoreId}.pdf` }
+      `K&A Clinic — Health Monitoring Report (${periodLabel()})`,
+      `<p>Attached is the K&amp;A Animal Bite Center health monitoring report for <strong>${periodLabel()}</strong>.</p>`
+        + `<p>Service: ${serviceFilterLabel()} &bull; Status: ${statusFilterLabel()} &bull; ${rows.length} patient record${rows.length !== 1 ? 's' : ''}.</p>`
+        + `<p>&mdash; K&amp;A Animal Bite Center</p>`,
+      { base64, filename: `health-monitoring-report-${period}${statusSlug}-${getTodayDateString()}.pdf` }
     );
   }
 
-  function handleDocTypeChange(val) {
-    if (val === 'record') { setIncludeRecord(true); setIncludeCertificate(false); }
-    else if (val === 'certificate') { setIncludeRecord(false); setIncludeCertificate(true); }
-    else if (val === 'both') { setIncludeRecord(true); setIncludeCertificate(true); }
+  async function emailSinglePatientPdf(p, to) {
+    if (!p) return;
+    const logo = (await getClinicLogoBase64()) || logoDataUrl || CLINIC_LOGO_BASE64;
+    const base64 = pdfToBase64(buildDocumentPdf(p, docType, 'patient', logo));
+    if (!base64) {
+      onToast('Could not generate the PDF attachment. Please try again.', 'error');
+      return;
+    }
+    await sendReportEmail(
+      to,
+      `K&A Clinic — Medical Report for ${formatTitleCase(p.name)}`,
+      `<p>Dear ${formatTitleCase(p.name)},</p><p>Please find your official patient medical report from K&amp;A Animal Bite Center attached as a PDF.</p><p>&mdash; K&amp;A Animal Bite Center</p>`,
+      { base64, filename: `medical-report-${p.id || p.mrn || p.firestoreId || 'patient'}.pdf` }
+    );
   }
 
-  const [zoomLevel, setZoomLevel] = useState(0.85);
-  const [rotation, setRotation] = useState(0);
+  // The measured height belongs to one specific rendered document; re-measure
+  // rather than briefly showing the previous record's sheet size.
+  useEffect(() => { setDocSheetHeight(null); }, [selectedPatient, showEmailInput, mode, exportFormat, period, statusFilter, serviceFilter]);
 
   const preview = getFilteredPatients();
 
-  function switchMode(next) {
-    setMode(next);
-    setShowEmailInput(false);
-    setEmailTo('');
-  }
-
-  // The clinic report is landscape orientation, so preview sheet turns landscape
+  // The clinic report is landscape orientation, so the preview sheet turns
+  // landscape for bulk exports and stays portrait for a single patient record.
   const isLandscapeSheet = mode === 'bulk';
 
-  const previewPane = (html) => (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}>
-      <iframe
-        title="Report preview"
-        sandbox=""
-        srcDoc={html}
-        style={{ display: 'block', width: '100%', height: '100%', border: 'none', background: '#FFFFFF' }}
-      />
-    </div>
+  // `allow-same-origin` (with scripts still blocked) is what makes the loaded
+  // document readable for the height measurement below.
+  const previewPane = (html, onMeasure) => (
+    <iframe
+      title="Report preview"
+      sandbox="allow-same-origin"
+      srcDoc={html}
+      onLoad={onMeasure ? (e) => {
+        const body = e.currentTarget.contentDocument?.body;
+        if (body) onMeasure(Math.ceil(body.scrollHeight));
+      } : undefined}
+      style={{ display: 'block', width: '100%', height: '100%', border: 'none', background: '#FFFFFF' }}
+    />
   );
 
-  return (
+  const selectStyle = {
+    width: '100%', padding: '9px 12px', fontSize: '.8125rem', fontWeight: 600, color: '#0F172A',
+    border: '1px solid #CBD5E1', borderRadius: 12, background: '#FFFFFF', outline: 'none', cursor: 'pointer',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+  };
+  const labelStyle = {
+    display: 'block', fontSize: '.71875rem', fontWeight: 700, color: '#334155',
+    textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 6
+  };
+  const previewPages = mode === 'bulk' ? chunkPatientsIntoPages(preview).length : 1;
+  // Width is the paper; height comes from whatever the rendered document
+  // actually measured, so a short record has no trailing blank paper and a
+  // multi-page report shows every page stacked.
+  const sheetWidth = mode === 'bulk' ? 1100 : 820;
+  const sheetHeight = mode === 'bulk'
+    ? (docSheetHeight || previewPages * 790)
+    : Math.min(docSheetHeight || 1060, 1060);
+
+  return createPortal(
     <div
-      className="modal-overlay"
-      style={{ alignItems: 'center', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }}
-      onClick={e => { if (e.target.classList.contains('modal-overlay')) onClose(); }}
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md"
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
-        className="modal bg-white rounded-3xl shadow-2xl border border-slate-200"
+        className="bg-white rounded-3xl shadow-2xl border border-slate-200"
         style={{ width: '1360px', maxWidth: '98vw', height: '92vh', maxHeight: '960px', padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+        onClick={e => e.stopPropagation()}
       >
-
-        {/* Card head — Add Report's shape, carrying a light brand wash so the
-            all-white card has somewhere for the eye to land. */}
+        {/* Card head */}
         <div
           className="px-6 py-4 flex items-center justify-between"
           style={{ flexShrink: 0, background: '#F4F6FE', borderBottom: '1px solid #E0E5FA' }}
@@ -4126,10 +4470,12 @@ doc.text('___________', pageWidth - 20 - colWidth / 2, y + 6, { align: 'center' 
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-900">
-                {initialPatient ? `Export Patient Record — ${formatTitleCase(initialPatient.name)}` : 'Export Clinic Report'}
+                {mode === 'single' ? `Export Patient Record — ${formatTitleCase(selectedPatient?.name || 'Patient')}` : 'Export Clinic Report'}
               </h3>
               <p className="text-[11px] text-slate-500 font-normal mt-0.5">
-                {initialPatient ? `Official medical record & certificate for ${formatTitleCase(initialPatient.name)}` : 'Download, print, or email official clinic registry reports'}
+                {mode === 'single'
+                  ? `Official patient medical report for ${formatTitleCase(selectedPatient?.name || 'Patient')}`
+                  : 'Download, print, or email official clinic registry reports'}
               </p>
             </div>
           </div>
@@ -4143,118 +4489,163 @@ doc.text('___________', pageWidth - 20 - colWidth / 2, y + 6, { align: 'center' 
           </button>
         </div>
 
-        {/* Modal 2-Column Split Body */}
+        {/* 2-column split body */}
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
-          {/* LEFT PANEL: Settings Controls */}
+          {/* LEFT PANEL: settings */}
           <div style={{
-            width: '330px', flexShrink: 0, background: '#F7F8FD',
-            borderRight: '1px solid #E3E7F5', padding: '20px 20px',
+            width: '340px', flexShrink: 0, background: '#F7F8FD',
+            borderRight: '1px solid #E3E7F5', padding: '20px',
             display: 'flex', flexDirection: 'column', gap: 18, overflowY: 'auto'
           }}>
             {mode === 'bulk' ? (
               <>
-                {/* Report Period Selector */}
+                {/* Report Period */}
                 <div>
-                  <label style={{ display: 'block', fontSize: '.71875rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 6 }}>
-                    REPORT PERIOD:
-                  </label>
-                  <select
-                    value={period}
-                    onChange={e => setPeriod(e.target.value)}
-                    style={{
-                      width: '100%', padding: '9px 12px', fontSize: '.8125rem', fontWeight: 600, color: '#0F172A',
-                      border: '1px solid #CBD5E1', borderRadius: 12, background: '#FFFFFF', outline: 'none', cursor: 'pointer',
-                      boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
-                    }}
-                  >
+                  <label style={labelStyle}>Report Period</label>
+                  <select value={period} onChange={e => setPeriod(e.target.value)} style={selectStyle}>
+                    <option value="monthly">Monthly (This Calendar Month)</option>
                     <option value="daily">Daily (Today)</option>
                     <option value="weekly">Weekly (Last 7 Days)</option>
-                    <option value="monthly">Monthly (This Month)</option>
-                    <option value="yearly">Yearly (This Year)</option>
+                    <option value="yearly">Yearly (This Calendar Year)</option>
+                    <option value="all">All Time (Full Registry)</option>
                   </select>
                 </div>
 
-                {/* Record Status Selector */}
+                {/* Service / Vaccine */}
                 <div>
-                  <label style={{ display: 'block', fontSize: '.71875rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 6 }}>
-                    RECORD STATUS:
-                  </label>
-                  <select
-                    value={statusFilter}
-                    onChange={e => setStatusFilter(e.target.value)}
-                    style={{
-                      width: '100%', padding: '9px 12px', fontSize: '.8125rem', fontWeight: 600, color: '#0F172A',
-                      border: '1px solid #CBD5E1', borderRadius: 12, background: '#FFFFFF', outline: 'none', cursor: 'pointer',
-                      boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
-                    }}
-                  >
-                    <option value="all">All Records</option>
-                    <option value="completed">Completed</option>
-                    <option value="overdue">Overdue</option>
+                  <label style={labelStyle}>Service / Vaccine</label>
+                  <select value={serviceFilter} onChange={e => setServiceFilter(e.target.value)} style={selectStyle}>
+                    <option value="all">All Services</option>
+                    <option value="pep">PEP (Post-Exposure Prophylaxis)</option>
+                    <option value="prep">PrEP (Pre-Exposure Prophylaxis)</option>
+                    <option value="tetanus">Anti-Tetano (Tetanus)</option>
+                    <option value="pneumonia">Pneumonia Vaccine</option>
+                  </select>
+                </div>
+
+                {/* Record Status */}
+                <div>
+                  <label style={labelStyle}>Record Status</label>
+                  <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={selectStyle}>
+                    <option value="all">All Statuses</option>
                     <option value="ongoing">Ongoing</option>
+                    <option value="overdue">Overdue</option>
+                    <option value="completed">Completed</option>
                   </select>
                 </div>
 
-                {/* Export Format Selector */}
+                {/* Export Format */}
                 <div>
-                  <label style={{ display: 'block', fontSize: '.71875rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 6 }}>
-                    EXPORT FORMAT:
-                  </label>
-                  <select
-                    value={exportFormat}
-                    onChange={e => setExportFormat(e.target.value)}
-                    style={{
-                      width: '100%', padding: '9px 12px', fontSize: '.8125rem', fontWeight: 600, color: '#0F172A',
-                      border: '1px solid #CBD5E1', borderRadius: 12, background: '#FFFFFF', outline: 'none', cursor: 'pointer',
-                      boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
-                    }}
-                  >
-                    <option value="pdf">PDF Document</option>
-                    <option value="xls">Excel Spreadsheet (XLS)</option>
-                  </select>
+                  <label style={labelStyle}>Export Format</label>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setExportFormat('pdf')}
+                      className={`p-2.5 rounded-xl border text-left flex items-center gap-2.5 transition-all cursor-pointer ${
+                        exportFormat === 'pdf' ? 'border-[#3B50DF] bg-[#EEF2FF] shadow-xs ring-1 ring-[#3B50DF]/30' : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-[10px] shrink-0 ${exportFormat === 'pdf' ? 'bg-[#3B50DF] text-white' : 'bg-slate-100 text-slate-600'}`}>
+                        PDF
+                      </div>
+                      <div>
+                        <div className="text-[11px] font-bold text-slate-900">PDF</div>
+                        <div className="text-[10px] text-slate-600">Official printout</div>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExportFormat('xls')}
+                      className={`p-2.5 rounded-xl border text-left flex items-center gap-2.5 transition-all cursor-pointer ${
+                        exportFormat === 'xls' ? 'border-[#3B50DF] bg-[#EEF2FF] shadow-xs ring-1 ring-[#3B50DF]/30' : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-[10px] shrink-0 ${exportFormat === 'xls' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                        XLS
+                      </div>
+                      <div>
+                        <div className="text-[11px] font-bold text-slate-900">Excel</div>
+                        <div className="text-[10px] text-slate-600">Raw data</div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Matching result banner */}
+                <div className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200 text-xs">
+                  <span className="font-medium text-slate-600">Matching records:</span>
+                  <span className="font-extrabold text-[#3B50DF] bg-[#EEF2FF] px-2.5 py-1 rounded-full border border-[#E0E7FF]">
+                    {preview.length} patient{preview.length !== 1 ? 's' : ''}
+                  </span>
                 </div>
               </>
             ) : (
               <>
-                {/* Active Patient Info Card (Fixed to current patient) */}
+                {/* Target patient */}
                 <div>
-                  <label style={{ display: 'block', fontSize: '.71875rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 6 }}>
-                    TARGET PATIENT RECORD:
-                  </label>
-                  <div style={{ background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 12, padding: '10px 14px', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
-                    <div style={{ fontSize: '.8125rem', fontWeight: 800, color: '#0F172A' }}>
-                      {formatTitleCase(selectedPatient?.name || '—')}
+                  <label style={labelStyle}>Target Patient Record</label>
+                  {selectedPatient ? (
+                    <div style={{ background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 12, padding: '10px 14px', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+                      <div style={{ fontSize: '.8125rem', fontWeight: 800, color: '#0F172A' }}>
+                        {formatTitleCase(selectedPatient.name || '—')}
+                      </div>
+                      <div style={{ fontSize: '.71875rem', color: '#64748B', marginTop: 2 }}>
+                        ID: <strong style={{ color: '#3B50DF' }}>{selectedPatient.id || selectedPatient.mrn || '—'}</strong>
+                        {selectedPatient.age ? ` · ${selectedPatient.age} yrs` : ''} · {selectedPatient.sex || '—'}
+                      </div>
+                      <div style={{ fontSize: '.71875rem', color: '#64748B', marginTop: 4 }}>
+                        {selectedPatient.service || 'PEP'} · {selectedPatient.barangay || selectedPatient.address || 'Libon, Albay'}
+                      </div>
+                      <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '.71875rem', color: '#64748B' }}>
+                        <span>Exposure / Category:</span>
+                        <strong style={{ color: '#0F172A' }}>
+                          {((selectedPatient.service || '').trim().toUpperCase() === 'PEP')
+                            ? (selectedPatient.cat ? `Category ${selectedPatient.cat}` : (selectedPatient.animal || '—'))
+                            : '—'}
+                        </strong>
+                      </div>
                     </div>
-                    <div style={{ fontSize: '.71875rem', color: '#64748B', marginTop: 2 }}>
-                      MRN: <strong style={{ color: '#3B50DF' }}>{selectedPatient?.id || selectedPatient?.mrn || '—'}</strong> · {selectedPatient?.age ? `${selectedPatient.age} yrs` : ''} · {selectedPatient?.sex || '—'}
-                    </div>
-                  </div>
+                  ) : (
+                    <>
+                      <input
+                        type="text"
+                        value={patientQuery}
+                        onChange={e => setPatientQuery(e.target.value)}
+                        placeholder="Search by name, ID, or MRN…"
+                        style={{ ...selectStyle, cursor: 'text', fontWeight: 500 }}
+                      />
+                      {matchingPatients.length > 0 && (
+                        <div className="mt-1.5 border border-slate-200 rounded-xl bg-white shadow-lg overflow-hidden divide-y divide-slate-100 max-h-48 overflow-y-auto">
+                          {matchingPatients.map(p => (
+                            <button
+                              key={p.id || p.firestoreId}
+                              type="button"
+                              onClick={() => { setSelectedPatient(p); setPatientQuery(formatTitleCase(p.name)); }}
+                              className="w-full text-left px-3.5 py-2 text-xs hover:bg-slate-50 flex items-center justify-between transition-colors cursor-pointer"
+                            >
+                              <span className="font-bold text-slate-800">{formatTitleCase(p.name)}</span>
+                              <span className="text-slate-400 text-[11px]">{p.id || p.mrn}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
 
-                {/* Document Type Selector */}
+                {/* Document type — the medical record is the only issued form */}
                 <div>
-                  <label style={{ display: 'block', fontSize: '.71875rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 6 }}>
-                    DOCUMENT TYPE:
-                  </label>
-                  <select
-                    value={docType}
-                    onChange={e => handleDocTypeChange(e.target.value)}
-                    style={{
-                      width: '100%', padding: '9px 12px', fontSize: '.8125rem', fontWeight: 600, color: '#0F172A',
-                      border: '1px solid #CBD5E1', borderRadius: 12, background: '#FFFFFF', outline: 'none', cursor: 'pointer',
-                      boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
-                    }}
-                  >
-                    <option value="record">Medical Record</option>
-                    <option value="certificate">Medical Certificate</option>
-                    <option value="both">Medical Record &amp; Certificate</option>
-                  </select>
+                  <label style={labelStyle}>Document Type</label>
+                  <div style={{ ...selectStyle, cursor: 'default', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span>{docTypeLabel()}</span>
+                    <span style={{ fontSize: '.6875rem', color: '#64748B', fontWeight: 600 }}>PDF / Print</span>
+                  </div>
                 </div>
               </>
             )}
 
-            {/* Action Buttons Section (Uniform Dark Navy & Clean Outline Buttons) */}
+            {/* Actions */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 'auto', paddingTop: 16, borderTop: '1px solid #E2E8F0' }}>
               {mode === 'bulk' ? (
                 <>
@@ -4269,7 +4660,8 @@ doc.text('___________', pageWidth - 20 - colWidth / 2, y + 6, { align: 'center' 
                       opacity: preview.length === 0 ? 0.5 : 1
                     }}
                   >
-                    Export {exportFormat === 'xls' ? 'Excel (XLS)' : 'PDF'}
+                    <Download size={14} />
+                    Export {exportFormat === 'xls' ? 'Excel (XLS)' : 'PDF'} ({preview.length})
                   </button>
                   <button
                     type="button"
@@ -4282,6 +4674,7 @@ doc.text('___________', pageWidth - 20 - colWidth / 2, y + 6, { align: 'center' 
                       opacity: preview.length === 0 ? 0.5 : 1
                     }}
                   >
+                    <Printer size={14} />
                     Print Report
                   </button>
                 </>
@@ -4298,6 +4691,7 @@ doc.text('___________', pageWidth - 20 - colWidth / 2, y + 6, { align: 'center' 
                       opacity: !selectedPatient ? 0.5 : 1
                     }}
                   >
+                    <Download size={14} />
                     Export PDF Document
                   </button>
                   <button
@@ -4311,16 +4705,17 @@ doc.text('___________', pageWidth - 20 - colWidth / 2, y + 6, { align: 'center' 
                       opacity: !selectedPatient ? 0.5 : 1
                     }}
                   >
+                    <Printer size={14} />
                     Print Patient Record
                   </button>
                 </>
               )}
 
-              {/* Uniform Email Report Button */}
               <button
                 type="button"
                 onClick={() => {
                   setShowEmailInput(v => !v);
+                  setSentTo('');
                   if (mode === 'single' && selectedPatient && !emailTo) {
                     setEmailTo(selectedPatient.email || '');
                   }
@@ -4336,41 +4731,47 @@ doc.text('___________', pageWidth - 20 - colWidth / 2, y + 6, { align: 'center' 
                   opacity: (mode === 'bulk' ? preview.length === 0 : !selectedPatient) ? 0.5 : 1
                 }}
               >
-                <span>✉️ Email Report</span>
+                Email Report
               </button>
 
-              {/* Inline Email Input Panel */}
               {showEmailInput && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px', background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 8, marginTop: 2 }}>
+                  {sentTo && (
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 8 }}>
+                      <span style={{ color: '#047857', fontWeight: 800, lineHeight: 1.2 }}>✓</span>
+                      <div style={{ fontSize: '.71875rem', color: '#065F46', lineHeight: 1.45 }}>
+                        <strong>Sent.</strong> The report was emailed to <strong>{sentTo}</strong>.
+                      </div>
+                    </div>
+                  )}
                   <input
                     type="email"
-                    placeholder="Enter recipient email..."
+                    placeholder="Enter recipient email…"
                     value={emailTo}
-                    onChange={e => setEmailTo(e.target.value)}
+                    onChange={e => { setEmailTo(e.target.value); setSentTo(''); }}
                     style={{ width: '100%', padding: '8px 10px', fontSize: '.8125rem', border: '1px solid #CBD5E1', borderRadius: 6, outline: 'none', background: '#fff' }}
                   />
                   <button
                     type="button"
-                    disabled={sending}
+                    disabled={sending || !emailTo.trim()}
                     onClick={() =>
                       mode === 'bulk'
-                        ? sendReportEmail(emailTo, `K&A Clinic — ${period.charAt(0).toUpperCase() + period.slice(1)} Report (${periodLabel()})`, buildBulkReportHtml(preview))
+                        ? emailBulkReportPdf(emailTo)
                         : emailSinglePatientPdf(selectedPatient, emailTo)
                     }
-                    style={{ width: '100%', height: 38, background: '#3B50DF', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: '.8125rem', cursor: 'pointer' }}
+                    style={{ width: '100%', height: 38, background: '#3B50DF', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: '.8125rem', cursor: 'pointer', opacity: (sending || !emailTo.trim()) ? 0.6 : 1 }}
                   >
-                    {sending ? 'Sending…' : 'Send via Email'}
+                    {sending ? 'Sending… this can take a few seconds' : 'Send via Email'}
                   </button>
                 </div>
               )}
             </div>
-
           </div>
 
-          {/* RIGHT PANEL: Live Paper Document Preview Workspace (Matches PDF Viewer Reference) */}
+          {/* RIGHT PANEL: live paper document preview */}
           <div style={{ flex: 1, background: '#EDF0FA', padding: '16px 24px 24px', overflow: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
 
-            {/* Top Centered Viewer Toolbar — light, to match the card */}
+            {/* Viewer toolbar */}
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
               background: '#FFFFFF', padding: '6px 16px', borderRadius: 12,
@@ -4379,13 +4780,13 @@ doc.text('___________', pageWidth - 20 - colWidth / 2, y + 6, { align: 'center' 
               boxShadow: '0 2px 8px rgba(15,23,42,0.06)', marginBottom: 16, flexShrink: 0,
               position: 'sticky', top: 0, zIndex: 10
             }}>
-              {/* Page indicator */}
-              <span style={{ fontSize: '.78125rem', color: '#64748B' }}>1 / 1</span>
+              <span style={{ fontSize: '.78125rem', color: '#64748B' }}>
+                {previewPages} page{previewPages !== 1 ? 's' : ''}
+              </span>
 
               <div style={{ width: 1, height: 16, background: '#E2E8F0', margin: '0 4px' }} />
 
-              {/* Zoom controls */}
-              <button type="button" onClick={() => setZoomLevel(z => Math.max(0.4, Math.round((z - 0.1) * 100) / 100))} style={{ background: 'transparent', border: 'none', color: '#334155', fontSize: '1.1rem', fontWeight: 800, cursor: 'pointer', padding: '0 6px' }} title="Zoom Out">-</button>
+              <button type="button" onClick={() => setZoomLevel(z => Math.max(0.4, Math.round((z - 0.1) * 100) / 100))} style={{ background: 'transparent', border: 'none', color: '#334155', fontSize: '1.1rem', fontWeight: 800, cursor: 'pointer', padding: '0 6px' }} title="Zoom Out">−</button>
 
               <span style={{ minWidth: 46, textAlign: 'center', fontWeight: 700, color: '#0F172A', background: '#F1F5F9', padding: '2px 8px', borderRadius: 6, fontSize: '.78125rem' }}>
                 {Math.round(zoomLevel * 100)}%
@@ -4395,42 +4796,57 @@ doc.text('___________', pageWidth - 20 - colWidth / 2, y + 6, { align: 'center' 
 
               <div style={{ width: 1, height: 16, background: '#E2E8F0', margin: '0 4px' }} />
 
-              {/* Fit to Page */}
               <button type="button" onClick={() => setZoomLevel(0.85)} style={{ background: 'transparent', border: 'none', color: '#334155', fontSize: '.9rem', cursor: 'pointer', padding: '0 4px' }} title="Fit to Page">↕</button>
             </div>
 
-            {/* Paper Sheet Preview Container (Scales as a whole paper sheet!)
-                The sheet turns landscape for the Excel export, matching the
-                page setup the .xls actually carries. */}
+            {/* Paper sheet. The outer box reserves the *scaled* footprint, so
+                zooming out shrinks the page inside the panel instead of leaving
+                the sheet floating over reserved-but-empty space. The bulk report
+                draws its own page chrome (and its own page breaks), so only the
+                single-patient document gets a white sheet drawn around it. */}
             <div style={{
-              width: isLandscapeSheet ? '1060px' : '820px',
-              height: isLandscapeSheet ? '760px' : '1060px',
-              background: '#FFFFFF', borderRadius: 6,
-              border: '1px solid #D8DEF0',
-              boxShadow: '0 6px 24px rgba(15,23,42,0.14)',
-              overflow: 'hidden', display: 'flex', flexDirection: 'column', flexShrink: 0,
-              transform: `scale(${zoomLevel}) ${rotation ? `rotate(${rotation}deg)` : ''}`,
-              transformOrigin: 'top center',
-              transition: 'transform 0.15s ease',
-              marginBottom: zoomLevel < 1
-                ? `-${(1 - zoomLevel) * (isLandscapeSheet ? 760 : 1060)}px`
-                : `${(zoomLevel - 1) * 200}px`
+              width: `${sheetWidth * zoomLevel}px`,
+              height: `${sheetHeight * zoomLevel}px`,
+              flexShrink: 0,
+              transition: 'width 0.15s ease, height 0.15s ease',
             }}>
-              {mode === 'bulk' ? (
-                previewPane(exportFormat === 'xls' ? buildExcelPreviewHtml(preview, periodLabel()) : buildBulkReportHtml(preview))
-              ) : selectedPatient ? (
-                previewPane(buildDocumentHtml(selectedPatient, docType, showEmailInput ? 'patient' : 'clinic'))
-              ) : (
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC', color: '#64748B', fontSize: '.875rem' }}>
-                  Search and select a patient on the left panel to preview document.
-                </div>
-              )}
+              <div style={{
+                width: `${sheetWidth}px`,
+                height: `${sheetHeight}px`,
+                background: isLandscapeSheet ? 'transparent' : '#FFFFFF',
+                borderRadius: isLandscapeSheet ? 0 : 6,
+                border: isLandscapeSheet ? 'none' : '1px solid #D8DEF0',
+                boxShadow: isLandscapeSheet ? 'none' : '0 6px 24px rgba(15,23,42,0.14)',
+                overflow: 'hidden', display: 'flex', flexDirection: 'column',
+                transform: `scale(${zoomLevel}) ${rotation ? `rotate(${rotation}deg)` : ''}`,
+                transformOrigin: 'top left',
+                transition: 'transform 0.15s ease',
+              }}>
+                {mode === 'bulk' ? (
+                  previewPane(
+                    exportFormat === 'xls'
+                      ? buildExcelPreviewHtml(preview, periodLabel())
+                      : buildBulkReportHtml(preview, logoDataUrl),
+                    setDocSheetHeight
+                  )
+                ) : selectedPatient ? (
+                  previewPane(
+                    buildDocumentHtml(selectedPatient, docType, showEmailInput ? 'patient' : 'clinic'),
+                    setDocSheetHeight
+                  )
+                ) : (
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC', color: '#64748B', fontSize: '.875rem' }}>
+                    Search and select a patient on the left panel to preview document.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -4448,6 +4864,10 @@ function FollowUpModal({ patient, onClose, onToast }) {
   const [preset, setPreset] = useState('due');
   const [message, setMessage] = useState(PRESETS[0].text);
   const [sending, setSending] = useState(false);
+  // The toast renders under the modal's portal, so a send needs its own
+  // confirmation inside the card.
+  const [sentTo, setSentTo] = useState('');
+  const [sentSuccess, setSentSuccess] = useState(null);
 
   const pickPreset = (key) => {
     setPreset(key);
@@ -4472,28 +4892,33 @@ function FollowUpModal({ patient, onClose, onToast }) {
         setSending(false);
         return;
       }
-      // Partial delivery is normal (no email on file, or no app installed) —
-      // report what actually went out rather than a blanket success.
       const parts = [];
-      if (result.pushSent > 0) parts.push('app');
+      if (result.pushSent > 0) parts.push('app notification');
       if (result.emailed) parts.push('email');
+      
+      setSentSuccess({
+        message: parts.length
+          ? `Follow-up notification sent successfully to ${formatTitleCase(patient.name)} via ${parts.join(' and ')}.`
+          : `Follow-up notification logged for ${formatTitleCase(patient.name)}.`,
+        channels: parts
+      });
       onToast(
         parts.length
           ? `Follow-up sent via ${parts.join(' and ')} to ${formatTitleCase(patient.name)}`
-          : `Notification saved, but no delivery channel was available for ${formatTitleCase(patient.name)}`,
-        parts.length ? 'success' : 'error',
+          : `Notification saved for ${formatTitleCase(patient.name)}`,
+        'success'
       );
-      onClose();
     } catch (err) {
       console.error('Follow-up send error:', err);
       onToast('Failed to send follow-up.', 'error');
+    } finally {
       setSending(false);
     }
   }
 
-  return (
-    <div className="modal-overlay" style={{ alignItems: 'center' }} onClick={e => { if (e.target.classList.contains('modal-overlay')) onClose(); }}>
-      <div className="modal" style={{ width: '560px', padding: 0, overflow: 'hidden' }}>
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-[560px] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
         <div style={{ background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)', padding: '18px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <h3 style={{ fontSize: '1.0625rem', fontWeight: 800, color: '#FFFFFF', margin: 0 }}>Send Follow-up</h3>
@@ -4501,52 +4926,85 @@ function FollowUpModal({ patient, onClose, onToast }) {
               Notifies {formatTitleCase(patient.name)} in the app and by email
             </p>
           </div>
-          <button type="button" onClick={onClose}
-            style={{ width: 32, height: 32, borderRadius: 8, border: 'none', background: 'rgba(255,255,255,0.12)', color: '#FFFFFF', fontSize: '1rem', fontWeight: 700, cursor: 'pointer' }}>✕</button>
+          <button type="button" onClick={onClose} title="Close" aria-label="Close"
+            style={{ width: 32, height: 32, borderRadius: 8, border: 'none', background: 'rgba(255,255,255,0.12)', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background 0.15s' }}>
+            <X size={16} strokeWidth={2.2} />
+          </button>
         </div>
 
-        <div style={{ padding: 24 }}>
-          <div style={{ fontSize: '.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: 'var(--muted-2)', marginBottom: 8 }}>Message Template</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
-            {PRESETS.map(x => (
-              <button key={x.key} type="button" onClick={() => pickPreset(x.key)}
-                style={{
-                  padding: '10px 12px', borderRadius: 'var(--r-lg)', textAlign: 'left',
-                  border: `1px solid ${preset === x.key ? '#7C3AED' : 'var(--border)'}`,
-                  background: 'var(--bg)', boxShadow: preset === x.key ? '0 0 0 3px rgba(200,21,26,0.08)' : 'none',
-                  cursor: 'pointer', fontFamily: 'inherit',
-                  fontSize: '.78125rem', fontWeight: preset === x.key ? 700 : 600, color: 'var(--text)',
-                }}
-              >
-                {x.label}
-              </button>
-            ))}
-          </div>
-
-          <div style={{ fontSize: '.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: 'var(--muted-2)', marginBottom: 8 }}>Message</div>
-          <textarea
-            value={message}
-            onChange={e => { setMessage(e.target.value); setPreset('custom'); }}
-            rows={4}
-            placeholder="Write the follow-up message the patient will receive…"
-            style={{ width: '100%', padding: '10px 12px', fontSize: '.8125rem', border: '1.5px solid var(--border-2)', borderRadius: 'var(--r-md)', background: '#fff', color: 'var(--text)', outline: 'none', fontFamily: 'inherit', resize: 'vertical' }}
-          />
-
-          <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '.625rem', padding: '10px 14px', marginTop: 14, fontSize: '.75rem', color: '#1D4ED8', lineHeight: 1.5 }}>
-            The patient gets a push notification in the app and an email
-            {patient.email ? ` at ${patient.email}` : ' (no email on file — app only)'}.
-            Both include a button to confirm they received it.
-          </div>
-
-          <div className="modal-footer">
-            <button className="btn btn-outline" onClick={onClose} disabled={sending}>Cancel</button>
-            <button className="btn btn-primary" onClick={send} disabled={sending}>
-              {sending ? 'Sending…' : 'Send Follow-up'}
+        {sentSuccess ? (
+          <div style={{ padding: '32px 24px', textAlign: 'center' }}>
+            <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#DCFCE7', border: '2px solid #86EFAC', color: '#16A34A', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+            </div>
+            <h4 style={{ fontSize: '1.125rem', fontWeight: 800, color: '#0F172A', marginBottom: 8 }}>
+              Follow-up Sent to Patient!
+            </h4>
+            <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 12, padding: '14px 18px', maxWidth: 460, margin: '0 auto 18px', textAlign: 'left' }}>
+              <p style={{ fontSize: '.875rem', color: '#15803D', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span>✓</span> Delivered to {formatTitleCase(patient.name)}
+              </p>
+              <p style={{ fontSize: '.75rem', color: '#166534', margin: '4px 0 0', lineHeight: 1.4 }}>
+                {sentSuccess.message}
+              </p>
+            </div>
+            <p style={{ fontSize: '.75rem', color: '#64748B', maxWidth: 420, margin: '0 auto 24px', lineHeight: 1.4 }}>
+              The patient has received this reminder on their registered channels and can acknowledge it directly in the app.
+            </p>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={onClose}
+              style={{ padding: '9px 32px', fontSize: '.875rem', fontWeight: 700, borderRadius: 10 }}
+            >
+              Done
             </button>
           </div>
-        </div>
+        ) : (
+          <div style={{ padding: 24 }}>
+            <div style={{ fontSize: '.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: 'var(--muted-2)', marginBottom: 8 }}>Message Template</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
+              {PRESETS.map(x => (
+                <button key={x.key} type="button" onClick={() => pickPreset(x.key)}
+                  style={{
+                    padding: '10px 12px', borderRadius: 'var(--r-lg)', textAlign: 'left',
+                    border: `1px solid ${preset === x.key ? '#7C3AED' : 'var(--border)'}`,
+                    background: 'var(--bg)', boxShadow: preset === x.key ? '0 0 0 3px rgba(200,21,26,0.08)' : 'none',
+                    cursor: 'pointer', fontFamily: 'inherit',
+                    fontSize: '.78125rem', fontWeight: preset === x.key ? 700 : 600, color: 'var(--text)',
+                  }}
+                >
+                  {x.label}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ fontSize: '.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', color: 'var(--muted-2)', marginBottom: 8 }}>Message</div>
+            <textarea
+              value={message}
+              onChange={e => { setMessage(e.target.value); setPreset('custom'); }}
+              rows={4}
+              placeholder="Write the follow-up message the patient will receive…"
+              style={{ width: '100%', padding: '10px 12px', fontSize: '.8125rem', border: '1.5px solid var(--border-2)', borderRadius: 'var(--r-md)', background: '#fff', color: 'var(--text)', outline: 'none', fontFamily: 'inherit', resize: 'vertical' }}
+            />
+
+            <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '.625rem', padding: '10px 14px', marginTop: 14, fontSize: '.75rem', color: '#1D4ED8', lineHeight: 1.5 }}>
+              The patient gets a push notification in the app and an email
+              {patient.email ? ` at ${patient.email}` : ' (no email on file — app only)'}.
+              Both include a button to confirm they received it.
+            </div>
+
+            <div className="modal-footer" style={{ marginTop: 18 }}>
+              <button className="btn btn-outline" onClick={onClose} disabled={sending}>Cancel</button>
+              <button className="btn btn-primary" onClick={send} disabled={sending}>
+                {sending ? 'Sending…' : 'Send Follow-up'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -4584,20 +5042,24 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
     try {
       const barangayVal = patientToPin.barangay || (patientToPin.address ? (patientToPin.address.match(/Brgy\.\s*([^,]+)/)?.[1] || 'San Juan') : 'San Juan');
       const zoneVal = patientToPin.zone || (patientToPin.address ? patientToPin.address.split(',')[0].replace(/Brgy\..*/, '').trim() : 'Zone 1');
-      const locationStr = `${zoneVal ? zoneVal + ', ' : ''}Brgy. ${barangayVal}, Libon`;
+      const locationStr = patientToPin.address || `${zoneVal ? zoneVal + ', ' : ''}Brgy. ${barangayVal}, Libon, Albay`;
       const exposureTypeVal = patientToPin.service === 'PEP' ? `${patientToPin.animal || 'Dog'} Bite` : (patientToPin.service || 'Dog Bite');
       const categoryVal = patientToPin.cat ? `Category ${patientToPin.cat}` : 'Category III';
-      const exposureDateVal = patientToPin.date || new Date().toISOString().split('T')[0];
+      const exposureDateVal = patientToPin.date || getTodayDateString();
 
       const { lat, lng } = geocodeLibonAddress(barangayVal, zoneVal);
 
       // ABSOLUTE ANONYMIZATION — OMIT ALL PATIENT PERSONAL IDENTIFIERS
       await addDoc(collection(db, 'incidents'), {
         location: locationStr,
+        address: locationStr,
         barangay: barangayVal,
         zone: zoneVal,
         type: exposureTypeVal,
         category: categoryVal,
+        // Kept in step with the manually-pinned shape in incidents.jsx; the
+        // note stays generic because the pin carries no patient identifiers.
+        description: 'Pinned from a patient record. No identifying details attached.',
         date: exposureDateVal,
         lat,
         lng,
@@ -4620,7 +5082,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
   }
 
   useEffect(() => {
-    const q = query(collection(db, 'vaccinations'), orderBy('createdAt', 'desc'), limit(20));
+    const q = query(collection(db, 'vaccinations'), orderBy('createdAt', 'desc'));
     const unsub = onSnapshot(q, snap => {
       const data = snap.docs.map((d, i) => ({
         firestoreId: d.id,
@@ -4723,44 +5185,52 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
 
   function generateDefaultDoses(service, baseDate) {
     const d0 = baseDate || today();
-    const addDays = (dStr, days) => {
-      const d = new Date(dStr || Date.now());
-      if (isNaN(d.getTime())) return dStr;
-      d.setDate(d.getDate() + days);
-      return d.toISOString().split('T')[0];
-    };
+    const addDays = (dStr, days) => addDaysToDateString(dStr, days);
+
+    const makeDose = (key, label, date, isDone) => ({
+      key,
+      n: label,
+      label,
+      dose: label,
+      name: label,
+      date,
+      status: isDone ? 'done' : 'pending',
+      s: isDone ? 'done' : 'pending',
+      statusText: isDone ? 'Completed' : 'Scheduled',
+      done: isDone,
+    });
 
     if (service === 'PEP') {
       return [
-        { dose: 'Dose 1 (Day 0)', date: d0, status: 'Done', statusText: 'Completed' },
-        { dose: 'Dose 2 (Day 3)', date: addDays(d0, 3), status: 'Pending', statusText: 'Scheduled' },
-        { dose: 'Dose 3 (Day 7)', date: addDays(d0, 7), status: 'Pending', statusText: 'Scheduled' },
-        { dose: 'Dose 4 (Day 14)', date: addDays(d0, 14), status: 'Pending', statusText: 'Scheduled' },
-        { dose: 'Dose 5 (Day 28)', date: addDays(d0, 28), status: 'Pending', statusText: 'Scheduled' },
+        makeDose('d1', 'Dose 1 (Day 0)', d0, true),
+        makeDose('d2', 'Dose 2 (Day 3)', addDays(d0, 3), false),
+        makeDose('d3', 'Dose 3 (Day 7)', addDays(d0, 7), false),
+        makeDose('d4', 'Dose 4 (Day 14)', addDays(d0, 14), false),
+        makeDose('d5', 'Dose 5 (Day 28)', addDays(d0, 28), false),
       ];
     }
     if (service === 'PrEP') {
       return [
-        { dose: 'Dose 1 (Day 0)', date: d0, status: 'Done', statusText: 'Completed' },
-        { dose: 'Dose 2 (Day 7)', date: addDays(d0, 7), status: 'Pending', statusText: 'Scheduled' },
-        { dose: 'Dose 3 (Day 21)', date: addDays(d0, 21), status: 'Pending', statusText: 'Scheduled' },
+        makeDose('d1', 'Dose 1 (Day 0)', d0, true),
+        makeDose('d2', 'Dose 2 (Day 7)', addDays(d0, 7), false),
+        makeDose('d3', 'Dose 3 (Day 21)', addDays(d0, 21), false),
       ];
     }
     if (service === 'Tetanus') {
       return [
-        { dose: 'Primary Dose', date: d0, status: 'Done', statusText: 'Completed' },
-        { dose: 'Follow-up Booster (1 Month)', date: addDays(d0, 30), status: 'Pending', statusText: 'Scheduled' },
+        makeDose('d1', 'Primary Dose', d0, true),
+        makeDose('d2', 'Follow-up Booster (1 Month)', addDays(d0, 30), false),
       ];
     }
     if (service === 'Hepatitis') {
       return [
-        { dose: 'Dose 1 (Day 0)', date: d0, status: 'Done', statusText: 'Completed' },
-        { dose: 'Dose 2 (1 Month)', date: addDays(d0, 30), status: 'Pending', statusText: 'Scheduled' },
-        { dose: 'Dose 3 (6 Months)', date: addDays(d0, 180), status: 'Pending', statusText: 'Scheduled' },
+        makeDose('d1', 'Dose 1 (Day 0)', d0, true),
+        makeDose('d2', 'Dose 2 (1 Month)', addDays(d0, 30), false),
+        makeDose('d3', 'Dose 3 (6 Months)', addDays(d0, 180), false),
       ];
     }
     return [
-      { dose: 'Initial Dose', date: d0, status: 'Done', statusText: 'Completed' }
+      makeDose('d1', 'Initial Dose', d0, true),
     ];
   }
 
@@ -4772,11 +5242,30 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
     if (!form.age) { showToast('Age is required', 'error'); return; }
     if (form.contact && !isValidPHPhone(form.contact)) { showToast('Enter a valid Philippine mobile number', 'error'); return; }
 
+    const normalEmail = form.email.toLowerCase().trim();
+
+    // Prevent duplicate emails across patient records for patient-app uniqueness
+    const existingLocal = patients.find(p => (p.email || '').toLowerCase().trim() === normalEmail);
+    if (existingLocal) {
+      showToast(`Email "${normalEmail}" is already registered to ${formatTitleCase(existingLocal.name)} (MRN: ${existingLocal.id || existingLocal.mrn || '—'}). Patient records require a unique email for the Patient App.`, 'error');
+      return;
+    }
+
     if (typeof setSaving === 'function') setSaving(true);
 
     try {
+      // Query authorizedPatients in Firestore to ensure uniqueness across entire database
+      const existingEmailSnap = await getDocs(
+        query(collection(db, 'authorizedPatients'), where('email', '==', normalEmail), limit(1))
+      );
+      if (!existingEmailSnap.empty) {
+        const existingData = existingEmailSnap.docs[0].data();
+        showToast(`Email "${normalEmail}" is already registered in patient records to ${existingData.name || 'another patient'} (MRN: ${existingData.mrn || existingEmailSnap.docs[0].id}). Each patient must have a unique email for the Patient App.`, 'error');
+        if (typeof setSaving === 'function') setSaving(false);
+        return;
+      }
+
       const caseNo = await getAndIncrementNextMRN();
-      const normalEmail = form.email.toLowerCase().trim();
       const cleanFname = formatTitleCase(form.fname.trim());
       const cleanLname = formatTitleCase(form.lname.trim());
       const cleanMname = form.mname && form.mname.trim() ? formatTitleCase(form.mname.trim()) : '';
@@ -4827,6 +5316,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
         riskCondition: form.riskCondition || '',
         priorPneumo: form.priorPneumo || '',
         status: 'ongoing',
+        dose: `1/${defaultDoseArray.length}`,
         doses: defaultDoseArray,
         woundImages: [],
         createdAt: serverTimestamp(),
@@ -4861,15 +5351,41 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
     }
   }
 
-  function handleEditSave(form) {
+  async function handleEditSave(form) {
     if (!form.name || !form.name.trim()) { showToast('Please fill in the patient name', 'error'); return; }
     if (!form.age || Number(form.age) <= 0) { showToast('A valid age is required', 'error'); return; }
     if (form.contact && !isValidPHPhone(form.contact)) { showToast('Enter a valid Philippine mobile number', 'error'); return; }
     const newName = formatTitleCase(form.name.trim());
     const targetId = editPatient.firestoreId;
+    const cleanEmail = (form.email || editPatient.email || '').toLowerCase().trim();
+
+    // Prevent assigning an email already registered to another patient
+    if (cleanEmail && cleanEmail !== (editPatient.email || '').toLowerCase().trim()) {
+      const existingOther = patients.find(
+        p => p.firestoreId !== targetId && (p.email || '').toLowerCase().trim() === cleanEmail
+      );
+      if (existingOther) {
+        showToast(`Email "${cleanEmail}" is already registered to ${formatTitleCase(existingOther.name)} (MRN: ${existingOther.id || existingOther.mrn || '—'}). Each patient must have a unique email.`, 'error');
+        return;
+      }
+      try {
+        const existingEmailSnap = await getDocs(
+          query(collection(db, 'authorizedPatients'), where('email', '==', cleanEmail), limit(1))
+        );
+        const mrnKey = editPatient.id || editPatient.mrn || targetId;
+        if (!existingEmailSnap.empty && existingEmailSnap.docs[0].id !== mrnKey) {
+          const existingData = existingEmailSnap.docs[0].data();
+          showToast(`Email "${cleanEmail}" is already registered to ${existingData.name || 'another patient'} (MRN: ${existingData.mrn || existingEmailSnap.docs[0].id}). Each patient must have a unique email.`, 'error');
+          return;
+        }
+      } catch (err) {
+        console.warn('Email uniqueness check error:', err);
+      }
+    }
+
     const updatedData = {
       name: newName, age: form.age || editPatient.age, sex: form.sex || 'Male',
-      email: (form.email || editPatient.email || '').toLowerCase().trim(),
+      email: cleanEmail,
       address: form.address || '', contact: formatE164(form.contact || editPatient.contact || ''), service: form.service || 'PEP',
       vaccineBrand: form.vaccineBrand || '',
       animal: form.animal || 'Dog', cat: (form.cat || 'Category I').replace('Category ', ''),
@@ -4882,10 +5398,14 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
     };
     setEditPatient(null);
     showToast('Patient info updated', 'success');
+    const mrnKey = editPatient.id || editPatient.mrn || targetId;
     updateDoc(doc(db, 'vaccinations', targetId), updatedData).catch(err => {
       console.error('Edit patient error:', err);
       showToast('Failed to update patient.', 'error');
     });
+    if (mrnKey) {
+      setDoc(doc(db, 'authorizedPatients', mrnKey), { email: cleanEmail, name: newName }, { merge: true }).catch(() => {});
+    }
   }
 
   // ── One-time (but safe to re-run) sync: back-fills authorizedPatients for
@@ -5048,6 +5568,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
           onPinMap={p => setPinTarget(p)}
           onExport={p => setExportModal(p)}
           onEdit={p => setEditPatient(p)}
+          isArchiveView={caseloadTab === 'completed'}
         />
         {editPatient && (
           <EditPatientModal
@@ -5082,9 +5603,14 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
   // the same "Sort by" dropdown as the order options below (still two
   // distinct pieces of state — filter vs sortBy — just one trigger UI).
   const FILTER_OPTIONS = [
-    { key: 'all', label: 'All' },
+    { key: 'all', label: 'All Records' },
     { key: 'ongoing', label: 'Ongoing' },
     { key: 'overdue', label: 'Overdue' },
+    { key: 'prep', label: 'PrEP' },
+    { key: 'pep', label: 'PEP' },
+    { key: 'tetanus', label: 'Anti-Tetano' },
+    { key: 'pneumonia', label: 'Pneumonia Vaccine' },
+    { key: 'hepa', label: 'Hepatitis B' },
   ];
   const SORT_OPTIONS = [
     { key: 'newest', label: 'Registered (Newest)' },
@@ -5108,9 +5634,18 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
     .filter(p => {
       if (filter === 'all') return true;
       const liveStatus = derivePatientStatus(p);
-      const isOverdue = liveStatus !== 'completed' && buildDoses(p).some(d => d.status === 'miss');
+      const isOverdue = liveStatus !== 'completed' && (liveStatus === 'overdue' || p.status === 'overdue' || buildDoses(p).some(d => d.status === 'miss'));
       if (filter === 'ongoing') return liveStatus !== 'completed' && !isOverdue;
       if (filter === 'overdue') return isOverdue;
+      if (filter === 'completed') return liveStatus === 'completed';
+
+      const pSvc = (p.service || 'PEP').toLowerCase();
+      if (filter === 'prep') return pSvc === 'prep';
+      if (filter === 'pep') return pSvc === 'pep';
+      if (filter === 'tetanus' || filter === 'antitetano') return pSvc === 'tetanus';
+      if (filter === 'pneumonia') return pSvc === 'pneumonia';
+      if (filter === 'hepa') return pSvc === 'hepatitis';
+
       return liveStatus === filter;
     })
     .filter(p => {
@@ -5184,6 +5719,18 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
             }}
           >
             Patients
+            {activeCount > 0 && (
+              <span style={{
+                fontSize: '.6875rem',
+                fontWeight: 800,
+                padding: '2px 7px',
+                borderRadius: 999,
+                background: caseloadTab === 'active' ? '#3B50DF' : '#F1F5F9',
+                color: caseloadTab === 'active' ? '#FFFFFF' : '#64748B'
+              }}>
+                {activeCount}
+              </span>
+            )}
           </button>
 
           <button
@@ -5223,10 +5770,10 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
         </div>
 
         {/* ── Main Clean Table Card Container ── */}
-        <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
+        <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)', position: 'relative' }}>
 
           {/* ── Search, Filter & Action Toolbar (Above Table) ── */}
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12, background: '#FAFAFA' }}>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', borderRadius: '16px 16px 0 0', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12, background: '#FAFAFA' }}>
             
             {/* Search */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', flex: 1, minWidth: 280 }}>
@@ -5261,33 +5808,66 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
 
             {/* Filter and Sort — two independent dropdowns & Action Buttons */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              {caseloadTab !== 'completed' && (
-                <div ref={filterMenuRef} style={{ position: 'relative' }}>
-                  <button
-                    type="button"
-                    onClick={() => setFilterMenuOpen(o => !o)}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', fontSize: '.78125rem', fontWeight: 600, border: '1.5px solid #CBD5E1', borderRadius: '.5rem', background: '#FFFFFF', color: '#0F172A', cursor: 'pointer' }}
-                  >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>
-                    Filter
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
-                  </button>
+              <div ref={filterMenuRef} style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  onClick={() => setFilterMenuOpen(o => !o)}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px',
+                    fontSize: '.78125rem', fontWeight: 600,
+                    border: filter !== 'all' ? '1.5px solid #3B50DF' : '1.5px solid #CBD5E1',
+                    borderRadius: '.5rem',
+                    background: filter !== 'all' ? '#EEF2FF' : '#FFFFFF',
+                    color: filter !== 'all' ? '#3B50DF' : '#0F172A',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>
+                  {filter === 'all' ? 'Filter' : (FILTER_OPTIONS.find(o => o.key === filter)?.label || 'Filter')}
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+                </button>
 
-                  {filterMenuOpen && (
-                    <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, minWidth: 180, background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: 6, zIndex: 30 }}>
-                      {FILTER_OPTIONS.map(opt => (
-                        <button key={opt.key} type="button"
-                          onClick={() => { setFilter(opt.key); setCurrentPage(1); setFilterMenuOpen(false); }}
-                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', textAlign: 'left', padding: '7px 8px', borderRadius: 6, border: 'none', background: 'transparent', color: '#334155', fontSize: '.78125rem', fontWeight: filter === opt.key ? 700 : 500, cursor: 'pointer' }}
-                        >
-                          {opt.label}
-                          {filter === opt.key && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
-                        </button>
-                      ))}
+                {filterMenuOpen && (
+                  <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, minWidth: 205, maxHeight: '380px', overflowY: 'auto', background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: 6, zIndex: 50 }}>
+                    <div style={{ padding: '4px 8px 2px', fontSize: '.6875rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Status
                     </div>
-                  )}
-                </div>
-              )}
+                    {[
+                      { key: 'all', label: 'All Records' },
+                      { key: 'ongoing', label: 'Ongoing' },
+                      { key: 'overdue', label: 'Overdue' },
+                    ].map(opt => (
+                      <button key={opt.key} type="button"
+                        onClick={() => { setFilter(opt.key); setCurrentPage(1); setFilterMenuOpen(false); }}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', textAlign: 'left', padding: '6px 8px', borderRadius: 6, border: 'none', background: filter === opt.key ? '#EEF2FF' : 'transparent', color: filter === opt.key ? '#3B50DF' : '#334155', fontSize: '.78125rem', fontWeight: filter === opt.key ? 700 : 500, cursor: 'pointer' }}
+                      >
+                        {opt.label}
+                        {filter === opt.key && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
+                      </button>
+                    ))}
+
+                    <div style={{ margin: '4px 0', borderTop: '1px solid #F1F5F9' }} />
+                    <div style={{ padding: '4px 8px 2px', fontSize: '.6875rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Vaccine / Service
+                    </div>
+                    {[
+                      { key: 'prep', label: 'PrEP (Pre-Exposure)' },
+                      { key: 'pep', label: 'PEP (Post-Exposure)' },
+                      { key: 'tetanus', label: 'Anti-Tetano (Tetanus)' },
+                      { key: 'pneumonia', label: 'Pneumonia Vaccine' },
+                      { key: 'hepa', label: 'Hepatitis B' },
+                    ].map(opt => (
+                      <button key={opt.key} type="button"
+                        onClick={() => { setFilter(opt.key); setCurrentPage(1); setFilterMenuOpen(false); }}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', textAlign: 'left', padding: '6px 8px', borderRadius: 6, border: 'none', background: filter === opt.key ? '#EEF2FF' : 'transparent', color: filter === opt.key ? '#3B50DF' : '#334155', fontSize: '.78125rem', fontWeight: filter === opt.key ? 700 : 500, cursor: 'pointer' }}
+                      >
+                        {opt.label}
+                        {filter === opt.key && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               <div ref={sortMenuRef} style={{ position: 'relative' }}>
                 <button
@@ -5301,7 +5881,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
                 </button>
 
                 {sortMenuOpen && (
-                  <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, minWidth: 190, background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: 6, zIndex: 30 }}>
+                  <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, minWidth: 190, background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: 6, zIndex: 50 }}>
                     {SORT_OPTIONS.map(opt => (
                       <button key={opt.key} type="button"
                         onClick={() => { setSortBy(opt.key); setSortMenuOpen(false); }}
@@ -5315,20 +5895,22 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
                 )}
               </div>
 
-              {/* Export Clinic Report Button — Clean White Background */}
-              <button
-                type="button"
-                className="btn btn-outline btn-sm"
-                onClick={() => setExportModal(true)}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '.78125rem', fontWeight: 600,
-                  padding: '7px 14px', background: '#FFFFFF', border: '1.5px solid #CBD5E1', color: '#0F172A',
-                  borderRadius: '.5rem', cursor: 'pointer', transition: 'all 0.15s ease'
-                }}
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-                Export Clinic Report
-              </button>
+              {/* Export Clinic Report Button — Clean White Background (Hidden in Archive) */}
+              {caseloadTab !== 'completed' && (
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  onClick={() => setExportModal(true)}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '.78125rem', fontWeight: 600,
+                    padding: '7px 14px', background: '#FFFFFF', border: '1.5px solid #CBD5E1', color: '#0F172A',
+                    borderRadius: '.5rem', cursor: 'pointer', transition: 'all 0.15s ease'
+                  }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                  Export Clinic Report
+                </button>
+              )}
 
               {/* Add Patient Button — Royal Blue (#3B50DF) */}
               {caseloadTab !== 'completed' && (
@@ -5379,7 +5961,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
                     // itself (that would also change what the Filter dropdown and the
                     // detail-view badge treat as "ongoing"), just reuses vaccination.jsx's
                     // real dose-schedule logic to flag rows that need attention.
-                    const isOverdue = liveStatus !== 'completed' && buildDoses(p).some(d => d.status === 'miss');
+                    const isOverdue = liveStatus !== 'completed' && (liveStatus === 'overdue' || p.status === 'overdue' || buildDoses(p).some(d => d.status === 'miss'));
                     const formattedName = formatTitleCase(p.name);
 
                     return (
@@ -5427,26 +6009,6 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
                         </td>
                         <td style={{ padding: '16px 16px 16px 8px', width: '11%', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
                           <div style={{ display: 'flex', gap: 6, justifyContent: 'center', alignItems: 'center' }}>
-                            {liveStatus === 'completed' && !p.isArchived && (
-                              <button
-                                type="button"
-                                className="icon-btn"
-                                title="Move to Archive"
-                                onClick={() => handleArchivePatient(p)}
-                                style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid #A7F3D0', background: '#ECFDF5', color: '#047857', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-                              >
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              className="icon-btn"
-                              title="Pin Incident Map"
-                              onClick={() => setPinTarget(p)}
-                              style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid #CBD5E1', background: '#FFFFFF', color: '#475569', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-                            >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-                            </button>
                             <button
                               type="button"
                               className="icon-btn"
@@ -5476,48 +6038,91 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
           </div>
 
           {/* ── Pagination Footer ── */}
-          <div style={{ padding: '14px 20px', borderTop: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#FAFAFA' }}>
-            <div style={{ fontSize: '.75rem', color: '#64748B', fontWeight: 600 }}>
-              Showing {totalItems === 0 ? 0 : (safePage - 1) * itemsPerPage + 1}–{Math.min(safePage * itemsPerPage, totalItems)} of {totalItems} patients
+          <div style={{ padding: '14px 20px', borderTop: '1px solid #E2E8F0', borderRadius: '0 0 16px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#FAFAFA' }}>
+            <div style={{ fontSize: '.8125rem', color: '#475569', fontWeight: 600 }}>
+              {totalItems === 0 ? '0 of 0' : `${(safePage - 1) * itemsPerPage + 1} to ${Math.min(safePage * itemsPerPage, totalItems)} of ${totalItems}`}
               {selectedRows.size > 0 && <span style={{ marginLeft: 10, color: '#7C3AED', fontWeight: 800 }}>({selectedRows.size} selected)</span>}
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <button
                 type="button"
-                className="btn btn-outline btn-sm"
                 disabled={safePage <= 1}
-                onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
-                style={{ opacity: safePage <= 1 ? 0.4 : 1, padding: '5px 12px', fontSize: '.75rem', fontWeight: 600 }}
+                onClick={() => setCurrentPage(1)}
+                title="First Page"
+                aria-label="First Page"
+                style={{
+                  width: 28, height: 28, borderRadius: 6, border: 'none', background: 'transparent',
+                  color: safePage <= 1 ? '#CBD5E1' : '#475569',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: safePage <= 1 ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={e => { if (safePage > 1) { e.currentTarget.style.background = '#F1F5F9'; e.currentTarget.style.color = '#3B50DF'; } }}
+                onMouseLeave={e => { if (safePage > 1) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#475569'; } }}
               >
-                ← Previous
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="5" x2="6" y2="19"/><polyline points="18 19 11 12 18 5"/></svg>
               </button>
 
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map(pg => (
-                <button
-                  key={pg}
-                  type="button"
-                  onClick={() => setCurrentPage(pg)}
-                  style={{
-                    width: 28, height: 28, borderRadius: '.375rem', border: '1px solid #CBD5E1',
-                    background: safePage === pg ? '#3B50DF' : '#FFFFFF',
-                    color: safePage === pg ? '#FFFFFF' : '#334155',
-                    fontSize: '.75rem', fontWeight: safePage === pg ? 800 : 600,
-                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                  }}
-                >
-                  {pg}
-                </button>
-              ))}
+              <button
+                type="button"
+                disabled={safePage <= 1}
+                onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+                title="Previous Page"
+                aria-label="Previous Page"
+                style={{
+                  width: 28, height: 28, borderRadius: 6, border: 'none', background: 'transparent',
+                  color: safePage <= 1 ? '#CBD5E1' : '#475569',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: safePage <= 1 ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={e => { if (safePage > 1) { e.currentTarget.style.background = '#F1F5F9'; e.currentTarget.style.color = '#3B50DF'; } }}
+                onMouseLeave={e => { if (safePage > 1) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#475569'; } }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+              </button>
+
+              <span style={{ fontSize: '.8125rem', fontWeight: 600, color: '#334155', padding: '0 8px', whiteSpace: 'nowrap' }}>
+                Page {safePage} of {totalPages}
+              </span>
 
               <button
                 type="button"
-                className="btn btn-outline btn-sm"
                 disabled={safePage >= totalPages}
                 onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
-                style={{ opacity: safePage >= totalPages ? 0.4 : 1, padding: '5px 12px', fontSize: '.75rem', fontWeight: 600 }}
+                title="Next Page"
+                aria-label="Next Page"
+                style={{
+                  width: 28, height: 28, borderRadius: 6, border: 'none', background: 'transparent',
+                  color: safePage >= totalPages ? '#CBD5E1' : '#475569',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: safePage >= totalPages ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={e => { if (safePage < totalPages) { e.currentTarget.style.background = '#F1F5F9'; e.currentTarget.style.color = '#3B50DF'; } }}
+                onMouseLeave={e => { if (safePage < totalPages) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#475569'; } }}
               >
-                Next →
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+
+              <button
+                type="button"
+                disabled={safePage >= totalPages}
+                onClick={() => setCurrentPage(totalPages)}
+                title="Last Page"
+                aria-label="Last Page"
+                style={{
+                  width: 28, height: 28, borderRadius: 6, border: 'none', background: 'transparent',
+                  color: safePage >= totalPages ? '#CBD5E1' : '#475569',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: safePage >= totalPages ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={e => { if (safePage < totalPages) { e.currentTarget.style.background = '#F1F5F9'; e.currentTarget.style.color = '#3B50DF'; } }}
+                onMouseLeave={e => { if (safePage < totalPages) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#475569'; } }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 19 13 12 6 5"/><line x1="18" y1="5" x2="18" y2="19"/></svg>
               </button>
             </div>
           </div>

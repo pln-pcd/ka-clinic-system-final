@@ -40,7 +40,7 @@ export default function MobileApp() {
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
-        <ActivityIndicator size="large" color="#E31837" />
+        <ActivityIndicator size="large" color="#1E3A8A" />
       </View>
     );
   }

@@ -18,7 +18,7 @@ import { hasSeenOnboarding } from '../config/appPrefs';
 import { usePatientAuth } from '../context/PatientAuthContext';
 
 const { width, height } = Dimensions.get('window');
-const MEDICAL_RED = '#E31837';
+const NAVY_BLUE = '#1E3A8A';
 
 // Long enough for the entrance animation to land, short enough not to feel like
 // a loading screen. Returning patients spend this once per launch either way.
@@ -102,7 +102,7 @@ export default function LuxuryEntrance() {
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={['#FFFFFF', '#FFF1F2', '#F8FAFC']}
+        colors={['#FFFFFF', '#F0F6FE', '#F8FAFC']}
         style={styles.background}
       >
         {/* ANIMATED DECORATIVE ELEMENTS */}
@@ -124,7 +124,7 @@ export default function LuxuryEntrance() {
 
           <Animated.View style={[styles.textContainer, animatedTextStyle]}>
             <Text style={styles.title}>
-              <Text style={{ color: MEDICAL_RED }}>K&A</Text> CLINIC
+              <Text style={{ color: NAVY_BLUE }}>K&A</Text> CLINIC
             </Text>
 
             <View style={styles.dividerContainer}>
@@ -158,14 +158,14 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: scale(200),
     height: scale(200),
-    backgroundColor: MEDICAL_RED,
+    backgroundColor: NAVY_BLUE,
     opacity: 0.05,
     borderRadius: scale(40),
   },
   centerGlow: {
     width: width * 0.8,
     height: width * 0.8,
-    backgroundColor: MEDICAL_RED,
+    backgroundColor: NAVY_BLUE,
     opacity: 0.04,
     borderRadius: (width * 0.8) / 2,
   },
@@ -176,7 +176,7 @@ const styles = StyleSheet.create({
   logoWrapper: {
     width: width * 0.75,
     height: width * 0.75,
-    shadowColor: MEDICAL_RED,
+    shadowColor: NAVY_BLUE,
     shadowOffset: { width: 0, height: 20 },
     shadowOpacity: 0.15,
     shadowRadius: 35,
@@ -213,7 +213,7 @@ const styles = StyleSheet.create({
     width: scale(8),
     height: scale(8),
     borderRadius: scale(4),
-    backgroundColor: MEDICAL_RED,
+    backgroundColor: NAVY_BLUE,
     marginHorizontal: scale(15),
   },
   subtext: {

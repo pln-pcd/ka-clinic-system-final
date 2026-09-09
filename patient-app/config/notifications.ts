@@ -46,7 +46,7 @@ export function ensureNotificationPermission(): Promise<boolean> {
           name: 'Appointment updates',
           importance: Notifications.AndroidImportance.HIGH,
           vibrationPattern: [0, 250, 250, 250],
-          lightColor: '#C8102E',
+          lightColor: '#1E3A8A',
         });
       }
 
@@ -100,9 +100,9 @@ export async function presentLocalNotification(
 // the clinic server (api/notifications.js, action `register-token`), which
 // stores it against the patient's vaccination record.
 import Constants from 'expo-constants';
+import { API_BASE_URL } from './apiBase';
 import { auth } from './firebase';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || '';
 
 let registrationPromise: Promise<string | null> | null = null;
 

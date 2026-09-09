@@ -37,10 +37,10 @@ import CustomAlertModal, { CustomAlertConfig } from '../../components/CustomAler
 const { width } = Dimensions.get('window');
 
 const C = {
-  red:        '#C8102E',
-  redLight:   '#E8304A',
-  redDeep:    '#9A0B22',
-  redFaint:   'rgba(200,16,46,0.07)',
+  red:        '#1E3A8A',
+  redLight:   '#2563EB',
+  redDeep:    '#172554',
+  redFaint:   'rgba(30,58,138,0.07)',
   bg:         '#F5F7FA',
   white:      '#FFFFFF',
   border:     '#E8EDF3',
@@ -975,7 +975,7 @@ export default function AppointmentsScreen() {
                         onPress={() => { setApptCategory(cat.id as any); setVaccineType(''); setVaccineDropdownOpen(false); }}
                         activeOpacity={0.8}
                       >
-                        <Ionicons name={cat.icon as any} size={15} color={active ? '#E31837' : '#64748B'} />
+                        <Ionicons name={cat.icon as any} size={15} color={active ? C.red : '#64748B'} />
                         <Text style={[df.catLabel, active && df.catLabelActive]}>{cat.label}</Text>
                       </TouchableOpacity>
                     );

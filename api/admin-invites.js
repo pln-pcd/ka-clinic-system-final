@@ -147,7 +147,45 @@ async function revoke(req, res, caller) {
   res.status(200).json({ success: true, message: `${target.name || target.email} has been revoked.` });
 }
 
-const ACTIONS = { invite, revoke };
+// Manager cancels an invite for a pending staff member.
+async function cancel(req, res, caller) {
+  const targetUid = (req.body?.uid || '').trim();
+  if (!targetUid) {
+    res.status(400).json({ success: false, error: 'Missing admin uid.' });
+    return;
+  }
+
+  const targetRef = db.collection('admins').doc(targetUid);
+  const targetSnap = await targetRef.get();
+  if (!targetSnap.exists) {
+    res.status(404).json({ success: false, error: 'Admin not found.' });
+    return;
+  }
+  const target = targetSnap.data();
+
+  // Invalidate any pending invite tokens in 'invites' collection
+  const email = (target.email || '').trim().toLowerCase();
+  if (email) {
+    const invitesSnap = await db.collection('invites').where('email', '==', email).get();
+    const batch = db.batch();
+    invitesSnap.forEach(d => batch.delete(d.ref));
+    await batch.commit();
+  }
+
+  // Delete the unaccepted admin doc
+  await targetRef.delete();
+
+  // Also remove from Firebase Auth if the account was just an unactivated invite
+  try {
+    await auth.deleteUser(targetUid);
+  } catch (authErr) {
+    console.warn('Could not delete auth user during cancel invite:', authErr);
+  }
+
+  res.status(200).json({ success: true, message: `Invitation for ${target.email || 'user'} has been cancelled.` });
+}
+
+const ACTIONS = { invite, revoke, cancel };
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {

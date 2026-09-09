@@ -36,9 +36,27 @@ export default async function handler(req, res) {
       return;
     }
 
-    const email = (patient.email || '').trim();
+    if (patient.registered === true) {
+      res.status(400).json({ success: false, error: 'This patient record already has a registered account. Please sign in instead.' });
+      return;
+    }
+
+    const email = (patient.email || '').toLowerCase().trim();
     if (!email) {
       res.status(422).json({ success: false, error: 'No email on file for this patient record. Please contact the clinic to update your record.' });
+      return;
+    }
+
+    // Ensure email is not already in use by another registered patient account
+    const dupQuery = await db.collection('authorizedPatients')
+      .where('email', '==', email)
+      .where('registered', '==', true)
+      .get();
+    if (!dupQuery.empty && dupQuery.docs.some(d => d.id !== mrn)) {
+      res.status(409).json({
+        success: false,
+        error: 'This email address is already registered to another patient record. Each patient must have a unique email address.'
+      });
       return;
     }
 

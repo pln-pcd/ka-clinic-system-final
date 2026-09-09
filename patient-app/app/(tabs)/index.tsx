@@ -58,13 +58,13 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 const { width } = Dimensions.get('window');
 
-const MEDICAL_RED = '#EF4444';
+const MEDICAL_RED = '#1E3A8A';
 const SOFT_GRAY_BG = '#EEF2F6';
 
 const C = {
   red: MEDICAL_RED,
-  redLight: '#FF4D65',
-  redDeep: '#B8102C',
+  redLight: '#2563EB',
+  redDeep: '#172554',
   white: '#FFFFFF',
   charcoal: '#1E293B',
   slate: '#475569',
@@ -72,7 +72,7 @@ const C = {
   green: '#10B981',
   border: '#E2E8F0',
   cardBg: '#FFFFFF',
-  softRed: '#FFF1F3',
+  softRed: '#EFF6FF',
 };
 
 type VaccineDose = { id: string; dose: number; label: string; date: string; rawDate: string | null; done: boolean; missed: boolean; vaccineType?: 'Pre-Exposure' | 'Post-Exposure'; };
@@ -654,10 +654,10 @@ export default function RabiesRecoveryApp() {
 
       <ScrollView ref={mainScrollViewRef} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 110 + insets.bottom }}>
 
-        {/* ── TOP SECTION: EXACT GRADIENT (#FF7171 to #9B2020) ── */}
+        {/* ── TOP SECTION: NAVY BLUE GRADIENT ── */}
         <View style={s.topMeshSection}>
           <LinearGradient
-            colors={['#FF7171', '#9B2020']}
+            colors={['#1E3A8A', '#0F172A']}
             style={StyleSheet.absoluteFillObject}
             start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
           />
@@ -1002,20 +1002,15 @@ export default function RabiesRecoveryApp() {
 
       </ScrollView>
 
-      {/* ── PROGRESS TRACKER POP-UP BANNER MODAL ── */}
-      <Modal visible={showProgressModal} animationType="slide" transparent>
+      {/* ── PROGRESS TRACKER POP-UP MODAL (STYLE: WEB ADD REPORT POP CARD) ── */}
+      <Modal visible={showProgressModal} animationType="fade" transparent onRequestClose={() => setShowProgressModal(false)}>
         <View style={s.centeredOverlay}>
           <View style={s.progressBannerSheet}>
-            {/* Dark Navy / Midnight Header (matching reference modal) */}
-            <LinearGradient
-              colors={['#0F172A', '#1E293B']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={s.trackerDarkHeader}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={s.trackerDarkHeaderTitle}>{protocolLabel}</Text>
-                <Text style={s.trackerDarkHeaderSub}>
+            {/* Clean Slate-50 Header matching Web Pop Card */}
+            <View style={s.trackerWebHeader}>
+              <View style={{ flex: 1, paddingRight: scale(10) }}>
+                <Text style={s.trackerWebHeaderTitle}>{protocolLabel}</Text>
+                <Text style={s.trackerWebHeaderSub}>
                   {isGuest && vaccineSchedule.length === 0
                     ? 'No dose record — sign up to start tracking'
                     : `${completedDoses} of ${vaccineSchedule.length || 5} Doses Completed · ${Math.round(progress)}% Immunized`}
@@ -1023,14 +1018,15 @@ export default function RabiesRecoveryApp() {
               </View>
               <TouchableOpacity
                 onPress={() => setShowProgressModal(false)}
-                style={s.trackerDarkCloseBtn}
-                activeOpacity={0.8}
+                style={s.trackerWebCloseBtn}
+                activeOpacity={0.7}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               >
-                <Ionicons name="close" size={18} color="#FFFFFF" />
+                <Ionicons name="close" size={18} color="#94A3B8" />
               </TouchableOpacity>
-            </LinearGradient>
+            </View>
 
-            {/* Enhanced Dose Timeline List */}
+            {/* Dose Timeline List */}
             <ScrollView style={s.trackerTimelineScroll} showsVerticalScrollIndicator={false}>
               <View style={s.iosNotesDoseList}>
                 {trackerDoses.map((d: any, i: number) => {
@@ -1095,10 +1091,31 @@ export default function RabiesRecoveryApp() {
               </View>
             </ScrollView>
 
-            {/* Footer */}
-            <View style={s.trackerFooter}>
-              <TouchableOpacity style={s.trackerFooterCloseBtn} onPress={() => setShowProgressModal(false)} activeOpacity={0.85}>
-                <Text style={s.trackerFooterCloseText}>Close</Text>
+            {/* Web-Style Action Footer: Cancel & Primary Button */}
+            <View style={s.trackerWebFooter}>
+              <TouchableOpacity
+                style={s.trackerWebCancelBtn}
+                onPress={() => setShowProgressModal(false)}
+                activeOpacity={0.75}
+              >
+                <Text style={s.trackerWebCancelText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={s.trackerWebPrimaryBtn}
+                onPress={() => {
+                  setShowProgressModal(false);
+                  if (isGuest) {
+                    router.push('/auth/signup');
+                  } else {
+                    router.push('/(tabs)/appt');
+                  }
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={s.trackerWebPrimaryText}>
+                  {isGuest ? 'Sign Up to Track' : 'Book Dose'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1536,7 +1553,7 @@ const s = StyleSheet.create({
     position: 'absolute', top: verticalScale(9), right: scale(9),
     width: scale(8), height: verticalScale(8), borderRadius: scale(4), // FULLY CIRCULAR
     backgroundColor: '#FFD700',
-    borderWidth: 1.5, borderColor: '#7F1D1D',
+    borderWidth: 1.5, borderColor: '#1E3A8A',
   },
 
   cardOverlapContainer: {
@@ -1559,7 +1576,7 @@ const s = StyleSheet.create({
     width: scale(160),
     height: verticalScale(160),
     borderRadius: scale(80),
-    backgroundColor: 'rgba(227, 24, 55, 0.03)',
+    backgroundColor: 'rgba(30, 58, 138, 0.04)',
     top: verticalScale(-60),
     right: scale(-40),
   },
@@ -1567,9 +1584,9 @@ const s = StyleSheet.create({
     width: scale(48),
     height: verticalScale(48),
     borderRadius: scale(16),
-    backgroundColor: '#FFF1F3',
+    backgroundColor: '#EFF6FF',
     borderWidth: 1,
-    borderColor: '#FECDD3',
+    borderColor: '#BFDBFE',
     justifyContent: 'center',
     alignItems: 'center',
     flexShrink: 0,
@@ -1584,24 +1601,24 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: scale(5),
-    backgroundColor: '#FFF1F3',
+    backgroundColor: '#EFF6FF',
     alignSelf: 'flex-start',
     paddingHorizontal: scale(9),
     paddingVertical: verticalScale(3.5),
     borderRadius: scale(999),
     borderWidth: 1,
-    borderColor: '#FECDD3',
+    borderColor: '#BFDBFE',
   },
   nextDoseNavyPillDot: {
     width: scale(6),
     height: verticalScale(6),
     borderRadius: scale(3),
-    backgroundColor: '#E31837',
+    backgroundColor: MEDICAL_RED,
   },
   nextDoseNavyPillText: {
     fontSize: moderateScale(9.5),
     fontWeight: '800',
-    color: '#E31837',
+    color: MEDICAL_RED,
     letterSpacing: 0.8,
   },
   nextDoseProgressBadge: {
@@ -1629,7 +1646,7 @@ const s = StyleSheet.create({
   tapProgressHintNavy: {
     fontSize: moderateScale(11),
     fontWeight: '700',
-    color: '#E31837',
+    color: MEDICAL_RED,
     marginTop: verticalScale(6),
   },
   nextDoseArrowBox: {
@@ -2069,16 +2086,16 @@ const s = StyleSheet.create({
   inlineChipMore: { fontSize: moderateScale(10), color: C.muted, fontWeight: '700', alignSelf: 'center' },
   logActions: { flexDirection: 'row', gap: scale(6), alignItems: 'center' },
   logActionBtn: { width: scale(30), height: verticalScale(30), borderRadius: scale(10), backgroundColor: SOFT_GRAY_BG, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: C.border },
-  logActionDanger: { backgroundColor: '#FFF1F3', borderColor: '#FECDD3' },
+  logActionDanger: { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' },
 
   // Taller map frame (380px) so satellite view and incident pins are spacious and readable.
-  caseStatusDotActive: { backgroundColor: '#E31837' },
+  caseStatusDotActive: { backgroundColor: MEDICAL_RED },
   caseStatusDotResolved: { backgroundColor: '#94A3B8' },
   caseStatusPill: { paddingHorizontal: scale(9), paddingVertical: verticalScale(4), borderRadius: scale(20), borderWidth: 1 },
-  caseStatusPillActive: { backgroundColor: '#FFF1F3', borderColor: '#FECDD3' },
+  caseStatusPillActive: { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' },
   caseStatusPillResolved: { backgroundColor: '#F1F5F9', borderColor: '#E2E8F0' },
   caseStatusPillText: { fontSize: moderateScale(10.5), fontWeight: '800' },
-  caseStatusPillTextActive: { color: '#E31837' },
+  caseStatusPillTextActive: { color: MEDICAL_RED },
   caseStatusPillTextResolved: { color: '#64748B' },
 
   // MODAL OVERLAY & SHEETS
@@ -2089,39 +2106,93 @@ const s = StyleSheet.create({
   closeBtn: { width: scale(30), height: verticalScale(30), borderRadius: scale(15), backgroundColor: SOFT_GRAY_BG, justifyContent: 'center', alignItems: 'center' },
   fieldValue: { fontSize: moderateScale(11.5), fontWeight: '600', color: C.charcoal, marginTop: verticalScale(3) },
 
-  // PROGRESS BANNER MODAL
-  // Sheet has no padding of its own so the gradient hero can bleed edge-to-edge;
-  // each section below supplies its own inset instead.
-  progressBannerSheet: { width: '100%', backgroundColor: '#FFF', borderRadius: scale(28), overflow: 'hidden', elevation: 10 },
-  trackerDarkHeader: {
+  // PROGRESS POP-UP CARD (MATCHING WEB ADD REPORT MODAL)
+  progressBannerSheet: {
+    width: '100%',
+    maxWidth: scale(380),
+    backgroundColor: '#FFFFFF',
+    borderRadius: scale(24),
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.16,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 12,
+  },
+  trackerWebHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: scale(20),
-    paddingVertical: verticalScale(18),
-    borderTopLeftRadius: scale(28),
-    borderTopRightRadius: scale(28),
-    gap: scale(12),
+    paddingVertical: verticalScale(14),
+    backgroundColor: '#F8FAFC',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
   },
-  trackerDarkHeaderTitle: {
-    fontSize: moderateScale(17),
+  trackerWebHeaderTitle: {
+    fontSize: moderateScale(15),
     fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: -0.3,
+    color: '#0F172A',
+    letterSpacing: -0.2,
   },
-  trackerDarkHeaderSub: {
-    fontSize: moderateScale(12),
-    color: '#94A3B8',
-    marginTop: verticalScale(3),
-    fontWeight: '500',
+  trackerWebHeaderSub: {
+    fontSize: moderateScale(11.5),
+    color: '#64748B',
+    marginTop: verticalScale(2),
+    fontWeight: '400',
   },
-  trackerDarkCloseBtn: {
-    width: scale(32),
-    height: verticalScale(32),
-    borderRadius: scale(16),
-    backgroundColor: 'rgba(255,255,255,0.15)',
+  trackerWebCloseBtn: {
+    width: scale(30),
+    height: scale(30),
+    borderRadius: scale(8),
+    backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  trackerWebFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(10),
+    paddingHorizontal: scale(18),
+    paddingVertical: verticalScale(14),
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    backgroundColor: '#FFFFFF',
+  },
+  trackerWebCancelBtn: {
+    flex: 1,
+    height: verticalScale(42),
+    borderRadius: scale(12),
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  trackerWebCancelText: {
+    fontSize: moderateScale(13.5),
+    fontWeight: '700',
+    color: '#334155',
+  },
+  trackerWebPrimaryBtn: {
+    flex: 1,
+    height: verticalScale(42),
+    borderRadius: scale(12),
+    backgroundColor: '#1E3A8A',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#1E3A8A',
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  trackerWebPrimaryText: {
+    fontSize: moderateScale(13.5),
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   modalTopAccentStripe: {
     height: verticalScale(4),
@@ -2155,9 +2226,9 @@ const s = StyleSheet.create({
     width: scale(32),
     height: verticalScale(32),
     borderRadius: scale(10),
-    backgroundColor: '#FFF1F3',
+    backgroundColor: '#EFF6FF',
     borderWidth: 1,
-    borderColor: '#FECDD3',
+    borderColor: '#BFDBFE',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -2407,7 +2478,7 @@ const s = StyleSheet.create({
     backgroundColor: '#10B981',
   },
   trackerConnectorActive: {
-    backgroundColor: '#FECDD3',
+    backgroundColor: '#BFDBFE',
   },
 
   trackerStepCard: {
@@ -2431,8 +2502,8 @@ const s = StyleSheet.create({
     borderLeftColor: '#10B981',
   },
   trackerStepCardNext: {
-    backgroundColor: '#FFF1F3',
-    borderColor: '#FECDD3',
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
     borderLeftColor: MEDICAL_RED,
   },
   trackerStepCardMissed: {
@@ -2541,7 +2612,7 @@ const s = StyleSheet.create({
 
   // NOTIFICATION PANEL MODAL
   notifPanelSheet: { width: '100%', backgroundColor: '#FFF', borderRadius: scale(28), padding: scale(20), elevation: 10 },
-  notifCountPill: { backgroundColor: '#FEE2E2', borderRadius: scale(10), paddingHorizontal: scale(8), paddingVertical: verticalScale(2) },
+  notifCountPill: { backgroundColor: '#EFF6FF', borderRadius: scale(10), paddingHorizontal: scale(8), paddingVertical: verticalScale(2) },
   notifCountPillText: { fontSize: moderateScale(11), fontWeight: '800', color: MEDICAL_RED },
   notifFilterRow: { flexDirection: 'row', alignItems: 'center', gap: scale(8), marginBottom: verticalScale(14), borderBottomWidth: 1, borderBottomColor: '#F1F5F9', paddingBottom: verticalScale(10) },
   notifFilterTab: { paddingHorizontal: scale(10), paddingVertical: verticalScale(4), borderRadius: scale(10), backgroundColor: SOFT_GRAY_BG },
@@ -2574,7 +2645,7 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: scale(5), marginTop: verticalScale(8),
   },
   ackConfirmedText: { fontSize: moderateScale(11.5), fontWeight: '600', color: '#059669' },
-  notifUnreadDot: { width: scale(8), height: verticalScale(8), borderRadius: scale(4), backgroundColor: '#EF4444', marginTop: verticalScale(4) },
+  notifUnreadDot: { width: scale(8), height: verticalScale(8), borderRadius: scale(4), backgroundColor: '#1E3A8A', marginTop: verticalScale(4) },
   emptyNotifBox: { alignItems: 'center', padding: scale(30) },
   emptyNotifText: { fontSize: moderateScale(13), color: C.muted, marginTop: verticalScale(6), fontWeight: '600' },
   notifFooterRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: verticalScale(14), paddingTop: verticalScale(10), borderTopWidth: 1, borderTopColor: '#F1F5F9' },
@@ -2652,7 +2723,7 @@ const s = StyleSheet.create({
   cdcClinicHeaderTitle: {
     fontSize: moderateScale(9.5),
     fontWeight: '900',
-    color: '#E31837',
+    color: MEDICAL_RED,
     letterSpacing: 0.5,
     textTransform: 'uppercase',
     marginBottom: verticalScale(1),
@@ -2785,7 +2856,7 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: scale(4),
-    backgroundColor: '#DC2626',
+    backgroundColor: '#1E3A8A',
     paddingHorizontal: scale(7),
     paddingVertical: verticalScale(3),
     borderRadius: scale(4),
@@ -3005,7 +3076,7 @@ const s = StyleSheet.create({
   cdcClinicHeaderTitlePopup: {
     fontSize: moderateScale(10.5),
     fontWeight: '900',
-    color: '#E31837',
+    color: MEDICAL_RED,
     letterSpacing: 0.5,
     textTransform: 'uppercase',
     marginBottom: verticalScale(1),
@@ -3039,7 +3110,7 @@ const s = StyleSheet.create({
   cdcClinicHeaderTitlePopupBack: {
     fontSize: moderateScale(10.5),
     fontWeight: '900',
-    color: '#E31837',
+    color: MEDICAL_RED,
     letterSpacing: 0.5,
     textTransform: 'uppercase',
     marginBottom: verticalScale(1),
@@ -3260,7 +3331,7 @@ const s = StyleSheet.create({
     backgroundColor: '#ECFDF5',
   },
   recordsMiniBadgePending: {
-    backgroundColor: '#FFF1F3',
+    backgroundColor: '#EFF6FF',
   },
   recordsMiniBadgeTxt: {
     fontSize: moderateScale(9.5),

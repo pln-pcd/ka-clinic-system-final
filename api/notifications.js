@@ -265,13 +265,13 @@ function ackPage(ok) {
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="padding:48px 16px;">
     <tr><td align="center">
       <table role="presentation" width="480" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:480px;background:#FFFFFF;border-radius:14px;border:1px solid #E2E8F0;overflow:hidden;">
-        <tr><td style="background:#C8151A;padding:22px 32px;">
+        <tr><td style="background-color:#0A1D47;background:linear-gradient(135deg,#0A1D47 0%,#0E2A6D 100%);padding:22px 32px;border-bottom:3px solid #1D4ED8;">
           <div style="font-size:17px;font-weight:bold;color:#FFFFFF;">K&amp;A Clinic</div>
-          <div style="font-size:11px;color:rgba(255,255,255,.75);text-transform:uppercase;letter-spacing:.5px;margin-top:2px;">Anti-Rabies &amp; Animal Bite Center</div>
+          <div style="font-size:11px;color:#93C5FD;text-transform:uppercase;letter-spacing:.5px;margin-top:2px;font-weight:600;">Anti-Rabies &amp; Animal Bite Center</div>
         </td></tr>
         <tr><td style="padding:32px;">
           <h1 style="margin:0 0 12px;font-size:20px;color:${color};">${title}</h1>
-          <p style="margin:0;font-size:14px;color:#3D3535;line-height:1.6;">${msg}</p>
+          <p style="margin:0;font-size:14px;color:#334155;line-height:1.6;">${msg}</p>
         </td></tr>
       </table>
     </td></tr>

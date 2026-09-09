@@ -12,7 +12,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import Toast from '../components/Toast';
 import { authedPostJson } from '../lib/apiClient';
 import { db } from '../lib/firebase';
-import { formatDateShort as fmtDate } from '../lib/dates';
+import { formatDateShort as fmtDate, addDaysToDateString, getTodayDateString } from '../lib/dates';
 import { createPortal } from 'react-dom';
 
 /* ─────────────────────────────────────────────────────────── */
@@ -56,32 +56,9 @@ export const getName = (p) =>
 const getInitials = (name = '') =>
   name.trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?';
 
-const addDays = (dateStr, n) => {
-  if (!dateStr) return null;
-  const parts = String(dateStr).split('-');
-  if (parts.length === 3) {
-    const y = parseInt(parts[0], 10);
-    const m = parseInt(parts[1], 10) - 1;
-    const d = parseInt(parts[2], 10);
-    const dateObj = new Date(y, m, d);
-    dateObj.setDate(dateObj.getDate() + n);
-    const resY = dateObj.getFullYear();
-    const resM = String(dateObj.getMonth() + 1).padStart(2, '0');
-    const resD = String(dateObj.getDate()).padStart(2, '0');
-    return `${resY}-${resM}-${resD}`;
-  }
-  const dateObj = new Date(dateStr);
-  dateObj.setDate(dateObj.getDate() + n);
-  return dateObj.toISOString().slice(0, 10);
-};
+const addDays = (dateStr, n) => addDaysToDateString(dateStr, n);
 
-const getTodayStr = () => {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-};
+const getTodayStr = () => getTodayDateString();
 
 export { fmtDate };
 
@@ -92,18 +69,26 @@ const isOverdue = (dateStr) => {
 };
 
 export const buildDoses = (p) => {
-  const stored = p.doses || [];
+  const stored = p?.doses || [];
   if (stored.length > 0) {
     return stored.map((d, i) => {
-      const savedStatus = d.status || d.s;
-      let status = savedStatus || 'pending';
+      const rawStatus = String(d.status || d.s || 'pending').toLowerCase();
+      let status = (rawStatus === 'done' || rawStatus === 'completed' || d.done === true)
+        ? 'done'
+        : (rawStatus === 'miss' || rawStatus === 'missed' || rawStatus === 'overdue')
+        ? 'miss'
+        : 'pending';
       const overdueFlag = status === 'pending' && isOverdue(d.date);
       if (overdueFlag) status = 'miss';
+      const label = d.n || d.label || d.dose || d.name || `Dose ${i + 1}`;
       return {
         key:        d.key || `d${i + 1}`,
-        label:      d.n || d.label || `Dose ${i + 1}`,
+        label,
+        n:          label,
+        dose:       label,
         date:       d.date || null,
         status,
+        s:          status,
         note:       d.note || '',
         autoMissed: overdueFlag && status !== 'done',
       };
@@ -142,11 +127,24 @@ const nextDose = (p) => {
 
 /* ─────────────────────────────────────────────────────────── */
 /* COMPONENT                                                   */
+/* ── Cache for instant tab switching with zero loading lag ──── */
+let cachedVaccinationPatients = null;
+
 /* ─────────────────────────────────────────────────────────── */
-export default function VaccinationTrackerPage({ selectedPatientId }) {
-  const [patients,     setPatients]     = useState([]);
-  const [loading,      setLoading]      = useState(true);
+export default function VaccinationTrackerPage({ selectedPatientId, initialPatients = [] }) {
+  const [patients,     setPatients]     = useState(() => {
+    if (initialPatients && initialPatients.length > 0) return initialPatients;
+    if (cachedVaccinationPatients && cachedVaccinationPatients.length > 0) return cachedVaccinationPatients;
+    return [];
+  });
+  const [loading,      setLoading]      = useState(() => {
+    return !(
+      (initialPatients && initialPatients.length > 0) ||
+      (cachedVaccinationPatients && cachedVaccinationPatients.length > 0)
+    );
+  });
   const [searchQuery,  setSearchQuery]  = useState('');
+  const [searchFocused,setSearchFocused]= useState(false);
   const [filterStatus, setFilterStatus] = useState('all');
   const [currentPage,  setCurrentPage]  = useState(1);
   const [detailPt,     setDetailPt]     = useState(null);
@@ -253,6 +251,11 @@ export default function VaccinationTrackerPage({ selectedPatientId }) {
     { key: 'in-progress', label: 'In Progress' },
     { key: 'completed', label: 'Completed' },
     { key: 'overdue', label: 'Overdue' },
+    { key: 'prep', label: 'PrEP' },
+    { key: 'pep', label: 'PEP' },
+    { key: 'tetanus', label: 'Anti-Tetano' },
+    { key: 'pneumonia', label: 'Pneumonia Vaccine' },
+    { key: 'hepa', label: 'Hepatitis B' },
   ];
   const SORT_OPTIONS = [
     { key: 'newest', label: 'Registered (Newest)' },
@@ -261,6 +264,15 @@ export default function VaccinationTrackerPage({ selectedPatientId }) {
     { key: 'progress_desc', label: 'Dose Progress (Highest)' },
   ];
 
+  // Sync if dashboard passes updated patient list
+  useEffect(() => {
+    if (initialPatients && initialPatients.length > 0) {
+      setPatients(initialPatients);
+      cachedVaccinationPatients = initialPatients;
+      setLoading(false);
+    }
+  }, [initialPatients]);
+
   useEffect(() => {
     let unsub;
     const fetchVaccinations = () => {
@@ -268,6 +280,7 @@ export default function VaccinationTrackerPage({ selectedPatientId }) {
         const q = query(collection(db, 'vaccinations'), orderBy('createdAt', 'desc'));
         unsub = onSnapshot(q, snap => {
           const data = snap.docs.map(d => ({ firestoreId: d.id, ...d.data() }));
+          cachedVaccinationPatients = data;
           setPatients(data);
           setDetailPt(prev => prev ? data.find(p => p.firestoreId === prev.firestoreId) || null : null);
           setLoading(false);
@@ -276,6 +289,7 @@ export default function VaccinationTrackerPage({ selectedPatientId }) {
           const fallbackQ = query(collection(db, 'vaccinations'));
           unsub = onSnapshot(fallbackQ, snap => {
             const data = snap.docs.map(d => ({ firestoreId: d.id, ...d.data() }));
+            cachedVaccinationPatients = data;
             setPatients(data);
             setDetailPt(prev => prev ? data.find(p => p.firestoreId === prev.firestoreId) || null : null);
             setLoading(false);
@@ -286,6 +300,7 @@ export default function VaccinationTrackerPage({ selectedPatientId }) {
         const fallbackQ = query(collection(db, 'vaccinations'));
         unsub = onSnapshot(fallbackQ, snap => {
           const data = snap.docs.map(d => ({ firestoreId: d.id, ...d.data() }));
+          cachedVaccinationPatients = data;
           setPatients(data);
           setDetailPt(prev => prev ? data.find(p => p.firestoreId === prev.firestoreId) || null : null);
           setLoading(false);
@@ -487,11 +502,17 @@ export default function VaccinationTrackerPage({ selectedPatientId }) {
     const matchSearch = !q || name.includes(q) || cat.includes(q) || animal.includes(q) || caseNo.includes(q);
 
     const status = deriveStatus(p);
+    const pSvc = (p.service || 'PEP').toLowerCase();
     const matchStatus =
       filterStatus === 'all'         ? true :
       filterStatus === 'overdue'     ? status === 'overdue' :
       filterStatus === 'in-progress' ? status === 'in-progress' :
-      filterStatus === 'completed'   ? status === 'completed' : true;
+      filterStatus === 'completed'   ? status === 'completed' :
+      filterStatus === 'prep'        ? pSvc === 'prep' :
+      filterStatus === 'pep'         ? pSvc === 'pep' :
+      filterStatus === 'tetanus'     ? (pSvc === 'tetanus' || pSvc === 'antitetano') :
+      filterStatus === 'pneumonia'   ? pSvc === 'pneumonia' :
+      filterStatus === 'hepa'        ? pSvc === 'hepatitis' : true;
 
     return matchSearch && matchStatus;
   }).sort((a, b) => {
@@ -510,10 +531,10 @@ export default function VaccinationTrackerPage({ selectedPatientId }) {
   const paginated  = filtered.slice((safePage - 1) * itemsPerPage, safePage * itemsPerPage);
 
   const stats = [
-    { label: 'Total Patients',     value: patients.length,                                                icon: Users,       sub: 'Active & Master Records', color: '#3B50DF', tint: '#EEF2FF', border: '#E0E7FF' },
-    { label: 'Completed',          value: patients.filter(p => deriveStatus(p) === 'completed').length,   icon: CheckCircle, sub: 'Fully Vaccinated',         color: '#059669', tint: '#ECFDF5', border: '#A7F3D0' },
-    { label: 'In Progress',        value: patients.filter(p => deriveStatus(p) === 'in-progress').length, icon: Clock,       sub: 'Ongoing Doses',            color: '#2563EB', tint: '#EFF6FF', border: '#BFDBFE' },
-    { label: 'Overdue Follow-ups', value: patients.filter(p => deriveStatus(p) === 'overdue').length,     icon: AlertCircle, sub: 'Attention Required',       color: '#DC2626', tint: '#FEF2F2', border: '#FECACA' },
+    { label: 'Total Patients',     value: patients.length,                                                icon: Users,       sub: 'Active & Master Records' },
+    { label: 'Completed',          value: patients.filter(p => deriveStatus(p) === 'completed').length,   icon: CheckCircle, sub: 'Fully Vaccinated' },
+    { label: 'In Progress',        value: patients.filter(p => deriveStatus(p) === 'in-progress').length, icon: Clock,       sub: 'Ongoing Doses' },
+    { label: 'Overdue Follow-ups', value: patients.filter(p => deriveStatus(p) === 'overdue').length,     icon: AlertCircle, sub: 'Attention Required' },
   ];
 
   const statusBadge = (s) => {
@@ -564,42 +585,54 @@ export default function VaccinationTrackerPage({ selectedPatientId }) {
       <div className="space-y-5">
         
         {/* ── Summary Metric Cards ── */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
           {stats.map((s, i) => (
             <div
               key={i}
-              className="bg-white border border-slate-200/80 rounded-2xl p-4 sm:p-5 flex items-center gap-4 shadow-2xs hover:shadow-xs transition-all"
+              className="bg-white border border-slate-200/80 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3 flex items-center gap-3 shadow-2xs hover:shadow-xs transition-all"
             >
-              <div
-                className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 shadow-2xs"
-                style={{ background: s.tint, border: `1px solid ${s.border}`, color: s.color }}
-              >
-                <s.icon size={20} strokeWidth={2.2} />
+              <div className="w-8.5 h-8.5 rounded-lg bg-slate-100 border border-slate-200/80 text-slate-600 flex items-center justify-center shrink-0">
+                <s.icon size={17} strokeWidth={2} className="text-slate-600" />
               </div>
               <div className="min-w-0">
-                <div className="text-2xl font-extrabold text-slate-900 leading-none tabular-nums">{s.value}</div>
-                <div className="text-xs font-bold text-slate-700 mt-1.5 truncate">{s.label}</div>
-                <div className="text-[11px] font-medium text-slate-400 mt-0.5 truncate">{s.sub}</div>
+                <div className="text-xl font-extrabold text-slate-900 leading-none tabular-nums">{s.value}</div>
+                <div className="text-xs font-bold text-slate-700 mt-1 truncate">{s.label}</div>
+                <div className="text-[10.5px] font-medium text-slate-400 mt-0.5 truncate">{s.sub}</div>
               </div>
             </div>
           ))}
         </div>
 
         {/* ── Main Clean Table Card Container ── */}
-        <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
+        <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)', position: 'relative' }}>
 
           {/* ── Search, Filter & Action Toolbar (Above Table) ── */}
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12, background: '#FAFAFA' }}>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', borderRadius: '16px 16px 0 0', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12, background: '#FAFAFA' }}>
             
             {/* Search Input Box */}
             <div style={{ position: 'relative', flex: 1, maxWidth: '24rem', minWidth: '16rem' }}>
-              <Search style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', opacity: .4, pointerEvents: 'none' }} size={14} color="#0F172A" />
+              <Search
+                style={{
+                  position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)',
+                  opacity: searchFocused ? 1 : .4, color: searchFocused ? '#3B50DF' : '#0F172A',
+                  pointerEvents: 'none', transition: 'all 0.15s ease'
+                }}
+                size={14}
+              />
               <input
                 type="text"
                 placeholder="Search by patient name, MRN, animal, or service..."
                 value={searchQuery}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setSearchFocused(false)}
                 onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-                style={{ width: '100%', padding: '8px 12px 8px 34px', fontSize: '.8125rem', border: '1.5px solid #CBD5E1', borderRadius: '.5rem', background: '#FFFFFF', color: '#0F172A', outline: 'none' }}
+                style={{
+                  width: '100%', padding: '8px 12px 8px 34px', fontSize: '.8125rem',
+                  border: searchFocused ? '1.5px solid #3B50DF' : '1.5px solid #CBD5E1',
+                  borderRadius: '.5rem', background: '#FFFFFF', color: '#0F172A', outline: 'none',
+                  boxShadow: searchFocused ? '0 0 0 3px rgba(59,80,223,0.15)' : 'none',
+                  transition: 'all 0.15s ease'
+                }}
               />
             </div>
 
@@ -609,19 +642,55 @@ export default function VaccinationTrackerPage({ selectedPatientId }) {
                 <button
                   type="button"
                   onClick={() => setFilterMenuOpen(o => !o)}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', fontSize: '.78125rem', fontWeight: 600, border: '1.5px solid #CBD5E1', borderRadius: '.5rem', background: '#FFFFFF', color: '#0F172A', cursor: 'pointer' }}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px',
+                    fontSize: '.78125rem', fontWeight: 600,
+                    border: filterStatus !== 'all' ? '1.5px solid #3B50DF' : '1.5px solid #CBD5E1',
+                    borderRadius: '.5rem',
+                    background: filterStatus !== 'all' ? '#EEF2FF' : '#FFFFFF',
+                    color: filterStatus !== 'all' ? '#3B50DF' : '#0F172A',
+                    cursor: 'pointer'
+                  }}
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>
-                  Filter
+                  {filterStatus === 'all' ? 'Filter' : (FILTER_OPTIONS.find(o => o.key === filterStatus)?.label || 'Filter')}
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
                 </button>
 
                 {filterMenuOpen && (
-                  <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, minWidth: 180, background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: 6, zIndex: 30 }}>
-                    {FILTER_OPTIONS.map(opt => (
+                  <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, minWidth: 215, maxHeight: '380px', overflowY: 'auto', background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: 6, zIndex: 50 }}>
+                    <div style={{ padding: '4px 8px 2px', fontSize: '.6875rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Status
+                    </div>
+                    {[
+                      { key: 'all', label: 'All Records' },
+                      { key: 'in-progress', label: 'In Progress' },
+                      { key: 'completed', label: 'Completed' },
+                      { key: 'overdue', label: 'Overdue' },
+                    ].map(opt => (
                       <button key={opt.key} type="button"
                         onClick={() => { setFilterStatus(opt.key); setCurrentPage(1); setFilterMenuOpen(false); }}
-                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', textAlign: 'left', padding: '7px 8px', borderRadius: 6, border: 'none', background: 'transparent', color: '#334155', fontSize: '.78125rem', fontWeight: filterStatus === opt.key ? 700 : 500, cursor: 'pointer' }}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', textAlign: 'left', padding: '6px 8px', borderRadius: 6, border: 'none', background: filterStatus === opt.key ? '#EEF2FF' : 'transparent', color: filterStatus === opt.key ? '#3B50DF' : '#334155', fontSize: '.78125rem', fontWeight: filterStatus === opt.key ? 700 : 500, cursor: 'pointer' }}
+                      >
+                        {opt.label}
+                        {filterStatus === opt.key && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
+                      </button>
+                    ))}
+
+                    <div style={{ margin: '4px 0', borderTop: '1px solid #F1F5F9' }} />
+                    <div style={{ padding: '4px 8px 2px', fontSize: '.6875rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Vaccine / Service
+                    </div>
+                    {[
+                      { key: 'prep', label: 'PrEP (Pre-Exposure)' },
+                      { key: 'pep', label: 'PEP (Post-Exposure)' },
+                      { key: 'tetanus', label: 'Anti-Tetano (Tetanus)' },
+                      { key: 'pneumonia', label: 'Pneumonia Vaccine' },
+                      { key: 'hepa', label: 'Hepatitis B' },
+                    ].map(opt => (
+                      <button key={opt.key} type="button"
+                        onClick={() => { setFilterStatus(opt.key); setCurrentPage(1); setFilterMenuOpen(false); }}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', textAlign: 'left', padding: '6px 8px', borderRadius: 6, border: 'none', background: filterStatus === opt.key ? '#EEF2FF' : 'transparent', color: filterStatus === opt.key ? '#3B50DF' : '#334155', fontSize: '.78125rem', fontWeight: filterStatus === opt.key ? 700 : 500, cursor: 'pointer' }}
                       >
                         {opt.label}
                         {filterStatus === opt.key && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
@@ -790,47 +859,90 @@ export default function VaccinationTrackerPage({ selectedPatientId }) {
           </div>
 
           {/* ── Standardized Pagination Bar ── */}
-          <div style={{ padding: '14px 20px', borderTop: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#FAFAFA' }}>
-            <div style={{ fontSize: '.75rem', color: '#64748B', fontWeight: 600 }}>
-              Showing {filtered.length === 0 ? 0 : (safePage - 1) * itemsPerPage + 1}–{Math.min(safePage * itemsPerPage, filtered.length)} of {filtered.length} patients
+          <div style={{ padding: '14px 20px', borderTop: '1px solid #E2E8F0', borderRadius: '0 0 16px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#FAFAFA' }}>
+            <div style={{ fontSize: '.8125rem', color: '#475569', fontWeight: 600 }}>
+              {filtered.length === 0 ? '0 of 0' : `${(safePage - 1) * itemsPerPage + 1} to ${Math.min(safePage * itemsPerPage, filtered.length)} of ${filtered.length}`}
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <button
                 type="button"
-                className="btn btn-outline btn-sm"
                 disabled={safePage <= 1}
-                onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
-                style={{ opacity: safePage <= 1 ? 0.4 : 1, padding: '5px 12px', fontSize: '.75rem', fontWeight: 600 }}
+                onClick={() => setCurrentPage(1)}
+                title="First Page"
+                aria-label="First Page"
+                style={{
+                  width: 28, height: 28, borderRadius: 6, border: 'none', background: 'transparent',
+                  color: safePage <= 1 ? '#CBD5E1' : '#475569',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: safePage <= 1 ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={e => { if (safePage > 1) { e.currentTarget.style.background = '#F1F5F9'; e.currentTarget.style.color = '#3B50DF'; } }}
+                onMouseLeave={e => { if (safePage > 1) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#475569'; } }}
               >
-                ← Previous
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="5" x2="6" y2="19"/><polyline points="18 19 11 12 18 5"/></svg>
               </button>
 
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map(pg => (
-                <button
-                  key={pg}
-                  type="button"
-                  onClick={() => setCurrentPage(pg)}
-                  style={{
-                    width: 28, height: 28, borderRadius: '.375rem', border: '1px solid #CBD5E1',
-                    background: safePage === pg ? '#3B50DF' : '#FFFFFF',
-                    color: safePage === pg ? '#FFFFFF' : '#334155',
-                    fontSize: '.75rem', fontWeight: safePage === pg ? 800 : 600,
-                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                  }}
-                >
-                  {pg}
-                </button>
-              ))}
+              <button
+                type="button"
+                disabled={safePage <= 1}
+                onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+                title="Previous Page"
+                aria-label="Previous Page"
+                style={{
+                  width: 28, height: 28, borderRadius: 6, border: 'none', background: 'transparent',
+                  color: safePage <= 1 ? '#CBD5E1' : '#475569',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: safePage <= 1 ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={e => { if (safePage > 1) { e.currentTarget.style.background = '#F1F5F9'; e.currentTarget.style.color = '#3B50DF'; } }}
+                onMouseLeave={e => { if (safePage > 1) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#475569'; } }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+              </button>
+
+              <span style={{ fontSize: '.8125rem', fontWeight: 600, color: '#334155', padding: '0 8px', whiteSpace: 'nowrap' }}>
+                Page {safePage} of {totalPages}
+              </span>
 
               <button
                 type="button"
-                className="btn btn-outline btn-sm"
                 disabled={safePage >= totalPages}
                 onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
-                style={{ opacity: safePage >= totalPages ? 0.4 : 1, padding: '5px 12px', fontSize: '.75rem', fontWeight: 600 }}
+                title="Next Page"
+                aria-label="Next Page"
+                style={{
+                  width: 28, height: 28, borderRadius: 6, border: 'none', background: 'transparent',
+                  color: safePage >= totalPages ? '#CBD5E1' : '#475569',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: safePage >= totalPages ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={e => { if (safePage < totalPages) { e.currentTarget.style.background = '#F1F5F9'; e.currentTarget.style.color = '#3B50DF'; } }}
+                onMouseLeave={e => { if (safePage < totalPages) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#475569'; } }}
               >
-                Next →
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+
+              <button
+                type="button"
+                disabled={safePage >= totalPages}
+                onClick={() => setCurrentPage(totalPages)}
+                title="Last Page"
+                aria-label="Last Page"
+                style={{
+                  width: 28, height: 28, borderRadius: 6, border: 'none', background: 'transparent',
+                  color: safePage >= totalPages ? '#CBD5E1' : '#475569',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: safePage >= totalPages ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={e => { if (safePage < totalPages) { e.currentTarget.style.background = '#F1F5F9'; e.currentTarget.style.color = '#3B50DF'; } }}
+                onMouseLeave={e => { if (safePage < totalPages) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#475569'; } }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 19 13 12 6 5"/><line x1="18" y1="5" x2="18" y2="19"/></svg>
               </button>
             </div>
           </div>
@@ -924,14 +1036,14 @@ export default function VaccinationTrackerPage({ selectedPatientId }) {
                       {
                         key: 'Selected Service',
                         val: p.service || 'PEP',
-                        badge: 'bg-indigo-50 text-[#3B50DF] border border-indigo-200/90 px-2.5 py-0.5 rounded-full font-extrabold text-[11px]'
+                        badge: 'bg-slate-100 text-slate-700 border border-slate-200/90 px-2.5 py-0.5 rounded-full font-bold text-[11px]'
                       },
                       ...((!p.service || p.service === 'PEP' || p.service === 'PrEP') ? [
-                        { key: 'Animal Type', val: p.animal || '—', badge: 'bg-emerald-50 text-emerald-700 border border-emerald-200/90 px-2.5 py-0.5 rounded-full font-extrabold text-[11px]' },
+                        { key: 'Animal Type', val: p.animal || '—', badge: 'bg-slate-100 text-slate-700 border border-slate-200/90 px-2.5 py-0.5 rounded-full font-bold text-[11px]' },
                         {
                           key: 'Exposure Category',
                           val: p.cat ? `Cat ${String(p.cat).replace('Category ', '').trim()}` : '—',
-                          badge: 'bg-amber-50 text-amber-700 border border-amber-200/90 px-2.5 py-0.5 rounded-full font-extrabold text-[11px]'
+                          badge: 'bg-slate-100 text-slate-700 border border-slate-200/90 px-2.5 py-0.5 rounded-full font-bold text-[11px]'
                         },
                         { key: 'Date of Exposure', val: p.date || '—', color: 'text-slate-700 font-bold' },
                       ] : [

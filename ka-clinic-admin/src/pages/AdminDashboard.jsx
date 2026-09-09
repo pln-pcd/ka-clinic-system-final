@@ -3,7 +3,7 @@ import { signOut } from 'firebase/auth';
 import { collection, doc, onSnapshot, orderBy, query, setDoc, where } from 'firebase/firestore';
 import {
   Activity, AlertCircle, AlertOctagon, AlertTriangle,
-  Bell, Calendar, Check, CheckCircle, CheckCircle2, Clock,
+  Bell, Calendar, Check, CheckCheck, CheckCircle, CheckCircle2, Clock,
   ChevronLeft, ChevronRight as ChevronRightIcon,
   Edit2, Eye, Filter, Home, Info, LogOut, MapPin as MapIcon, Menu,
   MessageSquare, Moon, MoreVertical, Package, Phone, Plus,
@@ -21,6 +21,7 @@ import PatientRecordsPage from './patients';
 import SettingsPage from './settings';
 import { useAuth } from '../lib/useAuth';
 import VaccinationTrackerPage, { buildDoses, fmtDate, getName } from './vaccination';
+import { getTodayDateString } from '../lib/dates';
 
 // ── Greeting helpers ─────────────────────────────────────────────────────────
 function getGreeting(hour) {
@@ -170,38 +171,16 @@ function WelcomeBanner({ stats, onNavigate, adminName, tagline }) {
 
 // ── Page Transition Wrapper ───────────────────────────────────────────────────
 function PageTransition({ children, pageKey }) {
-  const [visible, setVisible]     = useState(false);
-  const [displayKey, setDisplayKey] = useState(pageKey);
-  const [content, setContent]     = useState(children);
-
-  useEffect(() => {
-    if (pageKey !== displayKey) {
-      setVisible(false);
-      const t = setTimeout(() => {
-        setDisplayKey(pageKey);
-        setContent(children);
-        setVisible(true);
-      }, 170);
-      return () => clearTimeout(t);
-    } else {
-      setVisible(true);
-    }
-  }, [pageKey]);
-
-  useEffect(() => {
-    if (pageKey === displayKey) setContent(children);
-  }, [children]);
-
   return (
-    <div style={{
-      opacity:    visible ? 1 : 0,
-      transform:  visible ? 'none' : 'translateY(14px) scale(0.993)',
-      filter:     visible ? 'none' : 'blur(2px)',
-      transition: 'opacity 0.32s cubic-bezier(0.22,1,0.36,1), transform 0.32s cubic-bezier(0.22,1,0.36,1), filter 0.28s ease',
-      height: '100%',
-      backgroundColor: '#F0F4FA',
-    }}>
-      {content}
+    <div
+      key={pageKey}
+      style={{
+        height: '100%',
+        backgroundColor: '#F0F4FA',
+        animation: 'kna-fade-in 0.16s cubic-bezier(0.16, 1, 0.3, 1) both',
+      }}
+    >
+      {children}
     </div>
   );
 }
@@ -245,7 +224,17 @@ export default function AdminDashboard({ onLogout }) {
 
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
-  const [readNotifIds, setReadNotifIds] = useState(new Set());
+  // Read state is durable the same way the dismissed set is: localStorage for
+  // first paint, admins/{uid} for the copy that survives a new browser or a
+  // fresh Vercel deployment hostname.
+  const [readNotifIds, setReadNotifIds] = useState(() => {
+    try {
+      const saved = localStorage.getItem('kna_read_notifications');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
   // Seeded from localStorage so the list is correct on first paint, then
   // reconciled against Firestore below. localStorage alone is per-origin, so
   // a dismissal on localhost never reached the deployed site — and Vercel
@@ -383,7 +372,7 @@ export default function AdminDashboard({ onLogout }) {
 
     // Search Incidents
     incidentList.forEach(inc => {
-      const loc = inc.location || inc.barangay || '';
+      const loc = inc.address || inc.location || inc.barangay || '';
       const victim = inc.victimName || inc.patient || '';
       if (loc.toLowerCase().includes(q) || victim.toLowerCase().includes(q)) {
         results.push({
@@ -435,12 +424,35 @@ export default function AdminDashboard({ onLogout }) {
       }).length;
 
       setStats(p => ({ ...p, patients: snap.size, patientsThisWeek: registeredThisWeek }));
+
+      // Real-time overdue patient notifications
+      const overdueNotifs = docs
+        .map(p => {
+          if (p.isArchived || p.status === 'completed') return null;
+          const missed = buildDoses(p).filter(d => d.status === 'miss');
+          if (missed.length === 0) return null;
+          const earliest = missed.reduce((a, b) => (a.date < b.date ? a : b));
+          const daysOverdue = Math.max(1, Math.floor((Date.now() - new Date(earliest.date).getTime()) / 86400000));
+          return {
+            id: `overdue-${p.id}`,
+            patientId: p.firestoreId || p.id || p.name,
+            type: 'critical',
+            title: 'Patient Overdue for Vaccination',
+            message: `${getName(p)} (${p.id || 'MRN'}) is ${daysOverdue}d overdue for ${earliest.label}.`,
+            time: `${daysOverdue}d overdue`,
+            icon: 'overdue'
+          };
+        })
+        .filter(Boolean)
+        .slice(0, 10);
+
+      setNotifications(prev => [...overdueNotifs, ...prev.filter(n => !n.id.startsWith('overdue-'))]);
     });
   }, []);
 
   // Real-Time Listener on /appointments
   useEffect(() => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getTodayDateString();
     const q = query(collection(db, 'appointments'), orderBy('createdAt', 'desc'));
     return onSnapshot(q, snap => {
       const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -546,13 +558,23 @@ export default function AdminDashboard({ onLogout }) {
     if (!uid) return;
     const unsub = onSnapshot(doc(db, 'admins', uid), snap => {
       const saved = snap.data()?.dismissedNotifications;
-      if (!Array.isArray(saved)) return;
-      setDismissedNotifIds(prev => {
-        const next = new Set([...prev, ...saved]);
-        if (next.size === prev.size) return prev;
-        try { localStorage.setItem('kna_dismissed_notifications', JSON.stringify([...next])); } catch (e) {}
-        return next;
-      });
+      if (Array.isArray(saved)) {
+        setDismissedNotifIds(prev => {
+          const next = new Set([...prev, ...saved]);
+          if (next.size === prev.size) return prev;
+          try { localStorage.setItem('kna_dismissed_notifications', JSON.stringify([...next])); } catch (e) {}
+          return next;
+        });
+      }
+      const savedRead = snap.data()?.readNotifications;
+      if (Array.isArray(savedRead)) {
+        setReadNotifIds(prev => {
+          const next = new Set([...prev, ...savedRead]);
+          if (next.size === prev.size) return prev;
+          try { localStorage.setItem('kna_read_notifications', JSON.stringify([...next])); } catch (e) {}
+          return next;
+        });
+      }
     }, err => console.error('Dismissed notifications listener failed:', err));
     return () => unsub();
   }, []);
@@ -570,11 +592,41 @@ export default function AdminDashboard({ onLogout }) {
     if (n.id.startsWith('msg-')) {
       return notifConfig.newMessage !== false;
     }
+    if (n.id.startsWith('overdue-')) {
+      return notifConfig.overdueVaccination !== false;
+    }
     return true;
   });
 
   const unreadNotifCount = filteredNotifications.filter(n => !readNotifIds.has(n.id)).length;
-  const markAllRead  = () => setReadNotifIds(new Set(filteredNotifications.map(n => n.id)));
+
+  const persistRead = (next) => {
+    try { localStorage.setItem('kna_read_notifications', JSON.stringify([...next])); } catch (e) {}
+    const uid = auth?.currentUser?.uid;
+    if (!uid) return;
+    setDoc(doc(db, 'admins', uid), { readNotifications: [...next] }, { merge: true })
+      .catch(err => console.error('Failed to save read notifications:', err));
+  };
+
+  // Explicit action now — opening the bell no longer silently marks everything
+  // read, so the unread count still means something after a glance.
+  const markAllRead = () => {
+    setReadNotifIds(prev => {
+      const next = new Set([...prev, ...filteredNotifications.map(n => n.id)]);
+      persistRead(next);
+      return next;
+    });
+  };
+
+  const markNotifRead = (id) => {
+    setReadNotifIds(prev => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      persistRead(next);
+      return next;
+    });
+  };
 
   // Writes the dismissed set to both the local cache and admins/{uid}, so it
   // survives logout, a different browser, and a fresh Vercel deployment URL.
@@ -610,6 +662,9 @@ export default function AdminDashboard({ onLogout }) {
       setActivePage('inventory');
     } else if (n.id.startsWith('msg-')) {
       setActivePage('messages');
+    } else if (n.id.startsWith('overdue-')) {
+      if (n.patientId) setSelectedOverduePatientId(n.patientId);
+      setActivePage('vaccination');
     }
     setNotifOpen(false);
   };
@@ -654,7 +709,7 @@ export default function AdminDashboard({ onLogout }) {
           onClick={() => setSelectedCalendarDay(isSelected ? null : day)}
           className="relative p-2 text-center rounded-xl text-xs font-bold cursor-pointer select-none transition-all"
           style={{
-            background: isSelected ? '#08173d' : isToday ? '#1D4ED8' : 'transparent',
+            background: isSelected ? '#06122c' : isToday ? '#1D4ED8' : 'transparent',
             color: isSelected || isToday ? '#ffffff' : '#334155',
             boxShadow: isToday ? '0 2px 8px rgba(29,78,216,0.35)' : 'none',
           }}
@@ -789,12 +844,12 @@ export default function AdminDashboard({ onLogout }) {
         </div>
       )}
 
-      {/* ── SIDEBAR (Deep Rich Navy Blue Theme with SVG Curved Notch Cutout Active Tabs) ── */}
-      <div className="fixed h-screen z-40 flex flex-col justify-between bg-[#08173d] text-white transition-all duration-300"
+      {/* ── SIDEBAR (Deep Rich Dark Navy Blue Theme with SVG Curved Notch Cutout Active Tabs) ── */}
+      <div className="fixed h-screen z-40 flex flex-col justify-between bg-[#06122c] text-white transition-all duration-300"
         style={{ width: sidebarOpen ? 256 : 76 }}>
         <div className="flex flex-col min-h-0 flex-1">
           {/* Logo Header — White background logo beside clinic name */}
-          <div className={`py-5 border-b border-blue-950/60 flex items-center min-h-[72px] transition-all duration-300 ${
+          <div className={`py-5 border-b border-white/10 flex items-center min-h-[72px] transition-all duration-300 ${
             sidebarOpen ? 'px-4 justify-between' : 'pl-3 pr-0 justify-start'
           }`}>
             {sidebarOpen && (
@@ -813,11 +868,11 @@ export default function AdminDashboard({ onLogout }) {
               </div>
             )}
             <button onClick={() => setSidebarOpen(!sidebarOpen)}
-              className={`flex items-center cursor-pointer transition-colors hover:bg-blue-600/20 text-blue-200/80 hover:text-white ${
+              className={`flex items-center cursor-pointer transition-colors hover:bg-white/10 text-white ${
                 sidebarOpen ? 'p-2 rounded-xl flex-shrink-0' : 'pl-3.5 pr-3 py-2.5 rounded-xl flex-shrink-0'
               }`}
               title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}>
-              <Menu size={sidebarOpen ? 20 : 19} strokeWidth={sidebarOpen ? 2 : 2.2} className="flex-shrink-0" />
+              <Menu size={sidebarOpen ? 20 : 19} strokeWidth={sidebarOpen ? 2 : 2.2} className="flex-shrink-0 text-white" />
             </button>
           </div>
 
@@ -836,8 +891,8 @@ export default function AdminDashboard({ onLogout }) {
                     <button key={item.id} onClick={() => { setSelectedOverduePatientId(null); setActivePage(item.id); }}
                       className={`group w-full flex items-center gap-3 relative cursor-pointer text-sm leading-snug transition-colors duration-150 ${
                         isActive
-                          ? 'bg-[#F0F4FA] text-[#08173d] font-extrabold rounded-l-2xl pl-3.5 pr-3 py-3 relative z-10 -mr-1 w-[calc(100%+4px)]'
-                          : 'text-blue-100/85 font-medium hover:bg-blue-600/15 hover:text-white pl-3.5 pr-3 py-2.5 rounded-xl mr-4'
+                          ? 'bg-[#F0F4FA] text-black font-extrabold rounded-l-2xl pl-3.5 pr-3 py-3 relative z-10 -mr-1 w-[calc(100%+4px)]'
+                          : 'text-white font-medium hover:bg-white/10 hover:text-white pl-3.5 pr-3 py-2.5 rounded-xl mr-4'
                       }`}
                       title={!sidebarOpen ? item.label : ''}>
 
@@ -853,8 +908,8 @@ export default function AdminDashboard({ onLogout }) {
                         </>
                       )}
 
-                      <item.icon size={19} strokeWidth={2.2} className={`flex-shrink-0 transition-colors relative z-10 ${isActive ? 'text-[#08173d]' : 'text-blue-300/70 group-hover:text-white'}`}/>
-                      <span className="relative z-10" style={{ opacity: sidebarOpen ? 1 : 0, overflow: 'hidden', whiteSpace: 'nowrap', transition: 'opacity 0.18s', flex: 1, textAlign: 'left' }}>
+                      <item.icon size={19} strokeWidth={2.2} className={`flex-shrink-0 transition-colors relative z-10 ${isActive ? 'text-black' : 'text-white'}`}/>
+                      <span className={`relative z-10 ${isActive ? 'text-black font-extrabold' : 'text-white'}`} style={{ opacity: sidebarOpen ? 1 : 0, overflow: 'hidden', whiteSpace: 'nowrap', transition: 'opacity 0.18s', flex: 1, textAlign: 'left' }}>
                         {item.label}
                       </span>
                       {item.badge > 0 && (
@@ -881,8 +936,8 @@ export default function AdminDashboard({ onLogout }) {
                     <button key={item.id} onClick={() => { setSelectedOverduePatientId(null); setActivePage(item.id); }}
                       className={`group w-full flex items-center gap-3 relative cursor-pointer text-sm leading-snug transition-colors duration-150 ${
                         isActive
-                          ? 'bg-[#F0F4FA] text-[#08173d] font-extrabold rounded-l-2xl pl-3.5 pr-3 py-3 relative z-10 -mr-1 w-[calc(100%+4px)]'
-                          : 'text-blue-100/85 font-medium hover:bg-blue-600/15 hover:text-white pl-3.5 pr-3 py-2.5 rounded-xl mr-4'
+                          ? 'bg-[#F0F4FA] text-black font-extrabold rounded-l-2xl pl-3.5 pr-3 py-3 relative z-10 -mr-1 w-[calc(100%+4px)]'
+                          : 'text-white font-medium hover:bg-white/10 hover:text-white pl-3.5 pr-3 py-2.5 rounded-xl mr-4'
                       }`}
                       title={!sidebarOpen ? item.label : ''}>
 
@@ -898,8 +953,8 @@ export default function AdminDashboard({ onLogout }) {
                         </>
                       )}
 
-                      <item.icon size={19} strokeWidth={2.2} className={`flex-shrink-0 transition-colors relative z-10 ${isActive ? 'text-[#08173d]' : 'text-blue-300/70 group-hover:text-white'}`}/>
-                      <span className="relative z-10" style={{ opacity: sidebarOpen ? 1 : 0, overflow: 'hidden', whiteSpace: 'nowrap', transition: 'opacity 0.18s', flex: 1, textAlign: 'left' }}>
+                      <item.icon size={19} strokeWidth={2.2} className={`flex-shrink-0 transition-colors relative z-10 ${isActive ? 'text-black' : 'text-white'}`}/>
+                      <span className={`relative z-10 ${isActive ? 'text-black font-extrabold' : 'text-white'}`} style={{ opacity: sidebarOpen ? 1 : 0, overflow: 'hidden', whiteSpace: 'nowrap', transition: 'opacity 0.18s', flex: 1, textAlign: 'left' }}>
                         {item.label}
                       </span>
                     </button>
@@ -911,10 +966,10 @@ export default function AdminDashboard({ onLogout }) {
         </div>
 
         {/* Logout Footer */}
-        <div className="p-3 border-t border-blue-950/60">
-          <button onClick={handleLogout} className="w-full flex items-center gap-3 pl-3.5 pr-3 py-2.5 rounded-xl transition-colors cursor-pointer text-sm font-medium text-blue-200/80 hover:bg-blue-600/20 hover:text-rose-300"
+        <div className="p-3 border-t border-white/10">
+          <button onClick={handleLogout} className="w-full flex items-center gap-3 pl-3.5 pr-3 py-2.5 rounded-xl transition-colors cursor-pointer text-sm font-medium text-white hover:bg-white/10 hover:text-rose-300"
           title={!sidebarOpen ? 'Sign Out' : ''}>
-            <LogOut size={19} strokeWidth={2} className="flex-shrink-0" />
+            <LogOut size={19} strokeWidth={2} className="flex-shrink-0 text-white" />
             <span style={{ opacity: sidebarOpen ? 1 : 0, overflow: 'hidden', whiteSpace: 'nowrap', transition: 'opacity 0.18s' }}>
               Sign Out
             </span>
@@ -1045,7 +1100,7 @@ export default function AdminDashboard({ onLogout }) {
 
             {/* Notification Bell */}
             <div className="relative" ref={notifRef}>
-              <button onClick={() => { setNotifOpen(o => !o); if (!notifOpen) markAllRead(); }}
+              <button onClick={() => setNotifOpen(o => !o)}
                 className="w-11 h-11 flex items-center justify-center rounded-full border border-slate-200 bg-slate-50 hover:bg-blue-50 hover:border-blue-200 hover:text-[#1D4ED8] text-slate-700 shadow-2xs relative cursor-pointer transition-all">
                 <Bell size={19}/>
                 {unreadNotifCount > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-[20px] h-[20px] bg-rose-500 text-white text-[11px] font-bold rounded-full flex items-center justify-center px-1" style={{ animation: 'kna-badge-pop 0.3s cubic-bezier(0.22,1,0.36,1) both' }}>{unreadNotifCount > 9 ? '9+' : unreadNotifCount}</span>}
@@ -1063,9 +1118,12 @@ export default function AdminDashboard({ onLogout }) {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={markAllRead}
-                        className="px-3.5 py-1 rounded-xl border border-slate-200 bg-slate-50 hover:bg-blue-50 text-xs font-semibold text-[#0a1d47] shadow-2xs transition-all cursor-pointer"
+                        disabled={unreadNotifCount === 0}
+                        title={unreadNotifCount === 0 ? 'Nothing unread' : `Mark ${unreadNotifCount} notification${unreadNotifCount === 1 ? '' : 's'} as read`}
+                        className="px-3 py-1 rounded-xl border border-slate-200 bg-slate-50 hover:bg-blue-50 hover:border-blue-200 text-xs font-semibold text-[#0a1d47] shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-45 disabled:cursor-default disabled:hover:bg-slate-50 disabled:hover:border-slate-200"
                       >
-                        See All
+                        <CheckCheck size={13} strokeWidth={2.4} />
+                        Mark all read
                       </button>
                     </div>
                   </div>
@@ -1101,12 +1159,15 @@ export default function AdminDashboard({ onLogout }) {
                     ) : (
                       filteredNotifications.map((n, idx) => {
                         const isUnread = !readNotifIds.has(n.id);
+                        const isOverdue = n.id.startsWith('overdue-');
                         const IconComponent = n.id.startsWith('inv-')
                           ? Package
                           : n.id.startsWith('apt-')
                           ? Calendar
                           : n.id.startsWith('msg-')
                           ? MessageSquare
+                          : isOverdue
+                          ? AlertTriangle
                           : n.id.startsWith('inc-')
                           ? AlertCircle
                           : Wrench;
@@ -1114,18 +1175,22 @@ export default function AdminDashboard({ onLogout }) {
                         return (
                           <div
                             key={n.id}
-                            onClick={() => handleNotifClick(n)}
+                            onClick={() => { markNotifRead(n.id); handleNotifClick(n); }}
                             className="py-3 px-1 flex items-start gap-3 hover:bg-blue-50/40 transition-all cursor-pointer group relative"
                             style={{ animation: `kna-notif-item 0.18s ease-out ${idx * 0.03}s both` }}
                           >
-                            <div className="w-10 h-10 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-[#1D4ED8] shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
+                            <div className={`w-10 h-10 rounded-full border flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform ${
+                              isOverdue
+                                ? 'bg-rose-50 border-rose-200 text-rose-600'
+                                : 'bg-blue-50 border-blue-100 text-[#1D4ED8]'
+                            }`}>
                               <IconComponent size={17} strokeWidth={2} />
                             </div>
 
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center justify-between gap-2">
                                 <div className="flex items-center gap-1.5 min-w-0">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0 inline-block" />
+                                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 inline-block ${isUnread ? 'bg-blue-500' : 'bg-slate-300'}`} />
                                   <p className={`text-xs ${isUnread ? 'font-bold text-[#0a1d47]' : 'font-semibold text-slate-700'} truncate`}>
                                     {n.title}
                                   </p>
@@ -1509,7 +1574,14 @@ export default function AdminDashboard({ onLogout }) {
                 />
               </div>
             )}
-            {activePage === 'vaccination'  && <div className="h-full overflow-y-auto"><VaccinationTrackerPage selectedPatientId={selectedOverduePatientId}/></div>}
+            {activePage === 'vaccination'  && (
+              <div className="h-full overflow-y-auto">
+                <VaccinationTrackerPage
+                  selectedPatientId={selectedOverduePatientId}
+                  initialPatients={allPatients}
+                />
+              </div>
+            )}
             {activePage === 'inventory'    && <div className="h-full overflow-y-auto"><VaccineInventoryPage/></div>}
             {activePage === 'incidents'    && <div className="h-full overflow-y-auto"><IncidentMapPage/></div>}
             {activePage === 'messages'     && <div className="h-full overflow-y-auto"><MessagesPage/></div>}
@@ -1523,6 +1595,10 @@ export default function AdminDashboard({ onLogout }) {
       <style>{`
         *, html, body, button, input, select, textarea, span, div, p, a, h1, h2, h3, h4, h5, h6, nav, header, aside, section, main {
           font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+        }
+        @keyframes kna-fade-in {
+          from{opacity:0.85;}
+          to  {opacity:1;}
         }
         @keyframes kna-banner-in {
           from{opacity:0;transform:translateY(-16px) scale(0.98);}

@@ -2,7 +2,9 @@
 import { addDoc, collection, doc, limit, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
 import { AlertCircle, Check, Download, Edit3, FileText, Minus, Package, Plus, Search, X, XCircle } from 'lucide-react';
 import { useEffect, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { db } from '../lib/firebase';
+import { today, getTodayDateString } from '../lib/dates';
 
 /* ─────────────────────────── CSS ─────────────────────────── */
 const globalCSS = `
@@ -115,8 +117,6 @@ const globalCSS = `
 /* ─────────────────────────── HELPERS ─────────────────────────── */
 const liveStatus = item => (parseInt(item.stock) || 0) <= 0 ? 'out-of-stock' : 'in-stock';
 
-const today = () => new Date().toISOString().slice(0, 10);
-
 const fmtUnit = (u) => u ? u.charAt(0).toUpperCase() + u.slice(1) : '';
 
 const INVENTORY_HEADERS = ['Item Name', 'Category', 'Stock', 'Unit', 'Expiry', 'Status'];
@@ -153,11 +153,11 @@ const buildInventoryReportHtml = (rows, periodLabel) => {
         <path d="M12 6v12M6 12h12"/>
       </svg>
     </div>
-    <div style="text-align:center;flex:1;padding:0 16px;">
-      <div style="font-family:'Times New Roman',Georgia,serif;font-size:10px;font-weight:600;color:#475569;letter-spacing:1.2px;text-transform:uppercase;">Republic of the Philippines</div>
-      <div style="font-family:'Times New Roman',Georgia,serif;font-size:18px;font-weight:800;color:#1E293B;margin:2px 0 1px;letter-spacing:-0.01em;">K&amp;A Anti-Rabies Vaccine Clinic</div>
-      <div style="font-family:'Segoe UI',sans-serif;font-size:10.5px;font-weight:700;color:#0F172A;text-transform:uppercase;letter-spacing:0.5px;">Animal Bite Treatment Center</div>
-      <div style="font-size:9px;color:#64748B;margin-top:3px;font-family:'Segoe UI',sans-serif;">Polangui, Albay &bull; Contact: (052) 486-1220 &bull; Email: knaclinic.ph@gmail.com</div>
+    <div style="text-align:center;flex:1;padding:0 16px;font-family:'Plus Jakarta Sans','Inter',-apple-system,sans-serif;">
+      <div style="font-size:10px;font-weight:700;color:#475569;letter-spacing:1.2px;text-transform:uppercase;">Republic of the Philippines</div>
+      <div style="font-size:18px;font-weight:800;color:#1E293B;margin:2px 0 1px;letter-spacing:-0.01em;">K&amp;A Anti-Rabies Vaccine Clinic</div>
+      <div style="font-size:10.5px;font-weight:700;color:#0F172A;text-transform:uppercase;letter-spacing:0.5px;">Animal Bite Treatment Center</div>
+      <div style="font-size:9px;color:#64748B;margin-top:3px;">Polangui, Albay &bull; Contact: (052) 486-1220 &bull; Email: knaclinic.ph@gmail.com</div>
     </div>
     <div style="width:58px;height:58px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:#0F172A;border:1px solid #0F172A;flex-shrink:0;">
       <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -233,7 +233,6 @@ const exportPDF = (rows, periodLabel) => {
 export default function VaccineInventoryPage() {
   const [inventory, setInventory] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('All');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportPeriod, setExportPeriod] = useState('all');
@@ -256,32 +255,19 @@ export default function VaccineInventoryPage() {
   const [useStockQty, setUseStockQty] = useState(1);
 
   useEffect(() => {
-    const q = query(collection(db, 'inventory'), orderBy('name', 'asc'), limit(20));
+    const q = query(collection(db, 'inventory'), orderBy('name', 'asc'));
     return onSnapshot(q, snap => {
       setInventory(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
   }, []);
-
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearchQuery(searchQuery), 300);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const [catMenuOpen, setCatMenuOpen] = useState(false);
-  const catMenuRef = useRef(null);
-  useEffect(() => {
-    const handler = e => {
-      if (catMenuRef.current && !catMenuRef.current.contains(e.target)) setCatMenuOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
   const filtered = inventory.filter(item => {
-    const matchesSearch = item.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase());
-    const matchesCategory = categoryFilter === 'All' || item.category === categoryFilter;
-    return matchesSearch && matchesCategory;
+    return (item.name || '').toLowerCase().includes(debouncedSearchQuery.toLowerCase());
   });
 
   /* ── Add Item ── */
@@ -426,24 +412,21 @@ export default function VaccineInventoryPage() {
       {/* Stats Row */}
       {(() => {
         const stats = [
-          { label: 'Total Items', value: inventory.length, sub: 'Active inventory items', icon: Package, color: '#3B50DF', tint: '#EEF2FF', border: '#E0E7FF' },
-          { label: 'Low Stock', value: inventory.filter(i => i.stock < 10 && i.stock > 0).length, sub: 'Reorder recommended', icon: AlertCircle, color: '#D97706', tint: '#FEF3C7', border: '#FDE68A' },
-          { label: 'Out of Stock', value: inventory.filter(i => i.stock <= 0).length, sub: 'Immediate restocking required', icon: XCircle, color: '#DC2626', tint: '#FEF2F2', border: '#FECACA' },
+          { label: 'Total Items', value: inventory.length, sub: 'Active inventory items', icon: Package },
+          { label: 'Low Stock', value: inventory.filter(i => i.stock < 10 && i.stock > 0).length, sub: 'Reorder recommended', icon: AlertCircle },
+          { label: 'Out of Stock', value: inventory.filter(i => i.stock <= 0).length, sub: 'Immediate restocking required', icon: XCircle },
         ];
         return (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
             {stats.map((s, i) => (
-              <div key={i} className="bg-white border border-slate-200/80 rounded-2xl p-4 sm:p-5 flex items-center gap-4 shadow-2xs hover:shadow-xs transition-all">
-                <div
-                  className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 shadow-2xs"
-                  style={{ background: s.tint, border: `1px solid ${s.border}`, color: s.color }}
-                >
-                  <s.icon size={20} strokeWidth={2.2} />
+              <div key={i} className="bg-white border border-slate-200/80 rounded-xl py-2.5 px-4 sm:py-3 sm:px-4.5 flex items-center gap-3.5 shadow-2xs hover:shadow-xs transition-all">
+                <div className="w-8 h-8 rounded-lg bg-slate-100 border border-slate-200 text-slate-500 flex items-center justify-center shrink-0">
+                  <s.icon size={16} strokeWidth={2} />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-2xl font-extrabold text-slate-900 leading-none tabular-nums">{s.value}</p>
-                  <p className="text-xs font-bold text-slate-700 mt-1.5 truncate">{s.label}</p>
-                  <p className="text-[11px] font-medium text-slate-400 mt-0.5 truncate">{s.sub}</p>
+                  <p className="text-xl font-bold text-slate-900 leading-none tabular-nums">{s.value}</p>
+                  <p className="text-xs font-semibold text-slate-700 mt-1 truncate">{s.label}</p>
+                  <p className="text-[11px] font-normal text-slate-400 mt-0.5 truncate">{s.sub}</p>
                 </div>
               </div>
             ))}
@@ -471,41 +454,8 @@ export default function VaccineInventoryPage() {
             </div>
           </div>
 
-          {/* Category Filter & Action Buttons */}
+          {/* Action Buttons */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            
-            {/* Custom Category Dropdown (styled identically to Patients / Vaccination Filter) */}
-            <div ref={catMenuRef} style={{ position: 'relative' }}>
-              <button
-                type="button"
-                onClick={() => setCatMenuOpen(o => !o)}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', fontSize: '.78125rem', fontWeight: 600, border: '1.5px solid #CBD5E1', borderRadius: '.5rem', background: '#FFFFFF', color: '#0F172A', cursor: 'pointer' }}
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>
-                {categoryFilter === 'All' ? 'All Categories' : categoryFilter}
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
-              </button>
-
-              {catMenuOpen && (
-                <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, minWidth: 180, background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', padding: 6, zIndex: 99 }}>
-                  {[
-                    { key: 'All', label: 'All Categories' },
-                    { key: 'Vaccine', label: 'Vaccines' },
-                    { key: 'Medicine', label: 'Medicines' },
-                    { key: 'Supply', label: 'Supplies' },
-                  ].map(opt => (
-                    <button key={opt.key} type="button"
-                      onClick={() => { setCategoryFilter(opt.key); setCatMenuOpen(false); }}
-                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', textAlign: 'left', padding: '7px 8px', borderRadius: 6, border: 'none', background: 'transparent', color: '#334155', fontSize: '.78125rem', fontWeight: categoryFilter === opt.key ? 700 : 500, cursor: 'pointer' }}
-                    >
-                      {opt.label}
-                      {categoryFilter === opt.key && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
             <button
               type="button"
               onClick={() => setShowExportModal(true)}
@@ -599,40 +549,40 @@ export default function VaccineInventoryPage() {
         </div>
       </div>
 
-      {/* ── Add Item Modal (Bigger 580px card + Dark Navy Header Banner + Simple X Icon) ── */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }} onClick={() => { setShowAddModal(false); setFormData({ name: '', category: 'Vaccine', unit: 'Vials', stock: '', minStock: '10', expiry: '' }); }}>
-          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-slate-200" onClick={e => e.stopPropagation()}>
-            {/* Card head — same light header as the Add Report pop-up */}
-            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
+      {/* ── Add Item Modal (Comfortable 580px card + refined typography, Portaled to body) ── */}
+      {showAddModal && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 transition-all" style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }} onClick={() => { setShowAddModal(false); setFormData({ name: '', category: 'Vaccine', unit: 'Vials', stock: '', minStock: '10', expiry: '' }); }}>
+          <div className="bg-white rounded-3xl w-full max-w-[580px] overflow-hidden shadow-2xl border border-slate-200" onClick={e => e.stopPropagation()}>
+            {/* Card head */}
+            <div className="px-7 py-5 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-bold text-slate-900">Add Inventory Item</h3>
-                <p className="text-[11px] text-slate-400 font-normal mt-0.5">Fill in the details for the new vaccine or supply item</p>
+                <h3 className="text-[17px] font-bold text-slate-900">Add Inventory Item</h3>
+                <p className="text-[13px] text-slate-500 font-normal mt-0.5">Fill in the details for the new vaccine or supply item</p>
               </div>
-              <button onClick={() => { setShowAddModal(false); setFormData({ name: '', category: 'Vaccine', unit: 'Vials', stock: '', minStock: '10', expiry: '' }); }} className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer" title="Close" aria-label="Close">
-                <X size={16} />
+              <button onClick={() => { setShowAddModal(false); setFormData({ name: '', category: 'Vaccine', unit: 'Vials', stock: '', minStock: '10', expiry: '' }); }} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl cursor-pointer transition-colors" title="Close" aria-label="Close">
+                <X size={18} />
               </button>
             </div>
 
-            {/* Form Body (Smaller text) */}
-            <div className="p-6 space-y-4">
+            {/* Form Body */}
+            <div className="px-7 py-6 space-y-4.5">
               <div>
-                <label className="text-[11px] font-semibold text-slate-500 block mb-1.5">Item Name <span className="text-red-500">*</span></label>
+                <label className="text-[13px] font-semibold text-slate-600 block mb-1.5">Item Name <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   placeholder="e.g. BCG Vaccine"
                   value={formData.name}
                   onChange={e => setFormData(f => ({ ...f, name: e.target.value }))}
-                  className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:border-[#3B50DF] outline-none transition-all"
+                  className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 focus:border-[#3B50DF] outline-none transition-all"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-500 block mb-1.5">Category</label>
+                  <label className="text-[13px] font-semibold text-slate-600 block mb-1.5">Category</label>
                   <select
                     value={formData.category}
                     onChange={e => setFormData(f => ({ ...f, category: e.target.value }))}
-                    className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:border-[#3B50DF] outline-none"
+                    className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 focus:border-[#3B50DF] outline-none"
                   >
                     <option value="Vaccine">Vaccine</option>
                     <option value="Medicine">Medicine</option>
@@ -640,11 +590,11 @@ export default function VaccineInventoryPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-500 block mb-1.5">Unit</label>
+                  <label className="text-[13px] font-semibold text-slate-600 block mb-1.5">Unit</label>
                   <select
                     value={formData.unit}
                     onChange={e => setFormData(f => ({ ...f, unit: e.target.value }))}
-                    className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:border-[#3B50DF] outline-none"
+                    className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 focus:border-[#3B50DF] outline-none"
                   >
                     <option value="Vials">Vials</option>
                     <option value="Tablets">Tablets</option>
@@ -656,95 +606,96 @@ export default function VaccineInventoryPage() {
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-500 block mb-1.5">Stock <span className="text-red-500">*</span></label>
+                  <label className="text-[13px] font-semibold text-slate-600 block mb-1.5">Stock <span className="text-red-500">*</span></label>
                   <input
                     type="number"
                     min="0"
                     placeholder="0"
                     value={formData.stock}
                     onChange={e => setFormData(f => ({ ...f, stock: e.target.value }))}
-                    className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:border-[#3B50DF] outline-none"
+                    className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 focus:border-[#3B50DF] outline-none"
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-500 block mb-1.5">Min Threshold</label>
+                  <label className="text-[13px] font-semibold text-slate-600 block mb-1.5">Min Threshold</label>
                   <input
                     type="number"
                     min="1"
                     placeholder="10"
                     value={formData.minStock || ''}
                     onChange={e => setFormData(f => ({ ...f, minStock: e.target.value }))}
-                    className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:border-[#3B50DF] outline-none"
+                    className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 focus:border-[#3B50DF] outline-none"
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-500 block mb-1.5">Expiry Date</label>
+                  <label className="text-[13px] font-semibold text-slate-600 block mb-1.5">Expiry Date</label>
                   <input
                     type="date"
                     value={formData.expiry}
                     onChange={e => setFormData(f => ({ ...f, expiry: e.target.value }))}
-                    className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:border-[#3B50DF] outline-none"
+                    className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 focus:border-[#3B50DF] outline-none"
                   />
                 </div>
               </div>
             </div>
 
             {/* Footer */}
-            <div className="px-6 pb-6 pt-2 bg-white flex items-center gap-3">
+            <div className="px-7 pb-7 pt-2 bg-white flex items-center gap-3">
               <button
                 onClick={() => { setShowAddModal(false); setFormData({ name: '', category: 'Vaccine', unit: 'Vials', stock: '', minStock: '10', expiry: '' }); }}
                 disabled={saving}
-                className="flex-1 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs cursor-pointer hover:bg-slate-50 transition-colors disabled:opacity-50"
+                className="flex-1 py-3 rounded-xl border border-slate-300 text-slate-700 font-bold text-sm cursor-pointer hover:bg-slate-50 transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving || !formData.name || !formData.stock}
-                className="flex-1 py-2.5 rounded-xl bg-[#3B50DF] text-white font-bold text-xs cursor-pointer hover:bg-indigo-700 shadow-xs transition-colors flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex-1 py-3 rounded-xl bg-[#3B50DF] text-white font-bold text-sm cursor-pointer hover:bg-indigo-700 shadow-xs transition-colors flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <Plus size={14} /> {saving ? 'Saving Item…' : 'Save Item'}
+                <Plus size={16} /> {saving ? 'Saving Item…' : 'Save Item'}
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* ── Edit Item Modal (Bigger 580px card + Dark Navy Header Banner + Simple X Icon) ── */}
-      {showEditModal && selectedItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }} onClick={() => { setShowEditModal(false); setSelectedItem(null); }}>
-          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-slate-200" onClick={e => e.stopPropagation()}>
-            {/* Card head — same light header as the Add Report pop-up */}
-            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
+      {/* ── Edit Item Modal (Comfortable 580px card + refined typography, Portaled to body) ── */}
+      {showEditModal && selectedItem && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 transition-all" style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }} onClick={() => { setShowEditModal(false); setSelectedItem(null); }}>
+          <div className="bg-white rounded-3xl w-full max-w-[580px] overflow-hidden shadow-2xl border border-slate-200" onClick={e => e.stopPropagation()}>
+            {/* Card head */}
+            <div className="px-7 py-5 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-bold text-slate-900">Edit Inventory Item</h3>
-                <p className="text-[11px] text-slate-400 font-normal mt-0.5">Update details for <span className="font-bold text-slate-600">{selectedItem.name}</span></p>
+                <h3 className="text-[17px] font-bold text-slate-900">Edit Inventory Item</h3>
+                <p className="text-[13px] text-slate-500 font-normal mt-0.5">Update details for <span className="font-bold text-slate-700">{selectedItem.name}</span></p>
               </div>
               
-              <button onClick={() => { setShowEditModal(false); setSelectedItem(null); }} className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer" title="Close" aria-label="Close">
-                <X size={16} />
+              <button onClick={() => { setShowEditModal(false); setSelectedItem(null); }} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl cursor-pointer transition-colors" title="Close" aria-label="Close">
+                <X size={18} />
               </button>
             </div>
 
-            {/* Form Body (Smaller text) */}
-            <div className="p-6 space-y-4">
+            {/* Form Body */}
+            <div className="px-7 py-6 space-y-4.5">
               <div>
-                <label className="text-[11px] font-semibold text-slate-500 block mb-1.5">Item Name <span className="text-red-500">*</span></label>
+                <label className="text-[13px] font-semibold text-slate-600 block mb-1.5">Item Name <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   placeholder="e.g. BCG Vaccine"
                   value={editFormData.name}
                   onChange={e => setEditFormData(f => ({ ...f, name: e.target.value }))}
-                  className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:border-[#3B50DF] outline-none transition-all"
+                  className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 focus:border-[#3B50DF] outline-none transition-all"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-500 block mb-1.5">Category</label>
+                  <label className="text-[13px] font-semibold text-slate-600 block mb-1.5">Category</label>
                   <select
                     value={editFormData.category}
                     onChange={e => setEditFormData(f => ({ ...f, category: e.target.value }))}
-                    className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:border-[#3B50DF] outline-none"
+                    className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 focus:border-[#3B50DF] outline-none"
                   >
                     <option value="Vaccine">Vaccine</option>
                     <option value="Medicine">Medicine</option>
@@ -752,11 +703,11 @@ export default function VaccineInventoryPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-500 block mb-1.5">Unit</label>
+                  <label className="text-[13px] font-semibold text-slate-600 block mb-1.5">Unit</label>
                   <select
                     value={editFormData.unit}
                     onChange={e => setEditFormData(f => ({ ...f, unit: e.target.value }))}
-                    className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:border-[#3B50DF] outline-none"
+                    className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 focus:border-[#3B50DF] outline-none"
                   >
                     <option value="Vials">Vials</option>
                     <option value="Tablets">Tablets</option>
@@ -768,52 +719,53 @@ export default function VaccineInventoryPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-500 block mb-1.5">Stock Quantity <span className="text-red-500">*</span></label>
+                  <label className="text-[13px] font-semibold text-slate-600 block mb-1.5">Stock Quantity <span className="text-red-500">*</span></label>
                   <input
                     type="number"
                     min="0"
                     placeholder="0"
                     value={editFormData.stock}
                     onChange={e => setEditFormData(f => ({ ...f, stock: e.target.value }))}
-                    className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:border-[#3B50DF] outline-none"
+                    className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 focus:border-[#3B50DF] outline-none"
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-500 block mb-1.5">Expiry Date</label>
+                  <label className="text-[13px] font-semibold text-slate-600 block mb-1.5">Expiry Date</label>
                   <input
                     type="date"
                     value={editFormData.expiry}
                     onChange={e => setEditFormData(f => ({ ...f, expiry: e.target.value }))}
-                    className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:border-[#3B50DF] outline-none"
+                    className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 focus:border-[#3B50DF] outline-none"
                   />
                 </div>
               </div>
             </div>
 
-            {/* Footer — No border divider line */}
-            <div className="px-6 pb-6 pt-2 bg-white flex items-center gap-3">
+            {/* Footer */}
+            <div className="px-7 pb-7 pt-2 bg-white flex items-center gap-3">
               <button
                 onClick={() => { setShowEditModal(false); setSelectedItem(null); }}
-                className="flex-1 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs cursor-pointer hover:bg-slate-50 transition-colors"
+                className="flex-1 py-3 rounded-xl border border-slate-300 text-slate-700 font-bold text-sm cursor-pointer hover:bg-slate-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleEditSave}
                 disabled={!editFormData.name || !editFormData.stock}
-                className="flex-1 py-2.5 rounded-xl bg-[#3B50DF] text-white font-bold text-xs cursor-pointer hover:bg-indigo-700 shadow-xs transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+                className="flex-1 py-3 rounded-xl bg-[#3B50DF] text-white font-bold text-sm cursor-pointer hover:bg-indigo-700 shadow-xs transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                <Check size={14} /> Save Changes
+                <Check size={16} /> Save Changes
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* ── Use Stock Modal ── */}
-      {showUseStockModal && selectedItem && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-xs overflow-hidden shadow-xl">
+      {/* ── Use Stock Modal (Portaled to body) ── */}
+      {showUseStockModal && selectedItem && createPortal(
+        <div className="fixed inset-0 bg-black/40 backdrop-blur z-[9999] flex items-center justify-center p-4" onClick={() => { setShowUseStockModal(false); setSelectedItem(null); }}>
+          <div className="bg-white rounded-2xl w-full max-w-xs overflow-hidden shadow-xl" onClick={e => e.stopPropagation()}>
             <div className="p-6">
               <div className="text-center mb-4">
                 <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center mx-auto mb-3">
@@ -859,12 +811,13 @@ export default function VaccineInventoryPage() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* ── Export Report Modal (Print Preview Split Layout) ── */}
-      {showExportModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      {/* ── Export Report Modal (Print Preview Split Layout, Portaled to body) ── */}
+      {showExportModal && createPortal(
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div style={{ background: '#FFFFFF', borderRadius: 24, width: '1360px', maxWidth: '98vw', height: '92vh', maxHeight: '960px', boxShadow: '0 24px 64px rgba(0,0,0,0.25)', overflow: 'hidden', display: 'flex', flexDirection: 'column', border: '1px solid #E2E8F0' }}>
             
             {/* Light Clean Header Bar (Matching Export Clinic Report) */}
@@ -911,9 +864,9 @@ export default function VaccineInventoryPage() {
                     value={exportPeriod}
                     onChange={e => setExportPeriod(e.target.value)}
                     style={{
-                      width: '100%', padding: '9px 12px', fontSize: '.8125rem', fontWeight: 600, color: '#0F172A',
-                      border: '1px solid #CBD5E1', borderRadius: 12, background: '#FFFFFF', outline: 'none', cursor: 'pointer',
-                      boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+                      width: '100%', padding: '8px 12px', borderRadius: 10,
+                      border: '1px solid #CBD5E1', fontSize: '.8125rem', fontWeight: 600,
+                      color: '#0F172A', background: '#FFFFFF', outline: 'none'
                     }}
                   >
                     <option value="all">All Items (Full Database)</option>
@@ -989,9 +942,6 @@ export default function VaccineInventoryPage() {
                   
                   <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.2)', margin: '0 4px' }} />
                   
-                  {/* Fit to Page */}
-                  <button type="button" onClick={() => setExportZoomLevel(0.85)} style={{ background: 'transparent', border: 'none', color: '#FFF', fontSize: '.9rem', cursor: 'pointer', padding: '0 4px' }} title="Fit to Page">↕</button>
-                  
                   {/* Rotate Page */}
                   <button type="button" onClick={() => setExportRotation(r => (r + 90) % 360)} style={{ background: 'transparent', border: 'none', color: '#FFF', fontSize: '1rem', cursor: 'pointer', padding: '0 4px' }} title="Rotate Page">↻</button>
                 </div>
@@ -1017,7 +967,8 @@ export default function VaccineInventoryPage() {
 
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>

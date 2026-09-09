@@ -17,7 +17,7 @@ export type AssistantReply = {
   category: ReplyCategory;
 };
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || '';
+import { API_BASE_URL } from '../../config/apiBase';
 
 // Any clinical signal short-circuits to a staff hand-off without a round trip.
 // This mirrors api/chatbot.js CLINICAL_PATTERNS in intent: the server is the
