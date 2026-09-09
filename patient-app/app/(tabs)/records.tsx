@@ -24,6 +24,7 @@ import { formatDoseDate } from '../../config/dates';
 import { db } from '../../config/firebase';
 import { usePatientAuth } from '../../context/PatientAuthContext';
 import { moderateScale, scale, verticalScale } from '../../constants/scale';
+import { serviceCopy } from '../../constants/vaccineTypes';
 import CustomAlertModal, { CustomAlertConfig } from '../../components/CustomAlertModal';
 
 const { width } = Dimensions.get('window');
@@ -173,7 +174,8 @@ export default function RecordsScreen() {
   const miVal = middleNameVal ? middleNameVal.charAt(0).toUpperCase() + '.' : 'C.';
   const dobVal = pr.dob || '04/12/1995';
   const mrnVal = mrn ? `MRN-${mrn}` : (pr.id ? `MRN-${pr.id}` : 'MRN-2026-004');
-  const purposeVal = pr.service === 'PrEP' ? 'Pre-Exposure Prophylaxis (PrEP)' : 'Post-Exposure Prophylaxis (PEP)';
+  const vaccineCopy = serviceCopy(pr.service);
+  const purposeVal = pr.service ? vaccineCopy.long : '—';
   const catVal = pr.cat ? `Category ${pr.cat}` : 'Category II (Moderate Risk)';
   const doseList = Array.isArray(pr.doses) && pr.doses.length > 0 ? pr.doses : DEFAULT_RECORD_DOSES;
 
@@ -242,11 +244,11 @@ export default function RecordsScreen() {
           </View>
         </View>
 
-        {/* ══ PEP VACCINATION SCHEDULE TABLE ══ */}
+        {/* ══ VACCINATION SCHEDULE TABLE — heading follows the record ══ */}
         <View style={s.section}>
           <View style={s.sectionHeader}>
             <View style={s.sectionAccent} />
-            <Text style={s.sectionTitle}>PEP Dose Timeline</Text>
+            <Text style={s.sectionTitle}>{vaccineCopy.timelineTitle}</Text>
           </View>
 
           <View style={s.tableCard}>

@@ -50,6 +50,7 @@ import {
 } from '../../config/notifications';
 import { usePatientAuth } from '../../context/PatientAuthContext';
 import { moderateScale, scale, verticalScale } from '../../constants/scale';
+import { protocolLabel as buildProtocolLabel, serviceCopy } from '../../constants/vaccineTypes';
 import CustomAlertModal, { CustomAlertConfig } from '../../components/CustomAlertModal';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -75,7 +76,7 @@ const C = {
   softRed: '#EFF6FF',
 };
 
-type VaccineDose = { id: string; dose: number; label: string; date: string; rawDate: string | null; done: boolean; missed: boolean; vaccineType?: 'Pre-Exposure' | 'Post-Exposure'; };
+type VaccineDose = { id: string; dose: number; label: string; date: string; rawDate: string | null; done: boolean; missed: boolean; vaccineType?: string; };
 type NextDoseNotif = { id: string; doseLabel: string; doseDate: string; message: string; sentAt: string; };
 // Full raw `vaccinations/{mrn}` doc, kept alongside the derived `vaccineSchedule`
 // so the vaccination card has real fields to render.
@@ -418,7 +419,7 @@ export default function RabiesRecoveryApp() {
       const rawDoses: any[] = Array.isArray(data.doses) ? data.doses : [];
       if (rawDoses.length === 0) { setVaccineSchedule([]); setNextDoseNotif(null); return; }
 
-      const vaccineType: 'Pre-Exposure' | 'Post-Exposure' = data.service === 'PrEP' ? 'Pre-Exposure' : 'Post-Exposure';
+      const vaccineType = serviceCopy(data.service).short;
       const todayISO = new Date().toISOString().slice(0, 10);
       setVaccineSchedule(rawDoses.map((d, i) => {
         const rawStatus = d.status || d.s || 'pending';
@@ -605,15 +606,12 @@ export default function RabiesRecoveryApp() {
 
   const completedDoses = vaccineSchedule.filter(d => d.done).length;
   const progress = vaccineSchedule.length > 0 ? (completedDoses / vaccineSchedule.length) * 100 : 0;
-  const vaccineType = vaccineSchedule[0]?.vaccineType ?? 'Post-Exposure';
+  const vaccineType = vaccineSchedule[0]?.vaccineType ?? serviceCopy(patientRecord?.service).short;
 
   // Real regimen label — derived from the same `service`/dose-count data the
   // Admin Dashboard's Vaccination Tracker uses, not a hardcoded placeholder.
-  const protocolLabel = patientRecord?.service === 'PrEP'
-    ? `Pre-Exposure Prophylaxis${vaccineSchedule.length ? ` · ${vaccineSchedule.length}-Dose Series` : ''}`
-    : vaccineSchedule.length > 0
-      ? `Post-Exposure ARV Protocol · ${vaccineSchedule.length}-Dose Series`
-      : 'Post-Exposure Prophylaxis Protocol';
+  const vaccineCopy = serviceCopy(patientRecord?.service);
+  const protocolLabel = buildProtocolLabel(patientRecord?.service, vaccineSchedule.length);
 
   const displayedNotifications = notifFilter === 'unread' ? notifications.filter(n => n.unread) : notifications;
 
@@ -637,7 +635,7 @@ export default function RabiesRecoveryApp() {
   const miVal = middleNameVal ? middleNameVal.charAt(0).toUpperCase() + '.' : (isGuest ? '—' : 'M.');
   const dobVal = pr.dob || (isGuest ? '—' : '04/12/1995');
   const mrnVal = mrn ? `MRN-${mrn}` : (pr.id ? `MRN-${pr.id}` : (isGuest ? 'No MRN (Guest)' : 'MRN-2026-8842'));
-  const purposeVal = pr.service === 'PrEP' ? 'Pre-Exposure Prophylaxis (PrEP)' : (isGuest ? '—' : 'Post-Exposure Prophylaxis (PEP)');
+  const purposeVal = pr.service ? serviceCopy(pr.service).long : (isGuest ? '—' : '—');
   const catVal = pr.cat ? `Category ${pr.cat}` : (catValue ? `Category ${catValue}` : (isGuest ? '—' : 'Category II (Moderate Risk)'));
   const doseList = (Array.isArray(pr.doses) && pr.doses.length > 0)
     ? pr.doses
@@ -878,7 +876,7 @@ export default function RabiesRecoveryApp() {
                     <View style={s.attendingNotesBox}>
                       <Text style={s.cdcFieldLabel}>Attending Physician / Clinical Protocol Notes</Text>
                       <Text style={s.attendingNotesTxt}>
-                        {blank(pr.notes || pr.clinicalNotes, 'Patient started on PEP protocol. 10-day animal observation active for source animal.')}
+                        {blank(pr.notes || pr.clinicalNotes, `Patient started on ${vaccineCopy.short} protocol.`)}
                       </Text>
                     </View>
                     </ViewShot>
@@ -946,11 +944,11 @@ export default function RabiesRecoveryApp() {
                 </View>
               </View>
 
-              {/* ══ PEP VACCINATION SCHEDULE TABLE ══ */}
+              {/* ══ VACCINATION SCHEDULE TABLE — heading follows the record ══ */}
               <View style={s.recordsSection}>
                 <View style={s.recordsSectionHeader}>
                   <View style={s.recordsSectionAccent} />
-                  <Text style={s.recordsSectionTitle}>PEP Dose Timeline</Text>
+                  <Text style={s.recordsSectionTitle}>{vaccineCopy.timelineTitle}</Text>
                 </View>
 
                 <View style={s.recordsTableCard}>
@@ -1013,7 +1011,7 @@ export default function RabiesRecoveryApp() {
                 <Text style={s.trackerWebHeaderSub}>
                   {isGuest && vaccineSchedule.length === 0
                     ? 'No dose record — sign up to start tracking'
-                    : `${completedDoses} of ${vaccineSchedule.length || 5} Doses Completed · ${Math.round(progress)}% Immunized`}
+                    : `${completedDoses} of ${vaccineSchedule.length || trackerDoses.length} Doses Completed · ${Math.round(progress)}% Immunized`}
                 </Text>
               </View>
               <TouchableOpacity
@@ -1026,96 +1024,83 @@ export default function RabiesRecoveryApp() {
               </TouchableOpacity>
             </View>
 
-            {/* Dose Timeline List */}
-            <ScrollView style={s.trackerTimelineScroll} showsVerticalScrollIndicator={false}>
-              <View style={s.iosNotesDoseList}>
-                {trackerDoses.map((d: any, i: number) => {
-                  // Guest placeholder rows are all plain "Upcoming" — nothing is
-                  // actually scheduled, so none of them is the next dose.
-                  const isNext = !d.blankRow && !d.done && trackerDoses.findIndex((x: any) => !x.done) === i;
-                  const isLast = i === trackerDoses.length - 1;
-                  const isMissed = d.missed;
+            {/* Dose timeline — laid out horizontally: one card per dose, read
+                left to right like the schedule itself. Doses are fixed by the
+                regimen (Day 0/3/7/…) from the exposure date, so there is
+                nothing here to book; only clinic staff mark one administered. */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={s.trackerLaneContent}
+              style={s.trackerLane}
+            >
+              {trackerDoses.map((d: any, i: number) => {
+                const isNext = !d.blankRow && !d.done && trackerDoses.findIndex((x: any) => !x.done) === i;
+                const isMissed = d.missed;
+                const isLast = i === trackerDoses.length - 1;
 
-                  return (
-                    <View
-                      key={d.id}
-                      style={[
-                        s.iosNotesDoseRow,
-                        isNext && s.iosNotesDoseRowNext,
-                        isLast && s.iosNotesDoseRowLast,
-                      ]}
-                    >
-                      {/* Left status icon indicator */}
-                      <View style={s.iosNotesStatusBox}>
+                return (
+                  <View key={d.id} style={s.doseLaneStep}>
+                    <View style={[
+                      s.doseLaneCard,
+                      d.done && s.doseLaneCardDone,
+                      isNext && s.doseLaneCardNext,
+                      isMissed && s.doseLaneCardMissed,
+                    ]}>
+                      <View style={s.doseLaneIcon}>
                         {d.done ? (
-                          <Ionicons name="checkmark-circle" size={scale(20)} color="#10B981" />
+                          <Ionicons name="checkmark-circle" size={scale(22)} color="#10B981" />
                         ) : isMissed ? (
-                          <Ionicons name="alert-circle" size={scale(20)} color="#EF4444" />
+                          <Ionicons name="alert-circle" size={scale(22)} color="#EF4444" />
                         ) : isNext ? (
-                          <Ionicons name="time" size={scale(20)} color="#2563EB" />
+                          <Ionicons name="time" size={scale(22)} color="#2563EB" />
                         ) : (
-                          <Ionicons name="ellipse-outline" size={scale(20)} color="#CBD5E1" />
+                          <Ionicons name="ellipse-outline" size={scale(22)} color="#CBD5E1" />
                         )}
                       </View>
 
-                      {/* Dose Title & Secondary Status Date Info */}
-                      <View style={{ flex: 1 }}>
-                        <Text style={[s.iosNotesDoseTitle, isNext && s.iosNotesDoseTitleNext]}>
-                          {d.label}
-                        </Text>
-                        <Text style={[
-                          s.iosNotesDoseSubtitle,
-                          d.done && { color: '#059669', fontWeight: '600' },
-                          isNext && { color: '#2563EB', fontWeight: '700' },
-                          isMissed && { color: '#DC2626', fontWeight: '700' },
-                        ]}>
-                          {d.blankRow ? 'Not yet scheduled' : d.done ? `Administered · ${d.date}` : isNext ? `Scheduled · ${d.date}` : isMissed ? `Overdue · ${d.date}` : `Scheduled · ${d.date}`}
-                        </Text>
-                      </View>
+                      <Text style={[s.doseLaneTitle, isNext && s.doseLaneTitleNext]} numberOfLines={2}>
+                        {d.label}
+                      </Text>
 
-                      {/* Right Status Badge */}
+                      <Text style={[
+                        s.doseLaneDate,
+                        d.done && { color: '#059669' },
+                        isNext && { color: '#2563EB' },
+                        isMissed && { color: '#DC2626' },
+                      ]} numberOfLines={1}>
+                        {d.blankRow ? 'Not scheduled' : d.date}
+                      </Text>
+
                       <View style={[
-                        s.doseStatusBadge,
-                        d.done ? s.doseStatusBadgeDone : isNext ? s.doseStatusBadgeNext : isMissed ? s.doseStatusBadgeMissed : s.doseStatusBadgeUpcoming
+                        s.doseLaneBadge,
+                        d.done ? s.doseStatusBadgeDone : isNext ? s.doseStatusBadgeNext : isMissed ? s.doseStatusBadgeMissed : s.doseStatusBadgeUpcoming,
                       ]}>
                         <Text style={[
                           s.doseStatusText,
-                          d.done ? s.doseStatusTextDone : isNext ? s.doseStatusTextNext : isMissed ? s.doseStatusTextMissed : s.doseStatusTextUpcoming
+                          d.done ? s.doseStatusTextDone : isNext ? s.doseStatusTextNext : isMissed ? s.doseStatusTextMissed : s.doseStatusTextUpcoming,
                         ]}>
                           {d.done ? 'Completed' : isNext ? 'Next Up' : isMissed ? 'Overdue' : 'Upcoming'}
                         </Text>
                       </View>
                     </View>
-                  );
-                })}
-              </View>
+
+                    {!isLast && <View style={[s.doseLaneConnector, d.done && s.doseLaneConnectorDone]} />}
+                  </View>
+                );
+              })}
             </ScrollView>
 
-            {/* Web-Style Action Footer: Cancel & Primary Button */}
             <View style={s.trackerWebFooter}>
+              <Text style={s.trackerFooterNote} numberOfLines={2}>
+                Dose dates follow your regimen automatically. Clinic staff record each dose when it is given.
+              </Text>
               <TouchableOpacity
-                style={s.trackerWebCancelBtn}
+                style={s.trackerCloseAction}
                 onPress={() => setShowProgressModal(false)}
-                activeOpacity={0.75}
-              >
-                <Text style={s.trackerWebCancelText}>Cancel</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={s.trackerWebPrimaryBtn}
-                onPress={() => {
-                  setShowProgressModal(false);
-                  if (isGuest) {
-                    router.push('/auth/signup');
-                  } else {
-                    router.push('/(tabs)/appt');
-                  }
-                }}
                 activeOpacity={0.85}
               >
-                <Text style={s.trackerWebPrimaryText}>
-                  {isGuest ? 'Sign Up to Track' : 'Book Dose'}
-                </Text>
+                <Text style={s.trackerCloseActionText}>Close</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1306,7 +1291,7 @@ export default function RabiesRecoveryApp() {
                     <View style={s.attendingNotesBox}>
                       <Text style={s.cdcFieldLabelPopup}>Attending Physician / Clinical Protocol Notes</Text>
                       <Text style={s.attendingNotesTxtPopup}>
-                        {blank(pr.notes || pr.clinicalNotes, 'Patient started on PEP protocol. 10-day animal observation active for source animal.')}
+                        {blank(pr.notes || pr.clinicalNotes, `Patient started on ${vaccineCopy.short} protocol.`)}
                       </Text>
                     </View>
                   </ViewShot>
@@ -2109,7 +2094,8 @@ const s = StyleSheet.create({
   // PROGRESS POP-UP CARD (MATCHING WEB ADD REPORT MODAL)
   progressBannerSheet: {
     width: '100%',
-    maxWidth: scale(380),
+    // Landscape card: wide enough for the dose lane to read across.
+    maxWidth: scale(720),
     backgroundColor: '#FFFFFF',
     borderRadius: scale(24),
     overflow: 'hidden',
@@ -2150,6 +2136,79 @@ const s = StyleSheet.create({
     backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  trackerLane: {
+    maxHeight: verticalScale(190),
+  },
+  trackerLaneContent: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    paddingHorizontal: scale(18),
+    paddingVertical: verticalScale(16),
+  },
+  doseLaneStep: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  doseLaneCard: {
+    width: scale(132),
+    borderRadius: scale(14),
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    paddingVertical: verticalScale(12),
+    paddingHorizontal: scale(12),
+    alignItems: 'center',
+    gap: verticalScale(6),
+  },
+  doseLaneCardDone: { borderColor: '#A7F3D0', backgroundColor: '#F0FDF4' },
+  doseLaneCardNext: { borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' },
+  doseLaneCardMissed: { borderColor: '#FECACA', backgroundColor: '#FEF2F2' },
+  doseLaneIcon: { height: scale(26), justifyContent: 'center', alignItems: 'center' },
+  doseLaneTitle: {
+    fontSize: moderateScale(12.5),
+    fontWeight: '700',
+    color: '#0F172A',
+    textAlign: 'center',
+  },
+  doseLaneTitleNext: { color: '#1E40AF', fontWeight: '800' },
+  doseLaneDate: {
+    fontSize: moderateScale(11),
+    fontWeight: '600',
+    color: '#64748B',
+    textAlign: 'center',
+  },
+  doseLaneBadge: {
+    paddingHorizontal: scale(9),
+    paddingVertical: verticalScale(3),
+    borderRadius: scale(999),
+    marginTop: verticalScale(2),
+  },
+  doseLaneConnector: {
+    width: scale(18),
+    height: 2,
+    backgroundColor: '#E2E8F0',
+  },
+  doseLaneConnectorDone: { backgroundColor: '#A7F3D0' },
+  trackerFooterNote: {
+    flex: 1,
+    fontSize: moderateScale(10.5),
+    color: '#64748B',
+    lineHeight: moderateScale(14),
+    paddingRight: scale(10),
+  },
+  trackerCloseAction: {
+    paddingHorizontal: scale(22),
+    height: verticalScale(38),
+    borderRadius: scale(12),
+    backgroundColor: '#1E3A8A',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  trackerCloseActionText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: moderateScale(12.5),
   },
   trackerWebFooter: {
     flexDirection: 'row',

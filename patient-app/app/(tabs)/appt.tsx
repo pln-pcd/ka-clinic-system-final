@@ -171,12 +171,15 @@ const APPT_CATEGORIES = [
   { id: 'vaccination', label: 'Vaccination', icon: 'medkit'      },
 ] as const;
 
+// The services a patient can request a visit for, most-requested first.
+// PrEP is deliberately absent: a pre-exposure course is started by the clinic
+// when the patient is registered, not booked as a visit type here.
 const VACCINE_OPTIONS = [
-  { id: 'Pre-Exposure', label: 'Pre-Exposure (PrEP)' },
-  { id: 'Booster',      label: 'Booster'             },
-  { id: 'Hepa',         label: 'Hepatitis'           },
-  { id: 'Anti-Tetano',  label: 'Anti-Tetano'         },
-  { id: 'Pneumonia',    label: 'Pneumonia'           },
+  { id: 'Post-Exposure', label: 'Anti-Rabies (PEP)', desc: 'After an animal bite or scratch' },
+  { id: 'Booster',       label: 'Booster Dose',      desc: 'Top-up for a previous course' },
+  { id: 'Anti-Tetano',   label: 'Anti-Tetanus',      desc: 'Tetanus toxoid for wounds' },
+  { id: 'Hepa',          label: 'Hepatitis B',       desc: 'Hepatitis B immunization' },
+  { id: 'Pneumonia',     label: 'Pneumonia',         desc: 'Pneumococcal vaccine' },
 ];
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
@@ -238,6 +241,39 @@ export default function AppointmentsScreen() {
     name: '', age: '', gender: '', address: '', contactNumber: '',
   });
   const [formErrors, setFormErrors] = useState<Partial<PatientForm>>({});
+  // Whether the clinic record has already been folded into the form. The form
+  // is only ever seeded, never re-written under the patient: once they have
+  // typed into it, incoming record data must not clobber what they entered.
+  const prefilledRef = useRef(false);
+
+  // Auto-fill from the patient's own clinic record (`vaccinations/{mrn}` — the
+  // doc the Admin Dashboard writes). Fields the record has no value for are
+  // left genuinely empty so the patient fills them in themselves; nothing here
+  // writes back, so opening the form never changes the stored record.
+  useEffect(() => {
+    if (!mrn) return;
+    return onSnapshot(doc(db, 'vaccinations', mrn), (snap) => {
+      if (!snap.exists() || prefilledRef.current) return;
+      const r: any = snap.data() || {};
+      const joinedName = r.name || [r.firstName, r.middleName, r.lastName].filter(Boolean).join(' ');
+      const seeded = {
+        name: (joinedName || user?.displayName || '').trim(),
+        age: r.age !== undefined && r.age !== null ? String(r.age) : '',
+        gender: r.sex || r.gender || '',
+        address: r.address || '',
+        contactNumber: r.contact || r.contactNumber || '',
+      };
+      // Only fill blanks — anything already typed wins.
+      setPatientForm(prev => ({
+        name: prev.name || seeded.name,
+        age: prev.age || seeded.age,
+        gender: prev.gender || seeded.gender,
+        address: prev.address || seeded.address,
+        contactNumber: prev.contactNumber || seeded.contactNumber,
+      }));
+      prefilledRef.current = true;
+    }, (err) => console.error('Patient record prefill failed:', err));
+  }, [mrn, user?.displayName]);
   const [apptCategory,       setApptCategory]       = useState<'checkup' | 'vaccination'>('checkup');
   const [vaccineType,        setVaccineType]        = useState<string>('');
   const [vaccineDropdownOpen,setVaccineDropdownOpen] = useState(false);
@@ -465,6 +501,7 @@ export default function AppointmentsScreen() {
 
       setShowDetailsForm(false);
       setPatientForm({ name: '', age: '', gender: '', address: '', contactNumber: '' });
+      prefilledRef.current = false;
       setApptCategory('checkup');
       setVaccineType('');
       setVaccineDropdownOpen(false);
@@ -1008,7 +1045,10 @@ export default function AppointmentsScreen() {
                                 onPress={() => { setVaccineType(v.id); setVaccineDropdownOpen(false); }}
                                 activeOpacity={0.8}
                               >
-                                <Text style={[df.vaccineOptionTxt, sel && { color: C.navy, fontWeight: '700' }]}>{v.label}</Text>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={[df.vaccineOptionTxt, sel && { color: C.navy, fontWeight: '700' }]}>{v.label}</Text>
+                                  <Text style={df.vaccineOptionDesc}>{v.desc}</Text>
+                                </View>
                                 {sel && <Ionicons name="checkmark" size={14} color={C.navy}/>}
                               </TouchableOpacity>
                             );
@@ -1584,7 +1624,8 @@ const df = StyleSheet.create({
   dropdownBackdrop:     { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 90 },
   vaccineOption:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: scale(14), paddingVertical: verticalScale(13) },
   vaccineOptionActive:  { backgroundColor: C.navyFaint },
-  vaccineOptionTxt:     { fontSize: moderateScale(14), color: C.slate, fontWeight: '500' },
+  vaccineOptionTxt:     { fontSize: moderateScale(14), color: C.slate, fontWeight: '600' },
+  vaccineOptionDesc:    { fontSize: moderateScale(11), color: C.muted, marginTop: verticalScale(2) },
 });
 
 const ms = StyleSheet.create({

@@ -18,6 +18,10 @@ import { createPortal } from 'react-dom';
 /* ─────────────────────────────────────────────────────────── */
 /* CONSTANTS                                                   */
 /* ─────────────────────────────────────────────────────────── */
+// Fallback schedules, used only for a record that somehow has no stored
+// doses. They mirror buildInitialDoses() in patients.jsx, which is what
+// actually writes a new patient's schedule — a PrEP patient must never be
+// given the 5-dose post-exposure series just because it was the default.
 const ARV_SCHEDULE = [
   { key: 'd1', label: 'Dose 1 (ARV)', day: 0  },
   { key: 'd2', label: 'Dose 2 (ARV)', day: 3  },
@@ -25,6 +29,32 @@ const ARV_SCHEDULE = [
   { key: 'd4', label: 'Dose 4 (ARV)', day: 14 },
   { key: 'd5', label: 'Dose 5 (ARV)', day: 28 },
 ];
+
+const SERVICE_SCHEDULES = {
+  PEP: ARV_SCHEDULE,
+  PrEP: [
+    { key: 'd1', label: 'Dose 1 (Day 0)', day: 0 },
+    { key: 'd2', label: 'Dose 2 (Day 7)', day: 7 },
+  ],
+  Tetanus: [
+    { key: 'd1', label: 'Primary Dose', day: 0 },
+    { key: 'd2', label: 'Follow-up Booster (1 Month)', day: 30 },
+  ],
+  Hepatitis: [
+    { key: 'd1', label: 'Dose 1 (Day 0)', day: 0 },
+    { key: 'd2', label: 'Dose 2 (1 Month)', day: 30 },
+    { key: 'd3', label: 'Dose 3 (6 Months)', day: 180 },
+  ],
+};
+
+const scheduleForService = (service) => {
+  const s = String(service || '').trim().toLowerCase();
+  if (s === 'prep') return SERVICE_SCHEDULES.PrEP;
+  if (s.includes('tetan')) return SERVICE_SCHEDULES.Tetanus;
+  if (s.includes('hepa')) return SERVICE_SCHEDULES.Hepatitis;
+  if (s.includes('pneumo')) return [{ key: 'd1', label: 'Initial Dose', day: 0 }];
+  return ARV_SCHEDULE;
+};
 
 const CAT_STYLE = {
   'I':   { bg: '#ECFDF5', color: '#065F46', border: '#A7F3D0', label: 'Category I'   },
@@ -95,7 +125,7 @@ export const buildDoses = (p) => {
     });
   }
   const regDate = p.date || getTodayStr();
-  return ARV_SCHEDULE.map(s => {
+  return scheduleForService(p.service).map(s => {
     const scheduledDate = addDays(regDate, s.day);
     const overdueFlag = isOverdue(scheduledDate);
     return {

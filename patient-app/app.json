@@ -3,7 +3,7 @@
     "name": "K&A Clinic",
     "slug": "kna-rabies-monitoring",
     "version": "1.0.0",
-    "icon": "./assets/logo-white-nobg.png",
+    "icon": "./assets/icon.png",
     "splash": {
       "image": "./assets/logo-white-nobg.png",
       "resizeMode": "contain",
@@ -20,6 +20,7 @@
       [
         "expo-notifications",
         {
+          "icon": "./assets/notification-icon.png",
           "color": "#C8102E"
         }
       ],
@@ -43,7 +44,7 @@
       ],
       "package": "com.anonymous.knarabiesmonitoring",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/logo-white-nobg.png",
+        "foregroundImage": "./assets/icon-foreground.png",
         "backgroundColor": "#FFFFFF"
       }
     },
@@ -51,7 +52,7 @@
       "eas": {
         "projectId": "62297c13-8ceb-4918-9d9e-a9113cbf5acf"
       },
-      "apiBaseUrl": "https://ka-clinic-system.vercel.app"
+      "apiBaseUrl": "https://ka-clinic-system-final.vercel.app"
     }
   }
 }

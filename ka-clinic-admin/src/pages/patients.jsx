@@ -529,13 +529,20 @@ function ScheduleSummary({ service, baseDate }) {
   };
 
   let schedule = [];
-  if (service === 'PEP' || service === 'PrEP') {
+  // Mirrors buildInitialDoses() below — the preview must not promise a
+  // schedule different from the one actually written to the record.
+  if (service === 'PEP') {
     schedule = [
       { label: 'Dose 1 (Day 0)', date: addDays(0) },
       { label: 'Dose 2 (Day 3)', date: addDays(3) },
       { label: 'Dose 3 (Day 7)', date: addDays(7) },
       { label: 'Dose 4 (Day 14)', date: addDays(14) },
       { label: 'Dose 5 (Day 28)', date: addDays(28) },
+    ];
+  } else if (service === 'PrEP') {
+    schedule = [
+      { label: 'Dose 1 (Day 0)', date: addDays(0) },
+      { label: 'Dose 2 (Day 7)', date: addDays(7) },
     ];
   } else if (service === 'Tetanus') {
     schedule = [
@@ -654,6 +661,9 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [] }) {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [form, setForm] = useState({
     fname: '', mname: '', lname: '', suffix: '', email: '', age: '', sex: 'Male',
+    /* Vitals & birth date — optional, blank means "not recorded" everywhere
+       they are displayed rather than a zero or a guess. */
+    dob: '', height: '', weight: '', bloodPressure: '',
     barangay: 'San Juan', zone: 'Zone 1', address: 'Zone 1, Brgy. San Juan, Libon, Albay',
     contact: '', service: 'PEP', vaccineBrand: '',
     /* PEP Details */
@@ -862,6 +872,18 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [] }) {
                 </div>
                 <div className="form-field"><label>Sex</label>
                   <select value={form.sex} onChange={e => set('sex', e.target.value)}><option>Male</option><option>Female</option></select>
+                </div>
+                <div className="form-field"><label>Date of Birth</label>
+                  <input type="date" value={form.dob || ''} max={today()} onChange={e => set('dob', e.target.value)} />
+                </div>
+                <div className="form-field"><label>Blood Pressure</label>
+                  <input type="text" value={form.bloodPressure || ''} onChange={e => set('bloodPressure', e.target.value)} placeholder="e.g. 120/80" />
+                </div>
+                <div className="form-field"><label>Height <span style={{ fontWeight: 400, color: '#94A3B8', fontSize: '.6875rem' }}>(cm)</span></label>
+                  <input type="text" inputMode="decimal" value={form.height || ''} onChange={e => set('height', e.target.value.replace(/[^0-9.]/g, '').slice(0, 5))} placeholder="e.g. 165" />
+                </div>
+                <div className="form-field"><label>Weight <span style={{ fontWeight: 400, color: '#94A3B8', fontSize: '.6875rem' }}>(kg)</span></label>
+                  <input type="text" inputMode="decimal" value={form.weight || ''} onChange={e => set('weight', e.target.value.replace(/[^0-9.]/g, '').slice(0, 5))} placeholder="e.g. 58" />
                 </div>
                 <div className="form-field full">
                   <label>Email Address <span style={{ color: '#C8151A' }}>*</span> <span style={{ fontWeight: 400, color: '#64748B', fontSize: '.6875rem' }}>(Required for patient mobile app login)</span></label>
@@ -1242,6 +1264,7 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [] }) {
 function EditPatientModal({ patient, onClose, onSave, inventoryItems = [] }) {
   const [form, setForm] = useState({
     name: patient.name || '', email: patient.email || '', age: patient.age || '', sex: patient.sex || 'Male',
+    dob: patient.dob || '', height: patient.height || '', weight: patient.weight || '', bloodPressure: patient.bloodPressure || '',
     address: patient.address || '', contact: patient.contact || '',
     service: patient.service || 'PEP', vaccineBrand: patient.vaccineBrand || '',
     animal: patient.animal || 'Dog', cat: patient.cat ? `Category ${patient.cat}` : 'Category I',
@@ -1320,6 +1343,48 @@ function EditPatientModal({ patient, onClose, onSave, inventoryItems = [] }) {
                   <option>Male</option>
                   <option>Female</option>
                 </select>
+              </div>
+              <div>
+                <label className="block mb-1.5 text-slate-500">Date of Birth</label>
+                <input
+                  type="date"
+                  value={form.dob || ''}
+                  max={today()}
+                  onChange={e => set('dob', e.target.value)}
+                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                />
+              </div>
+              <div>
+                <label className="block mb-1.5 text-slate-500">Blood Pressure</label>
+                <input
+                  type="text"
+                  value={form.bloodPressure || ''}
+                  onChange={e => set('bloodPressure', e.target.value)}
+                  placeholder="e.g. 120/80"
+                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                />
+              </div>
+              <div>
+                <label className="block mb-1.5 text-slate-500">Height (cm)</label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={form.height || ''}
+                  onChange={e => set('height', e.target.value.replace(/[^0-9.]/g, '').slice(0, 5))}
+                  placeholder="e.g. 165"
+                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                />
+              </div>
+              <div>
+                <label className="block mb-1.5 text-slate-500">Weight (kg)</label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={form.weight || ''}
+                  onChange={e => set('weight', e.target.value.replace(/[^0-9.]/g, '').slice(0, 5))}
+                  placeholder="e.g. 58"
+                  className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                />
               </div>
               <div className="sm:col-span-2">
                 <label className="block mb-1.5 text-slate-500">Email Address</label>
@@ -1402,7 +1467,7 @@ function EditPatientModal({ patient, onClose, onSave, inventoryItems = [] }) {
                 Pre-Exposure Prophylaxis (PrEP)
               </p>
               <p className="mt-1 text-slate-600 font-normal">
-                Preventive rabies immunization schedule before exposure (3 doses: Days 0, 7, and 21 or 28). No animal bite exposure details required.
+                Preventive rabies immunization schedule before exposure (2 doses: Days 0 and 7). No animal bite exposure details required.
               </p>
             </div>
           )}
@@ -2108,7 +2173,21 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
 
                 <div>
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Birth Date / Age</span>
-                  <span className="text-xs font-bold text-slate-800 mt-0.5 block">{rec.age ? `${rec.age} yrs old` : '—'}</span>
+                  <span className="text-xs font-bold text-slate-800 mt-0.5 block">
+                    {rec.dob ? `${fmtDate(rec.dob)} · ` : ''}{rec.age ? `${rec.age} yrs old` : '—'}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Height / Weight</span>
+                  <span className="text-xs font-bold text-slate-800 mt-0.5 block">
+                    {rec.height ? `${rec.height} cm` : '—'} · {rec.weight ? `${rec.weight} kg` : '—'}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Blood Pressure</span>
+                  <span className="text-xs font-bold text-slate-800 mt-0.5 block">{rec.bloodPressure || '—'}</span>
                 </div>
 
                 <div>
@@ -3945,6 +4024,9 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
         rows: [
           ['Name', formatTitleCase(p.name)],
           ['Age / Gender', `${p.age || '—'} yrs · ${(p.sex || '—').toUpperCase()}`],
+          ['Date of Birth', p.dob ? (formatDateLong(p.dob) || p.dob) : '—'],
+          ['Height / Weight', `${p.height ? `${p.height} cm` : '—'} · ${p.weight ? `${p.weight} kg` : '—'}`],
+          ['Blood Pressure', p.bloodPressure || '—'],
           ['Contact / Address', `${p.contact || '—'} · ${p.address || '—'}`],
           ['Guarantor / Next of Kin', p.guardian || p.emergencyContact || '—'],
         ],
@@ -5209,11 +5291,13 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
         makeDose('d5', 'Dose 5 (Day 28)', addDays(d0, 28), false),
       ];
     }
+    // WHO's abridged 2-visit PrEP series. Records registered before this
+    // change keep the 3-dose schedule they were created with — the doses
+    // stored on the record are always what the app and reports display.
     if (service === 'PrEP') {
       return [
         makeDose('d1', 'Dose 1 (Day 0)', d0, true),
         makeDose('d2', 'Dose 2 (Day 7)', addDays(d0, 7), false),
-        makeDose('d3', 'Dose 3 (Day 21)', addDays(d0, 21), false),
       ];
     }
     if (service === 'Tetanus') {
@@ -5285,6 +5369,10 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
         contact: formattedContact,
         age: form.age || '',
         sex: form.sex || 'Male',
+        dob: form.dob || '',
+        height: form.height || '',
+        weight: form.weight || '',
+        bloodPressure: form.bloodPressure || '',
         barangay: selectedBarangay,
         zone: enteredZone,
         address: form.address || `${enteredZone ? enteredZone + ', ' : ''}Brgy. ${selectedBarangay}, Libon, Albay`,
@@ -5385,6 +5473,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
 
     const updatedData = {
       name: newName, age: form.age || editPatient.age, sex: form.sex || 'Male',
+      dob: form.dob || '', height: form.height || '', weight: form.weight || '', bloodPressure: form.bloodPressure || '',
       email: cleanEmail,
       address: form.address || '', contact: formatE164(form.contact || editPatient.contact || ''), service: form.service || 'PEP',
       vaccineBrand: form.vaccineBrand || '',

@@ -33,6 +33,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { db } from '../../config/firebase';
 import { usePatientAuth } from '../../context/PatientAuthContext';
 import { moderateScale, scale, verticalScale } from '../../constants/scale';
+import CustomAlertModal, { CustomAlertConfig } from '../../components/CustomAlertModal';
 import { askClinicAssistant, type ChatTurn } from '../services/chatbot';
 
 type BubbleMessage = {
@@ -96,6 +97,7 @@ export default function ChatScreen() {
   const [keyboardVisible, setKeyboardVisible] = useState(false);
 
   const insets = useSafeAreaInsets();
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const router = useRouter();
   const scrollRef = useRef<ScrollView>(null);
 
@@ -115,7 +117,13 @@ export default function ChatScreen() {
   useEffect(() => {
     const showSub = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      () => {
+      (e) => {
+        // Android runs edge-to-edge (app.json android.edgeToEdgeEnabled), so
+        // the window is never resized for the keyboard and KeyboardAvoidingView
+        // has nothing to react to — in a release APK the input bar ended up
+        // underneath the keyboard. Lifting by the measured height fixes it in
+        // both Expo Go and a built APK.
+        setKeyboardHeight(e?.endCoordinates?.height ?? 0);
         setKeyboardVisible(true);
         setTimeout(() => {
           scrollRef.current?.scrollToEnd({ animated: true });
@@ -125,6 +133,7 @@ export default function ChatScreen() {
     const hideSub = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
       () => {
+        setKeyboardHeight(0);
         setKeyboardVisible(false);
       }
     );
@@ -283,46 +292,55 @@ export default function ChatScreen() {
   // leaves `unread: false` and does NOT archive: the nightly sweep only files
   // away conversations an admin has already read, so a thread the patient ends
   // without staff ever opening it stays in the inbox.
+  // Confirmations use the app's own card rather than the OS alert, so the
+  // wording and styling match every other destructive step in the app.
+  const [alertConfig, setAlertConfig] = useState<CustomAlertConfig>({ visible: false, title: '', message: '' });
+  const hideAlert = () => setAlertConfig(prev => ({ ...prev, visible: false }));
+
+  const closeThread = async () => {
+    if (!openThreadId) return;
+    setEndingConversation(true);
+    setChatError('');
+    try {
+      // `unread` is deliberately left alone: it means "unread by an admin", so
+      // the patient must not clear it on staff's behalf. Writing unread:false
+      // here would satisfy the nightly sweep's resolved && !unread condition
+      // and file the conversation away before anyone at the clinic read it.
+      await updateDoc(doc(db, 'chatThreads', openThreadId), {
+        resolved: true,
+        closedBy: 'patient',
+        closedAt: Date.now(),
+      });
+      // Listener clears openThreadId, which returns the button to 'trigger'
+      // and drops the view back to the bot.
+      setMode('bot');
+      rememberPendingTrigger(false);
+    } catch (e: any) {
+      console.error('End conversation error:', e);
+      setChatError(e?.code === 'permission-denied'
+        ? 'You do not have permission to close this conversation.'
+        : 'Could not end the conversation. Please try again.');
+    } finally {
+      setEndingConversation(false);
+    }
+  };
+
   const endConversation = () => {
     if (!openThreadId || endingConversation) return;
-    Alert.alert(
-      'End conversation?',
-      'This closes your conversation with clinic staff. You can always start a new one if you need more help.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'End Conversation',
-          style: 'destructive',
-          onPress: async () => {
-            setEndingConversation(true);
-            setChatError('');
-            try {
-              // `unread` is deliberately left alone: it means "unread by an
-              // admin", so the patient must not clear it on staff's behalf.
-              // Writing unread:false here would satisfy the nightly sweep's
-              // resolved && !unread condition and file the conversation away
-              // before anyone at the clinic had read it.
-              await updateDoc(doc(db, 'chatThreads', openThreadId), {
-                resolved: true,
-                closedBy: 'patient',
-                closedAt: Date.now(),
-              });
-              // Listener clears openThreadId, which returns the button to
-              // 'trigger' and drops the view back to the bot.
-              setMode('bot');
-              rememberPendingTrigger(false);
-            } catch (e: any) {
-              console.error('End conversation error:', e);
-              setChatError(e?.code === 'permission-denied'
-                ? 'You do not have permission to close this conversation.'
-                : 'Could not end the conversation. Please try again.');
-            } finally {
-              setEndingConversation(false);
-            }
-          },
-        },
-      ]
-    );
+    setAlertConfig({
+      visible: true,
+      type: 'warning',
+      title: 'End this conversation?',
+      message: 'This closes your conversation with clinic staff. You can start a new one any time you need more help.',
+      primaryButtonText: 'End Conversation',
+      isDestructive: true,
+      secondaryButtonText: 'Cancel',
+      onSecondaryPress: hideAlert,
+      onPrimaryPress: () => {
+        hideAlert();
+        closeThread();
+      },
+    });
   };
 
   // ── Start a fresh assistant conversation ────────────────────────────────
@@ -332,22 +350,24 @@ export default function ChatScreen() {
   // in Firestore and is ended through endConversation, not by resetting the bot.
   const startNewBotConversation = () => {
     if (botMessages.length === 0 && !lastReplyNeedsEscalation) return;
-    Alert.alert(
-      'Start a new conversation?',
-      'This clears your chat with the K&A AI Assistant. Your conversation with clinic staff, if you have one, is not affected.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Start New',
-          onPress: () => {
-            setBotMessages([]);
-            setInput('');
-            setChatError('');
-            rememberPendingTrigger(false);
-          },
-        },
-      ]
-    );
+    setAlertConfig({
+      visible: true,
+      type: 'info',
+      title: 'Start a new conversation?',
+      message: openThreadId
+        ? 'This clears your chat with the K&A AI Assistant. Your open conversation with clinic staff stays exactly as it is.'
+        : 'This clears your chat with the K&A AI Assistant. Anything you asked so far will no longer be shown.',
+      primaryButtonText: 'Start New',
+      secondaryButtonText: 'Cancel',
+      onSecondaryPress: hideAlert,
+      onPrimaryPress: () => {
+        hideAlert();
+        setBotMessages([]);
+        setInput('');
+        setChatError('');
+        rememberPendingTrigger(false);
+      },
+    });
   };
 
   // ── Bot mode: ask the shared K&A Health Assistant engine (api/chatbot.js) ──
@@ -606,6 +626,7 @@ export default function ChatScreen() {
                 paddingBottom: keyboardVisible
                   ? verticalScale(8)
                   : Math.max(insets.bottom, verticalScale(16)) + verticalScale(6),
+                marginBottom: Platform.OS === 'android' ? keyboardHeight : 0,
               },
             ]}
           >
@@ -625,6 +646,8 @@ export default function ChatScreen() {
           </View>
         </View>
       </KeyboardAvoidingView>
+
+      <CustomAlertModal config={alertConfig} onClose={hideAlert} />
     </View>
   );
 }

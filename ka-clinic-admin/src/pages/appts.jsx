@@ -29,7 +29,8 @@ import {
 import { useEffect, useState } from 'react';
 import { auth, db } from '../lib/firebase';
 import Toast from '../components/Toast';
-import { getTodayDateString, addDaysToDateString } from '../lib/dates';
+import { authedPostJson } from '../lib/apiClient';
+import { getTodayDateString, addDaysToDateString, formatDateLong } from '../lib/dates';
 
 /* ─────────────────────────── CSS ─────────────────────────── */
 const globalCSS = `
@@ -941,12 +942,42 @@ export default function AppointmentPage() {
   const confirmedToday = appointments.filter(a => a.date === todayStr && (a.status === 'confirmed' || a.status === 'accepted')).length;
 
   // Actions
+  // Approving an appointment tells the patient. The app already surfaces a
+  // confirmed appointment in its notification list from the appointments
+  // listener, but that only fires while the app is open — this pushes through
+  // the same /api/notifications pipeline the dose reminders use, so it also
+  // lands in the patient's inbox and as a push/email when the app is closed.
+  const notifyAppointmentApproved = async (apt) => {
+    const patientId = apt?.patientId;
+    if (!patientId) return;
+    const whenDate = formatDateLong(apt.date) || apt.date || 'your scheduled date';
+    const whenTime = apt.time ? ` at ${apt.time}` : '';
+    try {
+      await authedPostJson('/api/notifications', {
+        action: 'send-followup',
+        patientId,
+        title: 'Appointment approved',
+        message: `Your ${apt.type || 'appointment'} at K&A Clinic on ${whenDate}${whenTime} has been approved. Please arrive 10 minutes early and bring your patient record.`,
+        dueDate: whenDate,
+        source: 'appointment-approved',
+      });
+    } catch (err) {
+      // The status change itself already succeeded; a failed notification
+      // must not read as a failed approval.
+      console.error('Appointment approval notification failed:', err);
+      showToast('Appointment approved, but the patient notification failed to send', 'error');
+    }
+  };
+
   const handleQuickAction = async (id, newStatus) => {
     try {
       const target = appointments.find(a => a.id === id);
       await updateDoc(doc(db, 'appointments', id), { status: newStatus, updatedAt: Date.now() });
       if (newStatus === 'cancelled' && target) {
         await releaseSlot(target.date, target.time);
+      }
+      if ((newStatus === 'confirmed' || newStatus === 'accepted') && target) {
+        await notifyAppointmentApproved(target);
       }
       showToast(`Appointment status updated to ${newStatus}`);
     } catch (err) {
