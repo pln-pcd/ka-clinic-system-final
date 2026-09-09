@@ -9,7 +9,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import React, { useEffect, useRef, useState } from 'react';
 import { auth, db } from '../lib/firebase';
 import {
-  ArrowRight, ShieldCheck, Mail, Lock, Key, Eye, EyeOff, Info, Check, CheckCircle2, ChevronLeft, Loader2, HelpCircle, Syringe, Heart, Sparkles
+  ArrowRight, ShieldCheck, Mail, Lock, Key, Eye, EyeOff, Info, Check, ChevronLeft, Loader2, HelpCircle, Syringe, Heart, Sparkles
 } from 'lucide-react';
 
 const SLIDES = [
@@ -680,19 +680,15 @@ export default function AdminLogin({ onSuccess, onBack }) {
         </div>
       </footer>
 
-      {/* ── SUCCESS OVERLAY (Transition to Dashboard) ── */}
+      {/* ── SIGN-IN HAND-OFF ──
+          This is a two-second wait on the way to the dashboard, so it says
+          what is happening and nothing more. The previous overlay announced
+          "Authenticated" with a badge and a second spinning ring, which is a
+          lot of ceremony for a step the user never chose to look at. */}
       {showSuccess && (
-        <div className="fixed inset-0 z-50 bg-[#060e24]/95 backdrop-blur-md flex flex-col items-center justify-center animate-in fade-in zoom-in-95 duration-300 text-white">
-          <div className="relative w-28 h-28 mb-5 flex items-center justify-center">
-            <div className="absolute inset-0 rounded-full border-2 border-dashed border-sky-400/50 animate-spin-slow" />
-            <div className="w-16 h-16 bg-blue-500/20 border border-blue-400 rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(59,130,246,0.5)] animate-pop-in">
-              <CheckCircle2 className="w-8 h-8 text-sky-400" />
-            </div>
-          </div>
-          <h2 className="font-display text-2xl font-extrabold text-white mb-1">Authenticated</h2>
-          <p className="text-blue-200 text-sm font-semibold flex items-center gap-1.5">
-            Loading clinic dashboard...
-          </p>
+        <div className="fixed inset-0 z-50 bg-[#060e24] flex flex-col items-center justify-center gap-4 text-white animate-in fade-in duration-200">
+          <div className="w-7 h-7 rounded-full border-2 border-white/15 border-t-white/80 animate-spin" />
+          <p className="text-sm font-semibold text-blue-100/80">Opening your dashboard…</p>
         </div>
       )}
 

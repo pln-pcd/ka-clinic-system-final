@@ -58,8 +58,9 @@ export default function App() {
   return (
     <>
       {view === 'checking' && (
-        <div className="min-h-screen flex items-center justify-center bg-[#060e24]">
-          <div className="w-8 h-8 border-[3px] border-blue-900 border-t-[#1D4ED8] rounded-full animate-spin" />
+        <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-[#060e24] text-white">
+          <div className="w-7 h-7 rounded-full border-2 border-white/15 border-t-white/80 animate-spin" />
+          <p className="text-sm font-semibold text-blue-100/80">Checking your session…</p>
         </div>
       )}
 
