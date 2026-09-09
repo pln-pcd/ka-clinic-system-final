@@ -25,6 +25,15 @@ import { createPortal } from 'react-dom';
 import { auth, db } from '../lib/firebase';
 import Toast from '../components/Toast';
 
+// Same-day resends are common, so the invite column needs the clock too —
+// a date alone looks unchanged when an invite is sent twice in one morning.
+function formatDateTime(ts) {
+  if (!ts) return '—';
+  const d = typeof ts === 'number' ? new Date(ts) : (ts?.toDate ? ts.toDate() : new Date(ts));
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
 function formatDate(ts) {
   if (!ts) return '—';
   const d = typeof ts === 'number' ? new Date(ts) : (ts?.toDate ? ts.toDate() : new Date(ts));
@@ -59,6 +68,10 @@ export default function ManageAdmins() {
   const [confirmRevoke, setConfirmRevoke] = useState(null);
   const [confirmCancel, setConfirmCancel] = useState(null);
   const [activeTab, setActiveTab] = useState('all'); // 'all' | 'invited' | 'revoked'
+  // A toast vanishes, and a resend that silently succeeds is indistinguishable
+  // from a dead button — especially when the mail itself lands in spam. The
+  // row keeps the confirmation until the admin moves on.
+  const [resentUid, setResentUid] = useState(null);
   const [copiedUid, setCopiedUid] = useState(null);
 
   useEffect(() => {
@@ -103,10 +116,16 @@ export default function ManageAdmins() {
 
   async function handleResend(admin) {
     setBusyUid(admin.uid);
+    setResentUid(null);
     try {
       const idToken = await auth.currentUser.getIdToken();
       const data = await postJson('/api/admin-invites', { action: 'invite', email: admin.email }, idToken);
-      showToast(data.success ? 'success' : 'error', data.success ? `Invite resent to ${admin.email}.` : (data.error || 'Could not resend the invite.'));
+      if (data.success) {
+        setResentUid(admin.uid);
+        showToast('success', `Invite resent to ${admin.email}. Ask them to check spam if it isn't in their inbox.`);
+      } else {
+        showToast('error', data.error || 'Could not resend the invite.');
+      }
     } catch {
       showToast('error', 'Network error. Please try again.');
     } finally {
@@ -326,7 +345,7 @@ export default function ManageAdmins() {
                         {/* Date Invited Column — shows when the invite was last
                             sent, so pressing Resend visibly updates the row. */}
                         <td className="px-6 py-3.5 text-xs font-semibold text-slate-500">
-                          {formatDate(admin.invitedAt || admin.createdAt)}
+                          {formatDateTime(admin.invitedAt || admin.createdAt)}
                         </td>
 
                         {/* Actions Column */}
@@ -351,9 +370,19 @@ export default function ManageAdmins() {
                                 <button
                                   onClick={() => handleResend(admin)}
                                   disabled={busyUid === admin.uid}
-                                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200/80 transition-colors disabled:opacity-50 cursor-pointer"
+                                  className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors disabled:opacity-50 cursor-pointer ${
+                                    resentUid === admin.uid
+                                      ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                                      : 'text-slate-700 bg-slate-100 hover:bg-slate-200 border-slate-200/80'
+                                  }`}
                                 >
-                                  <RotateCcw size={13} /> Resend
+                                  {busyUid === admin.uid ? (
+                                    <><Loader2 size={13} className="animate-spin" /> Sending…</>
+                                  ) : resentUid === admin.uid ? (
+                                    <><Check size={13} /> Sent</>
+                                  ) : (
+                                    <><RotateCcw size={13} /> Resend</>
+                                  )}
                                 </button>
                                 <button
                                   onClick={() => setConfirmCancel(admin)}

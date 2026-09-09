@@ -125,7 +125,7 @@ async function invite(req, res, caller) {
     return;
   }
 
-  res.status(200).json({ success: true, message: `Invite sent to ${email}.` });
+  res.status(200).json({ success: true, message: `Invite sent to ${email}.`, email, sentAt: Date.now() });
 }
 
 // Manager revokes a staff (or another manager's) account. Sets
