@@ -17,16 +17,7 @@
   ],
   "headers": [
     {
-      "source": "/assets/dashboard/(login-bg.mp4|login-poster.jpg)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=31536000, immutable"
-        }
-      ]
-    },
-    {
-      "source": "/assets/(.*).(png|jpg|jpeg|svg|webp|mp4)",
+      "source": "/assets/:path*.(png|jpg|jpeg|svg|webp|mp4)",
       "headers": [
         {
           "key": "Cache-Control",
