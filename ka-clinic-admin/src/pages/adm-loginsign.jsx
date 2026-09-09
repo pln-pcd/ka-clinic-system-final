@@ -289,7 +289,12 @@ export default function AdminLogin({ onSuccess, onBack }) {
         {/* Base dark navy backdrop */}
         <div className="absolute inset-0 bg-[#060e24]" />
 
-        {/* Dynamic Video Layer (Centered, aspect-ratio preserved, non-stretched) */}
+        {/* Dynamic Video Layer.
+            The poster is the first frame, so the backdrop is on screen from the
+            first paint instead of showing bare navy while 25 seconds of video
+            buffers. The clip itself is a 720p re-encode (412KB, down from a
+            1080p 5.8MB original) written with the moov atom first, so playback
+            starts on the opening bytes rather than after the whole download. */}
         {!videoError && (
           <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
             <video
@@ -298,12 +303,14 @@ export default function AdminLogin({ onSuccess, onBack }) {
               loop
               muted
               playsInline
+              preload="auto"
+              poster="/assets/dashboard/login-poster.jpg"
               onError={() => setVideoError(true)}
-              className="min-w-full min-h-full w-auto h-auto max-w-none object-cover opacity-80 transition-opacity duration-1000"
+              className="min-w-full min-h-full w-auto h-auto max-w-none object-cover opacity-80"
             >
+              <source src="/assets/dashboard/login-bg.mp4" type="video/mp4" />
               <source src="/assets/dashboard/login.mp4" type="video/mp4" />
               <source src="/login.mp4" type="video/mp4" />
-              <source src="/assets/login.mp4" type="video/mp4" />
             </video>
           </div>
         )}
