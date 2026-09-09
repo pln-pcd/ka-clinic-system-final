@@ -1,7 +1,7 @@
 import { db } from './_lib/firebaseAdmin.js';
 import { normalizeMRN } from './_lib/mrn.js';
 import { maskEmail } from './_lib/mask.js';
-import { buildOtpEmailHtml } from './_lib/emailTemplate.js';
+import { buildOtpEmailHtml, buildOtpEmailText } from './_lib/emailTemplate.js';
 import { generateOtp, isInCooldown, sendOtpEmailOrRollback } from './_lib/otp.js';
 
 const COOLDOWN_MS = 30 * 1000;
@@ -87,6 +87,7 @@ export default async function handler(req, res) {
       // mail — the recipient can read it from the inbox list without opening.
       subject: `${otp} is your K&A Clinic verification code`,
       html: buildOtpEmailHtml({ otp }),
+      text: buildOtpEmailText({ otp }),
     });
 
     if (sendError) {

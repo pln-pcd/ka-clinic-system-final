@@ -19,8 +19,8 @@ export function isInCooldown(record, cooldownMs) {
 // failed send doesn't block a retry behind the cooldown for a code that was
 // never delivered) and returns { error } for the caller to turn into a 502.
 // On success returns { error: null }.
-export async function sendOtpEmailOrRollback({ otpRef, to, subject, html }) {
-  const { error } = await sendMail({ to, subject, html });
+export async function sendOtpEmailOrRollback({ otpRef, to, subject, html, text }) {
+  const { error } = await sendMail({ to, subject, html, text });
   if (error) {
     console.error('Gmail send error:', error);
     await otpRef.delete();

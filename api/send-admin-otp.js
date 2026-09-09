@@ -8,7 +8,7 @@ import { requireAuthenticatedAdmin } from './_lib/adminAuth.js';
 import { getCookie, DEVICE_COOKIE_NAME, fingerprintDeviceId } from './_lib/deviceCookie.js';
 import { lockStatus } from './_lib/lockout.js';
 import { maskEmail } from './_lib/mask.js';
-import { buildAdminOtpEmailHtml } from './_lib/emailTemplate.js';
+import { buildAdminOtpEmailHtml, buildAdminOtpEmailText } from './_lib/emailTemplate.js';
 import { generateOtp, isInCooldown, sendOtpEmailOrRollback } from './_lib/otp.js';
 
 const COOLDOWN_MS = 30 * 1000;
@@ -71,6 +71,7 @@ export default async function handler(req, res) {
       to: caller.data.email,
       subject: `${code} is your K&A Clinic admin sign-in code`,
       html: buildAdminOtpEmailHtml({ otp: code }),
+      text: buildAdminOtpEmailText({ otp: code }),
     });
 
     if (sendError) {

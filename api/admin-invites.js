@@ -16,7 +16,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { auth, db } from './_lib/firebaseAdmin.js';
 import { requireActiveManager } from './_lib/adminAuth.js';
 import { isValidEmail } from './_lib/admins.js';
-import { buildInviteEmailHtml } from './_lib/emailTemplate.js';
+import { buildInviteEmailHtml, buildInviteEmailText } from './_lib/emailTemplate.js';
 import { sendMail } from './_lib/mailer.js';
 
 const INVITE_TTL_MS = 48 * 60 * 60 * 1000; // 48 hours
@@ -102,6 +102,7 @@ async function invite(req, res, caller) {
       ? `${manager.name} invited you to the K&A Clinic Admin Dashboard`
       : 'Your invite to the K&A Clinic Admin Dashboard',
     html: buildInviteEmailHtml({ inviteUrl, inviterName: manager.name }),
+    text: buildInviteEmailText({ inviteUrl, inviterName: manager.name }),
   });
 
   if (sendError) {

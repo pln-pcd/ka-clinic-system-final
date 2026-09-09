@@ -41,7 +41,7 @@ function shell({ title, preheader, body }) {
     <title>${title}</title>
   </head>
   <body style="margin:0;padding:0;background-color:${PAGE_BG};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,Helvetica,sans-serif;-webkit-font-smoothing:antialiased;">
-    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;font-size:1px;line-height:1px;">${preheader}</div>
+    <div style="display:none;max-height:0;overflow:hidden;">${preheader}</div>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${PAGE_BG};padding:24px 12px;">
       <tr>
         <td align="center">
@@ -218,4 +218,52 @@ export function buildFollowUpEmailHtml({ patientName, message, ackUrl, doseLabel
         : footnote('If you have already completed this visit, you can ignore this reminder.'),
     ].filter(Boolean).join('\n'),
   });
+}
+
+/* ─────────────────────── PLAINTEXT ALTERNATIVES ───────────────────────
+   Every message is multipart. mailer.js can scrape the HTML when nothing
+   better is supplied, but a hand-written part reads like a real message
+   and keeps the two halves saying the same thing — which is one of the
+   few deliverability levers left when sending from a plain Gmail address. */
+
+export function buildOtpEmailText({ otp }) {
+  return [
+    'Verify your sign-in',
+    '',
+    `Your K&A Clinic verification code is ${otp}.`,
+    'Enter it in the K&A Clinic Patient App to finish signing in. The code expires in 5 minutes.',
+    '',
+    'If you did not request this code, you can ignore this email. Never share it with anyone.',
+    '',
+    'K&A Anti-Rabies Vaccine Clinic - Libon, Albay',
+  ].join('\n');
+}
+
+export function buildAdminOtpEmailText({ otp }) {
+  return [
+    'Admin sign-in code',
+    '',
+    `Your K&A Clinic Admin Dashboard sign-in code is ${otp}.`,
+    'It expires in 5 minutes.',
+    '',
+    'If you did not just enter your password on the Admin Dashboard, ignore this email and change your password.',
+    '',
+    'K&A Anti-Rabies Vaccine Clinic - Libon, Albay',
+  ].join('\n');
+}
+
+export function buildInviteEmailText({ inviteUrl, inviterName }) {
+  const invitedBy = inviterName ? `${inviterName} has invited you` : 'You have been invited';
+  return [
+    'Hello,',
+    '',
+    `${invitedBy} to join the K&A Clinic Admin Dashboard as staff.`,
+    'Open the link below to set your password and activate your account:',
+    '',
+    inviteUrl,
+    '',
+    'This invite expires in 48 hours. If you were not expecting it, you can ignore this email.',
+    '',
+    'K&A Anti-Rabies Vaccine Clinic - Libon, Albay',
+  ].join('\n');
 }
