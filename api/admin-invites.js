@@ -103,7 +103,7 @@ async function invite(req, res, caller) {
   const forwardedProto = req.headers['x-forwarded-proto'] || 'https';
   let appUrl = requestOrigin
     || (configuredUrl && !configuredUrl.includes('localhost') ? configuredUrl : '')
-    || (forwardedHost ? `${forwardedProto}://${forwardedHost}` : 'https://ka-clinic-admin.vercel.app');
+    || (forwardedHost ? `${forwardedProto}://${forwardedHost}` : 'https://ka-clinic-admin-final.vercel.app');
   const inviteUrl = `${appUrl.replace(/\/+$/, '')}/accept-invite?token=${token}`;
 
   const { error: sendError } = await sendMail({
@@ -161,7 +161,7 @@ async function getLink(req, res, caller) {
   const forwardedProto = req.headers['x-forwarded-proto'] || 'https';
   let appUrl = requestOrigin
     || (configuredUrl && !configuredUrl.includes('localhost') ? configuredUrl : '')
-    || (forwardedHost ? `${forwardedProto}://${forwardedHost}` : 'https://ka-clinic-admin.vercel.app');
+    || (forwardedHost ? `${forwardedProto}://${forwardedHost}` : 'https://ka-clinic-admin-final.vercel.app');
   const inviteUrl = `${appUrl.replace(/\/+$/, '')}/accept-invite?token=${token}`;
   res.status(200).json({ success: true, inviteUrl });
 }

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { auth, db } from "../lib/firebase";
 import { buildDoses } from "./vaccination";
-import { buildInitialDoses, buildScheduleDates, isAgeGrouped, scheduleLabel } from "../lib/doseSchedules";
+import { buildInitialDoses, buildScheduleDates, isAgeGrouped, scheduleLabel, getEligibleVaccinesForService, isVaccineForService } from "../lib/doseSchedules";
 import { formatDateLong, formatDateLong as fmtDate, formatDateShort, formatDateNumeric, getTodayDateString, today, addDaysToDateString } from "../lib/dates";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
@@ -695,7 +695,8 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [] }) {
     ageGroup: 'adult',
   });
 
-  const vaccineItems = inventoryItems.filter(i => i.category === 'Vaccine' && (parseInt(i.stock) || 0) > 0);
+  const eligibleVaccines = getEligibleVaccinesForService(form.service, inventoryItems);
+  const vaccineItems = eligibleVaccines.filter(i => (parseInt(i.stock) || 0) > 0);
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -966,7 +967,16 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [] }) {
               </div>
 
               <div style={{ marginBottom: 20 }}>
-                <ServiceSelector value={form.service} onChange={v => set('service', v)} />
+                <ServiceSelector
+                  value={form.service}
+                  onChange={v => {
+                    setForm(f => ({
+                      ...f,
+                      service: v,
+                      vaccineBrand: f.vaccineBrand && isVaccineForService(v, f.vaccineBrand) ? f.vaccineBrand : ''
+                    }));
+                  }}
+                />
               </div>
 
               {/* Vaccine Brand Selector */}
@@ -1301,7 +1311,11 @@ function EditPatientModal({ patient, onClose, onSave, inventoryItems = [] }) {
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const isPep = form.service === 'PEP';
-  const vaccineItems = inventoryItems.filter(i => i.category === 'Vaccine' && (parseInt(i.stock) || 0) > 0);
+  const eligibleVaccines = getEligibleVaccinesForService(form.service, inventoryItems);
+  const vaccineItems = eligibleVaccines.filter(i => (parseInt(i.stock) || 0) > 0);
+  if (form.vaccineBrand && !vaccineItems.some(item => item.name === form.vaccineBrand)) {
+    vaccineItems.unshift({ id: 'current_assigned', name: form.vaccineBrand, stock: '?' });
+  }
 
   // handleEditSave (parent) validates, persists, and closes this modal itself —
   // no local saving/loading state to juggle here.
@@ -1492,7 +1506,14 @@ function EditPatientModal({ patient, onClose, onSave, inventoryItems = [] }) {
                     <label className="block mb-1.5 text-slate-500">Service</label>
                     <select
                       value={form.service}
-                      onChange={e => set('service', e.target.value)}
+                      onChange={e => {
+                        const newSvc = e.target.value;
+                        setForm(f => ({
+                          ...f,
+                          service: newSvc,
+                          vaccineBrand: f.vaccineBrand && isVaccineForService(newSvc, f.vaccineBrand) ? f.vaccineBrand : ''
+                        }));
+                      }}
                       className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
                     >
                       <option>PEP</option>

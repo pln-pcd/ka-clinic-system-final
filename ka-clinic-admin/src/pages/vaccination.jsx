@@ -13,7 +13,7 @@ import Toast from '../components/Toast';
 import { authedPostJson } from '../lib/apiClient';
 import { db } from '../lib/firebase';
 import { formatDateShort as fmtDate, addDaysToDateString, getTodayDateString } from '../lib/dates';
-import { buildScheduleDates } from '../lib/doseSchedules';
+import { buildScheduleDates, isVaccineForService, getEligibleVaccinesForService } from '../lib/doseSchedules';
 import { createPortal } from 'react-dom';
 
 /* ─────────────────────────────────────────────────────────── */
@@ -411,8 +411,14 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
     const prevStatus = cur.status;
     const isCurrentlyDone = prevStatus === 'done';
 
-    // ── STRICT SEQUENTIAL DOSE ENFORCEMENT ──
+    // ── STRICT SEQUENTIAL DOSE ENFORCEMENT & VACCINE BRAND CHECK ──
     if (!isCurrentlyDone) {
+      // The nurse cannot check if they still haven't chosen the vaccine brand
+      if (!fresh.vaccineBrand) {
+        showToast(`Please assign a Vaccine Brand for ${getName(fresh)} first before recording this dose, so the vial is deducted from stock.`, 'warning');
+        return;
+      }
+
       // User wants to check Dose di -> ALL previous doses (0 .. di - 1) MUST be 'done'
       for (let k = 0; k < di; k++) {
         if (doses[k].status !== 'done') {
@@ -886,24 +892,35 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                             <span style={{ color: pct === 100 ? '#059669' : '#1E293B' }}>{pct}%</span>
                           </div>
                           <div style={{ display: 'flex', gap: 3 }}>
-                            {doses.map((d, di) => (
-                              <button
-                                key={di}
-                                type="button"
-                                title={`${d.label} · ${fmtDate(d.date)} · Click to toggle status`}
-                                onClick={e => { e.stopPropagation(); cycleStatus(p, d.key); }}
-                                disabled={!!saving[`${p.firestoreId}_${d.key}`]}
-                                style={{
-                                  flex: 1, height: 8, borderRadius: 9999, border: 'none',
-                                  cursor: saving[`${p.firestoreId}_${d.key}`] ? 'wait' : 'pointer',
-                                  background:
-                                    d.status === 'done' ? '#10B981' :
-                                    d.status === 'miss' ? '#EF4444' : '#CBD5E1',
-                                  transition: 'all 0.15s',
-                                  opacity: saving[`${p.firestoreId}_${d.key}`] ? 0.5 : 1,
-                                }}
-                              />
-                            ))}
+                            {doses.map((d, di) => {
+                              const needsBrand = !p.vaccineBrand && d.status !== 'done';
+                              return (
+                                <button
+                                  key={di}
+                                  type="button"
+                                  title={
+                                    needsBrand
+                                      ? `Assign vaccine brand first before recording ${d.label}`
+                                      : `${d.label} · ${fmtDate(d.date)} · Click to toggle status`
+                                  }
+                                  onClick={e => { e.stopPropagation(); cycleStatus(p, d.key); }}
+                                  disabled={!!saving[`${p.firestoreId}_${d.key}`]}
+                                  style={{
+                                    flex: 1, height: 8, borderRadius: 9999, border: 'none',
+                                    cursor: saving[`${p.firestoreId}_${d.key}`]
+                                      ? 'wait'
+                                      : needsBrand
+                                      ? 'not-allowed'
+                                      : 'pointer',
+                                    background:
+                                      d.status === 'done' ? '#10B981' :
+                                      d.status === 'miss' ? '#EF4444' : '#CBD5E1',
+                                    transition: 'all 0.15s',
+                                    opacity: saving[`${p.firestoreId}_${d.key}`] ? 0.5 : (needsBrand ? 0.6 : 1),
+                                  }}
+                                />
+                              );
+                            })}
                           </div>
                         </div>
                       </td>
@@ -1191,32 +1208,62 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                   </div>
 
                   {/* Inventory Vaccine Brand Allocation */}
-                  <div className="mt-4 bg-white border border-slate-300/90 rounded-2xl p-4 shadow-2xs">
-                    <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 mb-2">
-                      Assigned Vaccine Brand (Stock Sync)
-                    </div>
-                    <div className="relative">
-                      <select
-                        value={p.vaccineBrand || ''}
-                        onChange={e => handleAssignBrand(p, e.target.value)}
-                        className="w-full py-2.5 pl-3 pr-9 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-bold text-xs text-slate-800 cursor-pointer appearance-none"
-                      >
-                        <option value="">— Select Vaccine Stock Brand —</option>
-                        {inventoryItems.filter(i => i.category === 'Vaccine').map(item => (
-                          <option key={item.id} value={item.name}>{item.name} ({item.stock} {item.unit || 'pcs'} left)</option>
-                        ))}
-                      </select>
-                      <ChevronDown
-                        size={16}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
-                      />
-                    </div>
-                    {!p.vaccineBrand && (
-                      <p className="text-[11px] font-semibold text-amber-600 mt-2">
-                        Select a brand to auto-deduct stock upon dose completion.
-                      </p>
-                    )}
-                  </div>
+                  {(() => {
+                    const serviceName = p.service || 'PEP';
+                    const eligibleVaccines = getEligibleVaccinesForService(serviceName, inventoryItems);
+                    const allOptions = [...eligibleVaccines];
+                    // Keep currently assigned brand in list if not already present
+                    if (p.vaccineBrand && !allOptions.some(item => item.name === p.vaccineBrand)) {
+                      allOptions.unshift({ id: 'current_assigned', name: p.vaccineBrand, stock: '?' });
+                    }
+
+                    return (
+                      <div className={`mt-4 bg-white border rounded-2xl p-4 shadow-2xs transition-all ${
+                        !p.vaccineBrand ? 'border-amber-300 bg-amber-50/25' : 'border-slate-300/90'
+                      }`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                            Assigned Vaccine Brand (Stock Sync)
+                          </div>
+                          <span className="text-[10px] font-bold text-[#3B50DF] bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full">
+                            {serviceName}
+                          </span>
+                        </div>
+                        <div className="relative">
+                          <select
+                            value={p.vaccineBrand || ''}
+                            onChange={e => handleAssignBrand(p, e.target.value)}
+                            className={`w-full py-2.5 pl-3 pr-9 border rounded-xl outline-none font-bold text-xs cursor-pointer appearance-none ${
+                              !p.vaccineBrand
+                                ? 'border-amber-400 bg-amber-50/50 text-amber-900 focus:border-amber-500'
+                                : 'border-slate-300 bg-white text-slate-800 focus:border-[#3B50DF]'
+                            }`}
+                          >
+                            <option value="">— Select {serviceName} Vaccine Stock Brand —</option>
+                            {allOptions.map(item => (
+                              <option key={item.id} value={item.name}>
+                                {item.name} ({item.stock} {item.unit || 'pcs'} left)
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown
+                            size={16}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                          />
+                        </div>
+                        {!p.vaccineBrand ? (
+                          <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200/80 rounded-lg p-2 mt-2">
+                            <AlertCircle size={14} className="shrink-0 text-amber-600" />
+                            <span>Select a vaccine brand to unlock dose checklist &amp; auto-deduct stock.</span>
+                          </div>
+                        ) : (
+                          <p className="text-[10.5px] font-medium text-slate-500 mt-2">
+                            Only vaccines approved for <strong className="text-slate-700">{serviceName}</strong> are selectable.
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Right Column: Dose Checklist */}
@@ -1236,28 +1283,36 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                     {(() => {
                       const nextDoseIndex = doses.findIndex(d => d.status !== 'done');
                       const lastDoneIndex = doses.reduce((last, d, idx) => d.status === 'done' ? idx : last, -1);
+                      const hasBrand = Boolean(p.vaccineBrand);
 
                       return doses.map((d, di) => {
                         const isDone = d.status === 'done';
                         const isNext = (!isDone && di === nextDoseIndex);
-                        const canToggle = isDone ? (di === lastDoneIndex) : isNext;
+                        const canToggle = isDone ? (di === lastDoneIndex) : (isNext && hasBrand);
 
                         const cardBg = isDone
                           ? 'bg-emerald-50/40 border-emerald-200/90'
                           : isNext
-                          ? 'bg-indigo-50/50 border-[#3B50DF] shadow-2xs'
+                          ? (hasBrand ? 'bg-indigo-50/50 border-[#3B50DF] shadow-2xs' : 'bg-amber-50/30 border-amber-200/70')
                           : 'bg-slate-50/50 border-slate-200/80';
 
                         const badgeBg = isDone
                           ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
                           : isNext
-                          ? 'bg-[#3B50DF] text-white border-indigo-600'
+                          ? (hasBrand ? 'bg-[#3B50DF] text-white border-indigo-600' : 'bg-amber-100 text-amber-800 border-amber-300')
                           : 'bg-slate-200/80 text-slate-600 border-slate-300';
 
                         return (
                           <div
                             key={di}
-                            className={`p-2.5 rounded-xl border transition-all flex items-center justify-between gap-3 ${cardBg} ${!canToggle && !isDone ? 'opacity-50' : 'opacity-100'}`}
+                            onClick={() => {
+                              if (!hasBrand && !isDone && isNext) {
+                                showToast('Please select an assigned Vaccine Brand first before checking this dose.', 'warning');
+                              }
+                            }}
+                            className={`p-2.5 rounded-xl border transition-all flex items-center justify-between gap-3 ${cardBg} ${
+                              !canToggle && !isDone ? 'opacity-60' : 'opacity-100'
+                            }`}
                           >
                             {/* Left Side: Dose Label & Target Date */}
                             <div className="flex items-center gap-2.5 min-w-0">
@@ -1286,9 +1341,15 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                                 checked={isDone}
                                 disabled={!canToggle || !!saving[`${p.firestoreId}_${d.key}`]}
                                 onChange={() => cycleStatus(p, d.key)}
-                                className="w-4.5 h-4.5 rounded accent-[#3B50DF] cursor-pointer disabled:cursor-not-allowed"
+                                className={`w-4.5 h-4.5 rounded accent-[#3B50DF] ${
+                                  !hasBrand && !isDone
+                                    ? 'cursor-not-allowed opacity-40'
+                                    : 'cursor-pointer disabled:cursor-not-allowed'
+                                }`}
                                 title={
-                                  !canToggle
+                                  !hasBrand && !isDone
+                                    ? 'Assign a Vaccine Brand first before checking this dose'
+                                    : !canToggle
                                     ? (isDone ? 'Only the latest completed dose can be unchecked' : `Complete Dose ${nextDoseIndex + 1} first`)
                                     : (isDone ? 'Uncheck to undo dose completion' : 'Check to mark dose as administered')
                                 }

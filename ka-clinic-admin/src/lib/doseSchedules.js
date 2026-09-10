@@ -189,3 +189,84 @@ export function buildInitialDoses(service, { day0, dob, ageGroup } = {}) {
     done: false,
   }));
 }
+
+/**
+ * Checks whether an inventory vaccine item belongs to a specific clinical service.
+ * E.g., PEP and PrEP are strictly for rabies vaccines (Rabipur, Verorab, Speeda),
+ * Tetanus is for anti-tetanus biologics, Hepatitis for Hepatitis vaccines, etc.
+ *
+ * @param {string} service - e.g. 'PEP', 'PrEP', 'Tetanus', 'Hepatitis', 'Pneumonia'
+ * @param {object|string} item - Inventory item object or vaccine name string
+ * @returns {boolean}
+ */
+export function isVaccineForService(service, item) {
+  const name = typeof item === 'string' ? item : (item?.name || '');
+  const n = name.toLowerCase();
+  const s = String(service || 'PEP').trim().toUpperCase();
+
+  // If the inventory item explicitly specifies a service
+  if (typeof item === 'object' && item !== null) {
+    if (item.service && String(item.service).trim().toUpperCase() === s) return true;
+  }
+
+  // Rabies PEP & PrEP:
+  // Strictly Rabies vaccines (Rabipur, Verorab, Speeda, PCEC, PVRV, HDCV, ARV)
+  if (s === 'PEP' || s === 'PREP') {
+    return n.includes('rabies') ||
+           n.includes('rabipur') ||
+           n.includes('verorab') ||
+           n.includes('speeda') ||
+           n.includes('pcec') ||
+           n.includes('pvrv') ||
+           n.includes('hdcv') ||
+           n.includes('arv');
+  }
+
+  // Anti-Tetanus:
+  if (s === 'TETANUS') {
+    return n.includes('tetanus') ||
+           n.includes('toxoid') ||
+           n.includes('ats') ||
+           n.includes('tig') ||
+           n.includes(' tt') ||
+           n.startsWith('tt') ||
+           n.includes('td');
+  }
+
+  // Hepatitis:
+  if (s === 'HEPATITIS') {
+    return n.includes('hepatitis') ||
+           n.includes('hepa') ||
+           n.includes('engerix') ||
+           n.includes('hbv') ||
+           n.includes('hav');
+  }
+
+  // Pneumonia / Pneumococcal:
+  if (s === 'PNEUMONIA') {
+    return n.includes('pneumo') ||
+           n.includes('prevnar') ||
+           n.includes('pcv') ||
+           n.includes('ppsv');
+  }
+
+  // Flu:
+  if (s === 'FLU' || s === 'INFLUENZA') {
+    return n.includes('flu') || n.includes('influenza');
+  }
+
+  // Fallback for custom or unrecognized services
+  return true;
+}
+
+/**
+ * Returns the list of inventory vaccine items valid for the specified service.
+ * If no matching items exist in stock, falls back to all vaccine items so
+ * clinic staff are never blocked by unusual brand names.
+ */
+export function getEligibleVaccinesForService(service, inventoryItems = []) {
+  const vaccineCategoryItems = inventoryItems.filter(i => i.category === 'Vaccine');
+  const matched = vaccineCategoryItems.filter(i => isVaccineForService(service, i));
+  return matched.length > 0 ? matched : vaccineCategoryItems;
+}
+

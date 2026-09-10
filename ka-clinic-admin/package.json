@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "check-smtp": "node --env-file=../.env ../scripts/check-smtp-usage.mjs"
   },
   "dependencies": {
     "firebase": "^10.14.1",

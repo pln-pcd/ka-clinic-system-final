@@ -2,7 +2,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "create-manager": "node --env-file=.env scripts/create-manager.js"
+    "create-manager": "node --env-file=.env scripts/create-manager.js",
+    "check-smtp": "node --env-file=.env scripts/check-smtp-usage.mjs"
   },
   "dependencies": {
     "firebase-admin": "^13.10.0",
