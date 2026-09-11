@@ -1349,7 +1349,7 @@ export default function AppointmentPage() {
             </div>
 
             {/* 2-Column Grid Content with Vertical Division Line in the Middle */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 0.85fr', gap: 14, flex: 1, overflowY: 'auto' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, flex: 1, overflowY: 'auto' }}>
               
               {/* LEFT COLUMN: Appointment Requests */}
               <div style={{ paddingRight: 12, borderRight: '1.5px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1361,51 +1361,62 @@ export default function AppointmentPage() {
                   </div>
                 ) : (
                   <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.6875rem' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.71875rem' }}>
                       <thead>
                         <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-subtle)' }}>
-                          <th style={{ padding: '5px 6px', fontWeight: 700, color: 'var(--text-muted)' }}>Patient</th>
-                          <th style={{ padding: '5px 6px', fontWeight: 700, color: 'var(--text-muted)' }}>Date & Time</th>
-                          <th style={{ padding: '5px 6px', fontWeight: 700, color: 'var(--text-muted)' }}>Service</th>
-                          <th style={{ padding: '5px 6px', fontWeight: 700, color: 'var(--text-muted)', textAlign: 'right' }}>Actions</th>
+                          <th style={{ padding: '6px 8px', fontWeight: 700, color: 'var(--text-muted)' }}>Patient</th>
+                          <th style={{ padding: '6px 8px', fontWeight: 700, color: 'var(--text-muted)' }}>Date & Time</th>
+                          <th style={{ padding: '6px 8px', fontWeight: 700, color: 'var(--text-muted)', textAlign: 'center' }}>Actions</th>
                         </tr>
                       </thead>
                       <tbody>
                         {pendingOnlineRequests.map(apt => (
-                          <tr key={apt.id} style={{ borderBottom: '1px solid var(--border)' }} className="transition-colors hover:bg-slate-50">
-                            <td style={{ padding: '5px 6px' }}>
-                              <div style={{ fontWeight: 700, color: 'var(--text-main)', fontSize: '0.71875rem' }}>{apt.name}</div>
-                              <div style={{ fontSize: '0.625rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 1 }}>
-                                <Phone size={9} /> {apt.contactNumber || apt.contact || '—'}
-                                <span className="badge-source" style={{ fontSize: '0.5625rem', padding: '1px 4px' }}>
-                                  {(apt.source === 'online' || apt.source === 'landing') ? 'Online' : 'Walk-In'}
-                                </span>
+                          <tr
+                            key={apt.id}
+                            onClick={() => openEditModal(apt)}
+                            style={{ borderBottom: '1px solid var(--border)', cursor: 'pointer' }}
+                            className="transition-colors hover:bg-slate-50 group"
+                            title="Click to view appointment details"
+                          >
+                            <td style={{ padding: '6px 8px' }}>
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); openEditModal(apt); }}
+                                className="text-left font-bold text-slate-800 hover:text-blue-600 cursor-pointer"
+                                style={{ fontSize: '0.78125rem', background: 'none', border: 'none', padding: 0 }}
+                              >
+                                {apt.name}
+                              </button>
+                              <div style={{ fontSize: '0.65625rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 1 }}>
+                                <Phone size={10} /> {apt.contactNumber || apt.contact || 'No contact'}
+                              </div>
+                              <div style={{ fontSize: '0.65625rem', color: '#4338CA', fontWeight: 600, marginTop: 2 }}>
+                                {apt.type}
                               </div>
                             </td>
-                            <td style={{ padding: '5px 6px', color: 'var(--text-muted)', fontSize: '0.65625rem', whiteSpace: 'nowrap' }}>
-                              <div style={{ fontWeight: 600 }}>{apt.date}</div>
-                              <div style={{ fontSize: '0.625rem' }}>{apt.time}</div>
+                            <td style={{ padding: '6px 8px', color: 'var(--text-muted)', fontSize: '0.6875rem', whiteSpace: 'nowrap' }}>
+                              <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>{apt.date}</div>
+                              <div style={{ fontSize: '0.65625rem' }}>{apt.time}</div>
                             </td>
-                            <td style={{ padding: '5px 6px', fontSize: '0.65625rem', fontWeight: 600, color: 'var(--text-main)' }}>
-                              {apt.type}
-                            </td>
-                            <td style={{ padding: '5px 6px', textAlign: 'right' }}>
-                              <div style={{ display: 'flex', gap: 3, justifyContent: 'flex-end', alignItems: 'center' }}>
+                            <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                              <div style={{ display: 'flex', gap: 6, justifyContent: 'center', alignItems: 'center' }}>
                                 <button
+                                  type="button"
                                   className="btn-queue-action btn-queue-confirm"
-                                  onClick={() => handleQuickAction(apt.id, 'confirmed')}
-                                  style={{ padding: '2px 6px', fontSize: '0.625rem', display: 'flex', alignItems: 'center', gap: 2 }}
+                                  onClick={(e) => { e.stopPropagation(); handleQuickAction(apt.id, 'confirmed'); }}
+                                  style={{ padding: '4px 10px', fontSize: '0.6875rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}
                                   title="Confirm appointment"
                                 >
-                                  <UserCheck size={10} /> Confirm
+                                  <UserCheck size={12} /> Confirm
                                 </button>
                                 <button
+                                  type="button"
                                   className="btn-queue-action btn-queue-cancel"
-                                  onClick={() => promptDecline(apt)}
-                                  style={{ padding: '2px 6px', fontSize: '0.625rem', display: 'flex', alignItems: 'center', gap: 2 }}
+                                  onClick={(e) => { e.stopPropagation(); promptDecline(apt); }}
+                                  style={{ padding: '4px 10px', fontSize: '0.6875rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}
                                   title="Decline appointment"
                                 >
-                                  <X size={10} /> Decline
+                                  <X size={12} /> Decline
                                 </button>
                               </div>
                             </td>
@@ -1466,9 +1477,20 @@ export default function AppointmentPage() {
                       </thead>
                       <tbody>
                         {allCancelledApts.map(apt => (
-                          <tr key={apt.id} style={{ borderBottom: '1px solid var(--border)' }} className="transition-colors hover:bg-slate-50">
+                          <tr
+                            key={apt.id}
+                            onClick={() => openEditModal(apt)}
+                            style={{ borderBottom: '1px solid var(--border)', cursor: 'pointer' }}
+                            className="transition-colors hover:bg-slate-50"
+                            title="Click to view appointment details"
+                          >
                             <td style={{ padding: '5px 6px', fontWeight: 700, fontSize: '0.71875rem' }}>
-                              <button onClick={() => openEditModal(apt)} className="text-left font-bold text-slate-800 hover:text-red-600 cursor-pointer">
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); openEditModal(apt); }}
+                                className="text-left font-bold text-slate-800 hover:text-red-600 cursor-pointer"
+                                style={{ background: 'none', border: 'none', padding: 0 }}
+                              >
                                 {apt.name}
                               </button>
                             </td>
