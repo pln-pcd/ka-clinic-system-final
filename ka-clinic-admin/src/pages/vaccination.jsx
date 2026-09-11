@@ -1,7 +1,7 @@
 // kna-admin/src/vaccination.jsx
 import {
   collection, doc, getDocs,
-  increment, onSnapshot, orderBy, query, runTransaction, updateDoc, where
+  increment, limit, onSnapshot, orderBy, query, runTransaction, updateDoc, where
 } from 'firebase/firestore';
 import {
   AlertCircle, Bell, CheckCircle, ChevronDown, ChevronLeft,
@@ -280,10 +280,11 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
   }, [initialPatients]);
 
   useEffect(() => {
+    if (initialPatients && initialPatients.length > 0) return;
     let unsub;
     const fetchVaccinations = () => {
       try {
-        const q = query(collection(db, 'vaccinations'), orderBy('createdAt', 'desc'));
+        const q = query(collection(db, 'vaccinations'), orderBy('createdAt', 'desc'), limit(100));
         unsub = onSnapshot(q, snap => {
           const data = snap.docs.map(d => ({ id: d.id, firestoreId: d.id, ...d.data() }));
           cachedVaccinationPatients = data;
@@ -297,7 +298,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
           setLoading(false);
         }, err => {
           console.warn('Ordered query failed, falling back to unordered query:', err);
-          const fallbackQ = query(collection(db, 'vaccinations'));
+          const fallbackQ = query(collection(db, 'vaccinations'), limit(100));
           unsub = onSnapshot(fallbackQ, snap => {
             const data = snap.docs.map(d => ({ id: d.id, firestoreId: d.id, ...d.data() }));
             cachedVaccinationPatients = data;
@@ -313,7 +314,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
         });
       } catch (err) {
         console.warn('Query catch fallback:', err);
-        const fallbackQ = query(collection(db, 'vaccinations'));
+        const fallbackQ = query(collection(db, 'vaccinations'), limit(100));
         unsub = onSnapshot(fallbackQ, snap => {
           const data = snap.docs.map(d => ({ id: d.id, firestoreId: d.id, ...d.data() }));
           cachedVaccinationPatients = data;

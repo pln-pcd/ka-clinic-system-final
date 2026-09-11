@@ -2047,7 +2047,7 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
   useEffect(() => {
     if (!db) { setAptsLoading(false); return; }
     try {
-      const q = query(collection(db, 'appointments'));
+      const q = query(collection(db, 'appointments'), limit(100));
       const unsub = onSnapshot(q, (snap) => {
         const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         const pEmail = (patient.email || '').toLowerCase().trim();
@@ -5296,7 +5296,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
   }
 
   useEffect(() => {
-    const q = query(collection(db, 'vaccinations'), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'vaccinations'), orderBy('createdAt', 'desc'), limit(100));
     const unsub = onSnapshot(q, snap => {
       const data = snap.docs.map((d, i) => ({
         firestoreId: d.id,

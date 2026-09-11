@@ -1,6 +1,5 @@
-// kna-admin/src/AdminDashboard.jsx
 import { signOut } from 'firebase/auth';
-import { collection, doc, onSnapshot, orderBy, query, setDoc, where } from 'firebase/firestore';
+import { collection, doc, limit, onSnapshot, orderBy, query, setDoc, where } from 'firebase/firestore';
 import {
   Activity, AlertCircle, AlertOctagon, AlertTriangle,
   Bell, Calendar, Check, CheckCheck, CheckCircle, CheckCircle2, Clock,
@@ -415,7 +414,7 @@ export default function AdminDashboard({ onLogout }) {
 
   // Real-Time Listener on /vaccinations (Patients count, recent patients, weekly trend)
   useEffect(() => {
-    const q = query(collection(db, 'vaccinations'), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'vaccinations'), orderBy('createdAt', 'desc'), limit(100));
     return onSnapshot(q, snap => {
       const docs = snap.docs.map(d => ({ id: d.id, firestoreId: d.id, ...d.data() }));
       setRecentPatients(docs.slice(0, 5));
@@ -461,7 +460,7 @@ export default function AdminDashboard({ onLogout }) {
   // Real-Time Listener on /appointments
   useEffect(() => {
     const today = getTodayDateString();
-    const q = query(collection(db, 'appointments'), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'appointments'), orderBy('createdAt', 'desc'), limit(100));
     return onSnapshot(q, snap => {
       const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       const todays = all.filter(a => a.date === today);
@@ -532,31 +531,26 @@ export default function AdminDashboard({ onLogout }) {
 
   // Real-Time Listener on /incidents
   useEffect(() => {
-    return onSnapshot(collection(db, 'incidents'), snap => {
+    const q = query(collection(db, 'incidents'), limit(50));
+    return onSnapshot(q, snap => {
       setIncidentList(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
   }, []);
 
-  // Aggregated Recent Activity Stream
+  // Aggregated Recent Activity Stream (derived from allAppointments, no duplicate listener)
   useEffect(() => {
-    const unsubAppts = onSnapshot(query(collection(db, 'appointments'), orderBy('createdAt', 'desc')), snapApt => {
-      const aptEvents = snapApt.docs.slice(0, 4).map(d => {
-        const data = d.data();
-        return {
-          id: `act-apt-${d.id}`,
-          action: data.status === 'confirmed' ? 'Appointment Confirmed' : data.status === 'cancelled' ? 'Appointment Cancelled' : 'New Appointment Request',
-          patient: data.name || data.patient || 'Patient',
-          time: data.createdAt ? new Date(data.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 'Recently',
-          type: data.status === 'confirmed' ? 'success' : data.status === 'cancelled' ? 'warning' : 'info',
-          rawTime: data.createdAt || 0,
-        };
-      });
+    if (!allAppointments || allAppointments.length === 0) return;
+    const aptEvents = allAppointments.slice(0, 4).map(data => ({
+      id: `act-apt-${data.id}`,
+      action: data.status === 'confirmed' ? 'Appointment Confirmed' : data.status === 'cancelled' ? 'Appointment Cancelled' : 'New Appointment Request',
+      patient: data.name || data.patient || 'Patient',
+      time: data.createdAt ? new Date(data.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 'Recently',
+      type: data.status === 'confirmed' ? 'success' : data.status === 'cancelled' ? 'warning' : 'info',
+      rawTime: data.createdAt || 0,
+    }));
 
-      setRecentActivity(aptEvents);
-    });
-
-    return () => unsubAppts();
-  }, []);
+    setRecentActivity(aptEvents);
+  }, [allAppointments]);
 
   // Pull the durable dismissed list for this admin. Unioned with whatever is
   // already in state so a dismissal made while offline isn't dropped by the

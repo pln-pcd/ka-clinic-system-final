@@ -47,6 +47,7 @@ export default async function handler(req, res) {
       subject,
       html: html || '<p>Please find your K&amp;A Clinic report attached.</p>',
       attachments,
+      role: 'appointments',
     });
     if (sendError) {
       console.error('send-patient-report mail error:', sendError);

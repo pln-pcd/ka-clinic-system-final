@@ -4,6 +4,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -968,7 +969,7 @@ export default function AppointmentPage() {
 
   // Real-time Firestore subscription
   useEffect(() => {
-    const q = query(collection(db, 'appointments'), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'appointments'), orderBy('createdAt', 'desc'), limit(150));
     const unsub = onSnapshot(q, (snap) => {
       setAppointments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (err) => {

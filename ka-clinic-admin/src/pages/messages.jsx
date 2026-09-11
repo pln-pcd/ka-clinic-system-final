@@ -3,6 +3,7 @@ import {
   addDoc,
   collection,
   doc,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -90,7 +91,7 @@ export default function MessagesPage() {
     let unsub;
     const fetchThreads = () => {
       try {
-        const q = query(collection(db, 'chatThreads'), orderBy('lastMessageAt', 'desc'));
+        const q = query(collection(db, 'chatThreads'), orderBy('lastMessageAt', 'desc'), limit(50));
         unsub = onSnapshot(q, snap => {
           const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
           setThreads(data);
@@ -102,28 +103,20 @@ export default function MessagesPage() {
           setLoadingThreads(false);
         }, err => {
           console.warn('Ordered chatThreads query failed, falling back to unordered:', err);
-          const fallbackQ = query(collection(db, 'chatThreads'));
+          const fallbackQ = query(collection(db, 'chatThreads'), limit(50));
           unsub = onSnapshot(fallbackQ, snap => {
             const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
             setThreads(data);
-            // Deliberately does NOT auto-select the first thread. Selecting a
-          // thread marks it read, and the auto-archive sweep files away
-          // anything closed+read — so auto-selecting on load could mark a
-          // conversation read, then archive it, without an admin ever seeing it.
-          setSelectedThread(prev => (prev ? data.find(t => t.id === prev.id) || prev : null));
+            setSelectedThread(prev => (prev ? data.find(t => t.id === prev.id) || prev : null));
             setLoadingThreads(false);
           });
         });
       } catch (err) {
         console.warn('Query catch fallback:', err);
-        const fallbackQ = query(collection(db, 'chatThreads'));
+        const fallbackQ = query(collection(db, 'chatThreads'), limit(50));
         unsub = onSnapshot(fallbackQ, snap => {
           const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
           setThreads(data);
-          // Deliberately does NOT auto-select the first thread. Selecting a
-          // thread marks it read, and the auto-archive sweep files away
-          // anything closed+read — so auto-selecting on load could mark a
-          // conversation read, then archive it, without an admin ever seeing it.
           setSelectedThread(prev => (prev ? data.find(t => t.id === prev.id) || prev : null));
           setLoadingThreads(false);
         });
@@ -147,7 +140,8 @@ export default function MessagesPage() {
         const q = query(
           collection(db, 'chatMessages'),
           where('threadId', '==', selectedThread.id),
-          orderBy('createdAt', 'asc')
+          orderBy('createdAt', 'asc'),
+          limit(100)
         );
         unsub = onSnapshot(q, snap => {
           setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -155,7 +149,8 @@ export default function MessagesPage() {
           console.warn('Ordered chatMessages query failed, falling back to unordered filter:', err);
           const fallbackQ = query(
             collection(db, 'chatMessages'),
-            where('threadId', '==', selectedThread.id)
+            where('threadId', '==', selectedThread.id),
+            limit(100)
           );
           unsub = onSnapshot(fallbackQ, snap => {
             const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -166,7 +161,8 @@ export default function MessagesPage() {
       } catch (err) {
         const fallbackQ = query(
           collection(db, 'chatMessages'),
-          where('threadId', '==', selectedThread.id)
+          where('threadId', '==', selectedThread.id),
+          limit(100)
         );
         unsub = onSnapshot(fallbackQ, snap => {
           const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));

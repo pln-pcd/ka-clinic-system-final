@@ -1,21 +1,43 @@
 import nodemailer from 'nodemailer';
 
-function getTransporter() {
-  const user = (process.env.GMAIL_USER || '').trim();
-  const pass = (process.env.GMAIL_APP_PASSWORD || '').trim();
-  if (!user || !pass) {
-    throw new Error('GMAIL_USER or GMAIL_APP_PASSWORD is not set.');
-  }
-  return nodemailer.createTransport({
-    service: 'gmail',
-    auth: { user, pass },
-  });
-}
+// Dedicated 3-Role SMTP configuration
+const ROLES = {
+  auth: {
+    name: 'auth',
+    getUser: () => (process.env.GMAIL_AUTH_USER || process.env.GMAIL_USER || 'contact.knaclinic@gmail.com').trim(),
+    getPass: () => (process.env.GMAIL_AUTH_PASSWORD || process.env.GMAIL_APP_PASSWORD || '').trim().replace(/\s+/g, ''),
+    displayName: 'K&A Clinic Security',
+    fallbackRoles: ['appointments', 'reminders'],
+  },
+  appointments: {
+    name: 'appointments',
+    getUser: () => (process.env.GMAIL_APPT_USER || 'pcdelacruz04@gmail.com').trim(),
+    getPass: () => (process.env.GMAIL_APPT_PASSWORD || '').trim().replace(/\s+/g, ''),
+    displayName: 'K&A Clinic Appointments',
+    fallbackRoles: ['reminders', 'auth'],
+  },
+  reminders: {
+    name: 'reminders',
+    getUser: () => (process.env.GMAIL_REMINDER_USER || 'delacruzpc15@gmail.com').trim(),
+    getPass: () => (process.env.GMAIL_REMINDER_PASSWORD || '').trim().replace(/\s+/g, ''),
+    displayName: 'K&A Clinic Reminders',
+    fallbackRoles: ['appointments', 'auth'],
+  },
+};
 
-function getFrom() {
-  const user = (process.env.GMAIL_USER || '').trim();
-  // Display name contains '&' which requires RFC 5322 double quotes
-  return `"K&A Anti-Rabies Clinic" <${user}>`;
+function getTransporterForRole(roleKey) {
+  const roleConfig = ROLES[roleKey] || ROLES.auth;
+  const user = roleConfig.getUser();
+  const pass = roleConfig.getPass();
+  if (!user || !pass) return null;
+  return {
+    transporter: nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user, pass },
+    }),
+    from: `"${roleConfig.displayName}" <${user}>`,
+    user,
+  };
 }
 
 // Crude HTML-to-text fallback for the multipart/alternative text part.
@@ -38,27 +60,36 @@ function htmlToText(html) {
     .trim();
 }
 
-export async function sendMail({ to, subject, html, text, attachments, headers }) {
-  try {
-    const transporter = getTransporter();
-    const from = getFrom();
-    const info = await transporter.sendMail({
-      from,
-      to,
-      subject,
-      html,
-      // Plaintext alternative prevents empty-text spam penalties
-      text: text || htmlToText(html),
-      replyTo: from,
-      headers: {
-        'X-Entity-Ref-ID': `kna-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
-        ...(headers || {}),
-      },
-      ...(attachments ? { attachments } : {}),
-    });
-    return { error: null, messageId: info?.messageId };
-  } catch (err) {
-    return { error: err };
+export async function sendMail({ to, subject, html, text, attachments, headers, role = 'auth' }) {
+  const initialRole = ROLES[role] ? role : 'auth';
+  const roleChain = [initialRole, ...(ROLES[initialRole]?.fallbackRoles || [])];
+
+  let lastError = null;
+  for (const r of roleChain) {
+    const config = getTransporterForRole(r);
+    if (!config) continue;
+
+    try {
+      const info = await config.transporter.sendMail({
+        from: config.from,
+        to,
+        subject,
+        html,
+        text: text || htmlToText(html),
+        replyTo: config.from,
+        headers: {
+          'X-Entity-Ref-ID': `kna-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+          ...(headers || {}),
+        },
+        ...(attachments ? { attachments } : {}),
+      });
+      return { error: null, messageId: info?.messageId, sender: config.user, role: r };
+    } catch (err) {
+      console.warn(`[mailer] Send via ${r} (${config.user}) failed, attempting fallback:`, err.message);
+      lastError = err;
+    }
   }
+
+  return { error: lastError || new Error('All SMTP transports failed.') };
 }
 

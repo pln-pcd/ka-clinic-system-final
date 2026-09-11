@@ -1,6 +1,6 @@
 // kna-admin/src/incidents.jsx
 import {
-  addDoc, collection, doc,
+  addDoc, collection, doc, limit,
   onSnapshot, orderBy, query
 } from 'firebase/firestore';
 import { Calendar, CheckCircle2, ChevronDown, Layers, Lock, MapPin, Repeat, ShieldAlert, X } from 'lucide-react';
@@ -213,13 +213,13 @@ export default function IncidentMapPage() {
     let unsub;
     const fetchIncidents = () => {
       try {
-        const q = query(collection(db, 'incidents'), orderBy('createdAt', 'desc'));
+        const q = query(collection(db, 'incidents'), orderBy('createdAt', 'desc'), limit(100));
         unsub = onSnapshot(q, snap => {
           setIncidents(snap.docs.map(d => ({ id: d.id, ...d.data() })));
           setLoading(false);
         }, err => {
           console.warn('Ordered query failed, falling back to unordered query:', err);
-          const fallbackQ = query(collection(db, 'incidents'));
+          const fallbackQ = query(collection(db, 'incidents'), limit(100));
           unsub = onSnapshot(fallbackQ, snap => {
             setIncidents(snap.docs.map(d => ({ id: d.id, ...d.data() })));
             setLoading(false);
@@ -227,7 +227,7 @@ export default function IncidentMapPage() {
         });
       } catch (err) {
         console.warn('Query catch fallback:', err);
-        const fallbackQ = query(collection(db, 'incidents'));
+        const fallbackQ = query(collection(db, 'incidents'), limit(100));
         unsub = onSnapshot(fallbackQ, snap => {
           setIncidents(snap.docs.map(d => ({ id: d.id, ...d.data() })));
           setLoading(false);

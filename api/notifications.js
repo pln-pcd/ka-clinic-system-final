@@ -185,6 +185,7 @@ async function sendFollowUp(req, res, caller) {
         doseLabel,
         dueDate,
       }),
+      role: 'reminders',
     });
     if (error) {
       console.error('send-followup mail error:', error);
@@ -393,6 +394,7 @@ async function doseSweep(req, res) {
           to: email,
           subject: `K&A Clinic — ${title}`,
           html: buildFollowUpEmailHtml({ patientName: name, message, doseLabel, dueDate }),
+          role: 'reminders',
         });
       }
 
