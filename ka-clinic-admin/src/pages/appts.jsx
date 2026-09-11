@@ -1435,7 +1435,6 @@ export default function AppointmentPage() {
                           <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-muted)' }}>Patient Name</th>
                           <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-muted)' }}>Date & Time</th>
                           <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-muted)' }}>Reason</th>
-                          <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-muted)', textAlign: 'right' }}>Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1449,19 +1448,6 @@ export default function AppointmentPage() {
                             <td style={{ padding: '8px 8px', color: 'var(--text-muted)', fontSize: '0.71875rem' }}>{apt.date}<br />{apt.time}</td>
                             <td style={{ padding: '8px 8px', color: '#991B1B', fontSize: '0.71875rem' }}>
                               {apt.cancellationReason || apt.notes || 'No reason'}
-                            </td>
-                            <td style={{ padding: '8px 8px', textAlign: 'right' }}>
-                              <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', alignItems: 'center' }}>
-                                <button
-                                  className="btn-queue-action btn-queue-confirm"
-                                  onClick={() => handleQuickAction(apt.id, 'confirmed')}
-                                  title="Reactivate appointment"
-                                  style={{ padding: '3px 6px', fontSize: '0.65625rem' }}
-                                >
-                                  <RotateCcw size={10} />
-                                  <span>Reactivate</span>
-                                </button>
-                              </div>
                             </td>
                           </tr>
                         ))}
@@ -1924,17 +1910,6 @@ export default function AppointmentPage() {
             </div>
 
             <div className="modal-footer" style={{ gap: 8 }}>
-              {editForm.status === 'cancelled' && (
-                <button
-                  className="btn-secondary"
-                  style={{ color: '#15803D', borderColor: '#A7F3D0', background: '#DCFCE7', display: 'flex', alignItems: 'center', gap: 4 }}
-                  onClick={() => setEditForm(prev => ({ ...prev, status: 'confirmed' }))}
-                >
-                  <RotateCcw size={13} />
-                  Reactivate
-                </button>
-              )}
-
               <div className="modal-footer-right">
                 <button className="btn-secondary" onClick={() => setEditModalOpen(false)}>Cancel</button>
                 <button className="btn-add-primary" onClick={handleSaveEdit} disabled={editSaving}>
