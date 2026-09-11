@@ -1360,32 +1360,59 @@ export default function AppointmentPage() {
                     <p style={{ fontSize: '.75rem', color: 'var(--text-muted)', marginTop: 2 }}>No pending appointment requests.</p>
                   </div>
                 ) : (
-                  <div className="queue-list" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {pendingOnlineRequests.map(apt => (
-                      <div key={apt.id} className="queue-item-card" style={{ padding: '12px 14px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <span className="q-name" style={{ fontSize: '0.875rem' }}>{apt.name}</span>
-                          <span className="badge-source">
-                            {(apt.source === 'online' || apt.source === 'landing') ? 'Online' : 'Walk-In'}
-                          </span>
-                        </div>
-
-                        <div className="q-meta" style={{ marginTop: 6 }}>
-                          <span><Phone size={11} style={{ display: 'inline', marginRight: 4 }} />{apt.contactNumber || apt.contact || 'No contact'}</span>
-                          <span><CalendarIcon size={11} style={{ display: 'inline', marginRight: 3 }} />{apt.date} · <Clock size={11} style={{ display: 'inline', marginRight: 3 }} />{apt.time}</span>
-                          <span style={{ fontWeight: 700, color: 'var(--text-main)', marginTop: 2 }}>{apt.type}</span>
-                        </div>
-
-                        <div className="q-actions" style={{ marginTop: 10 }}>
-                          <button className="btn-queue-action btn-queue-confirm" onClick={() => handleQuickAction(apt.id, 'confirmed')}>
-                            <UserCheck size={13} /> Confirm
-                          </button>
-                          <button className="btn-queue-action btn-queue-cancel" onClick={() => promptDecline(apt)}>
-                            <X size={13} /> Decline
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.78125rem' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-subtle)' }}>
+                          <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-muted)' }}>Patient</th>
+                          <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-muted)' }}>Date & Time</th>
+                          <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-muted)' }}>Service</th>
+                          <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-muted)', textAlign: 'right' }}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pendingOnlineRequests.map(apt => (
+                          <tr key={apt.id} style={{ borderBottom: '1px solid var(--border)' }} className="transition-colors hover:bg-slate-50">
+                            <td style={{ padding: '8px 8px' }}>
+                              <div style={{ fontWeight: 700, color: 'var(--text-main)' }}>{apt.name}</div>
+                              <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                                <Phone size={10} /> {apt.contactNumber || apt.contact || 'No contact'}
+                                <span className="badge-source" style={{ fontSize: '0.59375rem', padding: '1px 5px' }}>
+                                  {(apt.source === 'online' || apt.source === 'landing') ? 'Online' : 'Walk-In'}
+                                </span>
+                              </div>
+                            </td>
+                            <td style={{ padding: '8px 8px', color: 'var(--text-muted)', fontSize: '0.71875rem', whiteSpace: 'nowrap' }}>
+                              <div style={{ fontWeight: 600 }}>{apt.date}</div>
+                              <div style={{ fontSize: '0.6875rem' }}>{apt.time}</div>
+                            </td>
+                            <td style={{ padding: '8px 8px', fontSize: '0.71875rem', fontWeight: 600, color: 'var(--text-main)' }}>
+                              {apt.type}
+                            </td>
+                            <td style={{ padding: '8px 8px', textAlign: 'right' }}>
+                              <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', alignItems: 'center' }}>
+                                <button
+                                  className="btn-queue-action btn-queue-confirm"
+                                  onClick={() => handleQuickAction(apt.id, 'confirmed')}
+                                  style={{ padding: '3px 8px', fontSize: '0.6875rem' }}
+                                  title="Confirm appointment"
+                                >
+                                  <UserCheck size={11} /> Confirm
+                                </button>
+                                <button
+                                  className="btn-queue-action btn-queue-cancel"
+                                  onClick={() => promptDecline(apt)}
+                                  style={{ padding: '3px 8px', fontSize: '0.6875rem' }}
+                                  title="Decline appointment"
+                                >
+                                  <X size={11} /> Decline
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </div>
