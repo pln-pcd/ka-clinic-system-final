@@ -1349,63 +1349,63 @@ export default function AppointmentPage() {
             </div>
 
             {/* 2-Column Grid Content with Vertical Division Line in the Middle */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, flex: 1, overflowY: 'auto' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 0.85fr', gap: 14, flex: 1, overflowY: 'auto' }}>
               
               {/* LEFT COLUMN: Appointment Requests */}
-              <div style={{ paddingRight: 16, borderRight: '1.5px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ paddingRight: 12, borderRight: '1.5px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {pendingOnlineRequests.length === 0 ? (
-                  <div style={{ padding: '28px 16px', textAlign: 'center', background: '#F8FAFC', borderRadius: 10, border: '1px solid #F1F5F9' }}>
-                    <CheckCircle2 size={24} style={{ color: '#15803D', margin: '0 auto 6px' }} />
-                    <p style={{ fontSize: '.8125rem', fontWeight: 700, color: 'var(--text-main)' }}>All caught up!</p>
-                    <p style={{ fontSize: '.75rem', color: 'var(--text-muted)', marginTop: 2 }}>No pending appointment requests.</p>
+                  <div style={{ padding: '24px 16px', textAlign: 'center', background: '#F8FAFC', borderRadius: 10, border: '1px solid #F1F5F9' }}>
+                    <CheckCircle2 size={22} style={{ color: '#15803D', margin: '0 auto 6px' }} />
+                    <p style={{ fontSize: '.75rem', fontWeight: 700, color: 'var(--text-main)' }}>All caught up!</p>
+                    <p style={{ fontSize: '.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>No pending appointment requests.</p>
                   </div>
                 ) : (
                   <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.78125rem' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.6875rem' }}>
                       <thead>
                         <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-subtle)' }}>
-                          <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-muted)' }}>Patient</th>
-                          <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-muted)' }}>Date & Time</th>
-                          <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-muted)' }}>Service</th>
-                          <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-muted)', textAlign: 'right' }}>Actions</th>
+                          <th style={{ padding: '5px 6px', fontWeight: 700, color: 'var(--text-muted)' }}>Patient</th>
+                          <th style={{ padding: '5px 6px', fontWeight: 700, color: 'var(--text-muted)' }}>Date & Time</th>
+                          <th style={{ padding: '5px 6px', fontWeight: 700, color: 'var(--text-muted)' }}>Service</th>
+                          <th style={{ padding: '5px 6px', fontWeight: 700, color: 'var(--text-muted)', textAlign: 'right' }}>Actions</th>
                         </tr>
                       </thead>
                       <tbody>
                         {pendingOnlineRequests.map(apt => (
                           <tr key={apt.id} style={{ borderBottom: '1px solid var(--border)' }} className="transition-colors hover:bg-slate-50">
-                            <td style={{ padding: '8px 8px' }}>
-                              <div style={{ fontWeight: 700, color: 'var(--text-main)' }}>{apt.name}</div>
-                              <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
-                                <Phone size={10} /> {apt.contactNumber || apt.contact || 'No contact'}
-                                <span className="badge-source" style={{ fontSize: '0.59375rem', padding: '1px 5px' }}>
+                            <td style={{ padding: '5px 6px' }}>
+                              <div style={{ fontWeight: 700, color: 'var(--text-main)', fontSize: '0.71875rem' }}>{apt.name}</div>
+                              <div style={{ fontSize: '0.625rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 1 }}>
+                                <Phone size={9} /> {apt.contactNumber || apt.contact || '—'}
+                                <span className="badge-source" style={{ fontSize: '0.5625rem', padding: '1px 4px' }}>
                                   {(apt.source === 'online' || apt.source === 'landing') ? 'Online' : 'Walk-In'}
                                 </span>
                               </div>
                             </td>
-                            <td style={{ padding: '8px 8px', color: 'var(--text-muted)', fontSize: '0.71875rem', whiteSpace: 'nowrap' }}>
+                            <td style={{ padding: '5px 6px', color: 'var(--text-muted)', fontSize: '0.65625rem', whiteSpace: 'nowrap' }}>
                               <div style={{ fontWeight: 600 }}>{apt.date}</div>
-                              <div style={{ fontSize: '0.6875rem' }}>{apt.time}</div>
+                              <div style={{ fontSize: '0.625rem' }}>{apt.time}</div>
                             </td>
-                            <td style={{ padding: '8px 8px', fontSize: '0.71875rem', fontWeight: 600, color: 'var(--text-main)' }}>
+                            <td style={{ padding: '5px 6px', fontSize: '0.65625rem', fontWeight: 600, color: 'var(--text-main)' }}>
                               {apt.type}
                             </td>
-                            <td style={{ padding: '8px 8px', textAlign: 'right' }}>
-                              <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', alignItems: 'center' }}>
+                            <td style={{ padding: '5px 6px', textAlign: 'right' }}>
+                              <div style={{ display: 'flex', gap: 3, justifyContent: 'flex-end', alignItems: 'center' }}>
                                 <button
                                   className="btn-queue-action btn-queue-confirm"
                                   onClick={() => handleQuickAction(apt.id, 'confirmed')}
-                                  style={{ padding: '3px 8px', fontSize: '0.6875rem' }}
+                                  style={{ padding: '2px 6px', fontSize: '0.625rem', display: 'flex', alignItems: 'center', gap: 2 }}
                                   title="Confirm appointment"
                                 >
-                                  <UserCheck size={11} /> Confirm
+                                  <UserCheck size={10} /> Confirm
                                 </button>
                                 <button
                                   className="btn-queue-action btn-queue-cancel"
                                   onClick={() => promptDecline(apt)}
-                                  style={{ padding: '3px 8px', fontSize: '0.6875rem' }}
+                                  style={{ padding: '2px 6px', fontSize: '0.625rem', display: 'flex', alignItems: 'center', gap: 2 }}
                                   title="Decline appointment"
                                 >
-                                  <X size={11} /> Decline
+                                  <X size={10} /> Decline
                                 </button>
                               </div>
                             </td>
@@ -1418,29 +1418,29 @@ export default function AppointmentPage() {
               </div>
 
               {/* RIGHT COLUMN: Cancellation Table & Requests */}
-              <div style={{ paddingLeft: 4, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ paddingLeft: 4, display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {/* Pending Cancellation Requests Alerts */}
                 {cancellationRequests.length > 0 && (
-                  <div style={{ padding: 10, background: '#FFF5F5', borderRadius: 10, border: '1px solid #FCA5A5', marginBottom: 8 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                      <AlertCircle size={14} style={{ color: '#DC2626' }} />
-                      <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#991B1B' }}>
+                  <div style={{ padding: 8, background: '#FFF5F5', borderRadius: 8, border: '1px solid #FCA5A5', marginBottom: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 5 }}>
+                      <AlertCircle size={13} style={{ color: '#DC2626' }} />
+                      <span style={{ fontSize: '0.6875rem', fontWeight: 800, color: '#991B1B' }}>
                         Pending Cancellation Requests ({cancellationRequests.length})
                       </span>
                     </div>
                     {cancellationRequests.map(apt => (
-                      <div key={apt.id} style={{ background: '#FFFFFF', padding: 8, borderRadius: 6, border: '1px solid #FECACA', marginBottom: 6 }}>
+                      <div key={apt.id} style={{ background: '#FFFFFF', padding: 6, borderRadius: 6, border: '1px solid #FECACA', marginBottom: 4 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: '0.78125rem', fontWeight: 700 }}>{apt.name}</span>
-                          <span className="badge-source" style={{ background: '#FEE2E2', color: '#991B1B', fontSize: '0.6875rem' }}>Cancel Request</span>
+                          <span style={{ fontSize: '0.71875rem', fontWeight: 700 }}>{apt.name}</span>
+                          <span className="badge-source" style={{ background: '#FEE2E2', color: '#991B1B', fontSize: '0.625rem' }}>Cancel Request</span>
                         </div>
-                        <div style={{ fontSize: '0.71875rem', color: '#64748B', marginTop: 2 }}><CalendarIcon size={11} style={{ display: 'inline', marginRight: 3 }} />{apt.date} · <Clock size={11} style={{ display: 'inline', marginRight: 3 }} />{apt.time}</div>
-                        <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                          <button className="btn-queue-action btn-queue-cancel" onClick={() => handleQuickAction(apt.id, 'cancelled')} style={{ background: '#DC2626', color: '#FFF', fontSize: '0.6875rem', padding: '3px 8px' }}>
-                            <X size={11} /> Approve
+                        <div style={{ fontSize: '0.65625rem', color: '#64748B', marginTop: 1 }}><CalendarIcon size={10} style={{ display: 'inline', marginRight: 3 }} />{apt.date} · <Clock size={10} style={{ display: 'inline', marginRight: 3 }} />{apt.time}</div>
+                        <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+                          <button className="btn-queue-action btn-queue-cancel" onClick={() => handleQuickAction(apt.id, 'cancelled')} style={{ background: '#DC2626', color: '#FFF', fontSize: '0.625rem', padding: '2px 6px' }}>
+                            <X size={10} /> Approve
                           </button>
-                          <button className="btn-queue-action btn-queue-confirm" onClick={() => handleQuickAction(apt.id, 'confirmed')} style={{ fontSize: '0.6875rem', padding: '3px 8px' }}>
-                            <UserCheck size={11} /> Reject
+                          <button className="btn-queue-action btn-queue-confirm" onClick={() => handleQuickAction(apt.id, 'confirmed')} style={{ fontSize: '0.625rem', padding: '2px 6px' }}>
+                            <UserCheck size={10} /> Reject
                           </button>
                         </div>
                       </div>
@@ -1449,31 +1449,31 @@ export default function AppointmentPage() {
                 )}
 
                 {allCancelledApts.length === 0 ? (
-                  <div style={{ padding: '28px 16px', textAlign: 'center', background: '#F8FAFC', borderRadius: 10, border: '1px solid #F1F5F9' }}>
-                    <CheckCircle2 size={24} style={{ color: '#16A34A', margin: '0 auto 6px', opacity: 0.8 }} />
-                    <p style={{ fontSize: '.8125rem', fontWeight: 700, color: 'var(--text-main)' }}>No Cancelled Records</p>
-                    <p style={{ fontSize: '.75rem', color: 'var(--text-muted)', marginTop: 2 }}>No cancelled appointments recorded.</p>
+                  <div style={{ padding: '24px 16px', textAlign: 'center', background: '#F8FAFC', borderRadius: 10, border: '1px solid #F1F5F9' }}>
+                    <CheckCircle2 size={22} style={{ color: '#16A34A', margin: '0 auto 6px', opacity: 0.8 }} />
+                    <p style={{ fontSize: '.75rem', fontWeight: 700, color: 'var(--text-main)' }}>No Cancelled Records</p>
+                    <p style={{ fontSize: '.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>No cancelled appointments recorded.</p>
                   </div>
                 ) : (
                   <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.78125rem' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.6875rem' }}>
                       <thead>
                         <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-subtle)' }}>
-                          <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-muted)' }}>Patient Name</th>
-                          <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-muted)' }}>Date & Time</th>
-                          <th style={{ padding: '8px 8px', fontWeight: 700, color: 'var(--text-muted)' }}>Reason</th>
+                          <th style={{ padding: '5px 6px', fontWeight: 700, color: 'var(--text-muted)' }}>Patient</th>
+                          <th style={{ padding: '5px 6px', fontWeight: 700, color: 'var(--text-muted)' }}>Date / Time</th>
+                          <th style={{ padding: '5px 6px', fontWeight: 700, color: 'var(--text-muted)' }}>Reason</th>
                         </tr>
                       </thead>
                       <tbody>
                         {allCancelledApts.map(apt => (
                           <tr key={apt.id} style={{ borderBottom: '1px solid var(--border)' }} className="transition-colors hover:bg-slate-50">
-                            <td style={{ padding: '8px 8px', fontWeight: 700 }}>
+                            <td style={{ padding: '5px 6px', fontWeight: 700, fontSize: '0.71875rem' }}>
                               <button onClick={() => openEditModal(apt)} className="text-left font-bold text-slate-800 hover:text-red-600 cursor-pointer">
                                 {apt.name}
                               </button>
                             </td>
-                            <td style={{ padding: '8px 8px', color: 'var(--text-muted)', fontSize: '0.71875rem' }}>{apt.date}<br />{apt.time}</td>
-                            <td style={{ padding: '8px 8px', color: '#991B1B', fontSize: '0.71875rem' }}>
+                            <td style={{ padding: '5px 6px', color: 'var(--text-muted)', fontSize: '0.65625rem', whiteSpace: 'nowrap' }}>{apt.date}<br />{apt.time}</td>
+                            <td style={{ padding: '5px 6px', color: '#991B1B', fontSize: '0.65625rem' }}>
                               {apt.cancellationReason || apt.notes || 'No reason'}
                             </td>
                           </tr>
