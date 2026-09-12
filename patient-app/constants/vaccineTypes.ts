@@ -8,7 +8,7 @@
 // at registration (ka-clinic-admin/src/pages/patients.jsx buildInitialDoses)
 // and stored on the record, so the app renders whatever is actually stored.
 
-export type ServiceKey = 'PEP' | 'PrEP' | 'Tetanus' | 'Hepatitis' | 'Pneumonia' | 'Other';
+export type ServiceKey = 'PEP' | 'PrEP' | 'Tetanus' | 'Pneumonia' | 'Other';
 
 type ServiceCopy = {
   /** Badge/abbreviation, e.g. "PEP". */
@@ -40,12 +40,6 @@ const SERVICE_COPY: Record<ServiceKey, ServiceCopy> = {
     timelineTitle: 'Anti-Tetanus Dose Timeline',
     protocol: 'Anti-Tetanus Protocol',
   },
-  Hepatitis: {
-    short: 'Hepatitis B',
-    long: 'Hepatitis B Vaccination',
-    timelineTitle: 'Hepatitis B Dose Timeline',
-    protocol: 'Hepatitis B Protocol',
-  },
   Pneumonia: {
     short: 'Pneumonia',
     long: 'Pneumococcal Vaccination',
@@ -68,7 +62,6 @@ export function normalizeService(service?: string | null): ServiceKey {
   if (s === 'prep' || s.startsWith('pre-exposure') || s.includes('pre-exposure')) return 'PrEP';
   if (s === 'pep' || s.startsWith('post-exposure') || s.includes('post-exposure')) return 'PEP';
   if (s.includes('tetan')) return 'Tetanus';
-  if (s.includes('hepa')) return 'Hepatitis';
   if (s.includes('pneumo')) return 'Pneumonia';
   return 'Other';
 }

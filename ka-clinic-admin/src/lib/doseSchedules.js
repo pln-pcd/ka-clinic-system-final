@@ -54,16 +54,6 @@ const SCHEDULES = {
     ],
   },
 
-  Hepatitis: {
-    anchor: 'day0',
-    label: 'Hepatitis B',
-    doses: [
-      { key: 'd1', label: 'Dose 1 (Day 0)', day: 0 },
-      { key: 'd2', label: 'Dose 2 (1 Month)', month: 1 },
-      { key: 'd3', label: 'Dose 3 (6 Months)', month: 6 },
-    ],
-  },
-
   // Unvaccinated / unknown-history adult primary series.
   Tetanus: {
     anchor: 'day0',
@@ -231,15 +221,6 @@ export function isVaccineForService(service, item) {
            n.includes(' tt') ||
            n.startsWith('tt') ||
            n.includes('td');
-  }
-
-  // Hepatitis:
-  if (s === 'HEPATITIS') {
-    return n.includes('hepatitis') ||
-           n.includes('hepa') ||
-           n.includes('engerix') ||
-           n.includes('hbv') ||
-           n.includes('hav');
   }
 
   // Pneumonia / Pneumococcal:

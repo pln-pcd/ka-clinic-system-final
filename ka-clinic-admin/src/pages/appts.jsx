@@ -841,7 +841,6 @@ const SERVICE_TYPES = [
   "PEP Follow-up",
   "PrEP Consultation",
   "Anti-Tetanus Vaccine",
-  "Hepatitis B Vaccine",
   "Pneumococcal Vaccine",
   "General Consultation",
   "Walk-in Emergency",

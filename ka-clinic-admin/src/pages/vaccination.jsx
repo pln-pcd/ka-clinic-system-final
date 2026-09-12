@@ -260,7 +260,6 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
     { key: 'pep', label: 'PEP' },
     { key: 'tetanus', label: 'Anti-Tetano' },
     { key: 'pneumonia', label: 'Pneumonia Vaccine' },
-    { key: 'hepa', label: 'Hepatitis B' },
   ];
   const SORT_OPTIONS = [
     { key: 'newest', label: 'Registered (Newest)' },
@@ -602,8 +601,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
       filterStatus === 'prep'        ? pSvc === 'prep' :
       filterStatus === 'pep'         ? pSvc === 'pep' :
       filterStatus === 'tetanus'     ? (pSvc === 'tetanus' || pSvc === 'antitetano') :
-      filterStatus === 'pneumonia'   ? pSvc === 'pneumonia' :
-      filterStatus === 'hepa'        ? pSvc === 'hepatitis' : true;
+      filterStatus === 'pneumonia'   ? pSvc === 'pneumonia' : true;
 
     return matchSearch && matchStatus;
   }).sort((a, b) => {
@@ -794,7 +792,6 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                       { key: 'pep', label: 'PEP (Post-Exposure)' },
                       { key: 'tetanus', label: 'Anti-Tetano (Tetanus)' },
                       { key: 'pneumonia', label: 'Pneumonia Vaccine' },
-                      { key: 'hepa', label: 'Hepatitis B' },
                     ].map(opt => (
                       <button key={opt.key} type="button"
                         onClick={() => { setFilterStatus(opt.key); setCurrentPage(1); setFilterMenuOpen(false); }}

@@ -180,7 +180,6 @@ const VACCINE_OPTIONS = [
   { id: 'Post-Exposure', label: 'Anti-Rabies (PEP)', desc: 'After an animal bite or scratch' },
   { id: 'Booster',       label: 'Booster Dose',      desc: 'Top-up for a previous course' },
   { id: 'Anti-Tetano',   label: 'Anti-Tetanus',      desc: 'Tetanus toxoid for wounds' },
-  { id: 'Hepa',          label: 'Hepatitis B',       desc: 'Hepatitis B immunization' },
   { id: 'Pneumonia',     label: 'Pneumonia',         desc: 'Pneumococcal vaccine' },
 ];
 

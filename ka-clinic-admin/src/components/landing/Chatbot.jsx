@@ -67,7 +67,7 @@ export default function Chatbot() {
       setBadge(false);
       setMessages(m => {
         if (m.length === 0) {
-          return [{ role: 'bot', text: "👋 Hello! I'm KAI, the K&A Clinic assistant. I can help with clinic hours, booking an appointment, how to reach us, and using the app. For anything medical, please contact clinic staff directly. How can I help?", time: now() }];
+          return [{ role: 'bot', text: "👋 Hello! I'm KAI, the K&A Clinic assistant. I can help with vaccine prices & packages, clinic hours, booking an appointment, how to reach us, and using the app. How can I help?", time: now() }];
         }
         return m;
       });
@@ -93,11 +93,8 @@ export default function Chatbot() {
     }
   }, [input, messages, addMsg]);
 
-  // Non-clinical only, matching the assistant's narrowed scope. The former
-  // "PEP Vaccine Doses", "Bite First Aid" and "Vaccine Cost" prompts are gone —
-  // the assistant now hands all three to clinic staff, so offering them as
-  // one-tap shortcuts would advertise an answer that never arrives.
   const QUICK = [
+    ['💉 Vaccine Prices', 'How much are your vaccine prices and packages?'],
     ['🕒 Clinic Hours', 'What are your clinic hours and days?'],
     ['📅 Book an Appointment', 'How do I book an appointment?'],
     ['📍 Clinic Location', 'Where is K&A Clinic located?'],

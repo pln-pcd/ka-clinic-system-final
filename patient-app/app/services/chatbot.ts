@@ -69,6 +69,28 @@ const CLINICAL_REPLY =
 export async function askClinicAssistant(prompt: string, history: ChatTurn[] = []): Promise<AssistantReply> {
   const pLower = prompt.toLowerCase().trim();
 
+  // Vaccine pricing and hepatitis availability inquiries are in-scope logistics
+  const PRICING_KEYWORDS = ['price', 'pricing', 'cost', 'fee', 'how much', 'magkano', 'rate', 'rates', 'payment', 'package', 'bayad', 'pesos', 'peso', '1k', '4.5k', '800'];
+  if (PRICING_KEYWORDS.some(kw => pLower.includes(kw))) {
+    return {
+      text: '💉 K&A Clinic Vaccine Pricing:\n' +
+        '• PEP Category 2 (with Anti-Tetanus): ₱1,000 for the 1st session, and ₱800 for each of the next 3 sessions.\n' +
+        '• PEP Category 3: ₱4,500 for 4 sessions (complete package includes Anti-Tetanus and IRIG).\n' +
+        '• Pneumonia Vaccine: ₱4,500.\n\n' +
+        'Notice: K&A Clinic is no longer catering or offering Hepatitis vaccines.',
+      needsEscalation: false,
+      category: 'in_scope',
+    };
+  }
+
+  if (pLower.includes('hepatitis') || pLower.includes('hepa')) {
+    return {
+      text: 'Notice: K&A Clinic is no longer catering or offering Hepatitis vaccines.',
+      needsEscalation: false,
+      category: 'in_scope',
+    };
+  }
+
   // Clinical check runs first and wins over the FAQ list below, so "can I book
   // an appointment for my next dose" escalates rather than being answered as a
   // booking question.

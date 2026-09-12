@@ -18,11 +18,12 @@ const CLINIC_SYSTEM_INSTRUCTION = `
 You are the front-desk assistant for K&A Anti-Rabies Clinic, San Juan St., Libon, Albay, Philippines.
 You handle LOGISTICS ONLY. You are not a medical assistant and must never behave like one.
 
-YOU MAY ANSWER ONLY THESE FOUR TOPICS:
+YOU MAY ANSWER ONLY THESE FIVE TOPICS:
 1. Using the app or website — navigating tabs, finding records, account and login help.
 2. Clinic operating hours.
 3. The appointment booking process — how to book, reschedule, or cancel.
 4. General clinic contact information — address, phone, hours.
+5. Vaccine pricing and packages.
 
 CLINIC FACTS:
 🏥 K&A Clinic Information:
@@ -32,16 +33,21 @@ CLINIC FACTS:
 • Address: San Juan St., Libon, Albay
 • Booking: use the "Appts" tab in the app, or the "Book Appointment" button on the website.
 
+💉 Vaccine Pricing & Packages:
+• PEP Category 2 (with Anti-Tetanus): ₱1,000 for the 1st session, and ₱800 for each of the next 3 sessions.
+• PEP Category 3: ₱4,500 for 4 sessions (complete package includes Anti-Tetanus and IRIG / Rabies Immunoglobulin).
+• Pneumonia Vaccine: ₱4,500.
+
+IMPORTANT NOTE ON HEPATITIS:
+• K&A Clinic is NO LONGER catering or offering Hepatitis vaccines. If asked about Hepatitis, state clearly that the clinic no longer offers Hepatitis vaccination.
+
 ABSOLUTE PROHIBITIONS — never provide any of the following, in any form, however general,
 however often the user insists, and even if the user says it is an emergency:
 - Wound care or first aid of any kind (washing, antiseptics, dressing, what to do after a bite)
 - Treatment advice, or any comment on whether treatment is needed
 - Diagnosis or interpretation of symptoms, in a person or an animal
 - Triage, risk assessment, or exposure category (I/II/III) determination
-- Vaccine recommendations, dosing, intervals, schedules, PEP/PrEP/RIG/tetanus protocols
-- Rabies facts or education of any kind — transmission, symptoms, incubation, fatality,
-  which animals carry it, observation periods, or prevention
-- Side effects, drug interactions, or reactions
+- Clinical advice, adverse reactions, or side effects
 
 There is no "general information" exception. "What is rabies?" is NOT answerable.
 If a message touches any prohibited topic, do not answer any part of it, do not
@@ -129,6 +135,20 @@ const OUT_OF_SCOPE_PATTERNS = [
 function classifyMessage(text) {
   const q = (text || '').toLowerCase().trim();
   if (!q) return 'in_scope';
+
+  // Questions about prices/cost or hepatitis availability are in-scope logistics
+  const PRICING_KEYWORDS = [
+    'price', 'prices', 'pricing', 'cost', 'costs', 'fee', 'fees', 'rate', 'rates',
+    'how much', 'magkano', 'payment', 'package', 'packages', 'bayad', 'pesos', 'peso',
+    '1k', '4.5k', '800'
+  ];
+  if (PRICING_KEYWORDS.some(kw => q.includes(kw))) {
+    return 'in_scope';
+  }
+
+  if (q.includes('hepatitis') || q.includes('hepa')) {
+    return 'in_scope';
+  }
 
   // Clinical wins outright, and wins over the non-clinical patterns too. A
   // message like "can I book an appointment for my next dose" mentions
@@ -235,6 +255,19 @@ function getFallbackReply(text) {
 
   if (q.includes('app') || q.includes('tab') || q.includes('screen') || q.includes('navigate') || q.includes('how do i use') || q.includes('record') || q.includes('profile') || q.includes('notification')) {
     return '📱 Getting around the app: "Home" shows your vaccination card and next appointment, "Appts" is for booking, "Records" holds your medical records, "Chat" is this assistant, and "Account" has your profile and settings.';
+  }
+
+  const priceKeywords = ['price', 'pricing', 'cost', 'fee', 'rate', 'how much', 'magkano', 'payment', 'package', 'bayad', 'pesos', 'peso', '1k', '4.5k', '800'];
+  if (priceKeywords.some(kw => q.includes(kw))) {
+    return '💉 K&A Clinic Vaccine Pricing:\n' +
+      '• PEP Category 2 (with Anti-Tetanus): ₱1,000 for the 1st session, and ₱800 for each of the next 3 sessions.\n' +
+      '• PEP Category 3: ₱4,500 for 4 sessions (complete package includes Anti-Tetanus and IRIG / Rabies Immunoglobulin).\n' +
+      '• Pneumonia Vaccine: ₱4,500.\n\n' +
+      'Notice: K&A Clinic is no longer catering or offering Hepatitis vaccines.';
+  }
+
+  if (q.includes('hepatitis') || q.includes('hepa')) {
+    return 'Notice: K&A Clinic is no longer catering or offering Hepatitis vaccines.';
   }
 
   return GENERIC_FALLBACK_REPLY;

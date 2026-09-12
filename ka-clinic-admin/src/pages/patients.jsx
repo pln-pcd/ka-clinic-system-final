@@ -409,11 +409,6 @@ const SERVICE_TYPES = [
     pillClass: 'service-tetanus', selClass: 'sel-tetanus'
   },
   {
-    key: 'Hepatitis', label: 'Hepatitis', desc: 'Hepatitis Vaccine', sub: 'Hepa A / B / AB',
-    icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>,
-    pillClass: 'service-hepa', selClass: 'sel-hepa'
-  },
-  {
     key: 'Pneumonia', label: 'Pneumonia', desc: 'Pneumococcal Vaccine', sub: 'PCV / PPSV23',
     icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
     pillClass: 'service-pneumonia', selClass: 'sel-pneumonia'
@@ -610,25 +605,6 @@ function ServiceFields({ service, form, set }) {
     </>
   );
 
-  if (service === 'Hepatitis') return (
-    <>
-      <div className="form-field"><label>Hepatitis Variant</label><select value={form.hepaVariant || 'Hepatitis B'} onChange={e => set('hepaVariant', e.target.value)}>
-        <option>Hepatitis A</option><option>Hepatitis B</option><option>Hepatitis A+B (Combined)</option>
-      </select></div>
-      <div className="form-field"><label>Date of Consult</label><input type="date" value={form.date || ''} onChange={e => set('date', e.target.value)} /></div>
-      <div className="form-field full"><label>Risk Factor</label><select value={form.riskFactor || 'None stated'} onChange={e => set('riskFactor', e.target.value)}>
-        <option>None stated</option><option>Healthcare worker</option><option>Travel exposure</option><option>Household contact</option><option>Food handler</option><option>IV drug use history</option><option>Other</option>
-      </select></div>
-      <div className="form-field full"><label>Prior Hepa Vaccination</label><select value={form.priorHepa || 'None'} onChange={e => set('priorHepa', e.target.value)}>
-        <option>None</option><option>Partially vaccinated</option><option>Fully vaccinated (booster only)</option><option>Unknown</option>
-      </select></div>
-      <div className="form-field full"><label>Past Vaccination History</label><input type="text" value={form.pastVaccines || ''} onChange={e => set('pastVaccines', e.target.value)} placeholder="e.g. None" /></div>
-      <div className="form-field full"><label>Allergies</label><input type="text" value={form.allergies || ''} onChange={e => set('allergies', e.target.value)} placeholder="e.g. No known allergies" /></div>
-      <div className="form-field full"><label>Clinical Notes</label><textarea value={form.notes || ''} onChange={e => set('notes', e.target.value)} placeholder="Lab results, symptoms..." /></div>
-      <ScheduleSummary service={service} baseDate={form.date} />
-    </>
-  );
-
   if (service === 'Pneumonia') return (
     <>
       <div className="form-field full"><label>Age Group <span style={{ color: '#C8151A' }}>*</span> <span style={{ fontWeight: 400, color: '#64748B', fontSize: '.6875rem' }}>(sets the dose schedule)</span></label>
@@ -686,8 +662,6 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [] }) {
     pastVaccines: '', allergies: '', notes: '',
     /* Tetanus */
     woundType: 'Laceration', lastTetanus: 'Unknown',
-    /* Hepatitis */
-    hepaVariant: 'Hepatitis B', riskFactor: 'None stated', priorHepa: 'None',
     /* Pneumonia */
     pneumoVaccine: 'PCV15', riskCondition: 'None', priorPneumo: 'None',
     /* Tetanus and pneumococcal run different series for infants; the childhood
@@ -1151,26 +1125,6 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [] }) {
                   </>
                 )}
 
-                {form.service === 'Hepatitis' && (
-                  <>
-                    <div className="form-field"><label>Hepatitis Variant</label>
-                      <select value={form.hepaVariant || 'Hepatitis B'} onChange={e => set('hepaVariant', e.target.value)}>
-                        <option>Hepatitis A</option><option>Hepatitis B</option><option>Hepatitis A+B (Combined)</option>
-                      </select>
-                    </div>
-                    <div className="form-field"><label>Risk Factor</label>
-                      <select value={form.riskFactor || 'None stated'} onChange={e => set('riskFactor', e.target.value)}>
-                        <option>None stated</option><option>Healthcare worker</option><option>Travel exposure</option><option>Household contact</option><option>Food handler</option><option>IV drug use history</option><option>Other</option>
-                      </select>
-                    </div>
-                    <div className="form-field full"><label>Prior Hepa Vaccination</label>
-                      <select value={form.priorHepa || 'None'} onChange={e => set('priorHepa', e.target.value)}>
-                        <option>None</option><option>Partially vaccinated</option><option>Fully vaccinated (booster only)</option><option>Unknown</option>
-                      </select>
-                    </div>
-                  </>
-                )}
-
                 {form.service === 'Pneumonia' && (
                   <>
                     <div className="form-field"><label>Vaccine Variant</label>
@@ -1306,7 +1260,6 @@ function EditPatientModal({ patient, onClose, onSave, inventoryItems = [] }) {
     woundLocation: patient.woundLocation || '', woundDepth: patient.woundDepth || 'Superficial', numberOfBites: patient.numberOfBites || '1',
     pastVaccines: patient.pastVaccines || '', allergies: patient.allergies || '', notes: patient.notes || '',
     woundType: patient.woundType || 'Laceration', lastTetanus: patient.lastTetanus || 'Unknown',
-    hepaVariant: patient.hepaVariant || 'Hepatitis B', riskFactor: patient.riskFactor || 'None stated', priorHepa: patient.priorHepa || 'None',
     pneumoVaccine: patient.pneumoVaccine || 'PCV15', riskCondition: patient.riskCondition || 'None', priorPneumo: patient.priorPneumo || 'None',
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -1519,7 +1472,6 @@ function EditPatientModal({ patient, onClose, onSave, inventoryItems = [] }) {
                       <option>PEP</option>
                       <option>PrEP</option>
                       <option>Tetanus</option>
-                      <option>Hepatitis</option>
                       <option>Pneumonia</option>
                     </select>
                   </div>
@@ -1673,41 +1625,6 @@ function EditPatientModal({ patient, onClose, onSave, inventoryItems = [] }) {
                           className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
                         >
                           <option>Unknown</option><option>Less than 5 years ago</option><option>5–10 years ago</option><option>More than 10 years ago</option><option>Never vaccinated</option>
-                        </select>
-                      </div>
-                    </>
-                  )}
-
-                  {form.service === 'Hepatitis' && (
-                    <>
-                      <div>
-                        <label className="block mb-1.5 text-slate-500">Hepatitis Variant</label>
-                        <select
-                          value={form.hepaVariant}
-                          onChange={e => set('hepaVariant', e.target.value)}
-                          className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                        >
-                          <option>Hepatitis A</option><option>Hepatitis B</option><option>Hepatitis A+B (Combined)</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block mb-1.5 text-slate-500">Risk Factor</label>
-                        <select
-                          value={form.riskFactor}
-                          onChange={e => set('riskFactor', e.target.value)}
-                          className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                        >
-                          <option>None stated</option><option>Healthcare worker</option><option>Travel exposure</option><option>Household contact</option><option>Food handler</option><option>IV drug use history</option><option>Other</option>
-                        </select>
-                      </div>
-                      <div className="sm:col-span-2">
-                        <label className="block mb-1.5 text-slate-500">Prior Hepa Vaccination</label>
-                        <select
-                          value={form.priorHepa}
-                          onChange={e => set('priorHepa', e.target.value)}
-                          className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                        >
-                          <option>None</option><option>Partially vaccinated</option><option>Fully vaccinated (booster only)</option><option>Unknown</option>
                         </select>
                       </div>
                     </>
@@ -4109,7 +4026,6 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
     }
     if (p?.service === 'PrEP') return `Rabies PrEP preventive series${doneCount ? ` (${doneCount} dose${doneCount > 1 ? 's' : ''} completed)` : ' (Days 0, 7, 21)'}`;
     if (p?.service === 'Tetanus') return `Anti-Tetanus vaccination${doneCount ? ` (${doneCount} dose${doneCount > 1 ? 's' : ''} completed)` : ''}`;
-    if (p?.service === 'Hepatitis') return `Hepatitis vaccination series${doneCount ? ` (${doneCount} dose${doneCount > 1 ? 's' : ''} completed)` : ''}`;
     if (p?.service === 'Pneumonia') return `Pneumococcal vaccination${doneCount ? ` (${doneCount} dose${doneCount > 1 ? 's' : ''} completed)` : ''}`;
     return `${p?.service || 'Vaccination'} treatment`;
   }
@@ -5789,7 +5705,6 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
     { key: 'pep', label: 'PEP' },
     { key: 'tetanus', label: 'Anti-Tetano' },
     { key: 'pneumonia', label: 'Pneumonia Vaccine' },
-    { key: 'hepa', label: 'Hepatitis B' },
   ];
   const SORT_OPTIONS = [
     { key: 'newest', label: 'Registered (Newest)' },
@@ -5823,7 +5738,6 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
       if (filter === 'pep') return pSvc === 'pep';
       if (filter === 'tetanus' || filter === 'antitetano') return pSvc === 'tetanus';
       if (filter === 'pneumonia') return pSvc === 'pneumonia';
-      if (filter === 'hepa') return pSvc === 'hepatitis';
 
       return liveStatus === filter;
     })
@@ -6034,7 +5948,6 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
                       { key: 'pep', label: 'PEP (Post-Exposure)' },
                       { key: 'tetanus', label: 'Anti-Tetano (Tetanus)' },
                       { key: 'pneumonia', label: 'Pneumonia Vaccine' },
-                      { key: 'hepa', label: 'Hepatitis B' },
                     ].map(opt => (
                       <button key={opt.key} type="button"
                         onClick={() => { setFilter(opt.key); setCurrentPage(1); setFilterMenuOpen(false); }}
