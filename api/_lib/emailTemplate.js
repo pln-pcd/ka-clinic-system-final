@@ -171,6 +171,20 @@ export function buildAdminOtpEmailHtml({ otp }) {
   });
 }
 
+// Admin Password Reset verification code.
+export function buildPasswordResetEmailHtml({ otp }) {
+  return shell({
+    title: 'Your K&amp;A Clinic password reset code',
+    preheader: `${otp} is your K&amp;A Clinic password reset code. It expires in 10 minutes.`,
+    body: [
+      heading('Reset Your Password'),
+      paragraph('We received a request to reset your password for the <strong>K&amp;A Clinic Admin Portal</strong>. Enter the verification code below to set your new password.'),
+      codeBlock(otp),
+      footnote('If you did not request a password reset, you can safely ignore this email. Your account remains secure. Never share this code with anyone.'),
+    ].join('\n'),
+  });
+}
+
 // Manager → staff invite email — mirrors the staff credential interface in AcceptInvite.jsx
 export function buildInviteEmailHtml({ inviteUrl, inviterName }) {
   const invitedBy = inviterName
@@ -291,6 +305,20 @@ export function buildAdminOtpEmailText({ otp }) {
     'It expires in 5 minutes.',
     '',
     'If you did not just enter your password on the Admin Dashboard, ignore this email and change your password.',
+    '',
+    'K&A Anti-Rabies Vaccine Clinic - Libon, Albay',
+  ].join('\n');
+}
+
+export function buildPasswordResetEmailText({ otp }) {
+  return [
+    'Reset Your Password',
+    '',
+    `Your K&A Clinic password reset code is: ${otp}`,
+    '',
+    'Enter this code in the K&A Clinic Admin Portal to choose your new password. This code expires in 10 minutes.',
+    '',
+    'If you did not request a password reset, you can safely ignore this email. Never share this code with anyone.',
     '',
     'K&A Anti-Rabies Vaccine Clinic - Libon, Albay',
   ].join('\n');
