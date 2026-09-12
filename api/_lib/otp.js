@@ -8,11 +8,15 @@ export function generateOtp() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-// `record` is the existing OTP doc snapshot's data (or undefined if none).
-// Returns true when a resend should be blocked because the cooldown window
-// since the last send hasn't elapsed yet.
 export function isInCooldown(record, cooldownMs) {
   return !!(record?.createdAt && Date.now() - record.createdAt < cooldownMs);
+}
+
+export function getCooldownRemainingSeconds(record, cooldownMs) {
+  if (!record?.createdAt) return 0;
+  const elapsed = Date.now() - record.createdAt;
+  if (elapsed >= cooldownMs) return 0;
+  return Math.max(1, Math.ceil((cooldownMs - elapsed) / 1000));
 }
 
 // Sends the OTP email; on failure, deletes the just-written OTP doc (so a

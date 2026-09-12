@@ -64,6 +64,7 @@ export default function AdminLogin({ onSuccess, onBack }) {
   const [otpLoading, setOtpLoading] = useState(false);
   const [maskedEmail, setMaskedEmail] = useState('');
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [loginCooldown, setLoginCooldown] = useState(0);
 
   const emailRef = useRef();
   const otpRef = useRef();
@@ -92,6 +93,12 @@ export default function AdminLogin({ onSuccess, onBack }) {
     const id = setTimeout(() => setResendCooldown(c => c - 1), 1000);
     return () => clearTimeout(id);
   }, [resendCooldown]);
+
+  useEffect(() => {
+    if (loginCooldown <= 0) return;
+    const id = setTimeout(() => setLoginCooldown(c => c - 1), 1000);
+    return () => clearTimeout(id);
+  }, [loginCooldown]);
 
   function friendlyError(code) {
     switch (code) {
@@ -141,7 +148,11 @@ export default function AdminLogin({ onSuccess, onBack }) {
       const idToken = await auth.currentUser.getIdToken();
       const data = await postJson('/api/send-admin-otp', {}, { Authorization: `Bearer ${idToken}` });
       if (!data?.success) {
-        setError(data?.error || 'Could not send a verification code. Please try again.');
+        const remaining = Number(data?.retryAfter) || (data?.error ? Number(data.error.match(/(\d+)\s*second/i)?.[1]) : 30);
+        if (remaining > 0) {
+          setLoginCooldown(remaining);
+        }
+        setError(data?.error || `Please wait before requesting another code. Try again in 30 seconds.`);
         await auth.signOut();
         return;
       }
@@ -158,6 +169,7 @@ export default function AdminLogin({ onSuccess, onBack }) {
 
   async function handleEmailLogin(e) {
     if (e) e.preventDefault();
+    if (loginCooldown > 0) return;
     const trimmedEmail = email.trim();
     if (!trimmedEmail || !password) {
       setError('Please enter your email and password.');
@@ -545,12 +557,19 @@ export default function AdminLogin({ onSuccess, onBack }) {
                   Log in to access your clinic portal and records.
                 </p>
 
-                {error && (
+                {loginCooldown > 0 ? (
+                  <div className="flex items-start gap-2 bg-red-50 text-red-600 text-xs p-3 rounded-xl border border-red-100 mb-4 animate-in slide-in-from-top-2">
+                    <Info className="w-4 h-4 mt-0.5 shrink-0" />
+                    <p className="font-semibold">
+                      Please wait before requesting another code. Try again in {loginCooldown} second{loginCooldown === 1 ? '' : 's'}.
+                    </p>
+                  </div>
+                ) : error ? (
                   <div className="flex items-start gap-2 bg-red-50 text-red-600 text-xs p-3 rounded-xl border border-red-100 mb-4 animate-in slide-in-from-top-2">
                     <Info className="w-4 h-4 mt-0.5 shrink-0" />
                     <p className="font-semibold">{error}</p>
                   </div>
-                )}
+                ) : null}
 
                 <form onSubmit={handleEmailLogin} className="space-y-4">
                   {/* Email Input */}
@@ -629,13 +648,15 @@ export default function AdminLogin({ onSuccess, onBack }) {
                   {/* Login CTA Button with Navy Blue / Royal Blue Gradient */}
                   <button
                     type="submit"
-                    disabled={busy}
+                    disabled={busy || loginCooldown > 0}
                     className="w-full bg-gradient-to-r from-[#0a1d47] via-[#0e2a6d] to-[#1d4ed8] hover:from-[#071533] hover:via-[#0a2054] hover:to-[#173fa8] text-white py-3.5 px-6 rounded-full text-sm font-bold tracking-wide transition-all shadow-[0_10px_25px_rgba(14,42,109,0.35)] hover:shadow-[0_15px_30px_rgba(14,42,109,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-50 disabled:hover:translate-y-0 mt-3"
                   >
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : (
-                      <>
-                        Login
-                      </>
+                    {loading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : loginCooldown > 0 ? (
+                      `Wait ${loginCooldown}s`
+                    ) : (
+                      <>Login</>
                     )}
                   </button>
 

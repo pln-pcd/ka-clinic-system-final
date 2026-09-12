@@ -9,7 +9,7 @@ import { getCookie, DEVICE_COOKIE_NAME, fingerprintDeviceId } from './_lib/devic
 import { lockStatus } from './_lib/lockout.js';
 import { maskEmail } from './_lib/mask.js';
 import { buildAdminOtpEmailHtml, buildAdminOtpEmailText } from './_lib/emailTemplate.js';
-import { generateOtp, isInCooldown, sendOtpEmailOrRollback } from './_lib/otp.js';
+import { generateOtp, isInCooldown, getCooldownRemainingSeconds, sendOtpEmailOrRollback } from './_lib/otp.js';
 
 const COOLDOWN_MS = 30 * 1000;
 const OTP_TTL_MS = 5 * 60 * 1000;
@@ -59,7 +59,12 @@ export default async function handler(req, res) {
     const otpRef = db.collection('otps').doc(caller.uid);
     const existing = await otpRef.get();
     if (isInCooldown(existing.exists ? existing.data() : null, COOLDOWN_MS)) {
-      res.status(429).json({ success: false, error: 'Please wait before requesting another code.' });
+      const remainingSec = getCooldownRemainingSeconds(existing.exists ? existing.data() : null, COOLDOWN_MS) || 30;
+      res.status(429).json({
+        success: false,
+        error: `Please wait before requesting another code. Try again in ${remainingSec} second${remainingSec === 1 ? '' : 's'}.`,
+        retryAfter: remainingSec,
+      });
       return;
     }
 
