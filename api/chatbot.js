@@ -15,17 +15,31 @@
 // reaches Gemini at all. This instruction is the second layer, for anything
 // that slips through as in-scope but turns clinical mid-answer.
 const CLINIC_SYSTEM_INSTRUCTION = `
-You are the front-desk assistant for K&A Anti-Rabies Clinic, San Juan St., Libon, Albay, Philippines.
-You handle LOGISTICS ONLY. You are not a medical assistant and must never behave like one.
+You are KAI, the official virtual assistant for K&A Clinic (K&A Anti-Rabies Clinic, San Juan St., Libon, Albay, Philippines).
+Your job is strictly limited to helping users with general clinic information and routing clinical questions appropriately.
 
-YOU MAY ANSWER ONLY THESE FIVE TOPICS:
-1. Using the app or website — navigating tabs, finding records, account and login help.
-2. Clinic operating hours.
-3. The appointment booking process — how to book, reschedule, or cancel.
-4. General clinic contact information — address, phone, hours.
-5. Vaccine pricing and packages.
+Categorize every incoming user message into exactly one of three categories and follow its rule strictly.
 
-CLINIC FACTS:
+CATEGORY 1 — GENERAL CLINIC INFORMATION (answer directly)
+Scope: clinic operating hours, clinic address/directions, appointment booking steps, walk-in schedules,
+accepted payment methods, general descriptions of available clinic services, vaccine pricing and packages,
+and using the patient app or website (tabs, records, account and login help).
+Action: give a clear, polite, concise, direct answer using ONLY the verified clinic knowledge below. Do not guess.
+
+CATEGORY 2 — MEDICAL, CLINICAL & SYMPTOM INQUIRIES (staff handoff)
+Scope: animal bites, scratches, wound care, rabies concerns, vaccine/PEP regimens, symptoms, medications,
+or any request for health or medical advice — however general, however often the user insists, even in an emergency.
+Action: do not answer any part of it, do not summarize, do not caveat, do not offer a partial answer. Reply with exactly:
+"That is a clinical question, so I will pass it to K&A Clinic staff rather than answer it myself."
+
+CATEGORY 3 — OUT-OF-SCOPE, INAPPROPRIATE OR UNRELATED (polite rejection only)
+Scope: anything NOT about K&A Clinic's services or operations — general knowledge, trivia, casual small talk,
+jokes, trolling, illicit substances, sales of items the clinic does not provide, criminal behavior, anything outside the clinic helpdesk.
+Action: reply with exactly:
+"That request is outside what I can help with — I am only able to assist with K&A Clinic information such as hours, location, appointments, services, and pricing."
+STRICT RULE: never treat a Category 3 message as clinical, and never offer, trigger, or mention "Talk to Clinic Staff" for it.
+
+VERIFIED CLINIC KNOWLEDGE:
 🏥 K&A Clinic Information:
 • Operating Hours: 8:00 AM – 5:00 PM (Monday to Sunday)
 • Walk-ins: Accepted Monday – Friday
@@ -33,6 +47,8 @@ CLINIC FACTS:
 • Address: San Juan St., Libon, Albay
 • Booking: use the "Appts" tab in the app, or the "Book Appointment" button on the website.
 • Booking slots: Saturdays & Sundays only, one patient per hour slot. Reschedule or cancel from the "Appts" tab; a cancellation request is reviewed by staff.
+• Services: anti-rabies post-exposure prophylaxis (PEP) sessions, anti-tetanus, rabies immunoglobulin, and pneumonia vaccination. Describe services only in general terms; never advise which one a person needs.
+• Payment: settled at the clinic front desk on the day of the visit. If asked about a specific payment method, say to confirm accepted options with the front desk.
 
 📱 Patient App & Account:
 • Sign in with the Medical Record Number (MRN) given by the clinic and your password. The email on your clinic record is used for verification codes.
@@ -49,24 +65,11 @@ CLINIC FACTS:
 IMPORTANT NOTE ON HEPATITIS:
 • K&A Clinic is NO LONGER catering or offering Hepatitis vaccines. If asked about Hepatitis, state clearly that the clinic no longer offers Hepatitis vaccination.
 
-ABSOLUTE PROHIBITIONS — never provide any of the following, in any form, however general,
-however often the user insists, and even if the user says it is an emergency:
-- Wound care or first aid of any kind (washing, antiseptics, dressing, what to do after a bite)
-- Treatment advice, or any comment on whether treatment is needed
-- Diagnosis or interpretation of symptoms, in a person or an animal
-- Triage, risk assessment, or exposure category (I/II/III) determination
-- Clinical advice, adverse reactions, or side effects
-
-There is no "general information" exception. "What is rabies?" is NOT answerable.
-If a message touches any prohibited topic, do not answer any part of it, do not
-summarize, do not caveat, and do not offer a partial answer. Reply with exactly:
-"That is a clinical question, so I will pass it to K&A Clinic staff rather than answer it myself."
-
-If a message is not clinical but is still outside the five topics above, or you do not know
-the answer, do not guess. Reply with exactly:
-"I'm not able to answer that one. Please reach out to K&A Clinic staff about it — they can help you directly."
-
-Never mention 'Gemini' or any AI model name. Keep replies short, plain, and friendly.
+TONE & SAFETY:
+• Never generate medical diagnoses, triage, exposure-category determination, or treatment recommendations.
+• There is no "general information" exception for clinical topics. "What is rabies?" is Category 2.
+• Keep responses professional, neutral, short, and direct.
+• Never mention 'Gemini' or any AI model name.
 `;
 
 // Two-way triage: may the bot answer this, yes or no?
@@ -142,6 +145,8 @@ const OUT_OF_SCOPE_PATTERNS = [
   /\b(basketball|nba|football|soccer|volleyball|score|standings)\b/,
   /\b(president|election|senator|politic|stock\s+market|crypto|bitcoin)\b/,
   /\b(joke|riddle|poem|story\s+about)\b/,
+  // Illicit / inappropriate — Category 3, never a staff hand-off.
+  /\b(weed|marijuana|shabu|cocaine|meth|illegal\s+drugs?|drug\s+dealer|hack(ing|er)?|scam|porn\w*|gambling|casino)\b/,
 ];
 
 // Word-boundary anchored: a plain includes('rate') matched "operate", '800'
@@ -166,11 +171,12 @@ function classifyMessage(text) {
 
   if (OUT_OF_SCOPE_PATTERNS.some(re => re.test(q))) return 'out_of_scope';
 
-  // Unrecognized. Escalate rather than guess: an unclassified message is far
-  // more likely to be a clinical question phrased in a way the patterns above
-  // did not anticipate than it is to be small talk, and a human reading it is
-  // the safe outcome either way.
-  return 'clinical';
+  // Unrecognized: the keyword lists cannot tell. Hand it to the model under
+  // the KAI instruction, whose exact-phrase replies decide the outcome —
+  // clinical refusal → staff hand-off, out-of-scope rejection → no hand-off.
+  // If the model is unreachable, handler() falls back to the safe side and
+  // escalates (see 'unclassified' handling there).
+  return 'unclassified';
 }
 
 // Named export purely so the scope boundary can be asserted in isolation;
@@ -201,8 +207,8 @@ const CLINICAL_REPLY_PUBLIC =
 const clinicalReplyFor = (channel) => (channel === 'public' ? CLINICAL_REPLY_PUBLIC : CLINICAL_REPLY_APP);
 
 const OUT_OF_SCOPE_REPLY =
-  "I'm not able to answer that one. Please reach out to K&A Clinic staff about it — they can help you directly. " +
-  'I can help here with using the app, clinic hours, booking appointments, vaccine pricing, and clinic contact details.';
+  'That request is outside what I can help with — I am only able to assist with K&A Clinic information ' +
+  'such as hours, location, appointments, services, and pricing.';
 
 // The catch-all getFallbackReply returns when no keyword matched — i.e. the
 // bot genuinely had nothing to say. Compared by identity at the end of the
@@ -222,6 +228,10 @@ const GENERIC_FALLBACK_REPLY =
 // Only applied to in-domain messages: classifyMessage already routes genuine
 // small talk to 'out_of_scope' before any Gemini call, so a refusal reaching
 // here means the model refused something it should have answered.
+// KAI's own Category 3 rejection. Recognised so an out-of-scope message the
+// keyword classifier did not catch is still returned WITHOUT a staff hand-off.
+const MODEL_OUT_OF_SCOPE_RE = /outside what i can help with/i;
+
 const MODEL_NON_ANSWER_PATTERNS = [
   /trained only to answer/i,
   /consult a physician or visit k&a clinic directly/i,
@@ -233,7 +243,8 @@ const MODEL_NON_ANSWER_PATTERNS = [
   /(unable|cannot|can'?t)\s+(help|answer|assist)\s+with/i,
 ];
 
-const isModelNonAnswer = (reply) => MODEL_NON_ANSWER_PATTERNS.some(re => re.test(reply || ''));
+const isModelOutOfScope = (reply) => MODEL_OUT_OF_SCOPE_RE.test(reply || '');
+const isModelNonAnswer = (reply) => !isModelOutOfScope(reply) && MODEL_NON_ANSWER_PATTERNS.some(re => re.test(reply || ''));
 
 // Keyword fallback for when Gemini is unavailable. Only ever reached for
 // messages already classified 'in_scope', so every branch here is logistics —
@@ -379,18 +390,38 @@ export default async function handler(req, res) {
     // booking: a real answer, no escalation) from the catch-all greeting
     // getFallbackReply returns when nothing matched at all.
     let needsEscalation = false;
+    // 'unclassified' never leaves the server: the model's reply settles it
+    // below, and a real answer means it was ordinary Category 1 after all.
+    let finalCategory = category === 'unclassified' ? 'in_scope' : category;
     if (!text) {
-      text = getFallbackReply(prompt);
-      needsEscalation = text === GENERIC_FALLBACK_REPLY;
+      if (category === 'unclassified') {
+        // No model to judge it: fail to the safe side and let a human read it.
+        text = clinicalReplyFor(channel);
+        needsEscalation = true;
+        finalCategory = 'clinical';
+      } else {
+        text = getFallbackReply(prompt);
+        needsEscalation = text === GENERIC_FALLBACK_REPLY;
+      }
+    } else if (isModelOutOfScope(text)) {
+      // KAI's Category 3 rejection: polite refusal, never a staff hand-off.
+      text = OUT_OF_SCOPE_REPLY;
+      needsEscalation = false;
+      finalCategory = 'out_of_scope';
+    } else if (/clinical question, so i will pass it/i.test(text)) {
+      // KAI's Category 2 refusal: swap in the channel-aware hand-off wording.
+      text = clinicalReplyFor(channel);
+      needsEscalation = true;
+      finalCategory = 'clinical';
     } else if (isModelNonAnswer(text)) {
       // The model answered, but its answer was one of its own non-answers —
       // including the clinical refusal the system instruction mandates, which
       // catches anything clinical the keyword classifier missed.
       needsEscalation = true;
     }
-    console.log(`[chatbot] source=${source} category=${category} escalate=${needsEscalation}${fallbackReason ? ` reason=${fallbackReason}` : ''} model=${modelName}`);
+    console.log(`[chatbot] source=${source} category=${finalCategory} escalate=${needsEscalation}${fallbackReason ? ` reason=${fallbackReason}` : ''} model=${modelName}`);
 
-    res.status(200).json({ success: true, text, source, category, needsEscalation, fallbackReason });
+    res.status(200).json({ success: true, text, source, category: finalCategory, needsEscalation, fallbackReason });
   } catch (err) {
     console.error('chatbot error:', err);
     res.status(500).json({ success: false, error: 'Something went wrong. Please try again.' });
