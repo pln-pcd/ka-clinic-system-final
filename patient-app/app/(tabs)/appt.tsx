@@ -1621,7 +1621,7 @@ const df = StyleSheet.create({
   footer:     { flexDirection: 'row', gap: scale(12), paddingHorizontal: scale(20), paddingVertical: verticalScale(14), borderTopWidth: 1, borderTopColor: C.border, backgroundColor: C.white },
   cancelBtn:  { flex: 1, paddingVertical: verticalScale(12), borderRadius: scale(12), alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: C.border, backgroundColor: C.bg },
   cancelTxt:  { fontSize: moderateScale(13), fontWeight: '700', color: C.slate },
-  submitBtn:  { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: scale(8), paddingVertical: verticalScale(12), borderRadius: scale(12), backgroundColor: '#475569' },
+  submitBtn:  { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: scale(8), paddingVertical: verticalScale(12), borderRadius: scale(12), backgroundColor: '#334155' },
   submitTxt:  { fontSize: moderateScale(13), fontWeight: '800', color: C.white },
 
   typeSection:      { paddingHorizontal: scale(20), paddingTop: verticalScale(4), paddingBottom: verticalScale(8), position: 'relative', zIndex: 100 },
@@ -1725,6 +1725,6 @@ const sm = StyleSheet.create({
   footer:     { flexDirection: 'row', gap: scale(10), marginTop: verticalScale(16) },
   cancelBtn:  { flex: 1, paddingVertical: verticalScale(12), borderRadius: scale(12), borderWidth: 1, borderColor: C.border, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center' },
   cancelTxt:  { fontSize: moderateScale(13), fontWeight: '700', color: C.slate },
-  confirmBtn: { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: verticalScale(12), borderRadius: scale(12), backgroundColor: '#475569' },
+  confirmBtn: { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: verticalScale(12), borderRadius: scale(12), backgroundColor: '#334155' },
   confirmTxt: { fontSize: moderateScale(13), fontWeight: '800', color: C.white },
 });

@@ -151,7 +151,7 @@ function WelcomeBanner({ stats, onNavigate, adminName, tagline }) {
 
       <div className="relative z-10 max-w-sm sm:max-w-md">
         <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
-          Hello {adminName || 'Admin'}!
+          Hello, {adminName || 'Admin'}!
         </h2>
         <p className="text-xs sm:text-sm mt-2 leading-relaxed text-slate-500 font-medium">
           {tagline || 'Your trusted partner in rabies prevention and clinical care. Track patient vaccinations, appointments, and exposure cases in Libon, Albay.'}

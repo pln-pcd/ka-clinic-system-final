@@ -870,20 +870,9 @@ export default function AppointmentPage() {
     notes: '',
   });
 
-  const [editForm, setEditForm] = useState({
-    name: '',
-    contactNumber: '',
-    date: '',
-    time: '',
-    type: '',
-    status: '',
-    notes: '',
-    cancellationReason: '',
-  });
 
   const [toast, setToast] = useState({ msg: '', type: '' });
   const [saving, setSaving] = useState(false);
-  const [editSaving, setEditSaving] = useState(false);
 
   // Decline Reason Modal States
   const [declineModalOpen, setDeclineModalOpen] = useState(false);
@@ -1141,74 +1130,11 @@ export default function AppointmentPage() {
       });
   };
 
+  // The preview is read-only: patient-entered details are shown as booked
+  // and staff act on the request (confirm / reject) instead of editing it.
   const openEditModal = (apt) => {
     setEditingApt(apt);
-    setEditForm({
-      name: apt.name || '',
-      contactNumber: apt.contactNumber || apt.contact || '',
-      date: apt.date || selectedDate,
-      time: apt.time || TIME_SLOTS[0],
-      type: apt.type || SERVICE_TYPES[0],
-      status: apt.status || 'confirmed',
-      notes: apt.notes || '',
-      cancellationReason: apt.cancellationReason || apt.declineReason || '',
-    });
     setEditModalOpen(true);
-  };
-
-  const handleSaveEdit = () => {
-    if (!editingApt) return;
-    if (!editForm.name.trim() || !editForm.contactNumber.trim()) {
-      showToast('Please fill in patient name and contact number', 'error');
-      return;
-    }
-    if (editForm.date !== editingApt.date && !isWeekendDate(editForm.date)) {
-      showToast('Appointments are only available on Saturdays and Sundays', 'error');
-      return;
-    }
-    const updatedData = {
-      name: (editForm.name || '').trim(),
-      contactNumber: (editForm.contactNumber || '').trim(),
-      date: editForm.date || selectedDate || '',
-      time: editForm.time || TIME_SLOTS[0] || '',
-      type: editForm.type || SERVICE_TYPES[0] || '',
-      status: editForm.status || 'confirmed',
-      notes: (editForm.notes || '').trim(),
-      cancellationReason: (editForm.cancellationReason || '').trim(),
-      declineReason: (editForm.cancellationReason || '').trim(),
-      source: editingApt.source || 'walk-in',
-      updatedAt: Date.now(),
-    };
-    const aptId = editingApt.id;
-    const prevDate = editingApt.date;
-    const prevTime = editingApt.time;
-    const rescheduled = prevDate !== updatedData.date || prevTime !== updatedData.time;
-    setEditModalOpen(false);
-    setEditingApt(null);
-    setEditSaving(false);
-    showToast('Appointment updated successfully!');
-    updateDoc(doc(db, 'appointments', aptId), updatedData)
-      .then(async () => {
-        if (updatedData.status === 'cancelled') {
-          await releaseSlot(prevDate, prevTime);
-        } else if (rescheduled) {
-          await releaseSlot(prevDate, prevTime);
-          try {
-            await setDoc(doc(db, 'appointmentSlots', slotId(updatedData.date, updatedData.time)), {
-              date:      updatedData.date,
-              time:      updatedData.time,
-              heldBy:    auth.currentUser?.uid || 'admin',
-              createdAt: Date.now(),
-            });
-          } catch (err) {
-            console.error('Slot claim error:', err);
-          }
-        }
-      })
-      .catch(err => {
-        console.error('Edit error:', err);
-        showToast(err?.message || 'Failed to update appointment', 'error');
-      });
   };
 
   return (
@@ -1825,178 +1751,119 @@ export default function AppointmentPage() {
         </div>
       )}
 
-      {/* Edit Appointment Modal with Preview & Editable Info */}
-      {editModalOpen && editingApt && (
-        <div className="modal-overlay">
-          <div className="modal-card" style={{ width: 880, maxWidth: '96vw' }}>
-            <div className="modal-head">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      {/* Appointment Preview Modal — read-only; staff confirm or reject */}
+      {editModalOpen && editingApt && (() => {
+        const apt = editingApt;
+        const isPendingReq = apt.status === 'pending';
+        const isCancelReq = apt.status === 'cancellation_pending';
+        const statusCls = apt.status === 'confirmed' ? 'badge-confirmed' : apt.status === 'done' ? 'badge-done' : apt.status === 'cancelled' ? 'badge-cancelled' : 'badge-pending';
+        const Field = ({ label, value, span }) => (
+          <div className="form-group" style={span ? { gridColumn: '1 / -1' } : undefined}>
+            <label className="form-label">{label}</label>
+            <div className="form-input" style={{ background: 'var(--bg-subtle)', cursor: 'default', minHeight: 40, display: 'flex', alignItems: 'center', whiteSpace: 'pre-wrap' }}>
+              {value || <span style={{ color: 'var(--text-muted)' }}>—</span>}
+            </div>
+          </div>
+        );
+        const close = () => { setEditModalOpen(false); setEditingApt(null); };
+        const dangerBtn = { background: '#DC2626', color: '#FFF', padding: '8px 14px', fontSize: '0.8rem', fontWeight: 700, borderRadius: 8, display: 'inline-flex', alignItems: 'center', gap: 6 };
+        return (
+          <div className="modal-overlay">
+            <div className="modal-card" style={{ width: 880, maxWidth: '96vw' }}>
+              <div className="modal-head">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{
+                    width: 38, height: 38, borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #6366F1, #4338CA)',
+                    color: '#FFF', fontWeight: 800, fontSize: '0.85rem',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  }}>
+                    {getInitials(apt.name)}
+                  </div>
+                  <div>
+                    <h2 className="modal-title">Appointment Preview</h2>
+                    <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                      ID: {apt.id.slice(0, 10)}… · Created: {apt.createdAt ? new Date(apt.createdAt).toLocaleDateString() : '—'}
+                    </p>
+                  </div>
+                </div>
+                <button className="modal-close" onClick={close}><X size={16} /></button>
+              </div>
+
+              <div className="form-grid" style={{ maxHeight: '72vh', overflowY: 'auto', paddingRight: 4 }}>
                 <div style={{
-                  width: 38, height: 38, borderRadius: '50%',
-                  background: 'linear-gradient(135deg, #6366F1, #4338CA)',
-                  color: '#FFF', fontWeight: 800, fontSize: '0.85rem',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  display: 'flex', alignItems: 'center',
+                  padding: '10px 14px', background: 'var(--bg-subtle)', borderRadius: 10, gap: 12
                 }}>
-                  {getInitials(editForm.name || editingApt.name)}
-                </div>
-                <div>
-                  <h2 className="modal-title">Appointment Preview & Edit</h2>
-                  <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                    ID: {editingApt.id.slice(0, 10)}… · Created: {editingApt.createdAt ? new Date(editingApt.createdAt).toLocaleDateString() : '—'}
-                  </p>
-                </div>
-              </div>
-              <button className="modal-close" onClick={() => setEditModalOpen(false)}><X size={16} /></button>
-            </div>
-
-            <div className="form-grid" style={{ maxHeight: '72vh', overflowY: 'auto', paddingRight: 4 }}>
-
-              {/* Status & Source Preview Pills */}
-              <div style={{
-                display: 'flex', alignItems: 'center', justifyBetween: 'space-between',
-                padding: '10px 14px', background: 'var(--bg-subtle)', borderRadius: 10, gap: 12
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)' }}>Source:</span>
-                  <span className="badge-source">
-                    <Tag size={10} />
-                    {(editingApt.source === 'online' || editingApt.source === 'landing') ? 'Online Booking' : 'Walk-In / Admin'}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
-                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)' }}>Current Status:</span>
-                  <span className={`badge-status ${
-                    editForm.status === 'confirmed' ? 'badge-confirmed' : editForm.status === 'done' ? 'badge-done' : editForm.status === 'cancelled' ? 'badge-cancelled' : 'badge-pending'
-                  }`}>
-                    {editForm.status}
-                  </span>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, alignItems: 'start' }}>
-              {/* Left column: patient + schedule */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div className="form-group">
-                <label className="form-label">Full Name *</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={editForm.name}
-                  onChange={e => setEditForm({ ...editForm, name: e.target.value })}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Contact Number *</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={editForm.contactNumber}
-                  onChange={e => setEditForm({ ...editForm, contactNumber: e.target.value })}
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <div className="form-group">
-                  <label className="form-label">Date</label>
-                  <input
-                    type="date"
-                    className="form-input"
-                    value={editForm.date}
-                    onChange={e => setEditForm({ ...editForm, date: e.target.value })}
-                    style={!isWeekendDate(editForm.date) ? { borderColor: '#FCA5A5', background: '#FFF5F5' } : undefined}
-                  />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)' }}>Source:</span>
+                    <span className="badge-source">
+                      <Tag size={10} />
+                      {(apt.source === 'online' || apt.source === 'landing') ? 'Online Booking' : 'Walk-In / Admin'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)' }}>Current Status:</span>
+                    <span className={`badge-status ${statusCls}`}>{apt.status}</span>
+                  </div>
                 </div>
 
-                <div className="form-group">
-                  <label className="form-label">Time Slot</label>
-                  <select
-                    className="form-select"
-                    value={editForm.time}
-                    onChange={e => setEditForm({ ...editForm, time: e.target.value })}
-                  >
-                    {TIME_SLOTS.map(t => {
-                      const taken = takenTimesOn(editForm.date, editingApt?.id).includes(t);
-                      return <option key={t} value={t}>{taken ? `${t} — booked` : t}</option>;
-                    })}
-                  </select>
+                <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '2px 0 0' }}>
+                  Details below were entered by the patient at booking and cannot be edited by clinic staff.
+                </p>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, alignItems: 'start' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <Field label="Full Name" value={apt.name} />
+                    <Field label="Contact Number" value={apt.contactNumber || apt.contact} />
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                      <Field label="Date" value={formatDateLong(apt.date) || apt.date} />
+                      <Field label="Time Slot" value={apt.time} />
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <Field label="Purpose / Service" value={apt.type} />
+                    <Field label="Patient Notes" value={apt.notes} />
+                    {(apt.cancellationReason || apt.declineReason) && (
+                      <Field label="Cancellation Reason" value={apt.cancellationReason || apt.declineReason} />
+                    )}
+                  </div>
                 </div>
               </div>
 
-              <span style={{ fontSize: '.6875rem', fontWeight: 600, color: isWeekendDate(editForm.date) ? 'var(--text-muted)' : '#B91C1C', marginTop: -4 }}>
-                {isWeekendDate(editForm.date) ? 'Available Saturdays & Sundays only.' : 'Weekday date — only allowed if unchanged from original booking.'}
-              </span>
-              </div>
-
-              {/* Right column: service, status, notes */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <div className="form-group">
-                  <label className="form-label">Purpose / Service</label>
-                  <select
-                    className="form-select"
-                    value={editForm.type}
-                    onChange={e => setEditForm({ ...editForm, type: e.target.value })}
-                  >
-                    {SERVICE_TYPES.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
+              <div className="modal-footer" style={{ gap: 8 }}>
+                <div className="modal-footer-right">
+                  <button className="btn-secondary" onClick={close}>Close</button>
+                  {isPendingReq && (
+                    <>
+                      <button type="button" className="btn-queue-action btn-queue-cancel" style={dangerBtn}
+                        onClick={() => { close(); promptDecline(apt); }}>
+                        <X size={13} /> Reject
+                      </button>
+                      <button type="button" className="btn-add-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                        onClick={() => { close(); promptQuickAction(apt, 'confirmed'); }}>
+                        <UserCheck size={13} /> Confirm
+                      </button>
+                    </>
+                  )}
+                  {isCancelReq && (
+                    <>
+                      <button type="button" className="btn-add-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                        onClick={() => { close(); promptQuickAction(apt, 'confirmed'); }}>
+                        <UserCheck size={13} /> Reject Cancellation
+                      </button>
+                      <button type="button" className="btn-queue-action btn-queue-cancel" style={dangerBtn}
+                        onClick={() => { close(); promptQuickAction(apt, 'cancelled'); }}>
+                        <X size={13} /> Approve Cancellation
+                      </button>
+                    </>
+                  )}
                 </div>
-
-                <div className="form-group">
-                  <label className="form-label">Status</label>
-                  <select
-                    className="form-select"
-                    value={editForm.status}
-                    onChange={e => setEditForm({ ...editForm, status: e.target.value })}
-                  >
-                    <option value="confirmed">Confirmed</option>
-                    <option value="pending">Pending</option>
-                    <option value="done">Done</option>
-                    <option value="cancelled">Cancelled</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Clinical / Patient Notes</label>
-                <textarea
-                  className="form-input"
-                  rows={2}
-                  placeholder="Patient notes or clinical remarks…"
-                  value={editForm.notes}
-                  onChange={e => setEditForm({ ...editForm, notes: e.target.value })}
-                  style={{ resize: 'vertical', fontFamily: 'inherit' }}
-                />
-              </div>
-
-              {(editForm.status === 'cancelled' || editingApt.status === 'cancellation_pending') && (
-                <div className="form-group">
-                  <label className="form-label" style={{ color: '#991B1B' }}>Cancellation Reason</label>
-                  <textarea
-                    className="form-input"
-                    rows={2}
-                    placeholder="Reason for cancellation…"
-                    value={editForm.cancellationReason}
-                    onChange={e => setEditForm({ ...editForm, cancellationReason: e.target.value })}
-                    style={{ resize: 'vertical', fontFamily: 'inherit', borderColor: '#FCA5A5', background: '#FFF5F5' }}
-                  />
-                </div>
-              )}
-              </div>
-              </div>
-            </div>
-
-            <div className="modal-footer" style={{ gap: 8 }}>
-              <div className="modal-footer-right">
-                <button className="btn-secondary" onClick={() => setEditModalOpen(false)}>Cancel</button>
-                <button className="btn-add-primary" onClick={handleSaveEdit} disabled={editSaving}>
-                  {editSaving ? 'Updating...' : 'Save Changes'}
-                </button>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Confirm / Reject Action Pop-up — shows appointment details before committing */}
       {pendingAction && (() => {
@@ -2104,20 +1971,20 @@ export default function AppointmentPage() {
               padding: 0,
               overflow: 'hidden',
               borderRadius: 24,
-              border: '1px solid #FECACA',
-              boxShadow: '0 20px 40px -15px rgba(220, 38, 38, 0.25)',
+              border: '1px solid #E2E8F0',
+              boxShadow: '0 20px 40px -15px rgba(15, 23, 42, 0.2)',
               background: '#FFFFFF'
             }}
           >
             {/* Header */}
-            <div style={{ padding: '20px 24px', background: '#FEF2F2', borderBottom: '1px solid #FEE2E2', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ padding: '20px 24px', background: '#FFFFFF', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 40, height: 40, borderRadius: 12, background: '#FEE2E2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#DC2626', border: '1px solid #FCA5A5' }}>
+                <div style={{ width: 40, height: 40, borderRadius: 12, background: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', border: '1px solid #E2E8F0' }}>
                   <AlertCircle size={20} />
                 </div>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#991B1B' }}>Decline Appointment</h3>
-                  <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: '#B91C1C' }}>
+                  <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#0F172A' }}>Decline Appointment</h3>
+                  <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: '#64748B' }}>
                     {declineTargetApt.name} · {declineTargetApt.date} ({declineTargetApt.time})
                   </p>
                 </div>
@@ -2125,7 +1992,7 @@ export default function AppointmentPage() {
               <button
                 type="button"
                 onClick={() => setDeclineModalOpen(false)}
-                style={{ background: 'transparent', border: 'none', color: '#991B1B', cursor: 'pointer', padding: 4 }}
+                style={{ background: 'transparent', border: 'none', color: '#64748B', cursor: 'pointer', padding: 4 }}
               >
                 <X size={18} />
               </button>

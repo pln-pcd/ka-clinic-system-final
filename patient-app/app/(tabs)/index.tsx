@@ -39,7 +39,7 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import * as Sharing from 'expo-sharing';
+import { saveImageToGallery } from '../../config/saveImage';
 import ViewShot from 'react-native-view-shot';
 import { db } from '../../config/firebase';
 import {
@@ -355,21 +355,14 @@ export default function RabiesRecoveryApp() {
     setExportingCard(true);
     try {
       const uri = await targetRef.current.capture();
-      const canShare = await Sharing.isAvailableAsync();
-      if (canShare) {
-        await Sharing.shareAsync(uri, {
-          mimeType: 'image/png',
-          dialogTitle: isBack ? 'History of Exposure Record Card' : 'Anti-Rabies Vaccination Record Card',
-        });
-      } else {
-        showAlert({
-          type: 'success',
-          title: 'Card Exported',
-          message: `Image saved to photos: ${uri}`,
-          primaryButtonText: 'OK',
-          onPrimaryPress: hideAlert,
-        });
-      }
+      await saveImageToGallery(uri);
+      showAlert({
+        type: 'success',
+        title: 'Card Saved',
+        message: `${isBack ? 'History of Exposure Record Card' : 'Anti-Rabies Vaccination Record Card'} saved to your photo gallery.`,
+        primaryButtonText: 'OK',
+        onPrimaryPress: hideAlert,
+      });
     } catch (err: any) {
       showAlert({
         type: 'error',
@@ -967,18 +960,14 @@ export default function RabiesRecoveryApp() {
                     <Text style={[s.recordsTableCellValue, { flex: 1.8 }]}>{pr.animal || pr.sourceOfExposure || (isGuest ? '—' : 'Dog / Cat')}</Text>
                   </View>
                   <View style={[s.recordsTableRow, s.recordsTableRowAlt]}>
-                    <Text style={[s.recordsTableCellLabel, { flex: 1.2 }]}>Animal Status</Text>
-                    <Text style={[s.recordsTableCellValue, { flex: 1.8 }]}>{pr.animalStatus || (isGuest ? '—' : 'Alive & Observed')}</Text>
-                  </View>
-                  <View style={s.recordsTableRow}>
                     <Text style={[s.recordsTableCellLabel, { flex: 1.2 }]}>Local Washing</Text>
                     <Text style={[s.recordsTableCellValue, { flex: 1.8 }]}>{pr.washTreatment || (isGuest ? '—' : 'Soap & Running Water')}</Text>
                   </View>
-                  <View style={[s.recordsTableRow, s.recordsTableRowAlt]}>
+                  <View style={s.recordsTableRow}>
                     <Text style={[s.recordsTableCellLabel, { flex: 1.2 }]}>Known Allergies</Text>
                     <Text style={[s.recordsTableCellValue, { flex: 1.8 }]}>{pr.allergies || (isGuest ? '—' : 'None Reported')}</Text>
                   </View>
-                  <View style={[s.recordsTableRow, { borderBottomWidth: 0 }]}>
+                  <View style={[s.recordsTableRow, s.recordsTableRowAlt, { borderBottomWidth: 0 }]}>
                     <Text style={[s.recordsTableCellLabel, { flex: 1.2 }]}>Attending ABTC</Text>
                     <Text style={[s.recordsTableCellValue, { flex: 1.8, fontWeight: '700', color: '#1E293B' }]}>K&A Animal Bite Center</Text>
                   </View>
@@ -1065,13 +1054,12 @@ export default function RabiesRecoveryApp() {
               </TouchableOpacity>
             </View>
 
-            {/* Dose timeline — laid out horizontally: one card per dose, read
-                left to right like the schedule itself. Doses are fixed by the
-                regimen (Day 0/3/7/…) from the exposure date, so there is
-                nothing here to book; only clinic staff mark one administered. */}
+            {/* Dose timeline — a vertical list: one row per dose, read top to
+                bottom like the schedule itself. Doses are fixed by the regimen
+                (Day 0/3/7/…) from the exposure date, so there is nothing here
+                to book; only clinic staff mark one administered. */}
             <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
+              showsVerticalScrollIndicator={false}
               contentContainerStyle={s.trackerLaneContent}
               style={s.trackerLane}
             >
@@ -1081,29 +1069,27 @@ export default function RabiesRecoveryApp() {
                 const isLast = i === trackerDoses.length - 1;
 
                 return (
-                  <View key={d.id} style={s.doseLaneStep}>
-                    <View style={[
-                      s.doseLaneCard,
-                      d.done && s.doseLaneCardDone,
-                      isNext && s.doseLaneCardNext,
-                      isMissed && s.doseLaneCardMissed,
-                    ]}>
-                      <View style={s.doseLaneIcon}>
-                        {d.done ? (
-                          <Ionicons name="checkmark-circle" size={scale(22)} color="#10B981" />
-                        ) : isMissed ? (
-                          <Ionicons name="alert-circle" size={scale(22)} color="#EF4444" />
-                        ) : isNext ? (
-                          <Ionicons name="time" size={scale(22)} color="#2563EB" />
-                        ) : (
-                          <Ionicons name="ellipse-outline" size={scale(22)} color="#CBD5E1" />
-                        )}
-                      </View>
+                  <View key={d.id} style={[s.doseLaneCard, !isLast && s.doseLaneCardGap,
+                    d.done && s.doseLaneCardDone,
+                    isNext && s.doseLaneCardNext,
+                    isMissed && s.doseLaneCardMissed,
+                  ]}>
+                    <View style={s.doseLaneIcon}>
+                      {d.done ? (
+                        <Ionicons name="checkmark-circle" size={scale(22)} color="#10B981" />
+                      ) : isMissed ? (
+                        <Ionicons name="alert-circle" size={scale(22)} color="#EF4444" />
+                      ) : isNext ? (
+                        <Ionicons name="time" size={scale(22)} color="#2563EB" />
+                      ) : (
+                        <Ionicons name="ellipse-outline" size={scale(22)} color="#CBD5E1" />
+                      )}
+                    </View>
 
-                      <Text style={[s.doseLaneTitle, isNext && s.doseLaneTitleNext]} numberOfLines={2}>
+                    <View style={s.doseLaneBody}>
+                      <Text style={[s.doseLaneTitle, isNext && s.doseLaneTitleNext]} numberOfLines={1}>
                         {d.label}
                       </Text>
-
                       <Text style={[
                         s.doseLaneDate,
                         d.done && { color: '#059669' },
@@ -1112,21 +1098,19 @@ export default function RabiesRecoveryApp() {
                       ]} numberOfLines={1}>
                         {d.blankRow ? 'Not scheduled' : d.date}
                       </Text>
-
-                      <View style={[
-                        s.doseLaneBadge,
-                        d.done ? s.doseStatusBadgeDone : isNext ? s.doseStatusBadgeNext : isMissed ? s.doseStatusBadgeMissed : s.doseStatusBadgeUpcoming,
-                      ]}>
-                        <Text style={[
-                          s.doseStatusText,
-                          d.done ? s.doseStatusTextDone : isNext ? s.doseStatusTextNext : isMissed ? s.doseStatusTextMissed : s.doseStatusTextUpcoming,
-                        ]}>
-                          {d.done ? 'Completed' : isNext ? 'Next Up' : isMissed ? 'Overdue' : 'Upcoming'}
-                        </Text>
-                      </View>
                     </View>
 
-                    {!isLast && <View style={[s.doseLaneConnector, d.done && s.doseLaneConnectorDone]} />}
+                    <View style={[
+                      s.doseLaneBadge,
+                      d.done ? s.doseStatusBadgeDone : isNext ? s.doseStatusBadgeNext : isMissed ? s.doseStatusBadgeMissed : s.doseStatusBadgeUpcoming,
+                    ]}>
+                      <Text style={[
+                        s.doseStatusText,
+                        d.done ? s.doseStatusTextDone : isNext ? s.doseStatusTextNext : isMissed ? s.doseStatusTextMissed : s.doseStatusTextUpcoming,
+                      ]}>
+                        {d.done ? 'Completed' : isNext ? 'Next Up' : isMissed ? 'Overdue' : 'Upcoming'}
+                      </Text>
+                    </View>
                   </View>
                 );
               })}
@@ -2179,58 +2163,45 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
   trackerLane: {
-    maxHeight: verticalScale(190),
+    maxHeight: verticalScale(300),
   },
   trackerLaneContent: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
     paddingHorizontal: scale(18),
-    paddingVertical: verticalScale(16),
-  },
-  doseLaneStep: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    paddingVertical: verticalScale(14),
   },
   doseLaneCard: {
-    width: scale(132),
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(12),
     borderRadius: scale(14),
     borderWidth: 1,
     borderColor: '#E2E8F0',
     backgroundColor: '#FFFFFF',
-    paddingVertical: verticalScale(12),
-    paddingHorizontal: scale(12),
-    alignItems: 'center',
-    gap: verticalScale(6),
+    paddingVertical: verticalScale(11),
+    paddingHorizontal: scale(14),
   },
+  doseLaneCardGap: { marginBottom: verticalScale(8) },
   doseLaneCardDone: { borderColor: '#A7F3D0', backgroundColor: '#F0FDF4' },
   doseLaneCardNext: { borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' },
   doseLaneCardMissed: { borderColor: '#FECACA', backgroundColor: '#FEF2F2' },
-  doseLaneIcon: { height: scale(26), justifyContent: 'center', alignItems: 'center' },
+  doseLaneIcon: { width: scale(26), justifyContent: 'center', alignItems: 'center' },
+  doseLaneBody: { flex: 1, gap: verticalScale(2) },
   doseLaneTitle: {
     fontSize: moderateScale(12.5),
     fontWeight: '700',
     color: '#0F172A',
-    textAlign: 'center',
   },
   doseLaneTitleNext: { color: '#1E40AF', fontWeight: '800' },
   doseLaneDate: {
     fontSize: moderateScale(11),
     fontWeight: '600',
     color: '#64748B',
-    textAlign: 'center',
   },
   doseLaneBadge: {
     paddingHorizontal: scale(9),
     paddingVertical: verticalScale(3),
     borderRadius: scale(999),
-    marginTop: verticalScale(2),
   },
-  doseLaneConnector: {
-    width: scale(18),
-    height: 2,
-    backgroundColor: '#E2E8F0',
-  },
-  doseLaneConnectorDone: { backgroundColor: '#A7F3D0' },
   trackerFooterNote: {
     flex: 1,
     fontSize: moderateScale(10.5),

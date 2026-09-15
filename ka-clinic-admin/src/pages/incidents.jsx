@@ -418,7 +418,7 @@ export default function IncidentMapPage() {
         <div className="flex items-center gap-3">
           {/* Pin severity legend — inline beside layer toggle */}
           <div className="flex items-center gap-3 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-[11px] font-semibold text-slate-600">
-            <span className="text-[10px] font-extrabold text-slate-800 uppercase tracking-wider">Pin Severity</span>
+            <span className="text-[10px] font-extrabold text-slate-800 uppercase tracking-wider">Pin</span>
             {Object.entries(CATEGORY_COLOR).map(([cat, color]) => (
               <span key={cat} className="flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} /> {cat}

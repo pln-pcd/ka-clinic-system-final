@@ -1081,13 +1081,6 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [] }) {
                   </select>
                 </div>
 
-                <div className="form-field full"><label>Generic Name</label>
-                  <select value={form.genericName || ''} onChange={e => set('genericName', e.target.value)}>
-                    <option value="">— Select generic name —</option>
-                    {GENERIC_NAME_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                  </select>
-                </div>
-
                 <div className="form-field"><label>Wound Location</label>
                   <select value={form.woundLocation || ''} onChange={e => set('woundLocation', e.target.value)}>
                     <option value="">— Select location —</option>
@@ -1223,7 +1216,7 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [] }) {
                     <ReviewField label="No. of Bites" value={form.numberOfBites} />
                     <ReviewField label="Wound Washed?" value={form.woundWashed} />
                     <ReviewField label="RIG Given?" value={form.rigGiven} />
-                    <ReviewField label="Route / Generic" value={`${form.route} - ${form.genericName || 'N/A'}`} full />
+                    <ReviewField label="Vaccine Route" value={form.route || 'IM'} />
                   </ReviewSection>
                 )}
 

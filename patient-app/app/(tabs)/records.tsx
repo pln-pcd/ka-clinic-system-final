@@ -19,7 +19,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import ViewShot from 'react-native-view-shot';
-import * as Sharing from 'expo-sharing';
+import { saveImageToGallery } from '../../config/saveImage';
 import { formatDoseDate } from '../../config/dates';
 import { db } from '../../config/firebase';
 import { usePatientAuth } from '../../context/PatientAuthContext';
@@ -127,20 +127,14 @@ export default function RecordsScreen() {
     setExportingCard(true);
     try {
       const uri = await targetRef.current.capture();
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, {
-          mimeType: 'image/png',
-          dialogTitle: 'Export Vaccination Record Card',
-        });
-      } else {
-        showAlert({
-          type: 'success',
-          title: 'Card Exported',
-          message: `Card image saved to: ${uri}`,
-          primaryButtonText: 'OK',
-          onPrimaryPress: hideAlert,
-        });
-      }
+      await saveImageToGallery(uri);
+      showAlert({
+        type: 'success',
+        title: 'Card Saved',
+        message: 'Vaccination Record Card saved to your photo gallery.',
+        primaryButtonText: 'OK',
+        onPrimaryPress: hideAlert,
+      });
     } catch (e: any) {
       showAlert({
         type: 'error',
@@ -226,18 +220,14 @@ export default function RecordsScreen() {
               <Text style={[s.recordTableCellValue, { flex: 1.8 }]}>{pr.animal || pr.sourceOfExposure || 'Dog / Cat'}</Text>
             </View>
             <View style={[s.recordTableRow, s.recordTableRowAlt]}>
-              <Text style={[s.recordTableCellLabel, { flex: 1.2 }]}>Animal Status</Text>
-              <Text style={[s.recordTableCellValue, { flex: 1.8 }]}>{pr.animalStatus || 'Alive & Observed'}</Text>
-            </View>
-            <View style={s.recordTableRow}>
               <Text style={[s.recordTableCellLabel, { flex: 1.2 }]}>Local Washing</Text>
               <Text style={[s.recordTableCellValue, { flex: 1.8 }]}>{pr.washTreatment || 'Soap & Running Water'}</Text>
             </View>
-            <View style={[s.recordTableRow, s.recordTableRowAlt]}>
+            <View style={s.recordTableRow}>
               <Text style={[s.recordTableCellLabel, { flex: 1.2 }]}>Known Allergies</Text>
               <Text style={[s.recordTableCellValue, { flex: 1.8 }]}>{pr.allergies || 'None Reported'}</Text>
             </View>
-            <View style={[s.recordTableRow, { borderBottomWidth: 0 }]}>
+            <View style={[s.recordTableRow, s.recordTableRowAlt, { borderBottomWidth: 0 }]}>
               <Text style={[s.recordTableCellLabel, { flex: 1.2 }]}>Attending ABTC</Text>
               <Text style={[s.recordTableCellValue, { flex: 1.8, fontWeight: '700', color: C.charcoal }]}>K&A Animal Bite Center</Text>
             </View>

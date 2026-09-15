@@ -14,14 +14,6 @@ import { Archive, AlertCircle, CheckCheck, Inbox, MessageSquare, Search, Send } 
 import React, { useEffect, useRef, useState } from 'react';
 import { db } from '../lib/firebase';
 
-/* ─── status config ─────────────────────────────────────────── */
-const STATUS_CFG = {
-  replied: { label: 'Replied', cls: 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300 font-bold' },
-  pending: { label: 'Pending', cls: 'bg-amber-100 text-amber-800 ring-1 ring-amber-300 font-bold' },
-  new:     { label: 'New Message', cls: 'bg-blue-100 text-blue-800 ring-1 ring-blue-300 font-bold' },
-};
-
-const getStatus = (s) => STATUS_CFG[s] || STATUS_CFG.pending;
 
 /* ─── avatar initials ───────────────────────────────────────── */
 const initials = (name) => (name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
@@ -369,7 +361,6 @@ export default function MessagesPage() {
             ) : (
               filteredThreads.map(t => {
                 const selected = selectedThread?.id === t.id;
-                const status = getStatus(t.status);
                 const color = avatarColor(t.patientName);
                 const isArchived = !!t.archived;
 
@@ -423,16 +414,6 @@ export default function MessagesPage() {
 
                         {/* Badges */}
                         <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                          {!isArchived && (
-                            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${status.cls}`}>
-                              {status.label}
-                            </span>
-                          )}
-                          {!isArchived && t.resolved && (
-                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 ring-1 ring-gray-200">
-                              Closed
-                            </span>
-                          )}
                           {t.escalationReason && (
                             <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
                               ⚠️ {t.escalationReason}
@@ -516,18 +497,18 @@ export default function MessagesPage() {
                         className={`flex flex-col ${isAdmin ? 'items-end' : 'items-start'}`}
                       >
                         <div
-                          className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-xs shadow-xs leading-relaxed ${
+                          className={`max-w-[75%] rounded-2xl px-5 py-3 text-sm shadow-xs leading-relaxed ${
                             isAdmin
                               ? 'bg-[#3B50DF] text-white rounded-br-xs'
                               : 'bg-white text-gray-800 border border-gray-200 rounded-bl-xs'
                           }`}
                         >
-                          <p className="font-semibold text-[10px] mb-0.5 opacity-80">
+                          <p className="font-semibold text-[11px] mb-1 opacity-80">
                             {isAdmin ? 'K&A Staff' : m.senderName || selectedThread.patientName}
                           </p>
                           <p className="whitespace-pre-wrap">{m.text}</p>
                         </div>
-                        <span className="text-[10px] text-gray-400 mt-1 px-1">
+                        <span className="text-[11px] text-gray-400 mt-1 px-1">
                           {formatTime(m.createdAt)}
                         </span>
                       </div>

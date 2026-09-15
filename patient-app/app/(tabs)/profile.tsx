@@ -18,7 +18,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { auth, db, signOut } from '../../config/firebase';
+import { auth, db, forgetTrustedDevice, signOut } from '../../config/firebase';
 import { API_BASE_URL } from '../../config/apiBase';
 import { setKeepSignedIn } from '../../config/appPrefs';
 import { formatDoseDate } from '../../config/dates';
@@ -318,6 +318,7 @@ export default function ProfileScreen() {
         if (isThis) {
           try {
             if (user?.uid) await clearThisDeviceSession(user.uid);
+            await forgetTrustedDevice();
             await setKeepSignedIn(false);
             await signOut(auth);
           } catch (e) {
@@ -382,6 +383,7 @@ export default function ProfileScreen() {
         hideAlert();
         try {
           if (user?.uid) await clearThisDeviceSession(user.uid);
+          await forgetTrustedDevice();
           await setKeepSignedIn(false);
           await signOut(auth);
         } catch (e) {
