@@ -1,4 +1,4 @@
-import { auth, db } from './_lib/firebaseAdmin.js';
+import { auth, db } from '../firebaseAdmin.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {

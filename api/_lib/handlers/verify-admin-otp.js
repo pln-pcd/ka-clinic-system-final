@@ -7,9 +7,9 @@
 // the device-management UI) so future logins from this browser can skip
 // the OTP step entirely (Batch 4).
 import crypto from 'node:crypto';
-import { db } from './_lib/firebaseAdmin.js';
-import { requireAuthenticatedAdmin } from './_lib/adminAuth.js';
-import { buildDeviceCookie, fingerprintDeviceId, parseDeviceName } from './_lib/deviceCookie.js';
+import { db } from '../firebaseAdmin.js';
+import { requireAuthenticatedAdmin } from '../adminAuth.js';
+import { buildDeviceCookie, fingerprintDeviceId, parseDeviceName } from '../deviceCookie.js';
 
 const DEVICE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 

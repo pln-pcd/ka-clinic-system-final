@@ -1,9 +1,9 @@
 import { randomBytes } from 'crypto';
-import { auth, db } from './_lib/firebaseAdmin.js';
-import { buildPasswordResetEmailHtml, buildPasswordResetEmailText } from './_lib/emailTemplate.js';
-import { sendMail } from './_lib/mailer.js';
-import { maskEmail } from './_lib/mask.js';
-import { generateOtp, getCooldownRemainingSeconds, isInCooldown } from './_lib/otp.js';
+import { auth, db } from '../firebaseAdmin.js';
+import { buildPasswordResetEmailHtml, buildPasswordResetEmailText } from '../emailTemplate.js';
+import { sendMail } from '../mailer.js';
+import { maskEmail } from '../mask.js';
+import { generateOtp, getCooldownRemainingSeconds, isInCooldown } from '../otp.js';
 
 const COOLDOWN_MS = 30 * 1000;
 const RESET_TTL_MS = 10 * 60 * 1000; // 10 minutes
@@ -99,12 +99,12 @@ export default async function handler(req, res) {
     let buildText = buildPasswordResetEmailText;
     let sendMailFn = sendMail;
     try {
-      const freshTemplate = await import(`./_lib/emailTemplate.js?t=${Date.now()}`);
+      const freshTemplate = await import(`../emailTemplate.js?t=${Date.now()}`);
       if (freshTemplate?.buildPasswordResetEmailHtml) {
         buildHtml = freshTemplate.buildPasswordResetEmailHtml;
         buildText = freshTemplate.buildPasswordResetEmailText;
       }
-      const freshMailer = await import(`./_lib/mailer.js?t=${Date.now()}`);
+      const freshMailer = await import(`../mailer.js?t=${Date.now()}`);
       if (freshMailer?.sendMail) {
         sendMailFn = freshMailer.sendMail;
       }

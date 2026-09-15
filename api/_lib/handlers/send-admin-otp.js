@@ -3,13 +3,13 @@
 // client-supplied uid. If the request carries a valid trusted-device
 // cookie, no email is sent at all — the client skips straight to OTP-free
 // login (Batch 4).
-import { db } from './_lib/firebaseAdmin.js';
-import { requireAuthenticatedAdmin } from './_lib/adminAuth.js';
-import { getCookie, DEVICE_COOKIE_NAME, fingerprintDeviceId } from './_lib/deviceCookie.js';
-import { lockStatus } from './_lib/lockout.js';
-import { maskEmail } from './_lib/mask.js';
-import { buildAdminOtpEmailHtml, buildAdminOtpEmailText } from './_lib/emailTemplate.js';
-import { generateOtp, isInCooldown, getCooldownRemainingSeconds, sendOtpEmailOrRollback } from './_lib/otp.js';
+import { db } from '../firebaseAdmin.js';
+import { requireAuthenticatedAdmin } from '../adminAuth.js';
+import { getCookie, DEVICE_COOKIE_NAME, fingerprintDeviceId } from '../deviceCookie.js';
+import { lockStatus } from '../lockout.js';
+import { maskEmail } from '../mask.js';
+import { buildAdminOtpEmailHtml, buildAdminOtpEmailText } from '../emailTemplate.js';
+import { generateOtp, isInCooldown, getCooldownRemainingSeconds, sendOtpEmailOrRollback } from '../otp.js';
 
 const COOLDOWN_MS = 30 * 1000;
 const OTP_TTL_MS = 5 * 60 * 1000;

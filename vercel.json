@@ -5,6 +5,22 @@
   "framework": null,
   "rewrites": [
     {
+      "source": "/api/admin-forgot-password",
+      "destination": "/api/admin-password?op=forgot"
+    },
+    {
+      "source": "/api/admin-reset-password",
+      "destination": "/api/admin-password?op=reset"
+    },
+    {
+      "source": "/api/send-admin-otp",
+      "destination": "/api/admin-otp?op=send"
+    },
+    {
+      "source": "/api/verify-admin-otp",
+      "destination": "/api/admin-otp?op=verify"
+    },
+    {
       "source": "/((?!api/)(?!@)(?!src/)(?!node_modules/)(?!.*\\.).*)",
       "destination": "/index.html"
     }
