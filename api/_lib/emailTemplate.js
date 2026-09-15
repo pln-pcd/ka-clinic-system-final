@@ -171,17 +171,66 @@ export function buildAdminOtpEmailHtml({ otp }) {
   });
 }
 
-// Admin Password Reset verification code.
-export function buildPasswordResetEmailHtml({ otp }) {
+// Password Reset email with branded CTA button directly to the portal.
+export function buildPasswordResetEmailHtml({ resetUrl, email, name }) {
+  const greeting = name ? `Hello <strong>${name}</strong>,` : 'Hello,';
+  const preheaderText = 'Reset your K&A Animal Bite Center password. Link is valid for 15 minutes.';
+
+  const resetCard = `                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0 24px;background-color:#F8FAFC;border:1px solid #E2E8F0;border-radius:14px;overflow:hidden;">
+                  <tr>
+                    <td style="padding:16px 20px;background-color:#FFFFFF;border-bottom:1px solid #EDF2F7;">
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                        <tr>
+                          <td>
+                            <div style="font-size:10px;font-weight:bold;color:#64748B;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:3px;">Account Security</div>
+                            <div style="font-size:15px;font-weight:bold;color:#0F172A;">Password Reset Request</div>
+                          </td>
+                          <td align="right">
+                            <span style="display:inline-block;padding:4px 10px;background-color:#EFF6FF;color:#1D4ED8;font-size:10px;font-weight:bold;border-radius:999px;letter-spacing:0.5px;text-transform:uppercase;">Admin Portal</span>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:18px 20px;">
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-size:13px;color:#334155;line-height:1.6;">
+                        ${email ? `<tr>
+                          <td style="padding-bottom:6px;width:120px;color:#64748B;font-size:12px;font-weight:600;">Account Email:</td>
+                          <td style="padding-bottom:6px;font-weight:bold;color:#0F172A;font-size:13px;">${email}</td>
+                        </tr>` : ''}
+                        <tr>
+                          <td style="padding-bottom:6px;width:120px;color:#64748B;font-size:12px;font-weight:600;">Valid Duration:</td>
+                          <td style="padding-bottom:6px;color:#D97706;font-weight:600;font-size:12px;">15 Minutes</td>
+                        </tr>
+                        <tr>
+                          <td style="width:120px;color:#64748B;font-size:12px;font-weight:600;">Action Type:</td>
+                          <td style="color:#059669;font-weight:600;font-size:12px;">Secure One-Time Link</td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                </table>`;
+
+  const bodyParts = [
+    heading('Reset Your Password'),
+    paragraph(greeting),
+    paragraph('We received a request to reset your password for the <strong>K&amp;A Animal Bite Center</strong> administration system. Click the button below to create your new password:'),
+    resetCard,
+  ];
+
+  const targetUrl = resetUrl || 'https://ka-clinic-system-final.vercel.app/?mode=resetPassword';
+  bodyParts.push(button(targetUrl, 'Reset Password Now'));
+  bodyParts.push(fallbackLink(targetUrl));
+
+  bodyParts.push(
+    footnote('If you did not request this password reset, please safely ignore this email. Your password will remain unchanged and your account is secure. Never share or forward this email to anyone.')
+  );
+
   return shell({
-    title: 'Your K&amp;A Clinic password reset code',
-    preheader: `${otp} is your K&amp;A Clinic password reset code. It expires in 10 minutes.`,
-    body: [
-      heading('Reset Your Password'),
-      paragraph('We received a request to reset your password for the <strong>K&amp;A Clinic Admin Portal</strong>. Enter the verification code below to set your new password.'),
-      codeBlock(otp),
-      footnote('If you did not request a password reset, you can safely ignore this email. Your account remains secure. Never share this code with anyone.'),
-    ].join('\n'),
+    title: 'Reset Your K&amp;A Animal Bite Center Password',
+    preheader: preheaderText,
+    body: bodyParts.join('\n'),
   });
 }
 
@@ -310,18 +359,31 @@ export function buildAdminOtpEmailText({ otp }) {
   ].join('\n');
 }
 
-export function buildPasswordResetEmailText({ otp }) {
-  return [
-    'Reset Your Password',
+export function buildPasswordResetEmailText({ resetUrl, email, name }) {
+  const greeting = name ? `Hello ${name},` : 'Hello,';
+  const lines = [
+    'Reset Your Password — K&A Animal Bite Center',
+    '============================================',
     '',
-    `Your K&A Clinic password reset code is: ${otp}`,
+    greeting,
     '',
-    'Enter this code in the K&A Clinic Admin Portal to choose your new password. This code expires in 10 minutes.',
+    'We received a request to reset the password for your K&A Animal Bite Center administration account' + (email ? ` (${email}).` : '.'),
     '',
-    'If you did not request a password reset, you can safely ignore this email. Never share this code with anyone.',
-    '',
-    'K&A Anti-Rabies Vaccine Clinic - Libon, Albay',
-  ].join('\n');
+  ];
+
+  if (resetUrl) {
+    lines.push('Click or paste this link into your browser to choose your new password:');
+    lines.push(resetUrl);
+    lines.push('');
+  }
+
+  lines.push('This reset link is valid for 15 minutes.');
+  lines.push('');
+  lines.push('If you did not request this password reset, you can safely ignore this email. Your account remains secure.');
+  lines.push('');
+  lines.push('K&A Animal Bite Center — Libon, Albay');
+
+  return lines.join('\n');
 }
 
 export function buildInviteEmailText({ inviteUrl, inviterName }) {

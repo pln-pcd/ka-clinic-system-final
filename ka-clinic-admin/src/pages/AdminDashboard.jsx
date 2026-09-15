@@ -1,5 +1,6 @@
 import { signOut } from 'firebase/auth';
 import { collection, doc, limit, onSnapshot, orderBy, query, setDoc, where } from 'firebase/firestore';
+import { trackEvent } from '../lib/analytics';
 import {
   Activity, AlertCircle, AlertOctagon, AlertTriangle,
   Bell, Calendar, Check, CheckCheck, CheckCircle, CheckCircle2, Clock,
@@ -202,6 +203,9 @@ export default function AdminDashboard({ onLogout }) {
       signOut(auth).finally(() => { if (onLogout) onLogout(); });
     }
   }, [adminStatus]);
+
+  // Anonymous page-view telemetry (only writes when the Settings toggle is on).
+  useEffect(() => { trackEvent(`page_${activePage}`); }, [activePage]);
 
   useEffect(() => {
     if (activePage === 'manage-admins' && role !== null && role !== 'manager') {

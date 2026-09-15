@@ -214,7 +214,13 @@ export default function AppointmentsScreen() {
   const handleRequestCancellation = async () => {
     if (!cancellationModalAppt) return;
     if (!cancellationReasonInput.trim()) {
-      alert('Please provide a reason for cancellation.');
+      showAlert({
+        type: 'warning',
+        title: 'Reason Required',
+        message: 'Please provide a reason for the cancellation so the clinic can review it.',
+        primaryButtonText: 'OK',
+        onPrimaryPress: hideAlert,
+      });
       return;
     }
     setSubmittingCancellation(true);
@@ -228,9 +234,21 @@ export default function AppointmentsScreen() {
       setCancellationModalAppt(null);
       setSelectedApptDetail(null);
       setCancellationReasonInput('');
-      alert('Cancellation request submitted! Waiting for admin approval.');
+      showAlert({
+        type: 'success',
+        title: 'Cancellation Requested',
+        message: 'Your request was sent to the clinic. The appointment stays booked until staff approve the cancellation.',
+        primaryButtonText: 'OK',
+        onPrimaryPress: hideAlert,
+      });
     } catch (e: any) {
-      alert(e?.message || 'Could not submit cancellation request.');
+      showAlert({
+        type: 'error',
+        title: 'Request Failed',
+        message: e?.message || 'Could not submit the cancellation request. Please try again.',
+        primaryButtonText: 'OK',
+        onPrimaryPress: hideAlert,
+      });
     } finally {
       setSubmittingCancellation(false);
     }
@@ -301,6 +319,16 @@ export default function AppointmentsScreen() {
   const [loadingApts,    setLoadingApts]    = useState(true);
 
   const [aptsError, setAptsError] = useState('');
+
+  // Clinic-wide maintenance switch (admin portal → Settings → System). The
+  // landing-page booking form already honours it; the app must too, otherwise
+  // "halts public appointment booking" is only half true.
+  const [maintenanceMode, setMaintenanceMode] = useState(false);
+  useEffect(() => {
+    return onSnapshot(doc(db, 'settings', 'config'), snap => {
+      setMaintenanceMode(!!snap.data()?.system?.maintenanceMode);
+    }, err => console.warn('Settings listener error:', err));
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -450,6 +478,17 @@ export default function AppointmentsScreen() {
     if (!validateForm()) return;
     if (!selectedKey || !selectedTime) return;
 
+    if (maintenanceMode) {
+      showAlert({
+        type: 'warning',
+        title: 'Booking Temporarily Unavailable',
+        message: 'The clinic has paused online appointment booking for maintenance. Please try again later or contact the clinic directly.',
+        primaryButtonText: 'OK',
+        onPrimaryPress: hideAlert,
+      });
+      return;
+    }
+
     if (!user) {
       showAlert({
         type: 'error',
@@ -562,32 +601,6 @@ export default function AppointmentsScreen() {
     }
   };
 
-  // ── Cancel appointment (update status, don't delete) ─────────────────────
-  const handleCancel = async (id: string) => {
-    try {
-      await updateDoc(doc(db, 'appointments', id), {
-        status: 'cancelled',
-        updatedAt: Date.now(),
-      });
-      showAlert({
-        type: 'info',
-        title: 'Appointment Cancelled',
-        message: 'Your appointment has been cancelled successfully.',
-        primaryButtonText: 'OK',
-        onPrimaryPress: hideAlert,
-      });
-    } catch (e: any) {
-      showAlert({
-        type: 'error',
-        title: 'Cancellation Failed',
-        message: e?.code === 'permission-denied'
-          ? 'You do not have permission to cancel this appointment. Please contact the clinic front desk.'
-          : 'Could not cancel this appointment. Please try again.',
-        primaryButtonText: 'OK',
-        onPrimaryPress: hideAlert,
-      });
-    }
-  };
 
   const handleDone = () => {
     setShowSuccess(false);

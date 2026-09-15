@@ -1112,7 +1112,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
           >
             <div
               className="bg-white rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-slate-200/90 transition-all transform duration-200 scale-100"
-              style={{ width: '920px', maxWidth: '96vw', maxHeight: '88vh' }}
+              style={{ width: '1040px', maxWidth: '96vw', maxHeight: '92vh' }}
             >
               {/* ── Light Clean Header Bar (Matching AddReportModal Design Style) ── */}
               <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/90 flex items-center justify-between gap-4">
@@ -1154,7 +1154,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
               <div className="flex flex-1 min-h-0 overflow-hidden">
                 
                 {/* Left Column: Demographics & Exposure Summary */}
-                <div className="flex-1 bg-slate-50/40 border-r border-slate-100 p-6 overflow-y-auto">
+                <div className="flex-1 min-w-0 bg-slate-50/40 border-r border-slate-100 px-6 py-5 overflow-y-auto">
                   <div className="flex items-center justify-between mb-3 gap-2">
                     <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
                       Patient Identity & Exposure Summary
@@ -1197,7 +1197,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                     ].map((item, idx, arr) => (
                       <div
                         key={item.key}
-                        className={`flex items-center justify-between px-2.5 py-2 text-xs rounded-xl transition-colors hover:bg-slate-50/70 ${
+                        className={`flex items-center justify-between px-2.5 py-1.5 text-xs rounded-xl transition-colors hover:bg-slate-50/70 ${
                           idx < arr.length - 1 ? 'border-b border-slate-200/80' : ''
                         }`}
                       >
@@ -1245,7 +1245,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                     }
 
                     return (
-                      <div className={`mt-4 bg-white border rounded-2xl p-4 shadow-2xs transition-all ${
+                      <div className={`mt-3 bg-white border rounded-2xl p-4 shadow-2xs transition-all ${
                         !assignedBrand ? 'border-amber-300 bg-amber-50/25' : 'border-indigo-300 bg-indigo-50/15'
                       }`}>
                         <div className="flex items-center justify-between mb-2">
@@ -1302,7 +1302,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                 </div>
 
                 {/* Right Column: Dose Checklist */}
-                <div className="w-[390px] p-6 bg-white overflow-y-auto">
+                <div className="w-[440px] shrink-0 px-6 py-5 bg-white overflow-y-auto">
                   <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
                     <div>
                       <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
@@ -1368,7 +1368,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                                   )}
                                   {isDone && doseUsedBrand && (
                                     <span
-                                      className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-bold border border-emerald-200/90 inline-flex items-center gap-1 max-w-[155px]"
+                                      className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-bold border border-emerald-200/90 inline-flex items-center gap-1 max-w-[240px]"
                                       title={`Vaccine used: ${doseUsedBrand}`}
                                     >
                                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
@@ -1377,7 +1377,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                                   )}
                                   {!isDone && isNext && assignedBrand && (
                                     <span
-                                      className="text-[10px] px-1.5 py-0.5 rounded-md bg-indigo-100 text-[#3B50DF] font-bold border border-indigo-200 inline-flex items-center gap-1 max-w-[155px]"
+                                      className="text-[10px] px-1.5 py-0.5 rounded-md bg-indigo-100 text-[#3B50DF] font-bold border border-indigo-200 inline-flex items-center gap-1 max-w-[240px]"
                                       title={`Selected brand: ${assignedBrand}`}
                                     >
                                       <span className="w-1.5 h-1.5 rounded-full bg-[#3B50DF] shrink-0" />

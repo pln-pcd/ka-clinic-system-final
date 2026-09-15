@@ -444,17 +444,17 @@ export default function ManageAdmins() {
       {/* ── Invite Admin Modal Card (Portaled to body to blur sidebar + header) ── */}
       {inviteOpen && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 transition-all" style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }} onClick={() => setInviteOpen(false)}>
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden border border-slate-200" onClick={e => e.stopPropagation()}>
             
             {/* Header Banner */}
-            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between flex-shrink-0">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-indigo-50 text-[#3B50DF] border border-indigo-100/90 flex items-center justify-center shrink-0 shadow-2xs">
-                  <UserPlus size={16} />
+            <div className="px-7 py-5 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-50 text-[#3B50DF] border border-indigo-100/90 flex items-center justify-center shrink-0 shadow-2xs">
+                  <UserPlus size={20} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">Invite New Administrator</h3>
-                  <p className="text-[11px] text-slate-400 font-normal mt-0.5">Send portal invitation link to clinic staff</p>
+                  <h3 className="text-base font-bold text-slate-900">Invite New Administrator</h3>
+                  <p className="text-xs text-slate-400 font-normal mt-0.5">Send portal invitation link to clinic staff</p>
                 </div>
               </div>
               <button
@@ -462,18 +462,18 @@ export default function ManageAdmins() {
                 className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors"
                 title="Close"
               >
-                <X size={16} />
+                <X size={18} />
               </button>
             </div>
 
             <form onSubmit={handleInvite}>
-              <div className="p-6">
+              <div className="p-7">
                 <div>
-                  <label htmlFor="invite-admin-email" className="block text-xs font-semibold text-slate-500 mb-1.5">
+                  <label htmlFor="invite-admin-email" className="block text-sm font-semibold text-slate-500 mb-2">
                     Staff Email Address *
                   </label>
                   <div className="relative">
-                    <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <Mail className="w-[18px] h-[18px] text-slate-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
                     <input
                       id="invite-admin-email"
                       autoFocus
@@ -481,26 +481,26 @@ export default function ManageAdmins() {
                       placeholder="staff@kaclinic.ph"
                       value={inviteEmail}
                       onChange={e => setInviteEmail(e.target.value)}
-                      className="w-full bg-white border border-slate-300 pl-10 pr-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-[#3B50DF] focus:ring-1 focus:ring-[#3B50DF] transition-all"
+                      className="w-full bg-white border border-slate-300 pl-11 pr-4 py-3 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:border-[#3B50DF] focus:ring-1 focus:ring-[#3B50DF] transition-all"
                     />
                   </div>
-                  <p className="text-[11px] text-slate-400 font-normal mt-1.5">An invitation email will be delivered to complete account setup.</p>
+                  <p className="text-xs text-slate-400 font-normal mt-2">An invitation email will be delivered to complete account setup.</p>
                 </div>
               </div>
 
               {/* Action Buttons */}
-              <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3">
+              <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3">
                 <button
                   type="button"
                   onClick={() => setInviteOpen(false)}
-                  className="px-3.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 text-slate-700 cursor-pointer hover:bg-slate-100 transition-colors"
+                  className="px-4 py-2 text-sm font-semibold rounded-lg border border-slate-300 text-slate-700 cursor-pointer hover:bg-slate-100 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={inviteSending || !inviteEmail.trim()}
-                  className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-[#3B50DF] hover:bg-[#2F40B5] text-white cursor-pointer shadow-xs transition-colors disabled:opacity-50"
+                  className="px-5 py-2 text-sm font-semibold rounded-lg bg-[#3B50DF] hover:bg-[#2F40B5] text-white cursor-pointer shadow-xs transition-colors disabled:opacity-50"
                 >
                   {inviteSending ? 'Sending Invitation…' : 'Send Invite'}
                 </button>
@@ -514,17 +514,17 @@ export default function ManageAdmins() {
       {/* ── Revoke Confirm Modal (Portaled to body) ── */}
       {confirmRevoke && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 transition-all" style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }} onClick={() => setConfirmRevoke(null)}>
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden border border-slate-200" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200" onClick={e => e.stopPropagation()}>
             
             {/* Header */}
-            <div className="px-6 py-4 border-b border-slate-100 bg-rose-50/60 flex items-center justify-between flex-shrink-0">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-600 border border-rose-200 flex items-center justify-center shrink-0 shadow-2xs">
-                  <ShieldAlert size={16} />
+            <div className="px-7 py-5 border-b border-slate-100 bg-rose-50/60 flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 border border-rose-200 flex items-center justify-center shrink-0 shadow-2xs">
+                  <ShieldAlert size={20} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">Revoke Access?</h3>
-                  <p className="text-[11px] text-slate-500 font-normal mt-0.5">Administrator Deactivation</p>
+                  <h3 className="text-base font-bold text-slate-900">Revoke Access?</h3>
+                  <p className="text-xs text-slate-500 font-normal mt-0.5">Administrator Deactivation</p>
                 </div>
               </div>
               <button
@@ -532,24 +532,24 @@ export default function ManageAdmins() {
                 className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors"
                 title="Close"
               >
-                <X size={16} />
+                <X size={18} />
               </button>
             </div>
 
-            <div className="p-6">
-              <p className="text-xs text-slate-600 leading-relaxed">
+            <div className="p-7">
+              <p className="text-sm text-slate-600 leading-relaxed">
                 Are you sure you want to revoke portal access for <strong className="text-slate-900">{confirmRevoke.name || confirmRevoke.email}</strong>?
               </p>
-              <p className="text-[11px] text-slate-400 mt-2">
+              <p className="text-xs text-slate-400 mt-2.5">
                 They will be signed out immediately and won't be able to access the admin portal until re-invited.
               </p>
             </div>
 
-            <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3">
+            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3">
               <button
                 type="button"
                 onClick={() => setConfirmRevoke(null)}
-                className="px-3.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 text-slate-700 cursor-pointer hover:bg-slate-100 transition-colors"
+                className="px-4 py-2 text-sm font-semibold rounded-lg border border-slate-300 text-slate-700 cursor-pointer hover:bg-slate-100 transition-colors"
               >
                 Cancel
               </button>
@@ -557,7 +557,7 @@ export default function ManageAdmins() {
                 type="button"
                 onClick={() => handleRevoke(confirmRevoke)}
                 disabled={busyUid === confirmRevoke.uid}
-                className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-rose-600 hover:bg-rose-700 text-white cursor-pointer shadow-xs transition-colors disabled:opacity-50 inline-flex items-center gap-1.5"
+                className="px-5 py-2 text-sm font-semibold rounded-lg bg-rose-600 hover:bg-rose-700 text-white cursor-pointer shadow-xs transition-colors disabled:opacity-50 inline-flex items-center gap-1.5"
               >
                 {busyUid === confirmRevoke.uid ? 'Revoking…' : 'Confirm Revoke'}
               </button>

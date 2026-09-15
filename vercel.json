@@ -17,6 +17,10 @@
     {
       "path": "/api/notifications?action=dose-sweep",
       "schedule": "0 21 * * *"
+    },
+    {
+      "path": "/api/notifications?action=backup-cron",
+      "schedule": "0 18 * * *"
     }
   ],
   "headers": [

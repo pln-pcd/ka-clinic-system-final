@@ -69,9 +69,10 @@ const CLINICAL_REPLY =
 export async function askClinicAssistant(prompt: string, history: ChatTurn[] = []): Promise<AssistantReply> {
   const pLower = prompt.toLowerCase().trim();
 
-  // Vaccine pricing and hepatitis availability inquiries are in-scope logistics
-  const PRICING_KEYWORDS = ['price', 'pricing', 'cost', 'fee', 'how much', 'magkano', 'rate', 'rates', 'payment', 'package', 'bayad', 'pesos', 'peso', '1k', '4.5k', '800'];
-  if (PRICING_KEYWORDS.some(kw => pLower.includes(kw))) {
+  // Vaccine pricing and hepatitis availability inquiries are in-scope logistics.
+  // Word-boundary anchored, same as the server (see api/chatbot.js PRICING_RE).
+  const PRICING_RE = /\b(price|prices|pricing|cost|costs|fee|fees|rate|rates|how\s+much|magkano|payment|package|packages|bayad|pesos?|presyo)\b|₱/;
+  if (PRICING_RE.test(pLower)) {
     return {
       text: '💉 K&A Clinic Vaccine Pricing:\n' +
         '• PEP Category 2 (with Anti-Tetanus): ₱1,000 for the 1st session, and ₱800 for each of the next 3 sessions.\n' +
@@ -83,7 +84,7 @@ export async function askClinicAssistant(prompt: string, history: ChatTurn[] = [
     };
   }
 
-  if (pLower.includes('hepatitis') || pLower.includes('hepa')) {
+  if (/\b(hepatitis|hepa)\b/.test(pLower)) {
     return {
       text: 'Notice: K&A Clinic is no longer catering or offering Hepatitis vaccines.',
       needsEscalation: false,
@@ -144,8 +145,8 @@ export async function askClinicAssistant(prompt: string, history: ChatTurn[] = [
   // rather than guess — the message is already known not to be one of the four
   // logistics topics, so a human is the right destination.
   return {
-    text: 'I can help with using the app, clinic hours, booking appointments, and how to reach the clinic. ' +
-      'I could not handle that one, so please tap "Talk to Clinic Staff" below and our team will help you.',
+    text: "I'm not able to answer that one. Please reach out to K&A Clinic staff about it. " +
+      'Tap "Talk to Clinic Staff" below and our team will help you directly.',
     needsEscalation: true,
     category: 'clinical',
   };

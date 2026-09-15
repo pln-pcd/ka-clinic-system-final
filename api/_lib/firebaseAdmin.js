@@ -5,6 +5,7 @@
 import { cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getStorage } from 'firebase-admin/storage';
 
 function loadServiceAccount() {
   const b64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
@@ -26,3 +27,12 @@ function getAdminApp() {
 
 export const db = getFirestore(getAdminApp());
 export const auth = getAuth(getAdminApp());
+
+// Default Cloud Storage bucket (used for database backups). Override with
+// FIREBASE_STORAGE_BUCKET; otherwise the Firebase default for the project.
+export function storageBucket() {
+  const sa = loadServiceAccount();
+  const projectId = process.env.FIREBASE_PROJECT_ID || sa.project_id;
+  const name = process.env.FIREBASE_STORAGE_BUCKET || `${projectId}.firebasestorage.app`;
+  return getStorage(getAdminApp()).bucket(name);
+}

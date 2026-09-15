@@ -7,6 +7,8 @@ import { auth } from "./lib/firebase";
 import { authedPostJson } from "./lib/apiClient";
 
 const isAcceptInvitePath = window.location.pathname === '/accept-invite';
+const urlParams = new URLSearchParams(window.location.search);
+const isResetPassPath = urlParams.get('mode') === 'resetPassword' || Boolean(urlParams.get('oobCode')) || window.location.pathname === '/reset-password';
 
 export default function App() {
   // Firebase's own persisted session (browserLocalPersistence, set when
@@ -16,10 +18,16 @@ export default function App() {
   // belongs to a trusted, non-expired device (/api/devices check-session) — only
   // then do we skip straight to the dashboard. An untrusted/expired result
   // falls back to a full password + OTP login, same as a first-time visit.
-  const [view, setView] = useState(() => (isAcceptInvitePath ? 'accept-invite' : 'checking'));
+  const [view, setView] = useState(() => (isAcceptInvitePath ? 'accept-invite' : isResetPassPath ? 'login' : 'checking'));
 
   useEffect(() => {
     if (isAcceptInvitePath) return;
+
+    if (isResetPassPath) {
+      // When opening a reset link, ensure user lands directly on reset view
+      setView('login');
+      return;
+    }
 
     // onAuthStateChanged fires on EVERY auth transition, not just page load
     // — including the moment signInWithEmailAndPassword succeeds inside

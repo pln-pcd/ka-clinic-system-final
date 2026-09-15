@@ -30,6 +30,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { useAnimatedKeyboard, useAnimatedStyle } from 'react-native-reanimated';
 import { db } from '../../config/firebase';
 import { usePatientAuth } from '../../context/PatientAuthContext';
 import { moderateScale, scale, verticalScale } from '../../constants/scale';
@@ -97,7 +98,16 @@ export default function ChatScreen() {
   const [keyboardVisible, setKeyboardVisible] = useState(false);
 
   const insets = useSafeAreaInsets();
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  // Android runs edge-to-edge (app.json android.edgeToEdgeEnabled): the window
+  // is never resized for the keyboard, so KeyboardAvoidingView and the
+  // Keyboard.addListener height both proved unreliable in release APKs — the
+  // input bar stayed under the keyboard. Reanimated reads the keyboard inset
+  // natively (WindowInsets) and animates with it, which is the documented
+  // approach for edge-to-edge. iOS keeps KeyboardAvoidingView.
+  const keyboard = useAnimatedKeyboard({ isStatusBarTranslucentAndroid: true, isNavigationBarTranslucentAndroid: true });
+  const keyboardLift = useAnimatedStyle(() => ({
+    paddingBottom: Platform.OS === 'android' ? keyboard.height.value : 0,
+  }));
   const router = useRouter();
   const scrollRef = useRef<ScrollView>(null);
 
@@ -117,13 +127,7 @@ export default function ChatScreen() {
   useEffect(() => {
     const showSub = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      (e) => {
-        // Android runs edge-to-edge (app.json android.edgeToEdgeEnabled), so
-        // the window is never resized for the keyboard and KeyboardAvoidingView
-        // has nothing to react to — in a release APK the input bar ended up
-        // underneath the keyboard. Lifting by the measured height fixes it in
-        // both Expo Go and a built APK.
-        setKeyboardHeight(e?.endCoordinates?.height ?? 0);
+      () => {
         setKeyboardVisible(true);
         setTimeout(() => {
           scrollRef.current?.scrollToEnd({ animated: true });
@@ -133,7 +137,6 @@ export default function ChatScreen() {
     const hideSub = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
       () => {
-        setKeyboardHeight(0);
         setKeyboardVisible(false);
       }
     );
@@ -463,7 +466,7 @@ export default function ChatScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
       >
-        <View style={{ flex: 1 }}>
+        <Animated.View style={[{ flex: 1 }, keyboardLift]}>
           {chatError ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), padding: scale(14), backgroundColor: C.redLight }}>
               <Ionicons name="alert-circle-outline" size={16} color={C.red} />
@@ -626,7 +629,6 @@ export default function ChatScreen() {
                 paddingBottom: keyboardVisible
                   ? verticalScale(8)
                   : Math.max(insets.bottom, verticalScale(16)) + verticalScale(6),
-                marginBottom: Platform.OS === 'android' ? keyboardHeight : 0,
               },
             ]}
           >
@@ -644,7 +646,7 @@ export default function ChatScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </Animated.View>
       </KeyboardAvoidingView>
 
       <CustomAlertModal config={alertConfig} onClose={hideAlert} />

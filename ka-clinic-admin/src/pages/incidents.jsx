@@ -60,7 +60,6 @@ export default function IncidentMapPage() {
   const [pendingLatLng, setPendingLatLng] = useState(null);
   const [layerFilter, setLayerFilter] = useState('all');
   const [layerMenuOpen, setLayerMenuOpen] = useState(false);
-  const [legendExpanded, setLegendExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
 
@@ -416,6 +415,17 @@ export default function IncidentMapPage() {
         <div className="flex items-center gap-2 text-xs font-semibold text-gray-500">
           <ShieldAlert size={14} className="text-gray-400" /> Rabies Incident Surveillance Map — Libon, Albay
         </div>
+        <div className="flex items-center gap-3">
+          {/* Pin severity legend — inline beside layer toggle */}
+          <div className="flex items-center gap-3 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-[11px] font-semibold text-slate-600">
+            <span className="text-[10px] font-extrabold text-slate-800 uppercase tracking-wider">Pin Severity</span>
+            {Object.entries(CATEGORY_COLOR).map(([cat, color]) => (
+              <span key={cat} className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} /> {cat}
+              </span>
+            ))}
+          </div>
+
         <div ref={layerMenuRef} className="relative">
           <button
             onClick={() => setLayerMenuOpen(o => !o)}
@@ -442,6 +452,7 @@ export default function IncidentMapPage() {
             </div>
           )}
         </div>
+        </div>
       </div>
 
       {/* ── Main Map & List Grid ── */}
@@ -451,32 +462,6 @@ export default function IncidentMapPage() {
         <div className="col-span-8 bg-white rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden flex flex-col relative">
           <div ref={mapRef} className="w-full h-full z-10" />
 
-          {/* Map Legend — compact & collapsible */}
-          <div
-            onClick={() => setLegendExpanded(e => !e)}
-            className="absolute bottom-3 left-3 z-[1000] bg-white/95 backdrop-blur-md rounded-xl border border-slate-200/90 shadow-md px-3 py-2 text-[11px] max-w-[200px] cursor-pointer select-none transition-all"
-          >
-            <div className="flex items-center justify-between gap-3 text-[10px] font-extrabold text-slate-800 uppercase tracking-wider">
-              <span>Pin Severity</span>
-              <span className="text-[9px] text-slate-400">{legendExpanded ? '▼' : '▲'}</span>
-            </div>
-
-            {legendExpanded && (
-              <div className="mt-2 pt-2 border-t border-slate-100">
-                <div className="flex flex-col gap-1.5 mb-2">
-                  <div className="flex items-center gap-2 text-[10px] font-semibold text-slate-600">
-                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: CATEGORY_COLOR['Category I'] }} /> Category I
-                  </div>
-                  <div className="flex items-center gap-2 text-[10px] font-semibold text-slate-600">
-                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: CATEGORY_COLOR['Category II'] }} /> Category II
-                  </div>
-                  <div className="flex items-center gap-2 text-[10px] font-semibold text-slate-600">
-                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: CATEGORY_COLOR['Category III'] }} /> Category III
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Incident List Sidebar — iOS Notes-Style List */}

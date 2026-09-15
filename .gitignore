@@ -48,3 +48,4 @@ app-example
 .vercel
 .vercel
 .env*
+.idea/

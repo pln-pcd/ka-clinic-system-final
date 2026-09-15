@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { auth, db, signOut } from '../../config/firebase';
+import { API_BASE_URL } from '../../config/apiBase';
 import { setKeepSignedIn } from '../../config/appPrefs';
 import { formatDoseDate } from '../../config/dates';
 import {
@@ -195,11 +196,23 @@ export default function ProfileScreen() {
       emergencyName: patientRecord.emergencyName || prev.emergencyName,
       emergencyRel: patientRecord.emergencyRel || prev.emergencyRel,
       emergencyPhone: patientRecord.emergencyPhone || prev.emergencyPhone,
+      emergencyAltPhone: patientRecord.emergencyAltPhone || prev.emergencyAltPhone,
+      dob: patientRecord.dob || prev.dob,
     }));
     if (patientRecord.avatarUrl) {
       setProfileImage(patientRecord.avatarUrl);
     }
   }, [patientRecord]);
+
+  // Clinic-synced photo (patientAvatars/{mrn}) wins over the local cache so a
+  // photo set on another device shows here too.
+  useEffect(() => {
+    if (!mrn) return;
+    return onSnapshot(doc(db, 'patientAvatars', mrn), snap => {
+      const url = snap.data()?.dataUrl;
+      if (url) setProfileImage(url);
+    }, () => {});
+  }, [mrn]);
 
   const handleSavePersonalData = async () => {
     if (isGuest || user?.isAnonymous) {
@@ -221,10 +234,53 @@ export default function ProfileScreen() {
     setIsEditingPersonal(false);
     const uid = user?.uid || 'guest';
     await AsyncStorage.setItem(`kna:personalData:${uid}`, JSON.stringify(personalData)).catch(() => {});
+
+    // Push the self-service fields to the clinic record so the admin portal
+    // sees the same details. Name / age / gender are clinic-managed and are
+    // not sent (the inputs for them are read-only).
+    let synced = false;
+    let syncError = '';
+    if (mrn) {
+      try {
+        const idToken = await auth.currentUser?.getIdToken();
+        const resp = await fetch(`${API_BASE_URL}/api/notifications`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+          body: JSON.stringify({
+            action: 'update-profile',
+            mrn,
+            fields: {
+              contact: personalData.contact,
+              address: personalData.address,
+              religion: personalData.religion,
+              education: personalData.education,
+              occupation: personalData.occupation,
+              height: personalData.height,
+              weight: personalData.weight,
+              bloodPressure: personalData.bp,
+              emergencyName: personalData.emergencyName,
+              emergencyRel: personalData.emergencyRel,
+              emergencyPhone: personalData.emergencyPhone,
+              emergencyAltPhone: personalData.emergencyAltPhone,
+            },
+          }),
+        });
+        const json = await resp.json().catch(() => null);
+        if (json?.success) synced = true;
+        else syncError = json?.error || 'Could not sync to your clinic record.';
+      } catch {
+        syncError = 'Could not sync to your clinic record.';
+      }
+    }
+
     showAlert({
-      type: 'success',
+      type: synced || !mrn ? 'success' : 'warning',
       title: 'Personal Info Saved',
-      message: 'Your personal details have been updated successfully.',
+      message: synced
+        ? 'Your details have been updated and shared with the clinic.'
+        : syncError
+          ? `Saved on this device, but: ${syncError}`
+          : 'Your personal details have been updated successfully.',
       primaryButtonText: 'OK',
       onPrimaryPress: hideAlert,
     });
@@ -388,23 +444,50 @@ export default function ProfileScreen() {
         return;
       }
 
+      // Low quality + base64 so the photo is small enough to store inline on
+      // the clinic record (api/notifications set-avatar caps it at 600 KB).
+      const pickerOpts = { allowsEditing: true, aspect: [1, 1] as [number, number], quality: 0.25, base64: true };
       const result = useCamera
-        ? await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.7 })
-        : await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.7 });
+        ? await ImagePicker.launchCameraAsync(pickerOpts)
+        : await ImagePicker.launchImageLibraryAsync(pickerOpts);
 
       if (!result.canceled && result.assets[0]) {
-        const uri = result.assets[0].uri;
+        const asset = result.assets[0];
+        const uri = asset.uri;
         setProfileImage(uri);
         const uid = user?.uid || 'guest';
         await AsyncStorage.setItem(`kna:avatar:${uid}`, uri).catch(() => {});
         await AsyncStorage.setItem('kna:avatar:global', uri).catch(() => {});
-        if (mrn) {
-          doc(db, 'vaccinations', mrn);
+
+        // Sync to the clinic record so the nurse/admin portal shows the same
+        // photo. Guests have no record, so this is local-only for them.
+        let synced = false;
+        let syncError = '';
+        if (mrn && asset.base64 && !isGuest && !user?.isAnonymous) {
+          try {
+            const idToken = await auth.currentUser?.getIdToken();
+            const mime = asset.mimeType || 'image/jpeg';
+            const resp = await fetch(`${API_BASE_URL}/api/notifications`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+              body: JSON.stringify({ action: 'set-avatar', mrn, imageDataUrl: `data:${mime};base64,${asset.base64}` }),
+            });
+            const json = await resp.json().catch(() => null);
+            if (json?.success) synced = true;
+            else syncError = json?.error || 'Could not sync photo to your clinic record.';
+          } catch (e) {
+            syncError = 'Could not sync photo to your clinic record.';
+          }
         }
+
         showAlert({
-          type: 'success',
+          type: synced || !mrn ? 'success' : 'warning',
           title: 'Profile Photo Saved',
-          message: 'Your profile picture has been updated and saved.',
+          message: synced
+            ? 'Your profile picture has been updated and will also appear on your clinic record.'
+            : syncError
+              ? `Saved on this device, but: ${syncError}`
+              : 'Your profile picture has been updated and saved.',
           primaryButtonText: 'OK',
           onPrimaryPress: hideAlert,
         });
@@ -567,10 +650,10 @@ export default function ProfileScreen() {
               <View style={s.card}>
                 {isEditingPersonal ? (
                   <>
-                    <View style={s.editGroup}><Text style={s.editLabel}>Full Name</Text><TextInput style={s.editInput} value={personalData.fullName} onChangeText={v => setPersonalData(p => ({...p, fullName: v}))} placeholder="Enter full name" placeholderTextColor={C.muted} /></View>
-                    <View style={s.editGroup}><Text style={s.editLabel}>Age</Text><TextInput style={s.editInput} value={personalData.age} onChangeText={v => setPersonalData(p => ({...p, age: v}))} placeholder="e.g. 25" placeholderTextColor={C.muted} keyboardType="numeric" /></View>
-                    <View style={s.editGroup}><Text style={s.editLabel}>Date of Birth</Text><TextInput style={s.editInput} value={personalData.dob} onChangeText={v => setPersonalData(p => ({...p, dob: v}))} placeholder="MM/DD/YYYY" placeholderTextColor={C.muted} /></View>
-                    <View style={s.editGroup}><Text style={s.editLabel}>Gender</Text><TextInput style={s.editInput} value={personalData.gender} onChangeText={v => setPersonalData(p => ({...p, gender: v}))} placeholder="Male / Female / Other" placeholderTextColor={C.muted} /></View>
+                    <View style={s.editGroup}><Text style={s.editLabel}>Full Name <Text style={{ color: C.muted, fontWeight: '400' }}>(clinic-managed)</Text></Text><TextInput style={[s.editInput, { color: C.muted }]} value={personalData.fullName} editable={false} placeholder="—" placeholderTextColor={C.muted} /></View>
+                    <View style={s.editGroup}><Text style={s.editLabel}>Age <Text style={{ color: C.muted, fontWeight: '400' }}>(clinic-managed)</Text></Text><TextInput style={[s.editInput, { color: C.muted }]} value={personalData.age} editable={false} placeholder="—" placeholderTextColor={C.muted} /></View>
+                    <View style={s.editGroup}><Text style={s.editLabel}>Date of Birth <Text style={{ color: C.muted, fontWeight: '400' }}>(clinic-managed)</Text></Text><TextInput style={[s.editInput, { color: C.muted }]} value={personalData.dob} editable={false} placeholder="—" placeholderTextColor={C.muted} /></View>
+                    <View style={s.editGroup}><Text style={s.editLabel}>Gender <Text style={{ color: C.muted, fontWeight: '400' }}>(clinic-managed)</Text></Text><TextInput style={[s.editInput, { color: C.muted }]} value={personalData.gender} editable={false} placeholder="—" placeholderTextColor={C.muted} /></View>
                     <View style={s.editGroup}><Text style={s.editLabel}>Religion</Text><TextInput style={s.editInput} value={personalData.religion} onChangeText={v => setPersonalData(p => ({...p, religion: v}))} placeholder="e.g. Roman Catholic" placeholderTextColor={C.muted} /></View>
                     <View style={[s.editGroup, {borderBottomWidth:0}]}><Text style={s.editLabel}>Educational Background</Text><TextInput style={s.editInput} value={personalData.education} onChangeText={v => setPersonalData(p => ({...p, education: v}))} placeholder="e.g. College Graduate" placeholderTextColor={C.muted} /></View>
                   </>

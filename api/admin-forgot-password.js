@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import { auth, db } from './_lib/firebaseAdmin.js';
 import { buildPasswordResetEmailHtml, buildPasswordResetEmailText } from './_lib/emailTemplate.js';
 import { sendMail } from './_lib/mailer.js';
@@ -60,19 +61,68 @@ export default async function handler(req, res) {
     }
 
     const code = generateOtp();
+
+    // Generate reset token (Firebase Auth oobCode with reliable crypto fallback)
+    const fallbackToken = randomBytes(32).toString('hex');
+    let oobCode = null;
+    try {
+      const rawLink = await auth.generatePasswordResetLink(rawEmail);
+      if (rawLink) {
+        const parsed = new URL(rawLink);
+        oobCode = parsed.searchParams.get('oobCode');
+      }
+    } catch (linkErr) {
+      console.warn('generatePasswordResetLink notice (using secure fallback token):', linkErr.message);
+    }
+
+    const resetToken = oobCode || fallbackToken;
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    const proto = req.headers['x-forwarded-proto'] || (host && host.includes('localhost') ? 'http' : 'https');
+    const origin = req.headers.origin 
+      || (req.headers.referer ? new URL(req.headers.referer).origin : null) 
+      || (host ? `${proto}://${host}` : 'https://ka-clinic-system-final.vercel.app');
+
+    const resetUrl = `${origin}/?mode=resetPassword&oobCode=${encodeURIComponent(resetToken)}&email=${encodeURIComponent(rawEmail)}`;
+
     await resetRef.set({
       code,
+      oobCode: oobCode || null,
+      token: fallbackToken,
+      resetToken,
       email: rawEmail,
       uid: user.uid,
       createdAt: Date.now(),
       expiresAt: Date.now() + RESET_TTL_MS,
     });
 
-    const { error: sendError } = await sendMail({
+    let buildHtml = buildPasswordResetEmailHtml;
+    let buildText = buildPasswordResetEmailText;
+    let sendMailFn = sendMail;
+    try {
+      const freshTemplate = await import(`./_lib/emailTemplate.js?t=${Date.now()}`);
+      if (freshTemplate?.buildPasswordResetEmailHtml) {
+        buildHtml = freshTemplate.buildPasswordResetEmailHtml;
+        buildText = freshTemplate.buildPasswordResetEmailText;
+      }
+      const freshMailer = await import(`./_lib/mailer.js?t=${Date.now()}`);
+      if (freshMailer?.sendMail) {
+        sendMailFn = freshMailer.sendMail;
+      }
+    } catch {}
+
+    const { error: sendError } = await sendMailFn({
       to: rawEmail,
-      subject: `${code} is your K&A Clinic password reset code`,
-      html: buildPasswordResetEmailHtml({ otp: code }),
-      text: buildPasswordResetEmailText({ otp: code }),
+      subject: 'Reset Your K&A Animal Bite Center Password',
+      html: buildHtml({
+        resetUrl,
+        email: rawEmail,
+        name: adminData.name,
+      }),
+      text: buildText({
+        resetUrl,
+        email: rawEmail,
+        name: adminData.name,
+      }),
       role: 'auth',
     });
 

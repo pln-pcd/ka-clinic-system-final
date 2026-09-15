@@ -32,6 +32,7 @@ import { auth, db } from '../lib/firebase';
 import Toast from '../components/Toast';
 import { authedPostJson } from '../lib/apiClient';
 import { getTodayDateString, addDaysToDateString, formatDateLong } from '../lib/dates';
+import { trackEvent } from '../lib/analytics';
 
 /* ─────────────────────────── CSS ─────────────────────────── */
 const globalCSS = `
@@ -900,6 +901,24 @@ export default function AppointmentPage() {
     'Emergency cases prioritized at the clinic',
   ];
 
+  // Confirm / reject pop-up — every quick status change goes through this so
+  // the admin sees the appointment details before committing.
+  const [pendingAction, setPendingAction] = useState(null); // { apt, status }
+  const [pendingActionSaving, setPendingActionSaving] = useState(false);
+
+  const promptQuickAction = (apt, status) => setPendingAction({ apt, status });
+
+  const runPendingAction = async () => {
+    if (!pendingAction) return;
+    setPendingActionSaving(true);
+    try {
+      await handleQuickAction(pendingAction.apt.id, pendingAction.status);
+      setPendingAction(null);
+    } finally {
+      setPendingActionSaving(false);
+    }
+  };
+
   const promptDecline = (apt) => {
     setDeclineTargetApt(apt);
     setDeclinePreset(DECLINE_REASONS[0]);
@@ -949,6 +968,7 @@ export default function AppointmentPage() {
       });
       await releaseSlot(prevDate, prevTime);
       await notifyAppointmentDeclined(declineTargetApt, finalReason);
+      trackEvent('appointment_declined');
       showToast(`Appointment for ${declineTargetApt.name} declined`);
       setDeclineModalOpen(false);
       setDeclineTargetApt(null);
@@ -1063,6 +1083,7 @@ export default function AppointmentPage() {
       if ((newStatus === 'confirmed' || newStatus === 'accepted') && target) {
         await notifyAppointmentApproved(target);
       }
+      trackEvent(`appointment_${newStatus}`);
       showToast(`Appointment status updated to ${newStatus}`);
     } catch (err) {
       console.error('Error updating status:', err);
@@ -1402,7 +1423,7 @@ export default function AppointmentPage() {
                                 <button
                                   type="button"
                                   className="btn-queue-action btn-queue-confirm"
-                                  onClick={(e) => { e.stopPropagation(); handleQuickAction(apt.id, 'confirmed'); }}
+                                  onClick={(e) => { e.stopPropagation(); promptQuickAction(apt, 'confirmed'); }}
                                   style={{ padding: '4px 10px', fontSize: '0.6875rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}
                                   title="Confirm appointment"
                                 >
@@ -1446,10 +1467,10 @@ export default function AppointmentPage() {
                         </div>
                         <div style={{ fontSize: '0.65625rem', color: '#64748B', marginTop: 1 }}><CalendarIcon size={10} style={{ display: 'inline', marginRight: 3 }} />{apt.date} · <Clock size={10} style={{ display: 'inline', marginRight: 3 }} />{apt.time}</div>
                         <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-                          <button className="btn-queue-action btn-queue-cancel" onClick={() => handleQuickAction(apt.id, 'cancelled')} style={{ background: '#DC2626', color: '#FFF', fontSize: '0.625rem', padding: '2px 6px' }}>
+                          <button className="btn-queue-action btn-queue-cancel" onClick={() => promptQuickAction(apt, 'cancelled')} style={{ background: '#DC2626', color: '#FFF', fontSize: '0.625rem', padding: '2px 6px' }}>
                             <X size={10} /> Approve
                           </button>
-                          <button className="btn-queue-action btn-queue-confirm" onClick={() => handleQuickAction(apt.id, 'confirmed')} style={{ fontSize: '0.625rem', padding: '2px 6px' }}>
+                          <button className="btn-queue-action btn-queue-confirm" onClick={() => promptQuickAction(apt, 'confirmed')} style={{ fontSize: '0.625rem', padding: '2px 6px' }}>
                             <UserCheck size={10} /> Reject
                           </button>
                         </div>
@@ -1621,7 +1642,7 @@ export default function AppointmentPage() {
                             <>
                               <button
                                 className="btn-queue-action btn-queue-confirm"
-                                onClick={() => handleQuickAction(apt.id, 'confirmed')}
+                                onClick={() => promptQuickAction(apt, 'confirmed')}
                                 title="Accept / Confirm"
                                 style={{ padding: '5px 12px', fontSize: '0.71875rem' }}
                               >
@@ -1807,7 +1828,7 @@ export default function AppointmentPage() {
       {/* Edit Appointment Modal with Preview & Editable Info */}
       {editModalOpen && editingApt && (
         <div className="modal-overlay">
-          <div className="modal-card" style={{ width: 520 }}>
+          <div className="modal-card" style={{ width: 880, maxWidth: '96vw' }}>
             <div className="modal-head">
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{
@@ -1828,7 +1849,7 @@ export default function AppointmentPage() {
               <button className="modal-close" onClick={() => setEditModalOpen(false)}><X size={16} /></button>
             </div>
 
-            <div className="form-grid" style={{ maxHeight: '68vh', overflowY: 'auto', paddingRight: 4 }}>
+            <div className="form-grid" style={{ maxHeight: '72vh', overflowY: 'auto', paddingRight: 4 }}>
 
               {/* Status & Source Preview Pills */}
               <div style={{
@@ -1852,6 +1873,9 @@ export default function AppointmentPage() {
                 </div>
               </div>
 
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, alignItems: 'start' }}>
+              {/* Left column: patient + schedule */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div className="form-group">
                 <label className="form-label">Full Name *</label>
                 <input
@@ -1902,7 +1926,10 @@ export default function AppointmentPage() {
               <span style={{ fontSize: '.6875rem', fontWeight: 600, color: isWeekendDate(editForm.date) ? 'var(--text-muted)' : '#B91C1C', marginTop: -4 }}>
                 {isWeekendDate(editForm.date) ? 'Available Saturdays & Sundays only.' : 'Weekday date — only allowed if unchanged from original booking.'}
               </span>
+              </div>
 
+              {/* Right column: service, status, notes */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div className="form-group">
                   <label className="form-label">Purpose / Service</label>
@@ -1955,6 +1982,8 @@ export default function AppointmentPage() {
                   />
                 </div>
               )}
+              </div>
+              </div>
             </div>
 
             <div className="modal-footer" style={{ gap: 8 }}>
@@ -1968,6 +1997,101 @@ export default function AppointmentPage() {
           </div>
         </div>
       )}
+
+      {/* Confirm / Reject Action Pop-up — shows appointment details before committing */}
+      {pendingAction && (() => {
+        const { apt, status } = pendingAction;
+        const isCancelReq = apt.status === 'cancellation_pending';
+        const approving = status === 'confirmed' || status === 'accepted';
+        // Rejecting a cancellation request keeps the appointment (status back to confirmed)
+        const title = isCancelReq
+          ? (approving ? 'Reject Cancellation Request?' : 'Approve Cancellation?')
+          : (approving ? 'Confirm Appointment?' : 'Cancel Appointment?');
+        const sub = isCancelReq
+          ? (approving ? 'Appointment stays confirmed; patient is notified.' : 'Slot is released and patient is notified.')
+          : (approving ? 'Patient will be notified of approval.' : 'Slot is released and patient is notified.');
+        const danger = !approving;
+        const accent = danger ? '#DC2626' : '#16A34A';
+        const accentSoft = danger ? '#FEE2E2' : '#DCFCE7';
+        const accentBorder = danger ? '#FCA5A5' : '#86EFAC';
+        const accentText = danger ? '#991B1B' : '#166534';
+        const Row = ({ Icon, label, value }) => (
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 0', borderBottom: '1px solid #F1F5F9' }}>
+            <Icon size={14} style={{ color: '#64748B', marginTop: 2, flexShrink: 0 }} />
+            <span style={{ fontSize: '0.71875rem', fontWeight: 700, color: '#64748B', width: 90, flexShrink: 0 }}>{label}</span>
+            <span style={{ fontSize: '0.78125rem', fontWeight: 600, color: '#0F172A', wordBreak: 'break-word' }}>{value || '—'}</span>
+          </div>
+        );
+        return (
+          <div className="modal-overlay" style={{ zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={() => !pendingActionSaving && setPendingAction(null)}>
+            <div
+              className="modal-card"
+              style={{ width: 460, maxWidth: '100%', padding: 0, gap: 0, overflow: 'hidden', borderRadius: 20 }}
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div style={{ padding: '18px 24px', background: danger ? '#FEF2F2' : '#F0FDF4', borderBottom: '1px solid ' + accentBorder, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 12, background: accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', color: accent, border: '1px solid ' + accentBorder }}>
+                    {danger ? <AlertCircle size={20} /> : <UserCheck size={20} />}
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: accentText }}>{title}</h3>
+                    <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: accentText, opacity: 0.85 }}>{sub}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPendingAction(null)}
+                  disabled={pendingActionSaving}
+                  style={{ background: 'transparent', border: 'none', color: accentText, cursor: 'pointer', padding: 4 }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Appointment details */}
+              <div style={{ padding: '16px 24px', background: '#FFFFFF' }}>
+                <div style={{ fontSize: '0.6875rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Appointment Details</div>
+                <Row Icon={UserCheck} label="Patient" value={apt.name} />
+                <Row Icon={Phone} label="Contact" value={apt.contactNumber || apt.contact} />
+                <Row Icon={CalendarIcon} label="Date" value={formatDateLong(apt.date) || apt.date} />
+                <Row Icon={Clock} label="Time Slot" value={apt.time} />
+                <Row Icon={Tag} label="Service" value={apt.type || 'Consultation'} />
+                {apt.notes && <Row Icon={AlertCircle} label="Notes" value={apt.notes} />}
+                {isCancelReq && apt.cancellationReason && <Row Icon={AlertCircle} label="Patient Reason" value={apt.cancellationReason} />}
+              </div>
+
+              {/* Footer */}
+              <div style={{ padding: '14px 24px', background: '#F8FAFC', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => setPendingAction(null)}
+                  disabled={pendingActionSaving}
+                  className="btn-secondary"
+                  style={{ padding: '8px 16px', fontSize: '0.78125rem' }}
+                >
+                  Go Back
+                </button>
+                <button
+                  type="button"
+                  onClick={runPendingAction}
+                  disabled={pendingActionSaving}
+                  style={{
+                    padding: '8px 18px', borderRadius: 12, background: accent, color: '#FFFFFF', border: 'none',
+                    fontSize: '0.78125rem', fontWeight: 700, cursor: pendingActionSaving ? 'not-allowed' : 'pointer',
+                    opacity: pendingActionSaving ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 6,
+                    boxShadow: '0 4px 12px ' + (danger ? 'rgba(220,38,38,0.25)' : 'rgba(22,163,74,0.25)'),
+                  }}
+                >
+                  {danger ? <X size={14} /> : <UserCheck size={14} />}
+                  <span>{pendingActionSaving ? 'Saving…' : 'Yes, ' + title.replace('?', '')}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Decline Appointment Reason Pop-up Modal */}
       {declineModalOpen && declineTargetApt && (

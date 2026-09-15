@@ -2,7 +2,7 @@ import {
   browserLocalPersistence,
   browserSessionPersistence,
   confirmPasswordReset,
-  sendPasswordResetEmail,
+  verifyPasswordResetCode,
   setPersistence,
   signInWithEmailAndPassword,
 } from 'firebase/auth';
@@ -41,6 +41,20 @@ async function postJson(url, body, extraHeaders) {
   return res.json();
 }
 
+function getPasswordStrength(pass) {
+  if (!pass) return { score: 0, label: '', color: 'bg-slate-200', text: 'text-slate-400' };
+  let score = 0;
+  if (pass.length >= 8) score++;
+  if (pass.length >= 12) score++;
+  if (/[0-9]/.test(pass) || /[^A-Za-z0-9]/.test(pass)) score++;
+  if (/[A-Z]/.test(pass) && /[a-z]/.test(pass)) score++;
+
+  if (score <= 1) return { score: 1, label: 'Weak', color: 'bg-rose-500', text: 'text-rose-600' };
+  if (score === 2) return { score: 2, label: 'Fair', color: 'bg-amber-500', text: 'text-amber-600' };
+  if (score === 3) return { score: 3, label: 'Good', color: 'bg-blue-600', text: 'text-blue-600' };
+  return { score: 4, label: 'Strong', color: 'bg-emerald-600', text: 'text-emerald-600' };
+}
+
 export default function AdminLogin({ onSuccess, onBack }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -66,6 +80,8 @@ export default function AdminLogin({ onSuccess, onBack }) {
   const [forgotCooldown, setForgotCooldown] = useState(0);
   const [resetMaskedEmail, setResetMaskedEmail] = useState('');
   const [oobCode, setOobCode] = useState('');
+  const [verifyingLink, setVerifyingLink] = useState(false);
+  const [linkValid, setLinkValid] = useState(true);
 
   // Email-OTP second factor (Batch 3), skippable on a trusted device (Batch 4)
   const [otpStep, setOtpStep] = useState(false);
@@ -122,10 +138,31 @@ export default function AdminLogin({ onSuccess, onBack }) {
       const params = new URLSearchParams(window.location.search);
       const code = params.get('oobCode');
       const mode = params.get('mode');
+      const emailParam = params.get('email');
+      if (emailParam) {
+        setEmail(emailParam);
+        setResetMaskedEmail(emailParam);
+      }
       if (code && (mode === 'resetPassword' || !mode)) {
         setOobCode(code);
         setShowForgot(true);
         setForgotStep('new-password');
+        setVerifyingLink(true);
+        setLinkValid(true);
+        verifyPasswordResetCode(auth, code)
+          .then(userEmail => {
+            if (userEmail) {
+              setEmail(userEmail);
+              setResetMaskedEmail(userEmail);
+            }
+          })
+          .catch(err => {
+            console.warn('verifyPasswordResetCode note:', err?.message);
+            // Keep linkValid as true; backend handles custom tokens and fallback verification
+          })
+          .finally(() => {
+            setVerifyingLink(false);
+          });
       }
     } catch {}
   }, []);
@@ -323,9 +360,8 @@ export default function AdminLogin({ onSuccess, onBack }) {
         return;
       }
       setResetMaskedEmail(data.maskedEmail || trimmedEmail);
-      setForgotStep('new-password');
+      setForgotStep('sent');
       setForgotCooldown(30);
-      setForgotCode('');
       setNewPassword('');
       setConfirmNewPassword('');
     } catch {
@@ -359,10 +395,9 @@ export default function AdminLogin({ onSuccess, onBack }) {
   async function handleSetNewPassword(e) {
     if (e) e.preventDefault();
     const trimmedEmail = email.trim();
-    const trimmedCode = forgotCode.trim();
 
-    if (!oobCode && trimmedCode.length !== 6) {
-      setForgotError('Please enter the complete 6-digit verification code.');
+    if (!oobCode) {
+      setForgotError('Password reset link is missing or invalid. Please request a new reset link.');
       return;
     }
     if (newPassword.length < 8) {
@@ -378,12 +413,39 @@ export default function AdminLogin({ onSuccess, onBack }) {
     setForgotSending(true);
 
     if (oobCode) {
+      let fbSuccess = false;
       try {
         await confirmPasswordReset(auth, oobCode, newPassword);
+        fbSuccess = true;
+      } catch (err) {
+        console.warn('Client confirmPasswordReset notice, falling back to backend:', err?.message);
+      }
+
+      if (fbSuccess) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+        await postJson('/api/admin-reset-password', { email: trimmedEmail, action: 'unlock' }).catch(() => {});
         setForgotStep('success');
         setPassword(newPassword);
-      } catch (err) {
-        setForgotError(friendlyError(err.code) || 'Invalid or expired reset link. Please request a new code.');
+        setForgotSending(false);
+        return;
+      }
+
+      // Backend reset via custom token or Firebase Admin SDK
+      try {
+        const data = await postJson('/api/admin-reset-password', {
+          email: trimmedEmail,
+          oobCode,
+          newPassword,
+        });
+        if (!data?.success) {
+          setForgotError(data?.error || 'Failed to update password. Please request a new link.');
+          return;
+        }
+        window.history.replaceState({}, document.title, window.location.pathname);
+        setForgotStep('success');
+        setPassword(newPassword);
+      } catch {
+        setForgotError('Network error. Please check your connection.');
       } finally {
         setForgotSending(false);
       }
@@ -410,9 +472,11 @@ export default function AdminLogin({ onSuccess, onBack }) {
   }
 
   function handleResetSuccessDone() {
+    window.history.replaceState({}, document.title, window.location.pathname);
     setShowForgot(false);
     setForgotStep('request');
     setForgotCode('');
+    setOobCode('');
     setNewPassword('');
     setConfirmNewPassword('');
     setForgotError('');
@@ -629,7 +693,7 @@ export default function AdminLogin({ onSuccess, onBack }) {
                       Reset Password
                     </h2>
                     <p className="text-xs text-slate-500 leading-relaxed mb-6 font-medium">
-                      Enter your authorized clinic email to receive a 6-digit verification code.
+                      Enter your authorized clinic email to receive a secure password reset link.
                     </p>
 
                     {forgotError && (
@@ -661,10 +725,10 @@ export default function AdminLogin({ onSuccess, onBack }) {
                         disabled={forgotSending || !email.trim()}
                         className="w-full bg-gradient-to-r from-[#0a1d47] via-[#0e2a6d] to-[#1d4ed8] hover:from-[#071533] hover:via-[#0a2054] hover:to-[#173fa8] text-white py-3.5 rounded-full text-sm font-bold tracking-wide transition-all shadow-[0_10px_25px_rgba(14,42,109,0.3)] hover:shadow-[0_15px_30px_rgba(14,42,109,0.45)] active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-50 mb-3"
                       >
-                        {forgotSending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Send Verification Code'}
+                        {forgotSending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Send Reset Link'}
                       </button>
 
-                      <div className="flex items-center justify-between pt-2">
+                      <div className="flex items-center justify-start pt-2">
                         <button
                           type="button"
                           onClick={() => { setShowForgot(false); setForgotError(''); setError(''); }}
@@ -672,180 +736,251 @@ export default function AdminLogin({ onSuccess, onBack }) {
                         >
                           <ChevronLeft className="w-3.5 h-3.5" /> Back to Login
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => { setForgotStep('new-password'); setForgotError(''); }}
-                          className="text-xs font-semibold text-[#1d4ed8] hover:text-[#0a1d47] transition-colors"
-                        >
-                          Already have a code?
-                        </button>
                       </div>
                     </form>
+                  </div>
+                )}
+
+                {forgotStep === 'sent' && (
+                  <div className="text-center py-2 animate-in fade-in duration-300">
+                    <div className="w-14 h-14 rounded-2xl bg-blue-50 text-[#1d4ed8] border border-blue-100 flex items-center justify-center mx-auto mb-4 shadow-sm">
+                      <Mail className="w-7 h-7" />
+                    </div>
+                    <h2 className="text-2xl font-extrabold text-[#0a1b3f] tracking-tight mb-2 font-display">
+                      Check Your Inbox
+                    </h2>
+                    <p className="text-xs text-slate-600 leading-relaxed mb-6 font-medium max-w-sm mx-auto">
+                      We sent a secure password reset link to <strong className="text-[#0a1b3f]">{resetMaskedEmail || email.trim()}</strong>.
+                      Open the email and click <strong>Reset Password Now</strong> to choose your new password directly in the portal.
+                    </p>
+
+                    <div className="space-y-3">
+                      <button
+                        type="button"
+                        onClick={handleResendResetCode}
+                        disabled={forgotCooldown > 0 || forgotSending}
+                        className="w-full bg-slate-100 hover:bg-slate-200 text-[#0a1b3f] py-3 rounded-full text-xs font-bold transition-all disabled:opacity-50"
+                      >
+                        {forgotCooldown > 0 ? `Resend link in ${forgotCooldown}s` : 'Resend reset link'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => { setShowForgot(false); setForgotStep('request'); setForgotError(''); }}
+                        className="flex items-center justify-center gap-1.5 text-xs text-slate-500 hover:text-[#0a1d47] font-semibold mx-auto transition-colors"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" /> Back to Login
+                      </button>
+                    </div>
                   </div>
                 )}
 
                 {forgotStep === 'new-password' && (
                   <div>
-                    <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center mb-4 text-[#0e2a6d]">
+                    <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center mb-4 text-[#0e2a6d] shadow-sm">
                       <Lock className="w-6 h-6" />
                     </div>
                     <h2 className="text-2xl font-extrabold text-[#0a1b3f] tracking-tight mb-1 font-display">
-                      Set New Password
+                      {oobCode ? 'Choose New Password' : 'Set New Password'}
                     </h2>
-                    <p className="text-xs text-slate-500 leading-relaxed mb-5 font-medium">
+                    <p className="text-xs text-slate-500 leading-relaxed mb-4 font-medium">
                       {oobCode
-                        ? 'Create a new secure password for your account.'
+                        ? 'Create a new secure password for your clinic staff account.'
                         : <>We sent a 6-digit verification code to <span className="font-bold text-[#0a1b3f]">{resetMaskedEmail || email.trim() || 'your email'}</span>.</>}
                     </p>
 
-                    {forgotError && (
-                      <div className="flex items-start gap-2 bg-red-50 text-red-600 text-xs p-3 rounded-xl border border-red-100 mb-4 animate-in slide-in-from-top-2">
-                        <Info className="w-4 h-4 mt-0.5 shrink-0" />
-                        <p className="font-semibold">{forgotError}</p>
+                    {/* Account Identity Badge */}
+                    {(resetMaskedEmail || email.trim()) && (
+                      <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-blue-50/80 border border-blue-200/80 text-[#0e2a6d] text-xs font-semibold mb-4">
+                        <ShieldCheck className="w-4 h-4 text-[#1d4ed8] shrink-0" />
+                        <span className="truncate">Authorized account: <strong className="text-[#0a1b3f]">{resetMaskedEmail || email.trim()}</strong></span>
                       </div>
                     )}
 
-                    <form onSubmit={handleSetNewPassword} className="space-y-4">
-                      {!oobCode && (
+                    {verifyingLink && (
+                      <div className="flex items-center justify-center gap-2.5 p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-600 mb-4 animate-pulse">
+                        <Loader2 className="w-4 h-4 animate-spin text-[#1d4ed8]" />
+                        <span className="font-semibold">Verifying secure password reset link…</span>
+                      </div>
+                    )}
+
+                    {forgotError && (
+                      <div className="flex items-start gap-2.5 bg-red-50 text-red-600 text-xs p-3.5 rounded-xl border border-red-100 mb-4 animate-in slide-in-from-top-2">
+                        <Info className="w-4 h-4 mt-0.5 shrink-0" />
+                        <div className="space-y-1">
+                          <p className="font-semibold leading-relaxed">{forgotError}</p>
+                          {!linkValid && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOobCode('');
+                                setForgotStep('request');
+                                setForgotError('');
+                                window.history.replaceState({}, document.title, window.location.pathname);
+                              }}
+                              className="text-xs text-[#1d4ed8] hover:underline font-bold block pt-1"
+                            >
+                              Request a new reset link &rarr;
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {linkValid && !verifyingLink && (
+                      <form onSubmit={handleSetNewPassword} className="space-y-4">
+
                         <div>
                           <label className="block text-xs font-bold text-[#0a1b3f] mb-1.5">
-                            6-Digit Verification Code
+                            New Password
                           </label>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            autoComplete="one-time-code"
-                            placeholder="000000"
-                            maxLength={6}
-                            value={forgotCode}
-                            onChange={e => {
-                              setForgotCode(e.target.value.replace(/\D/g, '').slice(0, 6));
+                          <div className="relative">
+                            <input
+                              type={showNewPass ? 'text' : 'password'}
+                              autoComplete="new-password"
+                              placeholder="Create strong password"
+                              value={newPassword}
+                              onChange={e => { setNewPassword(e.target.value); setForgotError(''); }}
+                              disabled={forgotSending}
+                              className="w-full bg-slate-50 border border-slate-200 px-4 py-3 pr-11 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-600/15 focus:border-[#1d4ed8] transition-all disabled:opacity-50 font-medium"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowNewPass(!showNewPass)}
+                              className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-[#1d4ed8]"
+                            >
+                              {showNewPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
+                          </div>
+
+                          {/* Live Password Strength Meter */}
+                          {newPassword.length > 0 && (
+                            <div className="mt-2.5 space-y-2 animate-in fade-in duration-200">
+                              <div className="flex items-center justify-between text-[11px]">
+                                <span className="text-slate-500 font-medium">Strength:</span>
+                                <span className={`font-bold ${getPasswordStrength(newPassword).text}`}>
+                                  {getPasswordStrength(newPassword).label}
+                                </span>
+                              </div>
+                              <div className="grid grid-cols-4 gap-1.5 h-1.5">
+                                {[1, 2, 3, 4].map(idx => (
+                                  <div
+                                    key={idx}
+                                    className={`h-full rounded-full transition-all duration-300 ${
+                                      getPasswordStrength(newPassword).score >= idx
+                                        ? getPasswordStrength(newPassword).color
+                                        : 'bg-slate-200'
+                                    }`}
+                                  />
+                                ))}
+                              </div>
+
+                              {/* Checklist */}
+                              <div className="pt-1 space-y-1 text-[11px]">
+                                <div className={`flex items-center gap-1.5 ${newPassword.length >= 8 ? 'text-emerald-700 font-semibold' : 'text-slate-400'}`}>
+                                  <div className={`w-3.5 h-3.5 rounded-full flex items-center justify-center ${newPassword.length >= 8 ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+                                    <Check className="w-2.5 h-2.5 stroke-[3]" />
+                                  </div>
+                                  <span>At least 8 characters</span>
+                                </div>
+                                <div className={`flex items-center gap-1.5 ${(/[0-9]/.test(newPassword) || /[^A-Za-z0-9]/.test(newPassword)) ? 'text-emerald-700 font-semibold' : 'text-slate-400'}`}>
+                                  <div className={`w-3.5 h-3.5 rounded-full flex items-center justify-center ${(/[0-9]/.test(newPassword) || /[^A-Za-z0-9]/.test(newPassword)) ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+                                    <Check className="w-2.5 h-2.5 stroke-[3]" />
+                                  </div>
+                                  <span>Includes number or symbol</span>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-[#0a1b3f] mb-1.5">
+                            Confirm New Password
+                          </label>
+                          <div className="relative">
+                            <input
+                              type={showConfirmPass ? 'text' : 'password'}
+                              autoComplete="new-password"
+                              placeholder="Re-enter your new password"
+                              value={confirmNewPassword}
+                              onChange={e => { setConfirmNewPassword(e.target.value); setForgotError(''); }}
+                              disabled={forgotSending}
+                              className="w-full bg-slate-50 border border-slate-200 px-4 py-3 pr-11 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-600/15 focus:border-[#1d4ed8] transition-all disabled:opacity-50 font-medium"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowConfirmPass(!showConfirmPass)}
+                              className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-[#1d4ed8]"
+                            >
+                              {showConfirmPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
+                          </div>
+                          {confirmNewPassword && (
+                            <div className="flex items-center gap-1.5 mt-1.5 text-[11px]">
+                              {newPassword === confirmNewPassword ? (
+                                <>
+                                  <div className="w-3.5 h-3.5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                                    <Check className="w-2.5 h-2.5 stroke-[3]" />
+                                  </div>
+                                  <span className="text-emerald-700 font-semibold">Passwords match</span>
+                                </>
+                              ) : (
+                                <span className="text-rose-600 font-semibold">Passwords do not match</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        <button
+                          type="submit"
+                          disabled={
+                            forgotSending ||
+                            !oobCode ||
+                            newPassword.length < 8 ||
+                            newPassword !== confirmNewPassword
+                          }
+                          className="w-full bg-gradient-to-r from-[#0a1d47] via-[#0e2a6d] to-[#1d4ed8] hover:from-[#071533] hover:via-[#0a2054] hover:to-[#173fa8] text-white py-3.5 rounded-full text-sm font-bold tracking-wide transition-all shadow-[0_10px_25px_rgba(14,42,109,0.3)] hover:shadow-[0_15px_30px_rgba(14,42,109,0.45)] active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-50 mt-2"
+                        >
+                          {forgotSending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save New Password'}
+                        </button>
+
+                        <div className="flex items-center justify-start pt-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              window.history.replaceState({}, document.title, window.location.pathname);
+                              setShowForgot(false);
+                              setForgotStep('request');
                               setForgotError('');
                             }}
-                            disabled={forgotSending}
-                            className="w-full bg-slate-50 border border-slate-200 px-4 py-3 rounded-xl text-center font-mono text-xl font-bold tracking-[0.3em] text-[#0a1b3f] placeholder:text-slate-300 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-600/15 focus:border-[#1d4ed8] transition-all disabled:opacity-50"
-                          />
-                        </div>
-                      )}
-
-                      <div>
-                        <label className="block text-xs font-bold text-[#0a1b3f] mb-1.5">
-                          New Password
-                        </label>
-                        <div className="relative">
-                          <input
-                            type={showNewPass ? 'text' : 'password'}
-                            autoComplete="new-password"
-                            placeholder="At least 8 characters"
-                            value={newPassword}
-                            onChange={e => { setNewPassword(e.target.value); setForgotError(''); }}
-                            disabled={forgotSending}
-                            className="w-full bg-slate-50 border border-slate-200 px-4 py-3 pr-11 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-600/15 focus:border-[#1d4ed8] transition-all disabled:opacity-50 font-medium"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowNewPass(!showNewPass)}
-                            className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-[#1d4ed8]"
+                            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-[#0a1d47] font-semibold transition-colors"
                           >
-                            {showNewPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            <ChevronLeft className="w-3.5 h-3.5" /> Back to Login
                           </button>
                         </div>
-                        <div className="flex items-center gap-1.5 mt-1.5 text-[11px]">
-                          <div className={`w-3.5 h-3.5 rounded-full flex items-center justify-center ${newPassword.length >= 8 ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
-                            <Check className="w-2.5 h-2.5 stroke-[3]" />
-                          </div>
-                          <span className={newPassword.length >= 8 ? 'text-emerald-700 font-semibold' : 'text-slate-400'}>
-                            At least 8 characters
-                          </span>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-[#0a1b3f] mb-1.5">
-                          Confirm New Password
-                        </label>
-                        <div className="relative">
-                          <input
-                            type={showConfirmPass ? 'text' : 'password'}
-                            autoComplete="new-password"
-                            placeholder="Re-enter new password"
-                            value={confirmNewPassword}
-                            onChange={e => { setConfirmNewPassword(e.target.value); setForgotError(''); }}
-                            disabled={forgotSending}
-                            className="w-full bg-slate-50 border border-slate-200 px-4 py-3 pr-11 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-600/15 focus:border-[#1d4ed8] transition-all disabled:opacity-50 font-medium"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowConfirmPass(!showConfirmPass)}
-                            className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-[#1d4ed8]"
-                          >
-                            {showConfirmPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                          </button>
-                        </div>
-                        {confirmNewPassword && (
-                          <div className="flex items-center gap-1.5 mt-1.5 text-[11px]">
-                            {newPassword === confirmNewPassword ? (
-                              <>
-                                <div className="w-3.5 h-3.5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
-                                  <Check className="w-2.5 h-2.5 stroke-[3]" />
-                                </div>
-                                <span className="text-emerald-700 font-semibold">Passwords match</span>
-                              </>
-                            ) : (
-                              <span className="text-rose-600 font-semibold">Passwords do not match</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      <button
-                        type="submit"
-                        disabled={forgotSending || (!oobCode && forgotCode.length !== 6) || newPassword.length < 8 || newPassword !== confirmNewPassword}
-                        className="w-full bg-gradient-to-r from-[#0a1d47] via-[#0e2a6d] to-[#1d4ed8] hover:from-[#071533] hover:via-[#0a2054] hover:to-[#173fa8] text-white py-3.5 rounded-full text-sm font-bold tracking-wide transition-all shadow-[0_10px_25px_rgba(14,42,109,0.3)] hover:shadow-[0_15px_30px_rgba(14,42,109,0.45)] active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-50 mt-2"
-                      >
-                        {forgotSending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save New Password'}
-                      </button>
-
-                      <div className="flex items-center justify-between pt-2">
-                        <button
-                          type="button"
-                          onClick={() => { setShowForgot(false); setForgotStep('request'); setForgotError(''); }}
-                          className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-[#0a1d47] font-semibold transition-colors"
-                        >
-                          <ChevronLeft className="w-3.5 h-3.5" /> Back to Login
-                        </button>
-                        {!oobCode && (
-                          <button
-                            type="button"
-                            onClick={handleResendResetCode}
-                            disabled={forgotCooldown > 0 || forgotSending}
-                            className="text-xs font-semibold text-[#1d4ed8] hover:text-[#0a1d47] disabled:text-slate-400 transition-colors"
-                          >
-                            {forgotCooldown > 0 ? `Resend in ${forgotCooldown}s` : 'Resend code'}
-                          </button>
-                        )}
-                      </div>
-                    </form>
+                      </form>
+                    )}
                   </div>
                 )}
 
                 {forgotStep === 'success' && (
-                  <div className="text-center py-3 animate-in zoom-in-95 duration-300">
-                    <div className="w-14 h-14 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-4 border border-emerald-100 shadow-sm">
-                      <CheckCircle2 className="w-8 h-8" />
+                  <div className="text-center py-4 animate-in zoom-in-95 duration-300">
+                    <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-4 border border-emerald-200 shadow-[0_0_25px_rgba(16,185,129,0.2)]">
+                      <CheckCircle2 className="w-9 h-9" />
                     </div>
                     <h2 className="text-2xl font-extrabold text-[#0a1b3f] tracking-tight mb-2 font-display">
                       Password Updated!
                     </h2>
                     <p className="text-xs text-slate-600 leading-relaxed mb-6 font-medium max-w-xs mx-auto">
-                      Your new password has been securely saved. You can now log in to the staff dashboard.
+                      Your new password has been securely saved. You can now sign in to the clinic administration portal.
                     </p>
                     <button
                       type="button"
                       onClick={handleResetSuccessDone}
                       className="w-full bg-gradient-to-r from-[#0a1d47] via-[#0e2a6d] to-[#1d4ed8] hover:from-[#071533] hover:via-[#0a2054] hover:to-[#173fa8] text-white py-3.5 rounded-full text-sm font-bold tracking-wide transition-all shadow-[0_10px_25px_rgba(14,42,109,0.3)] hover:shadow-[0_15px_30px_rgba(14,42,109,0.45)] active:scale-[0.99]"
                     >
-                      Log In with New Password
+                      Sign In with New Password
                     </button>
                   </div>
                 )}

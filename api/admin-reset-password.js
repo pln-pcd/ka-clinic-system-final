@@ -8,19 +8,13 @@ export default async function handler(req, res) {
 
   try {
     const rawEmail = (req.body?.email || '').trim().toLowerCase();
+    const action = req.body?.action || '';
     const code = (req.body?.code || '').trim();
+    const oobCode = (req.body?.oobCode || '').trim();
     const newPassword = req.body?.newPassword || '';
 
     if (!rawEmail || !rawEmail.includes('@')) {
       res.status(400).json({ success: false, error: 'Please enter your email address.' });
-      return;
-    }
-    if (!/^\d{6}$/.test(code)) {
-      res.status(400).json({ success: false, error: 'Please enter the 6-digit verification code.' });
-      return;
-    }
-    if (!newPassword || newPassword.length < 8) {
-      res.status(400).json({ success: false, error: 'New password must be at least 8 characters long.' });
       return;
     }
 
@@ -33,6 +27,31 @@ export default async function handler(req, res) {
         return;
       }
       throw err;
+    }
+
+    // Direct unlock action after client-side confirmPasswordReset
+    if (action === 'unlock') {
+      await db.collection('admins').doc(user.uid).update({
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+        updatedAt: Date.now(),
+      }).catch(() => {});
+      await db.collection('passwordResets').doc(user.uid).delete().catch(() => {});
+      res.status(200).json({ success: true, message: 'Account unlocked.' });
+      return;
+    }
+
+    if (!code && !oobCode) {
+      res.status(400).json({ success: false, error: 'Please provide a verification code or reset link.' });
+      return;
+    }
+    if (code && !/^\d{6}$/.test(code)) {
+      res.status(400).json({ success: false, error: 'Please enter the 6-digit verification code.' });
+      return;
+    }
+    if (!newPassword || newPassword.length < 8) {
+      res.status(400).json({ success: false, error: 'New password must be at least 8 characters long.' });
+      return;
     }
 
     const resetRef = db.collection('passwordResets').doc(user.uid);
@@ -51,9 +70,19 @@ export default async function handler(req, res) {
       return;
     }
 
-    if (resetData.code !== code) {
+    if (code && resetData.code !== code) {
       res.status(400).json({ success: false, error: 'Incorrect verification code. Please check your email.' });
       return;
+    }
+
+    if (oobCode) {
+      const match = (resetData.oobCode && resetData.oobCode === oobCode) ||
+                    (resetData.token && resetData.token === oobCode) ||
+                    (resetData.resetToken && resetData.resetToken === oobCode);
+      if (!match) {
+        res.status(400).json({ success: false, error: 'Invalid or expired reset link. Please request a new link.' });
+        return;
+      }
     }
 
     // Update password in Firebase Authentication

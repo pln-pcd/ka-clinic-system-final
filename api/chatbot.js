@@ -32,6 +32,14 @@ CLINIC FACTS:
 • Scheduled Appointments: Saturdays & Sundays (8:00 AM – 12:00 PM)
 • Address: San Juan St., Libon, Albay
 • Booking: use the "Appts" tab in the app, or the "Book Appointment" button on the website.
+• Booking slots: Saturdays & Sundays only, one patient per hour slot. Reschedule or cancel from the "Appts" tab; a cancellation request is reviewed by staff.
+
+📱 Patient App & Account:
+• Sign in with the Medical Record Number (MRN) given by the clinic and your password. The email on your clinic record is used for verification codes.
+• Forgot password: use "Forgot Password" on the login screen (a code is emailed to the address on file).
+• The email address, name, and MRN on file CANNOT be changed inside the app — only clinic staff can update them. Tell the user to ask staff (in the app: "Talk to Clinic Staff" in the Chat tab).
+• App tabs: Home (vaccination card, next appointment), Appts (booking), Records (medical records, reports), Chat (this assistant and clinic staff), Account (profile photo, contact details, notification settings).
+• Profile photo and contact details can be updated from the Account tab.
 
 💉 Vaccine Pricing & Packages:
 • PEP Category 2 (with Anti-Tetanus): ₱1,000 for the 1st session, and ₱800 for each of the next 3 sessions.
@@ -53,6 +61,10 @@ There is no "general information" exception. "What is rabies?" is NOT answerable
 If a message touches any prohibited topic, do not answer any part of it, do not
 summarize, do not caveat, and do not offer a partial answer. Reply with exactly:
 "That is a clinical question, so I will pass it to K&A Clinic staff rather than answer it myself."
+
+If a message is not clinical but is still outside the five topics above, or you do not know
+the answer, do not guess. Reply with exactly:
+"I'm not able to answer that one. Please reach out to K&A Clinic staff about it — they can help you directly."
 
 Never mention 'Gemini' or any AI model name. Keep replies short, plain, and friendly.
 `;
@@ -132,23 +144,17 @@ const OUT_OF_SCOPE_PATTERNS = [
   /\b(joke|riddle|poem|story\s+about)\b/,
 ];
 
+// Word-boundary anchored: a plain includes('rate') matched "operate", '800'
+// matched phone numbers, 'fee' matched "coffee".
+const PRICING_RE = /\b(price|prices|pricing|cost|costs|fee|fees|rate|rates|how\s+much|magkano|payment|package|packages|bayad|pesos?|presyo|₱)\b|₱/;
+const HEPATITIS_RE = /\b(hepatitis|hepa)\b/;
+
 function classifyMessage(text) {
   const q = (text || '').toLowerCase().trim();
   if (!q) return 'in_scope';
 
-  // Questions about prices/cost or hepatitis availability are in-scope logistics
-  const PRICING_KEYWORDS = [
-    'price', 'prices', 'pricing', 'cost', 'costs', 'fee', 'fees', 'rate', 'rates',
-    'how much', 'magkano', 'payment', 'package', 'packages', 'bayad', 'pesos', 'peso',
-    '1k', '4.5k', '800'
-  ];
-  if (PRICING_KEYWORDS.some(kw => q.includes(kw))) {
-    return 'in_scope';
-  }
-
-  if (q.includes('hepatitis') || q.includes('hepa')) {
-    return 'in_scope';
-  }
+  // Questions about prices/cost or hepatitis availability are in-scope logistics.
+  if (PRICING_RE.test(q) || HEPATITIS_RE.test(q)) return 'in_scope';
 
   // Clinical wins outright, and wins over the non-clinical patterns too. A
   // message like "can I book an appointment for my next dose" mentions
@@ -195,16 +201,16 @@ const CLINICAL_REPLY_PUBLIC =
 const clinicalReplyFor = (channel) => (channel === 'public' ? CLINICAL_REPLY_PUBLIC : CLINICAL_REPLY_APP);
 
 const OUT_OF_SCOPE_REPLY =
-  'I can only help with using the app, clinic hours, booking appointments, and clinic contact details. ' +
-  'Please ask about one of those.';
+  "I'm not able to answer that one. Please reach out to K&A Clinic staff about it — they can help you directly. " +
+  'I can help here with using the app, clinic hours, booking appointments, vaccine pricing, and clinic contact details.';
 
 // The catch-all getFallbackReply returns when no keyword matched — i.e. the
 // bot genuinely had nothing to say. Compared by identity at the end of the
 // handler to tell "no answer" apart from a real keyword-matched answer, so it
 // must stay a single shared constant rather than a duplicated literal.
 const GENERIC_FALLBACK_REPLY =
-  "👋 Hello! I'm the K&A Clinic assistant. I can help with using the app, clinic hours, booking an " +
-  'appointment, and clinic contact details. For anything medical, I will put you through to clinic staff.';
+  "I'm not able to answer that one. Please reach out to K&A Clinic staff about it — they can help you directly. " +
+  'I can help here with using the app, clinic hours, booking an appointment, vaccine pricing, and clinic contact details.';
 
 // Section 5A applies to the Gemini path too: the model can return one of the
 // system instruction's own non-answers (the "unrelated question" refusal, or
@@ -222,6 +228,9 @@ const MODEL_NON_ANSWER_PATTERNS = [
   /i (can|could) only assist with/i,
   /please ask a related query/i,
   /clinical question, so i will pass it/i,
+  /not able to answer/i,
+  /(i\s+)?(don'?t|do\s+not)\s+(know|have\s+(that|this)\s+information)/i,
+  /(unable|cannot|can'?t)\s+(help|answer|assist)\s+with/i,
 ];
 
 const isModelNonAnswer = (reply) => MODEL_NON_ANSWER_PATTERNS.some(re => re.test(reply || ''));
@@ -257,8 +266,7 @@ function getFallbackReply(text) {
     return '📱 Getting around the app: "Home" shows your vaccination card and next appointment, "Appts" is for booking, "Records" holds your medical records, "Chat" is this assistant, and "Account" has your profile and settings.';
   }
 
-  const priceKeywords = ['price', 'pricing', 'cost', 'fee', 'rate', 'how much', 'magkano', 'payment', 'package', 'bayad', 'pesos', 'peso', '1k', '4.5k', '800'];
-  if (priceKeywords.some(kw => q.includes(kw))) {
+  if (PRICING_RE.test(q)) {
     return '💉 K&A Clinic Vaccine Pricing:\n' +
       '• PEP Category 2 (with Anti-Tetanus): ₱1,000 for the 1st session, and ₱800 for each of the next 3 sessions.\n' +
       '• PEP Category 3: ₱4,500 for 4 sessions (complete package includes Anti-Tetanus and IRIG / Rabies Immunoglobulin).\n' +
@@ -266,7 +274,7 @@ function getFallbackReply(text) {
       'Notice: K&A Clinic is no longer catering or offering Hepatitis vaccines.';
   }
 
-  if (q.includes('hepatitis') || q.includes('hepa')) {
+  if (HEPATITIS_RE.test(q)) {
     return 'Notice: K&A Clinic is no longer catering or offering Hepatitis vaccines.';
   }
 

@@ -35,6 +35,7 @@ import {
 import React, { useEffect, useRef, useState } from 'react';
 import { auth, db } from '../lib/firebase';
 import { authedPostJson } from '../lib/apiClient';
+import { useAuth } from '../lib/useAuth';
 import Toast from '../components/Toast';
 
 /* ─────────────────────────────────────────────
@@ -195,7 +196,42 @@ export default function SettingsPage({ onLogout }) {
     maintenanceMode:  false,
     analyticsEnabled: true,
     backupFrequency:  'daily',
+    backupRecipients: '',
+    lastBackup:       null,
   });
+  const [backupRunning, setBackupRunning] = useState(false);
+  // Manual backup emails the whole patient database — manager-only (mirrors api backupNow).
+  const { role: adminRole } = useAuth();
+  const isManager = adminRole === 'manager';
+
+  // Every System toggle persists immediately — the section has no Save button.
+  const saveSystemField = async (patch, okMsg, errMsg) => {
+    setSystem(p => ({ ...p, ...patch }));
+    try {
+      await setDoc(doc(db, 'settings', 'config'), { system: patch, updatedAt: Date.now() }, { merge: true });
+      if (okMsg) showToast(okMsg);
+    } catch (err) {
+      console.error('System setting save error:', err);
+      showToast(errMsg || 'Failed to save setting.', 'error');
+    }
+  };
+
+  const runBackupNow = async () => {
+    setBackupRunning(true);
+    try {
+      const data = await authedPostJson('/api/notifications', { action: 'backup' });
+      if (data?.success) {
+        showToast(`Backup complete — ${data.result?.docCount ?? 0} records emailed to ${(data.result?.recipients || []).join(', ')}.`);
+      } else {
+        showToast(data?.result?.error || data?.error || 'Backup failed.', 'error');
+      }
+    } catch (err) {
+      console.error('Backup error:', err);
+      showToast('Backup failed. Check your connection and try again.', 'error');
+    } finally {
+      setBackupRunning(false);
+    }
+  };
 
   /* ── Real-time listener on /settings/config ── */
   useEffect(() => {
@@ -647,44 +683,80 @@ export default function SettingsPage({ onLogout }) {
       <SectionCard title="Data & Backup Configuration" subtitle="Cloud persistence, analytics tracking, and archive schedule" icon={Shield}>
         <div className="py-1">
           <SettingRow label="Anonymous System Analytics" description="Help improve clinical performance via aggregated system telemetry">
-            <Toggle enabled={system.analyticsEnabled} onChange={v => setSystem(p => ({ ...p, analyticsEnabled: v }))} />
+            <Toggle
+              enabled={system.analyticsEnabled}
+              onChange={v => saveSystemField({ analyticsEnabled: v }, v ? 'Anonymous analytics enabled.' : 'Anonymous analytics disabled.')}
+            />
           </SettingRow>
-          <SettingRow label="Automated Database Backup" description="Frequency of cloud snapshots and clinical registry archives">
+          <SettingRow label="Automated Database Backup" description="Compressed JSON export of all clinical records, emailed to the backup recipients below (runs nightly at 2:00 AM Manila time)">
             <select
-              value={system.backupFrequency}
-              onChange={e => setSystem(p => ({ ...p, backupFrequency: e.target.value }))}
+              value={system.backupFrequency === 'hourly' ? 'daily' : system.backupFrequency}
+              onChange={e => saveSystemField({ backupFrequency: e.target.value }, 'Backup schedule updated.')}
               className="px-3 py-1.5 text-xs font-semibold border border-slate-300 rounded-xl bg-white text-slate-800 focus:outline-none focus:border-[#3B50DF] cursor-pointer"
             >
-              <option value="hourly">Hourly Snapshots</option>
               <option value="daily">Daily Backup (Recommended)</option>
-              <option value="weekly">Weekly Archive</option>
+              <option value="weekly">Weekly Archive (Sundays)</option>
               <option value="off">Manual Only</option>
             </select>
           </SettingRow>
+          <SettingRow label="Backup Recipients" description="Comma-separated emails. Leave blank to use the clinic email from Clinic Profile.">
+            <input
+              type="text"
+              defaultValue={system.backupRecipients || ''}
+              key={system.backupRecipients || ''}
+              placeholder={clinic.email || 'clinic@example.com'}
+              onBlur={e => {
+                const v = e.target.value.trim();
+                if (v !== (system.backupRecipients || '')) saveSystemField({ backupRecipients: v }, 'Backup recipients updated.');
+              }}
+              className="w-64 max-w-full px-3 py-1.5 text-xs font-medium border border-slate-300 rounded-xl bg-white text-slate-800 focus:outline-none focus:border-[#3B50DF]"
+            />
+          </SettingRow>
+          <SettingRow
+            label="Last Backup"
+            description={
+              !system.lastBackup
+                ? 'No backup has run yet.'
+                : system.lastBackup.status === 'ok'
+                  ? `${new Date(system.lastBackup.at).toLocaleString()} · ${system.lastBackup.docCount ?? 0} records · ${Math.round((system.lastBackup.sizeBytes || 0) / 1024)} KB · ${system.lastBackup.trigger === 'manual' ? 'manual' : 'scheduled'} · sent to ${(system.lastBackup.recipients || []).join(', ') || '—'}`
+                  : `Failed ${new Date(system.lastBackup.at).toLocaleString()} — ${system.lastBackup.error || 'unknown error'}`
+            }
+          >
+            {isManager ? (
+              <button
+                type="button"
+                onClick={runBackupNow}
+                disabled={backupRunning}
+                className="px-4 py-1.5 text-xs font-semibold rounded-xl bg-[#3B50DF] hover:bg-[#2F40B5] text-white cursor-pointer shadow-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+              >
+                <Save size={13} />
+                {backupRunning ? 'Backing up…' : 'Run Backup Now'}
+              </button>
+            ) : (
+              <span className="text-[11px] font-semibold text-slate-400">Manager only</span>
+            )}
+          </SettingRow>
         </div>
+        {system.lastBackup?.status === 'failed' && (
+          <div className="mt-4">
+            <Banner type="error" message={`Last backup failed: ${system.lastBackup.error || 'unknown error'}`} />
+          </div>
+        )}
       </SectionCard>
 
       <SectionCard title="System Availability & Maintenance" subtitle="Portal operational switch and maintenance mode override" icon={Lock}>
         <div className="py-1">
           <SettingRow
             label="Maintenance Mode"
-            description="Temporarily halts public appointment booking while maintenance is active"
+            description="Halts new bookings from the website and the patient app while active"
           >
             <Toggle
               enabled={system.maintenanceMode}
-              onChange={async v => {
-                setSystem(p => ({ ...p, maintenanceMode: v }));
-                try {
-                  await setDoc(doc(db, 'settings', 'config'), {
-                    system: { maintenanceMode: v },
-                    updatedAt: Date.now(),
-                  }, { merge: true });
-                  showToast(v ? 'Maintenance mode enabled.' : 'Maintenance mode disabled.');
-                } catch (err) {
-                  console.error('Maintenance mode save error:', err);
-                  showToast('Failed to toggle maintenance mode.', 'error');
-                }
-              }}
+              onChange={v => saveSystemField(
+                { maintenanceMode: v },
+                v ? 'Maintenance mode enabled.' : 'Maintenance mode disabled.',
+                'Failed to toggle maintenance mode.',
+              )}
             />
           </SettingRow>
         </div>

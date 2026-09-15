@@ -166,6 +166,15 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/vaccinations/$(resource.data.patientId)).data.email == request.auth.token.email;
     }
 
+    // Patient profile photos (api/notifications.js set-avatar). Doc id is the
+    // MRN. Kept apart from vaccinations so list pages never download photos.
+    // Written server-side only; a patient reads their own, admins read all.
+    match /patientAvatars/{mrn} {
+      allow read: if isAdmin()
+        || (request.auth != null && resource.data.email == request.auth.token.email.lower());
+      allow write: if isAdmin();
+    }
+
     match /patientNotifications/{docId} {
       allow read: if isAdmin() || ownsPatientNotification();
       allow write: if isAdmin();

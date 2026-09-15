@@ -1,5 +1,5 @@
 import { authedPostJson } from "../lib/apiClient";
-import { addDoc, collection, doc, getDocs, limit, onSnapshot, orderBy, query, runTransaction, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
+import { addDoc, collection, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, runTransaction, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { auth, db } from "../lib/firebase";
@@ -11,7 +11,8 @@ import * as XLSX from "xlsx";
 import autoTable from "jspdf-autotable";
 import Toast from "../components/Toast";
 import { CLINIC_LOGO_BASE64 } from "../assets/clinicLogoBase64";
-import { Printer, Download, MapPin } from "lucide-react";
+import { Printer, Download, MapPin, AlertTriangle } from "lucide-react";
+import { trackEvent } from "../lib/analytics";
 
 /* ─────────────────────────── CSS ─────────────────────────── */
 const globalCSS = `
@@ -672,7 +673,11 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [] }) {
   const eligibleVaccines = getEligibleVaccinesForService(form.service, inventoryItems);
   const vaccineItems = eligibleVaccines.filter(i => (parseInt(i.stock) || 0) > 0);
   const [saving, setSaving] = useState(false);
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const [stepErrors, setStepErrors] = useState({ fields: [], messages: [] });
+  const set = (k, v) => {
+    setForm(f => ({ ...f, [k]: v }));
+    setStepErrors(prev => prev.fields.length ? { fields: [], messages: [] } : prev);
+  };
 
   const isPep = form.service === 'PEP';
 
@@ -696,31 +701,53 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [] }) {
   const safeStepIndex = Math.min(currentStepIndex, steps.length - 1);
   const currentStep = steps[safeStepIndex];
 
-  const handleNext = () => {
+  // Inline "fill this up" note for the current step. Populated when Next is
+  // pressed with required fields empty; cleared as soon as the nurse edits
+  // anything or changes step. `fields` drives the red outline on each input.
+  const hasFieldError = (k) => stepErrors.fields.includes(k);
+  const errStyle = (k) => hasFieldError(k) ? { borderColor: '#C8151A', background: '#FFF5F5' } : undefined;
+
+  const validateStep = () => {
+    const fields = [];
+    const messages = [];
     if (currentStep.id === 'identity') {
-      if (!form.fname.trim() || !form.lname.trim()) { showToast('First Name and Last Name are required', 'error'); return; }
-      if (!form.age || Number(form.age) <= 0) { showToast('A valid age is required', 'error'); return; }
-      if (!form.email.trim()) { showToast('Email is required for app authorization', 'error'); return; }
+      if (!form.fname.trim()) { fields.push('fname'); messages.push('First Name is required'); }
+      if (!form.lname.trim()) { fields.push('lname'); messages.push('Last Name is required'); }
+      if (!form.age || Number(form.age) <= 0) { fields.push('age'); messages.push('A valid age is required'); }
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(form.email.trim())) { showToast('Please enter a valid email address', 'error'); return; }
-      if (form.contact && !isValidPHPhone(form.contact)) { showToast('Enter a valid Philippine mobile number (e.g. 0917 123 4567)', 'error'); return; }
+      if (!form.email.trim()) { fields.push('email'); messages.push('Email is required for patient app login'); }
+      else if (!emailRegex.test(form.email.trim())) { fields.push('email'); messages.push('Enter a valid email address'); }
+      if (form.contact && !isValidPHPhone(form.contact)) { fields.push('contact'); messages.push('Enter a valid Philippine mobile number (e.g. 0917 123 4567)'); }
     }
     if (currentStep.id === 'history') {
       const anyFilled = (form.pastVaccines || '').trim() || (form.allergies || '').trim() || (form.notes || '').trim();
-      if (!anyFilled) { showToast('Please provide at least one medical history detail before proceeding', 'error'); return; }
+      if (!anyFilled) { fields.push('pastVaccines', 'allergies', 'notes'); messages.push('Provide at least one medical history detail (past vaccination, allergy, or notes)'); }
     }
+    return { fields, messages };
+  };
+
+  const handleNext = () => {
+    const result = validateStep();
+    if (result.messages.length > 0) {
+      setStepErrors(result);
+      showToast('Please complete the required fields before proceeding', 'error');
+      return;
+    }
+    setStepErrors({ fields: [], messages: [] });
     if (safeStepIndex < steps.length - 1) {
       setCurrentStepIndex(safeStepIndex + 1);
     }
   };
 
   const handleBack = () => {
+    setStepErrors({ fields: [], messages: [] });
     if (safeStepIndex > 0) {
       setCurrentStepIndex(safeStepIndex - 1);
     }
   };
 
   const jumpToStepId = (id) => {
+    setStepErrors({ fields: [], messages: [] });
     const idx = steps.findIndex(s => s.id === id);
     if (idx !== -1) setCurrentStepIndex(idx);
   };
@@ -845,6 +872,19 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [] }) {
         {/* ── Active Step Body (Scrollable Content Area) ── */}
         <div style={{ flex: 1, minHeight: 0, padding: '24px 28px', overflowY: 'auto', background: '#FFFFFF' }}>
 
+          {/* Required-fields note — shown after Next is pressed with gaps */}
+          {stepErrors.messages.length > 0 && (
+            <div role="alert" style={{ maxWidth: '48rem', margin: '0 auto 16px', padding: '12px 16px', background: '#FFF5F5', border: '1px solid #FCA5A5', borderRadius: '.75rem', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <AlertTriangle size={16} style={{ color: '#C8151A', flexShrink: 0, marginTop: 1 }} />
+              <div>
+                <div style={{ fontSize: '.8125rem', fontWeight: 800, color: '#991B1B' }}>Please fill up the required fields before continuing</div>
+                <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: '.75rem', color: '#B91C1C', lineHeight: 1.6 }}>
+                  {stepErrors.messages.map((m, i) => <li key={i}>{m}</li>)}
+                </ul>
+              </div>
+            </div>
+          )}
+
           {/* STEP 1: PATIENT IDENTITY */}
           {currentStep.id === 'identity' && (
             <div style={{ maxWidth: '48rem', margin: '0 auto' }}>
@@ -855,10 +895,10 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [] }) {
 
               <div className="form-grid" style={{ gap: 14 }}>
                 <div className="form-field"><label>First Name <span style={{ color: '#C8151A' }}>*</span></label>
-                  <input type="text" value={form.fname} onChange={e => set('fname', e.target.value)} placeholder="e.g. Juan" />
+                  <input type="text" value={form.fname} onChange={e => set('fname', e.target.value)} placeholder="e.g. Juan" style={errStyle('fname')} />
                 </div>
                 <div className="form-field"><label>Last Name <span style={{ color: '#C8151A' }}>*</span></label>
-                  <input type="text" value={form.lname} onChange={e => set('lname', e.target.value)} placeholder="e.g. Dela Cruz" />
+                  <input type="text" value={form.lname} onChange={e => set('lname', e.target.value)} placeholder="e.g. Dela Cruz" style={errStyle('lname')} />
                 </div>
                 <div className="form-field"><label>Middle Initial <span style={{ fontWeight: 400, color: '#94A3B8', fontSize: '.6875rem' }}>(optional)</span></label>
                   <input type="text" value={form.mname || ''} onChange={e => set('mname', e.target.value)} placeholder="e.g. P." maxLength={5} />
@@ -867,7 +907,7 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [] }) {
                   <input type="text" value={form.suffix || ''} onChange={e => set('suffix', e.target.value)} placeholder="e.g. Jr., Sr., III" />
                 </div>
                 <div className="form-field"><label>Age <span style={{ color: '#C8151A' }}>*</span></label>
-                  <input type="text" inputMode="numeric" value={form.age} onChange={e => set('age', e.target.value.replace(/\D/g, '').slice(0, 3))} placeholder="e.g. 25" />
+                  <input type="text" inputMode="numeric" value={form.age} onChange={e => set('age', e.target.value.replace(/\D/g, '').slice(0, 3))} placeholder="e.g. 25" style={errStyle('age')} />
                 </div>
                 <div className="form-field"><label>Sex</label>
                   <select value={form.sex} onChange={e => set('sex', e.target.value)}><option>Male</option><option>Female</option></select>
@@ -886,11 +926,11 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [] }) {
                 </div>
                 <div className="form-field full">
                   <label>Email Address <span style={{ color: '#C8151A' }}>*</span> <span style={{ fontWeight: 400, color: '#64748B', fontSize: '.6875rem' }}>(Required for patient mobile app login)</span></label>
-                  <input type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="patient@gmail.com" />
+                  <input type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="patient@gmail.com" style={errStyle('email')} />
                 </div>
                 <div className="form-field full">
                   <label>Contact Number</label>
-                  <input type="text" inputMode="numeric" value={form.contact} onChange={e => set('contact', e.target.value.replace(/[^\d+\s-]/g, ''))} placeholder="+63 9XX XXX XXXX" />
+                  <input type="text" inputMode="numeric" value={form.contact} onChange={e => set('contact', e.target.value.replace(/[^\d+\s-]/g, ''))} placeholder="+63 9XX XXX XXXX" style={errStyle('contact')} />
                   {form.contact && !isValidPHPhone(form.contact) && (
                     <span style={{ fontSize: '.6875rem', color: '#C8151A', marginTop: 4, display: 'block' }}>Enter a valid Philippine mobile number (e.g. 0917 123 4567)</span>
                   )}
@@ -1097,13 +1137,13 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [] }) {
 
               <div className="form-grid" style={{ gap: 14 }}>
                 <div className="form-field full"><label>Past Vaccination History</label>
-                  <select value={form.pastVaccines || ''} onChange={e => set('pastVaccines', e.target.value)}>
+                  <select value={form.pastVaccines || ''} onChange={e => set('pastVaccines', e.target.value)} style={errStyle('pastVaccines')}>
                     <option value="">— Select history —</option>
                     {PAST_VACCINE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
                   </select>
                 </div>
                 <div className="form-field full"><label>Allergies</label>
-                  <select value={form.allergies || ''} onChange={e => set('allergies', e.target.value)}>
+                  <select value={form.allergies || ''} onChange={e => set('allergies', e.target.value)} style={errStyle('allergies')}>
                     <option value="">— Select allergy —</option>
                     {ALLERGY_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
                   </select>
@@ -1956,6 +1996,20 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
   const [viewingReport, setViewingReport] = useState(null);
   const [showExportModal, setShowExportModal] = useState(false);
 
+  // Profile photo lives on patientAvatars/{mrn} (set from the patient app), fetched
+  // only here so list views never pull image data.
+  const [avatarDataUrl, setAvatarDataUrl] = useState(null);
+  useEffect(() => {
+    const mrn = patient?.id || patient?.mrn;
+    setAvatarDataUrl(null);
+    if (!db || !mrn) return;
+    let cancelled = false;
+    getDoc(doc(db, 'patientAvatars', mrn))
+      .then(snap => { if (!cancelled && snap.exists()) setAvatarDataUrl(snap.data()?.dataUrl || null); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [patient?.id, patient?.mrn]);
+
   const r = records.find(x => x.firestoreId === patient.firestoreId || x.name === patient.name);
   const rec = r || { doses: [], reports: [], address: '—', date: patient.date, id: patient.id, age: patient.age, animal: patient.animal, cat: patient.cat };
   const reportsList = r?.reports || patient.reports || [];
@@ -2055,7 +2109,7 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
     return true;
   });
 
-  const patientPhoto = patient.photoUrl || patient.avatarUrl || patient.profileImage || patient.imageUrl || patient.photo || patient.image || rec.photoUrl || rec.avatarUrl;
+  const patientPhoto = avatarDataUrl || patient.photoUrl || patient.avatarUrl || patient.profileImage || patient.imageUrl || patient.photo || patient.image || rec.photoUrl || rec.avatarUrl;
 
   return (
     <div style={{ padding: '20px 24px 36px', maxWidth: '1600px', margin: '0 auto' }}>
@@ -2206,6 +2260,17 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
                   <div className="mt-0.5"><ServiceBadge service={patient.service} /></div>
                 </div>
 
+                {(rec.emergencyName || rec.emergencyPhone || rec.guardian || rec.emergencyContact) && (
+                  <div className="col-span-2">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Emergency Contact</span>
+                    <span className="text-xs font-bold text-slate-800 mt-0.5 block truncate">
+                      {rec.emergencyName
+                        ? `${rec.emergencyName}${rec.emergencyRel ? ` (${rec.emergencyRel})` : ''}${rec.emergencyPhone ? ` · ${rec.emergencyPhone}` : ''}`
+                        : (rec.guardian || rec.emergencyContact)}
+                    </span>
+                  </div>
+                )}
+
                 <div>
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Registration Date</span>
                   <span className="text-xs font-bold text-slate-800 mt-0.5 block">{fmtDate(rec.date)}</span>
@@ -2281,11 +2346,11 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
       </div>
 
       {/* ── MIDDLE ROW: VACCINATION DOSES (LEFT 6 COLS) & APPOINTMENTS (RIGHT 6 COLS) SIDE-BY-SIDE ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6 items-stretch">
 
-        {/* ── LEFT COLUMN (6 COLS): COMPACT VACCINATION DOSES TRACKER ── */}
-        <div className="lg:col-span-6 bg-white rounded-2xl border border-blue-100/90 ring-1 ring-blue-500/10 shadow-xs hover:shadow-sm transition-all p-4 sm:p-4.5 flex flex-col justify-between">
-          <div>
+        {/* ── LEFT COLUMN (6 COLS): VACCINATION DOSES TRACKER — fixed height, list scrolls ── */}
+        <div className="lg:col-span-6 bg-white rounded-3xl border border-blue-100/90 ring-1 ring-blue-500/10 shadow-xs hover:shadow-sm transition-all p-5 sm:p-6 flex flex-col" style={{ height: 440 }}>
+          <div className="flex flex-col flex-1 min-h-0">
             {/* Clean Header */}
             <div className="flex items-center justify-between pb-2.5 border-b border-blue-50 flex-wrap gap-2 mb-2.5">
               <div>
@@ -2304,7 +2369,8 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
               </div>
             </div>
 
-            {/* Dose Timeline List */}
+            {/* Dose Timeline List — scrolls inside the fixed-height card */}
+            <div className="flex-1 min-h-0 overflow-y-auto pr-1">
             {(() => {
               const dosesList = (Array.isArray(patient?.doses) && patient.doses.length > 0)
                 ? patient.doses
@@ -2410,11 +2476,12 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
                 </div>
               );
             })()}
+            </div>
           </div>
 
           {/* Status Legend Footer */}
           {((patient?.doses && patient.doses.length > 0) || (rec?.doses && rec.doses.length > 0)) && (
-            <div className="mt-2.5 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] font-semibold text-slate-500 flex-wrap gap-2">
+            <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-slate-500 flex-wrap gap-2 shrink-0">
               <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Completed</span>
               <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#3B50DF]" /> Next Due</span>
               <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-slate-300" /> Scheduled</span>
@@ -2424,9 +2491,9 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
         </div>
 
         {/* ── RIGHT COLUMN (6 COLS): SYNCED APPOINTMENTS CARD ── */}
-        <div className="lg:col-span-6 bg-white rounded-3xl border border-sky-100/90 ring-1 ring-sky-500/10 shadow-xs hover:shadow-sm transition-all overflow-hidden h-full flex flex-col justify-between">
-          <div>
-            <div className="p-4 sm:p-5 border-b border-sky-50 bg-sky-50/30 flex items-center justify-between flex-wrap gap-2">
+        <div className="lg:col-span-6 bg-white rounded-3xl border border-sky-100/90 ring-1 ring-sky-500/10 shadow-xs hover:shadow-sm transition-all overflow-hidden flex flex-col" style={{ height: 440 }}>
+          <div className="flex flex-col flex-1 min-h-0">
+            <div className="p-5 sm:p-6 border-b border-sky-50 bg-sky-50/30 flex items-center justify-between flex-wrap gap-2 shrink-0">
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-lg bg-sky-100/80 text-sky-700 border border-sky-200/80 flex items-center justify-center shrink-0 shadow-2xs">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
@@ -2467,8 +2534,8 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
               </div>
             </div>
 
-            {/* Appointments Table */}
-            <div className="overflow-x-auto">
+            {/* Appointments Table — scrolls inside the fixed-height card */}
+            <div className="overflow-auto flex-1 min-h-0">
               {aptsLoading ? (
                 <div className="py-8 text-center text-xs font-semibold text-slate-400">Loading appointments...</div>
               ) : filteredApts.length === 0 ? (
@@ -2479,14 +2546,14 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
               ) : (
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="border-b border-slate-100 bg-slate-50/50 text-[10.5px] font-bold text-slate-400 uppercase tracking-wider">
-                      <th className="px-4 py-3">Date</th>
-                      <th className="px-4 py-3">Type</th>
-                      <th className="px-4 py-3">Time</th>
-                      <th className="px-4 py-3">Status</th>
+                    <tr className="border-b border-slate-100 bg-slate-50/50 text-[11px] font-bold text-slate-400 uppercase tracking-wider sticky top-0 z-10">
+                      <th className="px-5 py-3.5 bg-slate-50">Date</th>
+                      <th className="px-5 py-3.5 bg-slate-50">Type</th>
+                      <th className="px-5 py-3.5 bg-slate-50">Time</th>
+                      <th className="px-5 py-3.5 bg-slate-50">Status</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
+                  <tbody className="divide-y divide-slate-100 text-[13px] font-medium text-slate-700">
                     {filteredApts.map((apt) => {
                       const statusStr = (apt.status || 'Pending').toLowerCase();
                       const isDone = statusStr === 'completed' || statusStr === 'done';
@@ -2499,10 +2566,10 @@ function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEd
 
                       return (
                         <tr key={apt.id} className="hover:bg-slate-50/80 transition-colors">
-                          <td className="px-4 py-3 font-bold text-slate-900">{fmtDate(apt.date)}</td>
-                          <td className="px-4 py-3 font-semibold text-slate-800 truncate max-w-[120px]">{apt.type || apt.purpose || 'Vaccination'}</td>
-                          <td className="px-4 py-3 text-slate-600 font-medium">{apt.time || '10:00 am'}</td>
-                          <td className="px-4 py-3">
+                          <td className="px-5 py-3.5 font-bold text-slate-900 whitespace-nowrap">{fmtDate(apt.date)}</td>
+                          <td className="px-5 py-3.5 font-semibold text-slate-800 truncate max-w-[160px]">{apt.type || apt.purpose || 'Vaccination'}</td>
+                          <td className="px-5 py-3.5 text-slate-600 font-medium whitespace-nowrap">{apt.time || '10:00 am'}</td>
+                          <td className="px-5 py-3.5">
                             <span className={`text-[9.5px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider inline-block ${badgeClass}`}>
                               {apt.status || 'Scheduled'}
                             </span>
@@ -4076,7 +4143,9 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
           ['Height / Weight', `${p.height ? `${p.height} cm` : '—'} · ${p.weight ? `${p.weight} kg` : '—'}`],
           ['Blood Pressure', p.bloodPressure || '—'],
           ['Contact / Address', `${p.contact || '—'} · ${p.address || '—'}`],
-          ['Guarantor / Next of Kin', p.guardian || p.emergencyContact || '—'],
+          ['Guarantor / Next of Kin', p.emergencyName
+            ? `${p.emergencyName}${p.emergencyRel ? ` (${p.emergencyRel})` : ''}${p.emergencyPhone ? ` · ${p.emergencyPhone}` : ''}`
+            : (p.guardian || p.emergencyContact || '—')],
         ],
       },
       {
@@ -5432,6 +5501,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
         setDoc(doc(db, 'authorizedPatients', caseNo), authDoc)
       ]);
 
+      trackEvent('patient_registered');
       showToast(`${fullName} registered and authorized for app login`, 'success');
       handleCloseAddModal();
     } catch (err) {
