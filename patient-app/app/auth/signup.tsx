@@ -19,10 +19,8 @@ import {
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import {
   AuthorizedPatient,
-  checkPatientEmailAvailability,
   completeEmailSignup,
   getAuthErrorMessage,
-  lookupAuthorizedPatient,
   sendEmailOTP,
   signInAsGuest,
   verifyEmailOTP,
@@ -85,17 +83,10 @@ export default function PatientSignupScreen() {
 
     setLoading(true);
     try {
-      const patientRecord = await lookupAuthorizedPatient(mrnInput);
-      if (!patientRecord || !patientRecord.authorized) {
-        throw new Error('MRN not found. Please register at the K&A Clinic front desk first.');
-      }
-      if (patientRecord.registered) {
-        throw new Error('This MRN already has an account. Please sign in instead.');
-      }
-
-      // Ensure the email associated with this MRN isn't already registered by another patient
-      await checkPatientEmailAvailability(patientRecord.email, patientRecord.mrn);
-
+      // One round trip: /api/send-otp already validates the MRN, refuses
+      // registered records, and checks email uniqueness with the same error
+      // messages, so the two client-side Firestore pre-checks that used to
+      // run first only added latency.
       const { maskedEmail: masked } = await sendEmailOTP(mrnInput);
       setMaskedEmail(masked);
       setOtpAttempts(0);

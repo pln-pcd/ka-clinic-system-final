@@ -628,7 +628,7 @@ export default function ChatScreen() {
               {
                 paddingBottom: keyboardVisible
                   ? verticalScale(8)
-                  : Math.max(insets.bottom, verticalScale(16)) + verticalScale(6),
+                  : verticalScale(10),
               },
             ]}
           >
@@ -641,10 +641,32 @@ export default function ChatScreen() {
                 returnKeyType="send"
                 onSubmitEditing={() => send()}
               />
-              <TouchableOpacity style={[s.sendBtn, (sending || botTyping) && { opacity: 0.6 }]} onPress={() => send()} disabled={sending || botTyping}>
+              <TouchableOpacity style={[s.sendBtn, (sending || botTyping || !input.trim()) && { opacity: 0.4 }]} onPress={() => send()} disabled={sending || botTyping || !input.trim()}>
                 <Ionicons name="arrow-up" size={20} color="#fff" />
               </TouchableOpacity>
             </View>
+          </View>
+
+          {/* ── BOTTOM NAV BAR ── same bar as Home/Appts/Account. Lives inside the
+              keyboard-lifted region so it rides up with the composer and stays
+              visible while typing; bottom inset only when the keyboard is down. */}
+          <View style={[nav.bar, { height: verticalScale(80) + insets.bottom, paddingBottom: verticalScale(8) + insets.bottom }]}>
+            <TouchableOpacity style={nav.tab} activeOpacity={0.7} onPress={() => router.navigate('/')}>
+              <Ionicons name="home-outline" size={24} color="#64748B" />
+              <Text style={nav.label}>Home</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={nav.tab} activeOpacity={0.7} onPress={() => router.navigate('/appt')}>
+              <Ionicons name="calendar-outline" size={24} color="#64748B" />
+              <Text style={nav.label}>Appts</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={nav.tab} activeOpacity={0.7}>
+              <Ionicons name="chatbubble-ellipses" size={24} color={C.red} />
+              <Text style={[nav.label, nav.labelActive]}>Chat</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={nav.tab} activeOpacity={0.7} onPress={() => router.navigate('/profile')}>
+              <Ionicons name="person-outline" size={24} color="#64748B" />
+              <Text style={nav.label}>Account</Text>
+            </TouchableOpacity>
           </View>
         </Animated.View>
       </KeyboardAvoidingView>
@@ -653,6 +675,19 @@ export default function ChatScreen() {
     </View>
   );
 }
+
+const nav = StyleSheet.create({
+  bar: {
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around',
+    borderTopWidth: 1, borderColor: '#F1F5F9',
+    paddingTop: verticalScale(6), paddingHorizontal: scale(4),
+    elevation: 20, shadowColor: '#0F172A', shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: -4 },
+  },
+  tab: { flex: 1, justifyContent: 'center', alignItems: 'center', height: '100%' },
+  label: { fontSize: moderateScale(11), color: '#64748B', marginTop: verticalScale(3), fontWeight: '600' },
+  labelActive: { color: C.red, fontWeight: '800' },
+});
 
 const s = StyleSheet.create({
   header: {

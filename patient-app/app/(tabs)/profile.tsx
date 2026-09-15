@@ -729,13 +729,6 @@ export default function ProfileScreen() {
                 )}
               </View>
 
-              {isEditingPersonal && (
-                <TouchableOpacity style={s.editFullBtn} onPress={handleSavePersonalData} activeOpacity={0.85}>
-                  <Ionicons name="checkmark-circle-outline" size={19} color="#FFFFFF" />
-                  <Text style={s.editFullBtnText}>Save Changes</Text>
-                </TouchableOpacity>
-              )}
-
             </ScrollView>
           </View>
         );
@@ -1014,7 +1007,13 @@ export default function ProfileScreen() {
                 {!user?.isAnonymous && !isGuest && (
                   <ProfileItem icon="phone-portrait-outline" label="Logged-in Devices" color={C.slate} onPress={() => setCurrentView('devices')} />
                 )}
-                <ProfileItem icon="document-text-outline" label="Privacy Policy" color={C.slate} onPress={() => setCurrentView('privacy')} />
+                <ProfileItem icon="document-text-outline" label="Privacy Policy" color={C.slate} onPress={() => setCurrentView('privacy')} isLast />
+              </View>
+            </View>
+
+            {/* Sign out sits in its own card so it never reads as "one more setting". */}
+            <View style={[s.sectionWrap, { marginTop: verticalScale(18) }]}>
+              <View style={s.card}>
                 <ProfileItem icon="log-out-outline" label="Sign Out" color={C.red} onPress={handleLogout} isLast />
               </View>
             </View>

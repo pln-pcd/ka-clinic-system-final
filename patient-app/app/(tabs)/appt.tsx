@@ -14,6 +14,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
+import Animated, { useAnimatedKeyboard, useAnimatedStyle } from 'react-native-reanimated';
 import {
   ActivityIndicator,
   Dimensions,
@@ -207,12 +208,21 @@ export default function AppointmentsScreen() {
 
   // ── Appointment Details & Cancellation Modals ─────────────────────────────
   const [selectedApptDetail, setSelectedApptDetail] = useState<FirestoreAppt | null>(null);
-  const [cancellationModalAppt, setCancellationModalAppt] = useState<FirestoreAppt | null>(null);
   const [cancellationReasonInput, setCancellationReasonInput] = useState('');
+  // Android: KeyboardAvoidingView 'height' inside a translucent Modal fights
+  // the window inset and jitters. Reanimated reads the keyboard natively and
+  // lifts the sheet smoothly instead (same approach as chat.tsx). iOS keeps
+  // KeyboardAvoidingView 'padding'.
+  const detailKeyboard = useAnimatedKeyboard({ isStatusBarTranslucentAndroid: true, isNavigationBarTranslucentAndroid: true });
+  const detailKeyboardLift = useAnimatedStyle(() => ({
+    paddingBottom: Platform.OS === 'android' ? detailKeyboard.height.value : 0,
+  }));
   const [submittingCancellation, setSubmittingCancellation] = useState(false);
 
+  // Reason is typed inline in the details modal (no second pop-up).
   const handleRequestCancellation = async () => {
-    if (!cancellationModalAppt) return;
+    const target = selectedApptDetail;
+    if (!target) return;
     if (!cancellationReasonInput.trim()) {
       showAlert({
         type: 'warning',
@@ -225,13 +235,12 @@ export default function AppointmentsScreen() {
     }
     setSubmittingCancellation(true);
     try {
-      await updateDoc(doc(db, 'appointments', cancellationModalAppt.id), {
+      await updateDoc(doc(db, 'appointments', target.id), {
         status: 'cancellation_pending',
         cancellationReason: cancellationReasonInput.trim(),
         cancellationRequestedAt: Date.now(),
         updatedAt: Date.now(),
       });
-      setCancellationModalAppt(null);
       setSelectedApptDetail(null);
       setCancellationReasonInput('');
       showAlert({
@@ -803,7 +812,7 @@ export default function AppointmentsScreen() {
                 <View style={s.apptRight}>
                   <StatusBadge status={appt.status}/>
                   {appt.status === 'pending' && (
-                    <TouchableOpacity style={s.cancelBtn} onPress={() => { setCancellationModalAppt(appt); setCancellationReasonInput(''); }}>
+                    <TouchableOpacity style={s.cancelBtn} onPress={() => { setCancellationReasonInput(''); setSelectedApptDetail(appt); }}>
                       <Ionicons name="close" size={12} color={C.muted}/>
                     </TouchableOpacity>
                   )}
@@ -896,9 +905,6 @@ export default function AppointmentsScreen() {
                           <Text style={s.adminNoteTxt}>Clinic: {appt.note}</Text>
                         </View>
                       ) : null}
-                    </View>
-                    <View style={s.apptRight}>
-                      <StatusBadge status="cancelled"/>
                     </View>
                   </TouchableOpacity>
                 </View>
@@ -1271,8 +1277,9 @@ export default function AppointmentsScreen() {
       </Modal>
 
       {/* ══ APPOINTMENT DETAIL MODAL ═════════════════════════════════════════ */}
-      <Modal visible={!!selectedApptDetail} transparent animationType="fade" statusBarTranslucent>
-        <View style={sm.overlay}>
+      <Modal visible={!!selectedApptDetail} transparent animationType="fade" statusBarTranslucent onShow={() => setCancellationReasonInput('')}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        <Animated.View style={[sm.overlay, detailKeyboardLift]}>
           <View style={sm.card}>
             <LinearGradient colors={[C.navy, C.charcoal]} style={sm.header}>
               <View style={{ flex: 1 }}>
@@ -1342,79 +1349,48 @@ export default function AppointmentsScreen() {
                   </View>
                 ) : null}
 
+                {(selectedApptDetail.status === 'pending' || selectedApptDetail.status === 'confirmed' || selectedApptDetail.status === 'accepted') && (
+                  <View style={{ marginTop: verticalScale(16) }}>
+                    <Text style={{ fontSize: moderateScale(13), fontWeight: '700', color: C.charcoal, marginBottom: verticalScale(8) }}>
+                      Reason for Cancellation <Text style={{ color: C.red }}>*</Text>
+                    </Text>
+                    <TextInput
+                      style={[df.input, df.inputMulti, { minHeight: verticalScale(80) }]}
+                      placeholder="e.g. Schedule conflict, illness, emergency..."
+                      placeholderTextColor={C.muted}
+                      multiline
+                      numberOfLines={3}
+                      value={cancellationReasonInput}
+                      onChangeText={setCancellationReasonInput}
+                    />
+                    <Text style={{ fontSize: moderateScale(11), color: C.muted, marginTop: verticalScale(6), fontStyle: 'italic' }}>
+                      Sent to the clinic for approval. The appointment stays booked until staff approve it.
+                    </Text>
+                  </View>
+                )}
+
                 <View style={[sm.footer, { marginTop: verticalScale(20) }]}>
                   <TouchableOpacity style={sm.cancelBtn} onPress={() => setSelectedApptDetail(null)}>
                     <Text style={sm.cancelTxt}>Close</Text>
                   </TouchableOpacity>
                   {(selectedApptDetail.status === 'pending' || selectedApptDetail.status === 'confirmed' || selectedApptDetail.status === 'accepted') && (
                     <TouchableOpacity
-                      style={[sm.confirmBtn, { backgroundColor: '#EF4444' }]}
-                      onPress={() => {
-                        setCancellationModalAppt(selectedApptDetail);
-                        setCancellationReasonInput('');
-                      }}
+                      style={[sm.confirmBtn, { backgroundColor: '#EF4444' }, submittingCancellation && { opacity: 0.6 }]}
+                      onPress={handleRequestCancellation}
+                      disabled={submittingCancellation}
                     >
-                      <Text style={sm.confirmTxt}>Request Cancellation</Text>
+                      {submittingCancellation ? (
+                        <ActivityIndicator color={C.white} size="small" />
+                      ) : (
+                        <Text style={sm.confirmTxt}>Request Cancellation</Text>
+                      )}
                     </TouchableOpacity>
                   )}
                 </View>
               </View>
             )}
           </View>
-        </View>
-      </Modal>
-
-      {/* ══ CANCELLATION REASON MODAL ════════════════════════════════════════ */}
-      <Modal visible={!!cancellationModalAppt} transparent animationType="fade" statusBarTranslucent>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <View style={sm.overlay}>
-            <View style={sm.card}>
-              <LinearGradient colors={[C.redDeep, C.red]} style={sm.header}>
-                <View style={{ flex: 1 }}>
-                  <Text style={sm.headerTitle}>Cancel Appointment</Text>
-                  <Text style={sm.headerSub}>Please state reason for cancellation</Text>
-                </View>
-                <TouchableOpacity onPress={() => setCancellationModalAppt(null)} style={sm.closeBtn}>
-                  <Ionicons name="close" size={20} color={C.white}/>
-                </TouchableOpacity>
-              </LinearGradient>
-
-              <View style={sm.body}>
-                <Text style={{ fontSize: moderateScale(13), fontWeight: '700', color: C.charcoal, marginBottom: verticalScale(8) }}>
-                  Reason for Cancellation <Text style={{ color: C.red }}>*</Text>
-                </Text>
-                <TextInput
-                  style={[df.input, df.inputMulti, { minHeight: verticalScale(90) }]}
-                  placeholder="e.g. Schedule conflict, illness, emergency..."
-                  placeholderTextColor={C.muted}
-                  multiline
-                  numberOfLines={3}
-                  value={cancellationReasonInput}
-                  onChangeText={setCancellationReasonInput}
-                />
-                <Text style={{ fontSize: moderateScale(11), color: C.muted, marginTop: verticalScale(6), fontStyle: 'italic' }}>
-                  This request will be sent to the clinic admin for approval.
-                </Text>
-
-                <View style={[sm.footer, { marginTop: verticalScale(20) }]}>
-                  <TouchableOpacity style={sm.cancelBtn} onPress={() => setCancellationModalAppt(null)}>
-                    <Text style={sm.cancelTxt}>Back</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[sm.confirmBtn, { backgroundColor: '#EF4444' }, submittingCancellation && { opacity: 0.6 }]}
-                    onPress={handleRequestCancellation}
-                    disabled={submittingCancellation}
-                  >
-                    {submittingCancellation ? (
-                      <ActivityIndicator color={C.white} size="small" />
-                    ) : (
-                      <Text style={sm.confirmTxt}>Submit Request</Text>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          </View>
+        </Animated.View>
         </KeyboardAvoidingView>
       </Modal>
 

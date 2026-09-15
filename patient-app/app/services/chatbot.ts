@@ -33,7 +33,9 @@ const CLINICAL_HINTS: RegExp[] = [
   /\b(bite|bit|bitten|scratch|scratched|lick|licked|wound|bleeding|puncture)\b/,
   /\b(dog|cat|puppy|kitten|bat|monkey|rat|animal|pet)\b/,
   /\b(vaccin\w*|pep|prep|rig|erig|hrig|immunoglobulin|booster|tetanus|toxoid|essen)\b/,
-  /\b(dose|doses|dosage|shot|shots|jab|inject\w*|day\s*\d+)\b/,
+  /\b(dose|doses|dosage|jab|inject\w*|day\s*\d+)\b/,
+  // "shot" only as a vaccine shot; a bare "I got shot" is not a clinic matter.
+  /\b(vaccine|vaccination|rabies|booster|tetanus|anti-?rabies|flu)\s+shots?\b|\bshots?\s+(schedule|for\s+rabies)\b/,
   /\b(categor\w*|triage|exposure|observation\s+period)\b/,
   /\b(symptom\w*|fever|swelling|redness|pus|infect\w*|rash|pain|numbness)\b/,
   /\b(diagnos\w*|treat\w*|cure|medicine|medication|prescri\w*|antiseptic|antibiotic)\b/,
@@ -141,13 +143,13 @@ export async function askClinicAssistant(prompt: string, history: ChatTurn[] = [
     }
   }
 
-  // Nothing matched locally and the server could not be reached. Hand off
-  // rather than guess — the message is already known not to be one of the four
-  // logistics topics, so a human is the right destination.
+  // Nothing matched locally and the server could not be reached. Nothing
+  // clinical was detected, so this is not a staff matter: polite out-of-scope
+  // reply, no hand-off. (Same rule as api/chatbot.js.)
   return {
-    text: "I'm not able to answer that one. Please reach out to K&A Clinic staff about it. " +
-      'Tap "Talk to Clinic Staff" below and our team will help you directly.',
-    needsEscalation: true,
-    category: 'clinical',
+    text: 'That request is outside what I can help with — I am only able to assist with K&A Clinic ' +
+      'information such as hours, location, appointments, services, and pricing.',
+    needsEscalation: false,
+    category: 'out_of_scope',
   };
 }

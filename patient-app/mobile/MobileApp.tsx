@@ -7,7 +7,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { usePatientAuth } from '../context/PatientAuthContext';
 
-const PUBLIC_ROUTES = ['auth', 'onboarding', 'onboarding1', 'onboarding2'];
+const PUBLIC_ROUTES = ['auth', 'onboarding', 'onboarding1', 'onboarding2', 'onboarding3', 'onboarding4'];
 
 export default function MobileApp() {
   const { user, loading } = usePatientAuth();
@@ -61,6 +61,8 @@ export default function MobileApp() {
         <Stack.Screen name="onboarding" />
         <Stack.Screen name="onboarding1" />
         <Stack.Screen name="onboarding2" />
+        <Stack.Screen name="onboarding3" />
+        <Stack.Screen name="onboarding4" />
       </Stack>
     </SafeAreaProvider>
   );

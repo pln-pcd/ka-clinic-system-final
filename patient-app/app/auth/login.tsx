@@ -55,10 +55,12 @@ export default function LoginScreen() {
       const cleanMRN = mrnInput.trim().toUpperCase();
       // Recorded before sign-in so the auth listener sees the correct choice on
       // the very first callback rather than a stale one.
-      await setKeepSignedIn(keepSignedIn);
-      await signInWithMRN(cleanMRN, password);
-      // Anyone who can sign in is by definition not a first-time user.
-      await markOnboardingSeen();
+      // The pref write overlaps the sign-in round trip. It is awaited together
+      // with sign-in, so it is on disk before anything reads it.
+      await Promise.all([setKeepSignedIn(keepSignedIn), signInWithMRN(cleanMRN, password)]);
+      // Anyone who can sign in is by definition not a first-time user. Not
+      // awaited: nothing after this depends on it.
+      markOnboardingSeen().catch(() => {});
 
       // Second factor. The password alone never opens the app: the session is
       // held as "pending" by PatientAuthContext until either the server vouches

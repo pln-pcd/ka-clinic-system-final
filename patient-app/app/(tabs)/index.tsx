@@ -960,14 +960,10 @@ export default function RabiesRecoveryApp() {
                     <Text style={[s.recordsTableCellValue, { flex: 1.8 }]}>{pr.animal || pr.sourceOfExposure || (isGuest ? '—' : 'Dog / Cat')}</Text>
                   </View>
                   <View style={[s.recordsTableRow, s.recordsTableRowAlt]}>
-                    <Text style={[s.recordsTableCellLabel, { flex: 1.2 }]}>Local Washing</Text>
-                    <Text style={[s.recordsTableCellValue, { flex: 1.8 }]}>{pr.washTreatment || (isGuest ? '—' : 'Soap & Running Water')}</Text>
-                  </View>
-                  <View style={s.recordsTableRow}>
                     <Text style={[s.recordsTableCellLabel, { flex: 1.2 }]}>Known Allergies</Text>
                     <Text style={[s.recordsTableCellValue, { flex: 1.8 }]}>{pr.allergies || (isGuest ? '—' : 'None Reported')}</Text>
                   </View>
-                  <View style={[s.recordsTableRow, s.recordsTableRowAlt, { borderBottomWidth: 0 }]}>
+                  <View style={[s.recordsTableRow, { borderBottomWidth: 0 }]}>
                     <Text style={[s.recordsTableCellLabel, { flex: 1.2 }]}>Attending ABTC</Text>
                     <Text style={[s.recordsTableCellValue, { flex: 1.8, fontWeight: '700', color: '#1E293B' }]}>K&A Animal Bite Center</Text>
                   </View>

@@ -10,7 +10,6 @@ import Animated, {
   withTiming
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { markOnboardingSeen } from '../config/appPrefs';
 import { moderateScale, scale, verticalScale } from '../constants/scale';
 
 const { width } = Dimensions.get('window');
@@ -43,13 +42,6 @@ export default function Onboarding2() {
     } else {
       router.replace('/onboarding1');
     }
-  };
-
-  // Finishing the carousel is what marks this install as onboarded — from here
-  // on, launches go straight to login (or the app, if a session is kept).
-  const handleFinish = async () => {
-    await markOnboardingSeen();
-    router.replace('/auth/login');
   };
 
   // Guarantees button is safely elevated above Android 3-button nav / gesture bar
@@ -102,18 +94,20 @@ export default function Onboarding2() {
             <View style={styles.indicatorContainer}>
               <View style={styles.indicator} />
               <View style={[styles.indicator, styles.activeIndicator]} />
+              <View style={styles.indicator} />
+              <View style={styles.indicator} />
             </View>
 
             <Text style={styles.tag}>SUPPORT: FIRST-LINE TRIAGE</Text>
             <Text style={styles.title}>Guided Assistance</Text>
             
             <Text style={styles.description}>
-              Our integrated AI assistant handles routine health questions, guides you through wound care procedures, and instantly connects you with clinic staff for urgent care.
+              Ask KAI about clinic hours, booking, pricing, and using the app — any time. For anything medical, one tap connects you to K&A Clinic staff who reply directly in the Chat tab.
             </Text>
           </View>
 
           <TouchableOpacity 
-            onPress={handleFinish} 
+            onPress={() => router.push('/onboarding3')} 
             activeOpacity={0.85}
             style={styles.buttonShadow}
           >
@@ -123,8 +117,8 @@ export default function Onboarding2() {
               end={{ x: 1, y: 0 }}
               style={styles.button}
             >
-              <Text style={styles.buttonText}>Get Started</Text>
-              <Ionicons name="rocket-sharp" size={18} color="#FFF" style={{ marginLeft: 8 }} />
+              <Text style={styles.buttonText}>Next</Text>
+              <Ionicons name="arrow-forward" size={18} color="#FFF" style={{ marginLeft: 8 }} />
             </LinearGradient>
           </TouchableOpacity>
         </Animated.View>
@@ -206,9 +200,9 @@ const styles = StyleSheet.create({
   indicatorContainer: { flexDirection: 'row', marginBottom: verticalScale(12), alignItems: 'center' },
   indicator: { width: scale(7), height: scale(7), borderRadius: scale(3.5), backgroundColor: '#E2E8F0', marginRight: scale(8) },
   activeIndicator: { width: scale(24), height: scale(7), borderRadius: scale(3.5), backgroundColor: NAVY_BLUE },
-  tag: { fontSize: moderateScale(11), fontWeight: '800', color: NAVY_BLUE, letterSpacing: 1.5, marginBottom: verticalScale(5), textTransform: 'uppercase' },
-  title: { fontSize: moderateScale(28), fontWeight: '900', color: '#1E293B', lineHeight: moderateScale(33), marginBottom: verticalScale(8) },
-  description: { fontSize: moderateScale(14.5), color: '#64748B', lineHeight: moderateScale(21), fontWeight: '400' },
+  tag: { fontSize: moderateScale(12), fontWeight: '800', color: NAVY_BLUE, letterSpacing: 1.5, marginBottom: verticalScale(5), textTransform: 'uppercase' },
+  title: { fontSize: moderateScale(30), fontWeight: '900', color: '#1E293B', lineHeight: moderateScale(36), marginBottom: verticalScale(10) },
+  description: { fontSize: moderateScale(16), color: '#64748B', lineHeight: moderateScale(24), fontWeight: '400' },
   buttonShadow: {
     shadowColor: NAVY_BLUE,
     shadowOffset: { width: 0, height: 6 },

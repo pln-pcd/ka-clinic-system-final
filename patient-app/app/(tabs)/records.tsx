@@ -220,14 +220,10 @@ export default function RecordsScreen() {
               <Text style={[s.recordTableCellValue, { flex: 1.8 }]}>{pr.animal || pr.sourceOfExposure || 'Dog / Cat'}</Text>
             </View>
             <View style={[s.recordTableRow, s.recordTableRowAlt]}>
-              <Text style={[s.recordTableCellLabel, { flex: 1.2 }]}>Local Washing</Text>
-              <Text style={[s.recordTableCellValue, { flex: 1.8 }]}>{pr.washTreatment || 'Soap & Running Water'}</Text>
-            </View>
-            <View style={s.recordTableRow}>
               <Text style={[s.recordTableCellLabel, { flex: 1.2 }]}>Known Allergies</Text>
               <Text style={[s.recordTableCellValue, { flex: 1.8 }]}>{pr.allergies || 'None Reported'}</Text>
             </View>
-            <View style={[s.recordTableRow, s.recordTableRowAlt, { borderBottomWidth: 0 }]}>
+            <View style={[s.recordTableRow, { borderBottomWidth: 0 }]}>
               <Text style={[s.recordTableCellLabel, { flex: 1.2 }]}>Attending ABTC</Text>
               <Text style={[s.recordTableCellValue, { flex: 1.8, fontWeight: '700', color: C.charcoal }]}>K&A Animal Bite Center</Text>
             </View>

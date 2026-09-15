@@ -76,13 +76,15 @@ export default function Onboarding1() {
             <View style={styles.indicatorContainer}>
               <View style={[styles.indicator, styles.activeIndicator]} />
               <View style={styles.indicator} />
+              <View style={styles.indicator} />
+              <View style={styles.indicator} />
             </View>
 
             <Text style={styles.tag}>PROTOCOL: DOSE TRACKING</Text>
             <Text style={styles.title}>Strict Dose{"\n"}Protocol</Text>
             
             <Text style={styles.description}>
-              To eliminate the risk of missed doses, our interactive timeline automatically tracks your vaccination schedule and sends timely reminders for every required visit.
+              Your Day 0, 3, 7 and 28 doses are mapped out automatically from your exposure date. See what's done, what's next, and get a reminder before every visit so no dose is ever missed.
             </Text>
           </View>
 
@@ -164,9 +166,9 @@ const styles = StyleSheet.create({
   indicatorContainer: { flexDirection: 'row', marginBottom: verticalScale(12), alignItems: 'center' },
   indicator: { width: scale(7), height: scale(7), borderRadius: scale(3.5), backgroundColor: '#E2E8F0', marginRight: scale(8) },
   activeIndicator: { width: scale(24), height: scale(7), borderRadius: scale(3.5), backgroundColor: NAVY_BLUE },
-  tag: { fontSize: moderateScale(11), fontWeight: '800', color: NAVY_BLUE, letterSpacing: 1.5, marginBottom: verticalScale(5), textTransform: 'uppercase' },
-  title: { fontSize: moderateScale(28), fontWeight: '900', color: '#1E293B', lineHeight: moderateScale(33), marginBottom: verticalScale(8) },
-  description: { fontSize: moderateScale(14.5), color: '#64748B', lineHeight: moderateScale(21), fontWeight: '400' },
+  tag: { fontSize: moderateScale(12), fontWeight: '800', color: NAVY_BLUE, letterSpacing: 1.5, marginBottom: verticalScale(5), textTransform: 'uppercase' },
+  title: { fontSize: moderateScale(30), fontWeight: '900', color: '#1E293B', lineHeight: moderateScale(36), marginBottom: verticalScale(10) },
+  description: { fontSize: moderateScale(16), color: '#64748B', lineHeight: moderateScale(24), fontWeight: '400' },
   buttonShadow: {
     shadowColor: NAVY_BLUE,
     shadowOffset: { width: 0, height: 6 },
