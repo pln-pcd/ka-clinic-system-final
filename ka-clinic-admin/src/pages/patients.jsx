@@ -11,7 +11,7 @@ import * as XLSX from "xlsx";
 import autoTable from "jspdf-autotable";
 import Toast from "../components/Toast";
 import { CLINIC_LOGO_BASE64 } from "../assets/clinicLogoBase64";
-import { Printer, Download, MapPin, AlertTriangle } from "lucide-react";
+import { Printer, Download, MapPin, AlertTriangle, AlertCircle } from "lucide-react";
 import { trackEvent } from "../lib/analytics";
 
 /* ─────────────────────────── CSS ─────────────────────────── */
@@ -1728,6 +1728,127 @@ function EditPatientModal({ patient, onClose, onSave, inventoryItems = [] }) {
 }
 
 /* ─────────────────────────── PIN MAP CONFIRM MODAL (LANDSCAPE) ─────────────────────────── */
+// ── Duplicate-patient detection for the Add Patient wizard ──────────────
+// Compares the form against every loaded record and returns the likely
+// matches, strongest first. Email is already enforced unique elsewhere; this
+// catches the same person re-registered under a new email or a typo'd name.
+const _normName = (v) => (v || '').toLowerCase().replace(/[^a-z]/g, '');
+const _digits = (v) => (v || '').replace(/\D/g, '').slice(-10); // PH mobile: last 10 digits
+function _levenshtein(a, b) {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[b.length];
+}
+function findSimilarPatients(form, patients) {
+  const fname = _normName(form.fname);
+  const lname = _normName(form.lname);
+  const full = fname + lname;
+  const contact = _digits(form.contact);
+  const dob = (form.dob || '').trim();
+  const age = String(form.age || '').trim();
+  if (!full) return [];
+
+  const out = [];
+  for (const p of patients) {
+    const pFull = _normName(p.name);
+    const pParts = (p.name || '').split(/[\s,]+/).filter(Boolean);
+    const pFirst = _normName(pParts[0]);
+    const pLast = _normName(pParts.filter(w => !/^(jr|sr|ii|iii|iv)\.?$/i.test(w)).slice(-1)[0]);
+    const pContact = _digits(p.contact);
+    const pDob = (p.dob || '').trim();
+    const pAge = String(p.age || '').trim();
+
+    const reasons = [];
+    const nameExact = pFirst === fname && pLast === lname;
+    const nameClose = !nameExact && fname && lname && _levenshtein(pFirst + pLast, full) <= 2;
+    const nameContained = !nameExact && !nameClose && (pFull.includes(full) || full.includes(pFull)) && Math.min(pFull.length, full.length) >= 6;
+    if (nameExact) reasons.push('Same name');
+    else if (nameClose) reasons.push('Very similar name');
+    else if (nameContained) reasons.push('Similar name');
+    if (contact && pContact && contact === pContact) reasons.push('Same contact number');
+    if (dob && pDob && dob === pDob) reasons.push('Same date of birth');
+    else if (age && pAge && age === pAge && (nameExact || nameClose)) reasons.push('Same age');
+
+    // A contact match alone is worth showing; a name match needs no extra.
+    if (!reasons.length) continue;
+    const strength = (nameExact ? 3 : nameClose ? 2 : nameContained ? 1 : 0) + (reasons.length - 1) * 2;
+    out.push({ patient: p, reasons, strength, exact: nameExact && reasons.length >= 2 });
+  }
+  return out.sort((a, b) => b.strength - a.strength).slice(0, 5);
+}
+
+function DuplicatePatientModal({ form, matches, onProceed, onCancel }) {
+  if (!matches?.length) return null;
+  const hasExact = matches.some(m => m.exact);
+  const newName = [form.fname, form.mname, form.lname].filter(Boolean).map(formatTitleCase).join(' ');
+  return createPortal(
+    <div className="admin-modal-overlay fixed z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md" onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
+      <div style={{ background: '#FFFFFF', borderRadius: '1.25rem', width: '40rem', maxWidth: '95vw', boxShadow: '0 24px 64px rgba(26,34,64,.22)', overflow: 'hidden', border: '1px solid #E2E8F0' }}>
+        <div style={{ padding: '16px 24px', background: '#FFFBEB', borderBottom: '1px solid #FDE68A', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 8, background: '#FEF3C7', border: '1px solid #FDE68A', color: '#B45309', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <AlertCircle size={18} strokeWidth={2.2} />
+            </div>
+            <div>
+              <h3 style={{ fontSize: '1rem', fontWeight: 900, color: '#0F172A', margin: 0 }}>
+                {hasExact ? 'Possible Duplicate Patient' : 'Similar Patient Found'}
+              </h3>
+              <p style={{ fontSize: '.71875rem', color: '#92400E', margin: 0 }}>
+                {matches.length === 1 ? 'A record' : `${matches.length} records`} already on file {matches.length === 1 ? 'looks' : 'look'} like <strong>{newName}</strong>. Check before registering again.
+              </p>
+            </div>
+          </div>
+          <button type="button" className="modal-close" onClick={onCancel} title="Close" aria-label="Close"><X size={16} strokeWidth={2.2} /></button>
+        </div>
+
+        <div style={{ padding: '18px 24px', display: 'flex', flexDirection: 'column', gap: 10, maxHeight: '55vh', overflowY: 'auto' }}>
+          {matches.map(({ patient: p, reasons, exact }) => (
+            <div key={p.id} style={{ border: `1px solid ${exact ? '#FCA5A5' : '#E2E8F0'}`, background: exact ? '#FEF2F2' : '#F8FAFC', borderRadius: '.75rem', padding: '12px 16px', display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, alignItems: 'start' }}>
+              <div>
+                <div style={{ fontSize: '.9rem', fontWeight: 800, color: '#0F172A' }}>{formatTitleCase(p.name)} <span style={{ fontWeight: 600, color: '#64748B', fontSize: '.75rem' }}>· MRN {p.id || p.mrn || '—'}</span></div>
+                <div style={{ fontSize: '.75rem', color: '#475569', marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: '4px 14px' }}>
+                  <span>{p.age ? `${p.age} yrs` : 'Age —'} · {p.sex || '—'}</span>
+                  <span>{p.contact || 'No contact'}</span>
+                  <span>{p.email || 'No email'}</span>
+                  {p.address && <span>{p.address}</span>}
+                  <span>{p.service || 'PEP'} · registered {p.date || '—'}</span>
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
+                {reasons.map(r => (
+                  <span key={r} style={{ fontSize: '.65rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.4px', padding: '3px 8px', borderRadius: 999, background: exact ? '#FEE2E2' : '#E0E7FF', color: exact ? '#991B1B' : '#3730A3', whiteSpace: 'nowrap' }}>{r}</span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ padding: '14px 24px', borderTop: '1px solid #E2E8F0', background: '#FAFAFA', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button type="button" className="btn-secondary" onClick={onCancel}>Go Back & Review</button>
+          <button
+            type="button"
+            onClick={onProceed}
+            className="px-5 py-2 rounded-xl text-xs font-bold text-white cursor-pointer transition-colors"
+            style={{ background: hasExact ? '#DC2626' : '#3B50DF' }}
+          >
+            {hasExact ? 'Register Anyway (New Person)' : 'Register as New Patient'}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 function PinMapConfirmModal({ patient, saving, onConfirm, onCancel }) {
   if (!patient) return null;
   const fullName = formatTitleCase(patient.name);
@@ -5381,7 +5502,12 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
   }
 
 
-  async function handleAddPatient(form, setSaving) {
+  // Set when the add form matches existing records; the modal either sends
+  // the admin back to review or re-enters handleAddPatient with the check
+  // skipped.
+  const [dupCheck, setDupCheck] = useState(null); // { form, setSaving, matches }
+
+  async function handleAddPatient(form, setSaving, { skipDuplicateCheck = false } = {}) {
     if (!form.fname.trim() || !form.lname.trim()) { showToast('Please fill in first and last name', 'error'); return; }
     if (!form.email.trim()) { showToast('Email is required so the patient can log in to the app', 'error'); return; }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -5400,6 +5526,14 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
     if (existingLocal) {
       showToast(`Email "${normalEmail}" is already registered to ${formatTitleCase(existingLocal.name)} (MRN: ${existingLocal.id || existingLocal.mrn || '—'}). Patient records require a unique email for the Patient App.`, 'error');
       return;
+    }
+
+    if (!skipDuplicateCheck) {
+      const matches = findSimilarPatients(form, patients);
+      if (matches.length) {
+        setDupCheck({ form, setSaving, matches });
+        return;
+      }
     }
 
     if (typeof setSaving === 'function') setSaving(true);
@@ -6286,6 +6420,18 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
       </div>
 
       {showModal && <AddPatientModal onClose={handleCloseAddModal} onAdd={handleAddPatient} inventoryItems={inventoryItems} />}
+      {dupCheck && (
+        <DuplicatePatientModal
+          form={dupCheck.form}
+          matches={dupCheck.matches}
+          onCancel={() => setDupCheck(null)}
+          onProceed={() => {
+            const { form, setSaving } = dupCheck;
+            setDupCheck(null);
+            handleAddPatient(form, setSaving, { skipDuplicateCheck: true });
+          }}
+        />
+      )}
       {editPatient && <EditPatientModal patient={editPatient} onClose={() => setEditPatient(null)} onSave={handleEditSave} inventoryItems={inventoryItems} />}
       {followUpTarget && (
         <FollowUpModal

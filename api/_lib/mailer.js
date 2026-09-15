@@ -25,16 +25,29 @@ const ROLES = {
   },
 };
 
+// Transports are cached per role for the life of the function instance. A
+// fresh createTransport() per send meant a full TLS + SMTP AUTH handshake with
+// Gmail on every OTP (1–3 s); a warm instance now reuses the pooled connection.
+const transportCache = new Map();
+
 function getTransporterForRole(roleKey) {
   const roleConfig = ROLES[roleKey] || ROLES.auth;
   const user = roleConfig.getUser();
   const pass = roleConfig.getPass();
   if (!user || !pass) return null;
-  return {
-    transporter: nodemailer.createTransport({
+  const cacheKey = `${roleConfig.name}:${user}`;
+  let transporter = transportCache.get(cacheKey);
+  if (!transporter) {
+    transporter = nodemailer.createTransport({
       service: 'gmail',
+      pool: true,
+      maxConnections: 2,
       auth: { user, pass },
-    }),
+    });
+    transportCache.set(cacheKey, transporter);
+  }
+  return {
+    transporter,
     from: `"${roleConfig.displayName}" <${user}>`,
     user,
   };

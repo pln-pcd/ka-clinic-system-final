@@ -105,7 +105,10 @@ const CLINICAL_PATTERNS = [
   /\b(dog|cat|puppy|kitten|bat|monkey|rat|animal)\b/,
   // Vaccines, biologics, protocols.
   /\b(vaccin\w*|pep|prep|post-?exposure|pre-?exposure|rig|erig|hrig|immunoglobulin|booster|tetanus|toxoid|essen|antigen|serum)\b/,
-  /\b(dose|dosage|shot|jab|injection|inject\w*|intradermal|intramuscular|day\s*\d+)\b/,
+  /\b(dose|dosage|jab|injection|inject\w*|intradermal|intramuscular|day\s*\d+)\b/,
+  // "shot" only as a vaccine shot — a bare "I got shot" is not a rabies-clinic
+  // question and goes to KAI to judge rather than straight to staff.
+  /\b(vaccine|vaccination|rabies|booster|tetanus|anti-?rabies|flu)\s+shots?\b|\bshots?\s+(schedule|for\s+rabies|of\s+(the\s+)?vaccine)\b/,
   // Triage, category, and risk language.
   /\b(categor(y|ies)\s*(i{1,3}|1|2|3)?|exposure\s+categor\w*|triage|risk\s+(level|assessment)|observation\s+period)\b/,
   // Symptoms, diagnosis, treatment.
@@ -171,12 +174,10 @@ function classifyMessage(text) {
 
   if (OUT_OF_SCOPE_PATTERNS.some(re => re.test(q))) return 'out_of_scope';
 
-  // Unrecognized: the keyword lists cannot tell. Hand it to the model under
-  // the KAI instruction, whose exact-phrase replies decide the outcome —
-  // clinical refusal → staff hand-off, out-of-scope rejection → no hand-off.
-  // If the model is unreachable, handler() falls back to the safe side and
-  // escalates (see 'unclassified' handling there).
-  return 'unclassified';
+  // Unrecognized: nothing clinical matched, so it is not a staff matter. Staff
+  // hand-off is reserved for rabies/medical messages; everything else the bot
+  // cannot place gets the polite out-of-scope rejection.
+  return 'out_of_scope';
 }
 
 // Named export purely so the scope boundary can be asserted in isolation;
@@ -214,9 +215,7 @@ const OUT_OF_SCOPE_REPLY =
 // bot genuinely had nothing to say. Compared by identity at the end of the
 // handler to tell "no answer" apart from a real keyword-matched answer, so it
 // must stay a single shared constant rather than a duplicated literal.
-const GENERIC_FALLBACK_REPLY =
-  "I'm not able to answer that one. Please reach out to K&A Clinic staff about it — they can help you directly. " +
-  'I can help here with using the app, clinic hours, booking an appointment, vaccine pricing, and clinic contact details.';
+const GENERIC_FALLBACK_REPLY = OUT_OF_SCOPE_REPLY;
 
 // Section 5A applies to the Gemini path too: the model can return one of the
 // system instruction's own non-answers (the "unrelated question" refusal, or
@@ -389,20 +388,14 @@ export default async function handler(req, res) {
     // should pick it up. Distinguishes a keyword-matched answer (hours,
     // booking: a real answer, no escalation) from the catch-all greeting
     // getFallbackReply returns when nothing matched at all.
+    // Staff hand-off happens ONLY for clinical content. An in-scope question
+    // the bot could not answer (keyword miss, model non-answer, model down)
+    // gets the out-of-scope wording instead of a hand-off.
     let needsEscalation = false;
-    // 'unclassified' never leaves the server: the model's reply settles it
-    // below, and a real answer means it was ordinary Category 1 after all.
-    let finalCategory = category === 'unclassified' ? 'in_scope' : category;
+    let finalCategory = category;
     if (!text) {
-      if (category === 'unclassified') {
-        // No model to judge it: fail to the safe side and let a human read it.
-        text = clinicalReplyFor(channel);
-        needsEscalation = true;
-        finalCategory = 'clinical';
-      } else {
-        text = getFallbackReply(prompt);
-        needsEscalation = text === GENERIC_FALLBACK_REPLY;
-      }
+      text = getFallbackReply(prompt);
+      if (text === GENERIC_FALLBACK_REPLY) finalCategory = 'out_of_scope';
     } else if (isModelOutOfScope(text)) {
       // KAI's Category 3 rejection: polite refusal, never a staff hand-off.
       text = OUT_OF_SCOPE_REPLY;
@@ -414,10 +407,10 @@ export default async function handler(req, res) {
       needsEscalation = true;
       finalCategory = 'clinical';
     } else if (isModelNonAnswer(text)) {
-      // The model answered, but its answer was one of its own non-answers —
-      // including the clinical refusal the system instruction mandates, which
-      // catches anything clinical the keyword classifier missed.
-      needsEscalation = true;
+      // The model returned one of its own non-answers to an in-scope
+      // question. Not clinical (that phrase is caught above), so no hand-off.
+      text = OUT_OF_SCOPE_REPLY;
+      finalCategory = 'out_of_scope';
     }
     console.log(`[chatbot] source=${source} category=${finalCategory} escalate=${needsEscalation}${fallbackReason ? ` reason=${fallbackReason}` : ''} model=${modelName}`);
 

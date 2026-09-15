@@ -66,7 +66,20 @@ export default function AdminLogin({ onSuccess, onBack }) {
   const [showForgot, setShowForgot] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [slide, setSlide] = useState(0);
-  const [videoError, setVideoError] = useState(false);
+  // Background slideshow: pets, vets and clinic scenes under the same navy
+  // wash the old video used to sit under. Crossfades every few seconds; the first
+  // frame is preloaded from index.html so the backdrop paints immediately.
+  const LOGIN_SLIDES = [1, 2, 3, 4, 5, 6].map(n => `/assets/dashboard/login/${n}.jpg`);
+  const [slideIndex, setSlideIndex] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setSlideIndex(i => (i + 1) % LOGIN_SLIDES.length), 6000);
+    return () => clearInterval(t);
+  }, []);
+  // Warm the next image so the crossfade never shows a blank frame.
+  useEffect(() => {
+    const img = new Image();
+    img.src = LOGIN_SLIDES[(slideIndex + 1) % LOGIN_SLIDES.length];
+  }, [slideIndex]);
 
   // Forgot password & Set New Password
   const [forgotStep, setForgotStep] = useState('request'); // 'request' | 'new-password' | 'success'
@@ -94,7 +107,6 @@ export default function AdminLogin({ onSuccess, onBack }) {
 
   const emailRef = useRef();
   const otpRef = useRef();
-  const videoRef = useRef();
 
   const REMEMBER_KEY = 'ka_admin_remembered_email';
 
@@ -488,36 +500,27 @@ export default function AdminLogin({ onSuccess, onBack }) {
   return (
     <div className="relative min-h-screen w-full flex flex-col justify-between overflow-hidden bg-[#060e24] font-sans selection:bg-blue-900 selection:text-white">
 
-      {/* ── BACKGROUND: Video Background with Natural Proportion & Blue-Navy Atmosphere ── */}
+      {/* ── BACKGROUND: Photo slideshow with Blue-Navy Atmosphere ── */}
       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
         {/* Base dark navy backdrop */}
         <div className="absolute inset-0 bg-[#060e24]" />
 
-        {/* Dynamic Video Layer.
-            The poster is the first frame, so the backdrop is on screen from the
-            first paint instead of showing bare navy while 25 seconds of video
-            buffers. The clip itself is a 720p re-encode (412KB, down from a
-            1080p 5.8MB original) written with the moov atom first, so playback
-            starts on the opening bytes rather than after the whole download. */}
-        {!videoError && (
-          <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
-            <video
-              ref={videoRef}
-              autoPlay
-              loop
-              muted
-              playsInline
-              preload="auto"
-              poster="/assets/dashboard/login-poster.jpg"
-              onError={() => setVideoError(true)}
-              className="min-w-full min-h-full w-auto h-auto max-w-none object-cover opacity-80"
-            >
-              <source src="/assets/dashboard/login-bg.mp4" type="video/mp4" />
-              <source src="/assets/dashboard/login.mp4" type="video/mp4" />
-              <source src="/login.mp4" type="video/mp4" />
-            </video>
-          </div>
-        )}
+        {/* Slideshow layer: every slide is mounted and stacked; only the active
+            one is opaque, so switching is a pure opacity crossfade with a slow
+            Ken Burns drift on the active frame. */}
+        {LOGIN_SLIDES.map((src, i) => (
+          <img
+            key={src}
+            src={src}
+            alt=""
+            aria-hidden="true"
+            loading={i === 0 ? 'eager' : 'lazy'}
+            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-[1800ms] ease-in-out ${
+              i === slideIndex ? 'opacity-80 animate-[loginKenBurns_7s_ease-out_forwards]' : 'opacity-0'
+            }`}
+          />
+        ))}
+        <style>{`@keyframes loginKenBurns { from { transform: scale(1); } to { transform: scale(1.06); } }`}</style>
 
         {/* Ambient Navy & Blue Atmospheric Glows */}
         <div className="absolute -top-32 -left-32 w-[650px] h-[650px] bg-blue-600/25 rounded-full blur-[140px]" />
@@ -563,7 +566,7 @@ export default function AdminLogin({ onSuccess, onBack }) {
       {/* ── MAIN CONTENT AREA (Split Layout: Left Copy + Right Floating Card) ── */}
       <main className="relative z-20 w-full max-w-7xl mx-auto px-6 sm:px-10 md:px-14 py-8 md:py-12 flex-1 flex flex-col md:flex-row items-center justify-between gap-10 md:gap-16">
 
-        {/* ── LEFT HERO COPY SECTION (Over Video) ── */}
+        {/* ── LEFT HERO COPY SECTION (Over Slideshow) ── */}
         <div className="w-full md:w-1/2 flex flex-col justify-center text-left max-w-xl">
           {/* Blue Pill Badge */}
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-950/70 backdrop-blur-md border border-blue-400/30 text-sky-300 text-xs font-bold tracking-wide w-fit mb-5 animate-in fade-in slide-in-from-bottom-2 duration-300 shadow-sm">

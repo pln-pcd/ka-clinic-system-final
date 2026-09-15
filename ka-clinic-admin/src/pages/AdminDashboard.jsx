@@ -481,6 +481,7 @@ export default function AdminDashboard({ onLogout }) {
           title: data.status === 'confirmed' ? 'Appointment Confirmed' : data.status === 'cancelled' ? 'Appointment Cancelled' : 'New Appointment Request',
           message: `${data.name || data.patient || 'Unknown'} — ${data.date || ''} at ${data.time || ''}`,
           time: data.createdAt ? new Date(data.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—',
+          ts: data.updatedAt || data.createdAt || null,
           icon: 'apt'
         };
       });
@@ -503,6 +504,7 @@ export default function AdminDashboard({ onLogout }) {
           title: 'New Message',
           message: data.lastMessage || 'You have an unread message',
           time: data.updatedAt ? new Date(data.updatedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—',
+          ts: data.updatedAt || null,
           icon: 'msg'
         };
       });
@@ -585,8 +587,18 @@ export default function AdminDashboard({ onLogout }) {
     return () => unsub();
   }, []);
 
+  // Tab window. Items with no timestamp (inventory, overdue) have no "when",
+  // so they show under every tab.
+  const notifWindowStart = (() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    if (notifTab === 'Today') return d.getTime();
+    if (notifTab === 'This Week') return d.getTime() - 6 * 24 * 60 * 60 * 1000;
+    return 0;
+  })();
   const filteredNotifications = notifications.filter(n => {
     if (dismissedNotifIds.has(n.id)) return false;
+    if (notifWindowStart && n.ts && n.ts < notifWindowStart) return false;
     if (n.id.startsWith('inv-')) {
       if (n.type === 'critical' || n.type === 'warning') return notifConfig.lowStock !== false;
       return notifConfig.expiringStock !== false;
@@ -1121,7 +1133,7 @@ export default function AdminDashboard({ onLogout }) {
 
                   {/* SEGMENTED TAB PILL CONTAINER */}
                   <div className="bg-slate-100/90 p-1 rounded-2xl flex items-center mb-4 text-xs font-semibold text-slate-500">
-                    {['Today', 'This Week', 'Earlier'].map((tab) => {
+                    {['Today', 'This Week', 'All'].map((tab) => {
                       const isSelected = notifTab === tab;
                       return (
                         <button
