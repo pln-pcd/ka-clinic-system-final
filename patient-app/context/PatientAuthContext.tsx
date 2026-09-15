@@ -2,12 +2,22 @@
 // identity (MRN) the rest of the app keys its Firestore reads on, so every
 // screen shares one auth listener + one MRN lookup instead of duplicating both.
 //
-// Also owns two session-lifetime concerns that must run before any screen
-// renders: enforcing the "keep me signed in" choice, and registering/watching
-// this device so a sign-out issued elsewhere takes effect here.
+// Also owns three session-lifetime concerns that must run before any screen
+// renders: enforcing the "keep me signed in" choice, gating every non-guest
+// session behind the login second factor (OTP, or a server-verified trusted
+// device), and registering/watching this device so a sign-out issued
+// elsewhere takes effect here.
+//
+// Second-factor gate: `user` exposed to the app is null until `verified` is
+// true for the current Firebase session. A password-only sign-in therefore
+// never reaches the tabs. Verification is granted only by
+//   • completeSecondFactor() — called by the OTP screen after a code passes,
+//     or by login after checkLoginTrust() returned true; or
+//   • the launch path below, where a restored session is re-checked against
+//     the server and signed out if this device is not trusted.
 import type { User } from 'firebase/auth';
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { auth, onAuthStateChanged, resolveMRNForUser, signOut } from '../config/firebase';
+import { auth, checkLoginTrust, onAuthStateChanged, resolveMRNForUser, signOut } from '../config/firebase';
 import { getKeepSignedIn } from '../config/appPrefs';
 import { clearThisDeviceSession, registerThisDevice, watchOwnSession } from '../config/deviceSessions';
 
@@ -18,6 +28,10 @@ type PatientAuthState = {
   loading: boolean;
   mrnLoading: boolean;
   deviceId: string | null;
+  /** Firebase session that exists but has not passed the second factor yet. */
+  pendingUser: User | null;
+  /** Mark the current Firebase session as second-factor verified. */
+  completeSecondFactor: () => void;
 };
 
 const PatientAuthContext = createContext<PatientAuthState>({
@@ -27,10 +41,15 @@ const PatientAuthContext = createContext<PatientAuthState>({
   loading: true,
   mrnLoading: false,
   deviceId: null,
+  pendingUser: null,
+  completeSecondFactor: () => {},
 });
 
 export function PatientAuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [authUser, setAuthUser] = useState<User | null>(null);
+  // uid of the session that passed the second factor. Compared against the
+  // live Firebase uid so a new sign-in never inherits an older verification.
+  const [verifiedUid, setVerifiedUid] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [mrn, setMrn] = useState<string | null>(null);
   const [mrnLoading, setMrnLoading] = useState(false);
@@ -53,17 +72,41 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
           if (!keep) {
             try { await clearThisDeviceSession(fbUser.uid); } catch {}
             await signOut(auth);
-            setUser(null);
+            setAuthUser(null);
             setLoading(false);
             return;
           }
+          // "Keep me signed in" was ticked, but that alone is not enough: the
+          // server must confirm THIS install still holds a valid trust token.
+          // Anything short of an explicit yes (no token, expired, revoked,
+          // reinstall, offline) signs the restored session out.
+          const trusted = await checkLoginTrust();
+          if (!trusted) {
+            try { await clearThisDeviceSession(fbUser.uid); } catch {}
+            await signOut(auth);
+            setAuthUser(null);
+            setLoading(false);
+            return;
+          }
+          setVerifiedUid(fbUser.uid);
         }
       }
-      setUser(fbUser);
+      setAuthUser(fbUser);
       setLoading(false);
     });
     return unsub;
   }, []);
+
+  // Guests have no second factor; everyone else must have passed it for the
+  // exact uid currently signed in.
+  const user: User | null =
+    authUser && (authUser.isAnonymous || verifiedUid === authUser.uid) ? authUser : null;
+  const pendingUser: User | null = authUser && !user ? authUser : null;
+
+  const completeSecondFactor = () => {
+    const u = auth.currentUser;
+    if (u) setVerifiedUid(u.uid);
+  };
 
   useEffect(() => {
     if (!user || user.isAnonymous) {
@@ -102,7 +145,7 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
 
   return (
     <PatientAuthContext.Provider
-      value={{ user, mrn, isGuest: !!user?.isAnonymous, loading, mrnLoading, deviceId }}
+      value={{ user, mrn, isGuest: !!user?.isAnonymous, loading, mrnLoading, deviceId, pendingUser, completeSecondFactor }}
     >
       {children}
     </PatientAuthContext.Provider>

@@ -3,6 +3,7 @@ import { normalizeMRN } from './_lib/mrn.js';
 import { maskEmail } from './_lib/mask.js';
 import { buildOtpEmailHtml, buildOtpEmailText } from './_lib/emailTemplate.js';
 import { generateOtp, isInCooldown, getCooldownRemainingSeconds, sendOtpEmailOrRollback } from './_lib/otp.js';
+import { isDeviceTrusted, requireAuthenticatedPatient, touchTrustedDevice, untrustDevice } from './_lib/patientAuth.js';
 
 const COOLDOWN_MS = 30 * 1000;
 const OTP_TTL_MS = 5 * 60 * 1000;
@@ -17,10 +18,102 @@ async function findAuthorizedPatient(mrn) {
   return null;
 }
 
+// ── Login second factor (shares this route: Hobby plan caps functions at 12) ──
+//
+// 'login-check'  → is THIS device trusted? Never sends mail. Defaults to
+//                  { trusted: false } on any doubt.
+// 'login-send'   → email a sign-in code to the patient's address on file.
+// 'login-untrust'→ forget this device (called on explicit sign-out).
+// All three require the Firebase ID token of the just-signed-in patient.
+async function handleLoginCheck(req, res) {
+  const caller = await requireAuthenticatedPatient(req);
+  if (caller.error) {
+    res.status(caller.status).json({ success: false, error: caller.error });
+    return;
+  }
+  const deviceId = String(req.body?.deviceId || '');
+  const trustToken = String(req.body?.trustToken || '');
+  let trusted = false;
+  try {
+    trusted = await isDeviceTrusted({ uid: caller.uid, deviceId, trustToken });
+  } catch (err) {
+    console.error('login-check trust lookup failed (treating as untrusted):', err);
+    trusted = false;
+  }
+  if (trusted) await touchTrustedDevice({ uid: caller.uid, deviceId });
+  res.status(200).json({ success: true, trusted });
+}
+
+async function handleLoginSend(req, res) {
+  const caller = await requireAuthenticatedPatient(req);
+  if (caller.error) {
+    res.status(caller.status).json({ success: false, error: caller.error });
+    return;
+  }
+
+  const otpRef = db.collection('patientLoginOtps').doc(caller.uid);
+  const existing = await otpRef.get();
+  if (isInCooldown(existing.exists ? existing.data() : null, COOLDOWN_MS)) {
+    const remainingSec = getCooldownRemainingSeconds(existing.exists ? existing.data() : null, COOLDOWN_MS) || 30;
+    res.status(429).json({
+      success: false,
+      error: `Please wait before requesting another code. Try again in ${remainingSec} second${remainingSec === 1 ? '' : 's'}.`,
+      retryAfter: remainingSec,
+    });
+    return;
+  }
+
+  const otp = generateOtp();
+  await otpRef.set({
+    uid: caller.uid,
+    otp,
+    expiresAt: Date.now() + OTP_TTL_MS,
+    attempts: 0,
+    createdAt: Date.now(),
+  });
+
+  const { error: sendError } = await sendOtpEmailOrRollback({
+    otpRef,
+    to: caller.email,
+    subject: `${otp} is your K&A Clinic sign-in code`,
+    html: buildOtpEmailHtml({ otp }),
+    text: buildOtpEmailText({ otp }),
+  });
+  if (sendError) {
+    res.status(502).json({ success: false, error: 'Failed to send the verification email. Please try again.' });
+    return;
+  }
+
+  res.status(200).json({ success: true, maskedEmail: maskEmail(caller.email) });
+}
+
+async function handleLoginUntrust(req, res) {
+  const caller = await requireAuthenticatedPatient(req);
+  if (caller.error) {
+    res.status(caller.status).json({ success: false, error: caller.error });
+    return;
+  }
+  await untrustDevice({ uid: caller.uid, deviceId: String(req.body?.deviceId || '') });
+  res.status(200).json({ success: true });
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ success: false, error: 'Method not allowed.' });
     return;
+  }
+
+  const action = req.body?.action || '';
+  if (action === 'login-check' || action === 'login-send' || action === 'login-untrust') {
+    try {
+      if (action === 'login-check') return await handleLoginCheck(req, res);
+      if (action === 'login-send') return await handleLoginSend(req, res);
+      return await handleLoginUntrust(req, res);
+    } catch (err) {
+      console.error(`send-otp ${action} error:`, err);
+      res.status(500).json({ success: false, error: 'Something went wrong. Please try again.' });
+      return;
+    }
   }
 
   try {

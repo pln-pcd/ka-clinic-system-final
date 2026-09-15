@@ -5,6 +5,7 @@
 // patient asked to stay signed in. Both are device-local by design — they are
 // properties of this phone, not of the clinic record.
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 
 const ONBOARDING_SEEN_KEY = 'kna.onboardingSeen.v1';
 const KEEP_SIGNED_IN_KEY  = 'kna.keepSignedIn.v1';
@@ -67,5 +68,32 @@ export async function getDeviceId(): Promise<string> {
   } catch {
     // Ephemeral fallback: the device still appears in the list for this run.
     return `dev_ephemeral_${Math.random().toString(36).slice(2, 10)}`;
+  }
+}
+
+// ── Trusted-device token (login OTP bypass) ──────────────────────────
+// Minted by the server after an OTP pass with "Keep me signed in" ticked.
+// Kept in the OS keystore (expo-secure-store), not AsyncStorage: Android
+// auto-backup can restore AsyncStorage onto a fresh install, and a reinstall
+// must NOT inherit trust. Keystore-backed values do not survive uninstall.
+// Web has no secure store, so web never holds a token and always gets OTP.
+const TRUST_TOKEN_KEY = 'kna.trustToken.v1';
+
+export async function getTrustToken(): Promise<string | null> {
+  try {
+    if (!(await SecureStore.isAvailableAsync())) return null;
+    return (await SecureStore.getItemAsync(TRUST_TOKEN_KEY)) || null;
+  } catch {
+    return null; // fail closed: no token → OTP required
+  }
+}
+
+export async function setTrustToken(token: string | null): Promise<void> {
+  try {
+    if (!(await SecureStore.isAvailableAsync())) return;
+    if (token) await SecureStore.setItemAsync(TRUST_TOKEN_KEY, token);
+    else await SecureStore.deleteItemAsync(TRUST_TOKEN_KEY);
+  } catch {
+    // Non-fatal: without a stored token the next sign-in simply asks for OTP.
   }
 }

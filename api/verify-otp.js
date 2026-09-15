@@ -1,5 +1,6 @@
 import { auth, db } from './_lib/firebaseAdmin.js';
 import { normalizeMRN } from './_lib/mrn.js';
+import { requireAuthenticatedPatient, trustDevice } from './_lib/patientAuth.js';
 
 const MAX_ATTEMPTS = 5;
 
@@ -115,10 +116,75 @@ async function handleCompleteSignup(req, res) {
     res.status(200).json({ success: true, uid: userRecord.uid, email });
 }
 
+// ── Login second factor ───────────────────────────────────────────────
+// Verifies the code emailed by /api/send-otp {action:'login-send'}. On
+// success the one-time code is destroyed; if the patient asked to stay
+// signed in on this device, a trust token is minted so the NEXT sign-in from
+// this same install can skip the code (see _lib/patientAuth.js).
+async function handleLoginVerify(req, res) {
+  const caller = await requireAuthenticatedPatient(req);
+  if (caller.error) {
+    res.status(caller.status).json({ success: false, error: caller.error });
+    return;
+  }
+
+  const code = String(req.body?.code || '').trim();
+  const rememberDevice = req.body?.rememberDevice === true;
+  const deviceId = String(req.body?.deviceId || '');
+  const deviceLabel = String(req.body?.deviceLabel || '');
+  if (!/^\d{6}$/.test(code)) {
+    res.status(400).json({ success: false, error: 'Please enter the 6-digit code.' });
+    return;
+  }
+
+  const otpRef = db.collection('patientLoginOtps').doc(caller.uid);
+  const otpSnap = await otpRef.get();
+  if (!otpSnap.exists) {
+    res.status(400).json({ success: false, error: 'No verification code found. Please request a new one.' });
+    return;
+  }
+  const record = otpSnap.data();
+  if (Date.now() >= record.expiresAt) {
+    await otpRef.delete();
+    res.status(400).json({ success: false, error: 'This code has expired. Please request a new one.' });
+    return;
+  }
+  if ((record.attempts || 0) >= MAX_ATTEMPTS) {
+    await otpRef.delete();
+    res.status(429).json({ success: false, error: 'Too many incorrect attempts. Please request a new code.' });
+    return;
+  }
+  if (code !== record.otp) {
+    await otpRef.update({ attempts: (record.attempts || 0) + 1 });
+    res.status(400).json({ success: false, error: 'Incorrect code. Please try again.' });
+    return;
+  }
+
+  await otpRef.delete();
+
+  let trustToken = null;
+  if (rememberDevice && deviceId) {
+    const minted = await trustDevice({ uid: caller.uid, deviceId, deviceLabel });
+    trustToken = minted.token;
+  }
+
+  res.status(200).json({ success: true, trustToken });
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ success: false, error: 'Method not allowed.' });
     return;
+  }
+
+  if (req.body?.action === 'login-verify') {
+    try {
+      return await handleLoginVerify(req, res);
+    } catch (err) {
+      console.error('login-verify error:', err);
+      res.status(500).json({ success: false, error: 'Something went wrong verifying the code. Please try again.' });
+      return;
+    }
   }
 
   // Two actions on one route: the default verifies the emailed code, and

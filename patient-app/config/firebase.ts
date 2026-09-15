@@ -15,6 +15,7 @@ import {
 // missing from the published v10 type defs for React Native builds.
 import { getReactNativePersistence } from 'firebase/auth';
 import { Platform } from 'react-native';
+import { getDeviceId, getTrustToken, setTrustToken } from './appPrefs';
 import { collection, doc, getDoc, getDocs, getFirestore, limit, query, setDoc, where } from 'firebase/firestore';
 
 export const firebaseConfig = {
@@ -181,13 +182,15 @@ export type SendOtpResult = {
 // dev-server HTML, which is why an unconfigured API_BASE_URL surfaces as a
 // confusing "JSON Parse error: Unexpected character: <" instead of a clear
 // message). Fail fast with an actionable error instead.
-async function postToApi<T>(path: string, body: unknown): Promise<T> {
+async function postToApi<T>(path: string, body: unknown, idToken?: string): Promise<T> {
   if (!API_BASE_URL) {
     throw new Error('The clinic server address is not configured for this app build (no EXPO_PUBLIC_API_BASE_URL and no app.json extra.apiBaseUrl). Contact the clinic if this keeps happening.');
   }
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (idToken) headers.Authorization = `Bearer ${idToken}`;
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(body),
   });
   let data: any;
@@ -230,6 +233,72 @@ export const completeEmailSignup = async (record: AuthorizedPatient, password: s
     await _updateProfile(credential.user, { displayName: record.name }).catch(() => {});
   }
   return credential.user;
+};
+
+// ── Login second factor (OTP unless this device is trusted) ───────────
+// After the password succeeds the session is NOT usable until either
+// checkLoginTrust() says this exact device holds a valid server-side trust
+// token, or the patient passes verifyLoginOTP(). PatientAuthContext enforces
+// this by hiding the Firebase user from the app until one of those happens.
+const describeDevice = () =>
+  Platform.OS === 'ios' ? `iPhone / iPad · iOS ${Platform.Version ?? ''}` :
+  Platform.OS === 'android' ? `Android device · ${Platform.Version ?? ''}` :
+  'Web browser';
+
+const currentIdToken = async (): Promise<string> => {
+  const u = auth.currentUser;
+  if (!u) throw new Error('Not signed in.');
+  return u.getIdToken();
+};
+
+/** Server-side answer to "is THIS install trusted?". Never sends mail. Any
+ *  failure (network, missing token, bad token) resolves to false. */
+export const checkLoginTrust = async (): Promise<boolean> => {
+  try {
+    const trustToken = await getTrustToken();
+    if (!trustToken) return false;
+    const deviceId = await getDeviceId();
+    const data = await postToApi<{ trusted: boolean }>('/api/send-otp', { action: 'login-check', deviceId, trustToken }, await currentIdToken());
+    if (data.trusted !== true) {
+      // Server rejected it (expired / revoked / reinstall mismatch): drop it so
+      // we stop presenting a dead token.
+      await setTrustToken(null);
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+export const sendLoginOTP = async (): Promise<SendOtpResult> => {
+  const data = await postToApi<{ maskedEmail: string }>('/api/send-otp', { action: 'login-send' }, await currentIdToken());
+  return { maskedEmail: data.maskedEmail };
+};
+
+/** Verifies the emailed code. With rememberDevice the server mints a trust
+ *  token for this install, which is stored in the keystore. */
+export const verifyLoginOTP = async (code: string, rememberDevice: boolean): Promise<void> => {
+  const deviceId = await getDeviceId();
+  const data = await postToApi<{ trustToken: string | null }>('/api/verify-otp', {
+    action: 'login-verify',
+    code,
+    rememberDevice,
+    deviceId,
+    deviceLabel: describeDevice(),
+  }, await currentIdToken());
+  await setTrustToken(rememberDevice && data.trustToken ? data.trustToken : null);
+};
+
+/** Explicit sign-out forgets this device on both sides. Best effort. */
+export const forgetTrustedDevice = async (): Promise<void> => {
+  try {
+    const deviceId = await getDeviceId();
+    if (auth.currentUser && !auth.currentUser.isAnonymous) {
+      await postToApi('/api/send-otp', { action: 'login-untrust', deviceId }, await currentIdToken());
+    }
+  } catch {}
+  await setTrustToken(null);
 };
 
 // Thrown when the MRN is valid but no Firebase Auth account exists for it yet.

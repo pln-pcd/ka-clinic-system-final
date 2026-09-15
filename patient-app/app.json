@@ -18,18 +18,27 @@
         }
       ],
       [
+        "expo-media-library",
+        {
+          "savePhotosPermission": "Allow K&A Clinic to save your vaccination record card to your photos.",
+          "isAccessMediaLocationEnabled": false
+        }
+      ],
+      [
         "expo-notifications",
         {
           "icon": "./assets/notification-icon.png",
           "color": "#C8102E"
         }
       ],
-      "expo-router"
+      "expo-router",
+      "expo-secure-store"
     ],
     "ios": {
       "infoPlist": {
         "NSCameraUsageDescription": "This app needs camera access so you can take a profile photo.",
-        "NSPhotoLibraryUsageDescription": "This app needs photo library access so you can choose a profile photo."
+        "NSPhotoLibraryUsageDescription": "This app needs photo library access so you can choose a profile photo.",
+        "NSPhotoLibraryAddUsageDescription": "This app saves your vaccination record card image to your photo library."
       },
       "bundleIdentifier": "com.anonymous.kna-rabies-monitoring"
     },
@@ -46,7 +55,8 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon-foreground.png",
         "backgroundColor": "#FFFFFF"
-      }
+      },
+      "allowBackup": false
     },
     "extra": {
       "eas": {

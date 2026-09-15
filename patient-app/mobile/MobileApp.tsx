@@ -57,6 +57,7 @@ export default function MobileApp() {
         <Stack.Screen name="auth/login" />
         <Stack.Screen name="auth/signup" />
         <Stack.Screen name="auth/forgot-password" />
+        <Stack.Screen name="auth/verify-login-otp" />
         <Stack.Screen name="onboarding" />
         <Stack.Screen name="onboarding1" />
         <Stack.Screen name="onboarding2" />

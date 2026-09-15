@@ -18,8 +18,9 @@ import {
 } from 'react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getAuthErrorMessage, signInAsGuest, signInWithMRN } from '../../config/firebase';
+import { checkLoginTrust, getAuthErrorMessage, sendLoginOTP, signInAsGuest, signInWithMRN } from '../../config/firebase';
 import { markOnboardingSeen, setKeepSignedIn } from '../../config/appPrefs';
+import { usePatientAuth } from '../../context/PatientAuthContext';
 import { moderateScale, scale, verticalScale } from '../../constants/scale';
 
 const { height } = Dimensions.get('window');
@@ -39,6 +40,7 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   // Defaults off: this is a medical record, and the phone may be shared.
   const [keepSignedIn, setKeepSignedInState] = useState(false);
+  const { completeSecondFactor } = usePatientAuth();
 
   const handleLogin = async () => {
     setError('');
@@ -57,7 +59,22 @@ export default function LoginScreen() {
       await signInWithMRN(cleanMRN, password);
       // Anyone who can sign in is by definition not a first-time user.
       await markOnboardingSeen();
-      router.replace('/(tabs)');
+
+      // Second factor. The password alone never opens the app: the session is
+      // held as "pending" by PatientAuthContext until either the server vouches
+      // for THIS device (trust token from an earlier OTP + "keep me signed in")
+      // or the patient enters the emailed code.
+      const trusted = await checkLoginTrust();
+      if (trusted) {
+        completeSecondFactor();
+        router.replace('/(tabs)');
+        return;
+      }
+      const { maskedEmail } = await sendLoginOTP();
+      router.replace({
+        pathname: '/auth/verify-login-otp',
+        params: { maskedEmail, remember: keepSignedIn ? '1' : '0' },
+      });
     } catch (e: any) {
       setError(getAuthErrorMessage(e));
     } finally {
