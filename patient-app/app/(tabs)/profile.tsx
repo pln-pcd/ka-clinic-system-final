@@ -3,10 +3,12 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
+import { resetTo } from '../../utils/navigation';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import {
   Alert,
+  AppState,
   Image,
   ScrollView,
   StatusBar,
@@ -34,8 +36,14 @@ import { moderateScale, scale, verticalScale } from '../../constants/scale';
 import CustomAlertModal, { CustomAlertConfig } from '../../components/CustomAlertModal';
 import {
   ensureNotificationPermission,
+  hasNotificationPermission,
+  isNotificationPermissionBlocked,
+  isPushEnabledByUser,
+  openNotificationSettings,
   presentLocalNotification,
   registerForPushNotifications,
+  setPushEnabledByUser,
+  unregisterPushNotifications,
 } from '../../config/notifications';
 
 // "3 hours ago" style stamp for the device list — absolute dates read as noise
@@ -167,13 +175,20 @@ export default function ProfileScreen() {
       }
     }).catch(() => {});
 
-    if (isGuest || user?.isAnonymous) {
-      setNotificationsEnabled(false);
-    } else {
-      AsyncStorage.getItem(`kna:pushNotifs:${uid}`).then(val => {
-        if (val !== null) setNotificationsEnabled(val === 'true');
-      }).catch(() => {});
-    }
+  }, [user?.uid, isGuest, user?.isAnonymous]);
+
+  // The switch shows what will actually happen: ON only when the patient wants
+  // push AND the phone allows it. Re-checked on returning to the app, since
+  // the permission can be changed in phone Settings while the app is away.
+  useEffect(() => {
+    if (!user || isGuest || user.isAnonymous) { setNotificationsEnabled(false); return; }
+    const sync = async () => {
+      const [wanted, allowed] = await Promise.all([isPushEnabledByUser(user.uid), hasNotificationPermission()]);
+      setNotificationsEnabled(wanted && allowed);
+    };
+    sync();
+    const sub = AppState.addEventListener('change', st => { if (st === 'active') sync(); });
+    return () => sub.remove();
   }, [user?.uid, isGuest, user?.isAnonymous]);
 
   // The clinic record wins for anything the clinic maintains. This used to
@@ -323,13 +338,14 @@ export default function ProfileScreen() {
         if (isThis) {
           try {
             if (user?.uid) await clearThisDeviceSession(user.uid);
+            await unregisterPushNotifications();
             await forgetTrustedDevice();
             await setKeepSignedIn(false);
             await signOut(auth);
           } catch (e) {
             console.log(e);
           }
-          router.replace('/auth/login');
+          resetTo(router, '/auth/login');
         } else {
           try {
             if (user?.uid) await revokeDeviceSession(user.uid, target.deviceId);
@@ -388,13 +404,16 @@ export default function ProfileScreen() {
         hideAlert();
         try {
           if (user?.uid) await clearThisDeviceSession(user.uid);
+          // Before signOut: needs the session, and stops this patient's
+          // reminders from reaching whoever uses the phone next.
+          await unregisterPushNotifications();
           await forgetTrustedDevice();
           await setKeepSignedIn(false);
           await signOut(auth);
         } catch (e) {
           console.log(e);
         }
-        router.replace('/auth/login');
+        resetTo(router, '/auth/login');
       },
       secondaryButtonText: 'Cancel',
       onSecondaryPress: hideAlert,
@@ -521,25 +540,31 @@ export default function ProfileScreen() {
       return;
     }
 
-    const uid = user?.uid || 'guest';
+    const uid = user?.uid;
+    if (!uid) return;
 
     if (value) {
       const granted = await ensureNotificationPermission(true);
       if (!granted) {
         setNotificationsEnabled(false);
-        await AsyncStorage.setItem(`kna:pushNotifs:${uid}`, 'false').catch(() => {});
+        // Once the patient has refused, Android/iOS stop showing the dialog;
+        // only phone Settings can turn it back on, so offer to go there.
+        const blocked = await isNotificationPermissionBlocked();
         showAlert({
           type: 'warning',
           title: 'Permission Required',
-          message: 'Notifications are disabled in your phone settings. Please enable notifications for K&A Clinic in your device Settings.',
-          primaryButtonText: 'OK',
-          onPrimaryPress: hideAlert,
+          message: blocked
+            ? 'Notifications are turned off for K&A Clinic in your phone settings. Open Settings, allow notifications, then come back and turn this on.'
+            : 'K&A Clinic needs your permission to send dose reminders and appointment updates.',
+          primaryButtonText: blocked ? 'Open Settings' : 'OK',
+          onPrimaryPress: () => { hideAlert(); if (blocked) openNotificationSettings(); },
+          ...(blocked ? { secondaryButtonText: 'Not Now', onSecondaryPress: hideAlert } : null),
         });
         return;
       }
 
       setNotificationsEnabled(true);
-      await AsyncStorage.setItem(`kna:pushNotifs:${uid}`, 'true').catch(() => {});
+      await setPushEnabledByUser(uid, true);
 
       // Register live device token with the clinic server
       registerForPushNotifications(mrn, true).catch(() => {});
@@ -560,7 +585,10 @@ export default function ProfileScreen() {
       });
     } else {
       setNotificationsEnabled(false);
-      await AsyncStorage.setItem(`kna:pushNotifs:${uid}`, 'false').catch(() => {});
+      await setPushEnabledByUser(uid, false);
+      // Detach this phone on the server too — otherwise the clinic keeps
+      // pushing and the "off" switch only hid local notifications.
+      await unregisterPushNotifications();
       showAlert({
         type: 'info',
         title: 'Push Notifications Disabled',
@@ -569,38 +597,6 @@ export default function ProfileScreen() {
         onPrimaryPress: hideAlert,
       });
     }
-  };
-
-  const handleSendTestNotification = async () => {
-    const granted = await ensureNotificationPermission(true);
-    if (!granted) {
-      showAlert({
-        type: 'warning',
-        title: 'Permission Denied',
-        message: 'Please enable notifications for K&A Clinic in your phone Settings first.',
-        primaryButtonText: 'OK',
-        onPrimaryPress: hideAlert,
-      });
-      return;
-    }
-
-    // Fire immediate local banner
-    await presentLocalNotification(
-      '🔔 K&A Clinic Test Notification',
-      'Push notifications are working properly on your phone!',
-      { test: true },
-    );
-
-    // Also register / refresh token
-    registerForPushNotifications(mrn, true).catch(() => {});
-
-    showAlert({
-      type: 'success',
-      title: 'Test Notification Sent',
-      message: 'A test notification has been dispatched to your notification bar.',
-      primaryButtonText: 'OK',
-      onPrimaryPress: hideAlert,
-    });
   };
 
   // ── Sub-components ──────────────────────────────────────────
@@ -1069,22 +1065,6 @@ export default function ProfileScreen() {
                       thumbColor={C.white}
                     />
                   </View>
-                )}
-                {notificationsEnabled && !isGuest && !user?.isAnonymous && (
-                  <TouchableOpacity
-                    style={[s.item, { borderTopWidth: 1, borderTopColor: '#F1F5F9' }]}
-                    onPress={handleSendTestNotification}
-                    activeOpacity={0.7}
-                  >
-                    <View style={[s.iconBox, { backgroundColor: '#EFF6FF' }]}>
-                      <Ionicons name="paper-plane-outline" size={18} color="#1E3A8A" />
-                    </View>
-                    <View style={{ flex: 1, marginLeft: scale(14) }}>
-                      <Text style={[s.itemLabel, { color: '#1E3A8A', fontWeight: '700' }]}>Send Test Notification</Text>
-                      <Text style={{ fontSize: moderateScale(11), color: C.muted, marginTop: verticalScale(1) }}>Verify notifications on your phone</Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={16} color={C.muted} />
-                  </TouchableOpacity>
                 )}
                 {!user?.isAnonymous && !isGuest && (
                   <ProfileItem icon="phone-portrait-outline" label="Logged-in Devices" color={C.slate} onPress={() => setCurrentView('devices')} />

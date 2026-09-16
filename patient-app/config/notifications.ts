@@ -2,7 +2,8 @@
 //
 // Push notification and local notification services for K&A Clinic Patient App.
 import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Linking, Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { API_BASE_URL } from './apiBase';
 import { auth } from './firebase';
@@ -74,16 +75,61 @@ export async function ensureNotificationPermission(force = false): Promise<boole
   }
 }
 
+// The Profile "Push Notifications" switch. Stored per account; anything but an
+// explicit 'false' counts as on, so a new sign-in defaults to receiving.
+const pushPrefKey = (uid: string) => `kna:pushNotifs:${uid}`;
+
+export async function isPushEnabledByUser(uid?: string | null): Promise<boolean> {
+  const id = uid ?? auth.currentUser?.uid;
+  if (!id) return false;
+  const v = await AsyncStorage.getItem(pushPrefKey(id)).catch(() => null);
+  return v !== 'false';
+}
+
+export async function setPushEnabledByUser(uid: string, enabled: boolean): Promise<void> {
+  await AsyncStorage.setItem(pushPrefKey(uid), enabled ? 'true' : 'false').catch(() => {});
+}
+
+/** OS-level permission only — never shows a prompt. */
+export async function hasNotificationPermission(): Promise<boolean> {
+  if (Platform.OS === 'web') return false;
+  try {
+    return (await Notifications.getPermissionsAsync()).status === 'granted';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * True when the OS will no longer show the permission dialog (patient chose
+ * "Don't allow" and Android/iOS stopped asking). Only Settings can fix it then.
+ */
+export async function isNotificationPermissionBlocked(): Promise<boolean> {
+  if (Platform.OS === 'web') return false;
+  try {
+    const p = await Notifications.getPermissionsAsync();
+    return p.status !== 'granted' && p.canAskAgain === false;
+  } catch {
+    return false;
+  }
+}
+
+export function openNotificationSettings(): void {
+  Linking.openSettings().catch(() => {});
+}
+
 /**
  * Fires an immediate local notification to the device tray.
+ * Silent no-op when the OS permission is missing or the patient switched push
+ * off — it never raises the permission prompt by itself.
  */
 export async function presentLocalNotification(
   title: string,
   body: string,
   data: Record<string, unknown> = {},
 ): Promise<void> {
-  const granted = await ensureNotificationPermission();
-  if (!granted) return;
+  if (!(await hasNotificationPermission())) return;
+  if (auth.currentUser && !(await isPushEnabledByUser())) return;
   try {
     await Notifications.scheduleNotificationAsync({
       content: {
@@ -130,7 +176,9 @@ export async function scheduleDoseReminder(doseLabel: string, dueDateStr: string
   }
 }
 
-let cachedRegisteredToken: string | null = null;
+// Keyed by account + MRN: signing out and into a different patient in the same
+// app session must register again, not return the previous patient's result.
+let cachedRegistration: { key: string; token: string } | null = null;
 let registrationInProgress: Promise<string | null> | null = null;
 
 /**
@@ -141,12 +189,15 @@ export async function registerForPushNotifications(
   mrn?: string | null,
   force = false,
 ): Promise<string | null> {
-  if (cachedRegisteredToken && !force) return cachedRegisteredToken;
+  const key = `${auth.currentUser?.uid || ''}:${mrn || ''}`;
+  if (cachedRegistration?.key === key && !force) return cachedRegistration.token;
   if (registrationInProgress && !force) return registrationInProgress;
 
   registrationInProgress = (async () => {
     try {
       if (Platform.OS === 'web') return null;
+      // Switched off in Profile: don't hand the clinic a token to push to.
+      if (!force && !(await isPushEnabledByUser())) return null;
       if (!API_BASE_URL) {
         console.warn('Push registration skipped: API_BASE_URL is not set.');
         return null;
@@ -158,12 +209,7 @@ export async function registerForPushNotifications(
         return null;
       }
 
-      const projectId =
-        Constants.expoConfig?.extra?.eas?.projectId ??
-        (Constants as any).easConfig?.projectId ??
-        EAS_PROJECT_ID;
-
-      const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
+      const token = await getDevicePushToken();
       if (!token) {
         console.warn('Push registration failed: no push token returned.');
         return null;
@@ -190,7 +236,7 @@ export async function registerForPushNotifications(
         return null;
       }
 
-      cachedRegisteredToken = token;
+      cachedRegistration = { key, token };
       return token;
     } catch (e) {
       console.warn('Push registration error:', e);
@@ -201,6 +247,42 @@ export async function registerForPushNotifications(
   })();
 
   return registrationInProgress;
+}
+
+async function getDevicePushToken(projectId?: string): Promise<string | null> {
+  const id =
+    projectId ??
+    Constants.expoConfig?.extra?.eas?.projectId ??
+    (Constants as any).easConfig?.projectId ??
+    EAS_PROJECT_ID;
+  const { data } = await Notifications.getExpoPushTokenAsync({ projectId: id });
+  return data || null;
+}
+
+/**
+ * Detaches this phone's push token from the signed-in patient's record, so the
+ * clinic stops pushing to it. Call BEFORE signOut — it needs the session.
+ * Best effort: a failure must never block signing out.
+ */
+export async function unregisterPushNotifications(): Promise<void> {
+  cachedRegistration = null;
+  try {
+    if (Platform.OS === 'web' || !API_BASE_URL) return;
+    const idToken = await auth.currentUser?.getIdToken();
+    if (!idToken) return;
+    // getExpoPushTokenAsync needs the permission; without it this phone could
+    // not display pushes anyway, and the server prunes the token later.
+    if (!(await hasNotificationPermission())) return;
+    const token = await getDevicePushToken();
+    if (!token) return;
+    await fetch(`${API_BASE_URL}/api/notifications`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+      body: JSON.stringify({ action: 'unregister-token', pushToken: token }),
+    });
+  } catch (e) {
+    console.warn('Push unregistration error:', e);
+  }
 }
 
 /**

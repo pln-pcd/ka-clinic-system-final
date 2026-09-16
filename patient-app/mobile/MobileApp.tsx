@@ -7,6 +7,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { usePatientAuth } from '../context/PatientAuthContext';
 import { setupNotificationChannelAsync } from '../config/notifications';
+import { resetTo } from '../utils/navigation';
 
 const PUBLIC_ROUTES = ['auth', 'onboarding', 'onboarding1', 'onboarding2', 'onboarding3', 'onboarding4'];
 
@@ -34,10 +35,10 @@ export default function MobileApp() {
 
     if (!user && !isPublicRoute) {
       // Not logged in → go to login
-      router.replace('/auth/login');
+      resetTo(router, '/auth/login');
     } else if (user && currentSegment === 'index') {
       // Logged in and on root index → go to main app
-      router.replace('/(tabs)');
+      resetTo(router, '/(tabs)');
     }
   }, [user, loading, segments]);
 
@@ -58,11 +59,14 @@ export default function MobileApp() {
     <SafeAreaProvider>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
-        <Stack.Screen name="(tabs)" />
+        {/* Root of the signed-in app: nothing behind it to swipe back to. */}
+        <Stack.Screen name="(tabs)" options={{ gestureEnabled: false }} />
         <Stack.Screen name="auth/login" />
         <Stack.Screen name="auth/signup" />
         <Stack.Screen name="auth/forgot-password" />
-        <Stack.Screen name="auth/verify-login-otp" />
+        {/* Leaving OTP must sign the pending session out — the on-screen back
+            button (and Android back, handled in the screen) does that. */}
+        <Stack.Screen name="auth/verify-login-otp" options={{ gestureEnabled: false }} />
         <Stack.Screen name="onboarding" />
         <Stack.Screen name="onboarding1" />
         <Stack.Screen name="onboarding2" />

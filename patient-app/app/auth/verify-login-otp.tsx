@@ -8,8 +8,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { resetTo } from '../../utils/navigation';
 import { useEffect, useRef, useState } from 'react';
 import {
+  BackHandler,
   Dimensions,
   Image,
   KeyboardAvoidingView,
@@ -67,8 +69,22 @@ export default function VerifyLoginOtp() {
       await setKeepSignedIn(false);
       await signOut(auth);
     } catch {}
-    router.replace('/auth/login');
+    resetTo(router, '/auth/login');
   };
+
+  // Android back must behave like the on-screen back button (swipe is
+  // disabled for this route): drop the pending session and return to login,
+  // instead of popping to whatever sat under this screen.
+  const abandonRef = useRef(abandon);
+  useEffect(() => { abandonRef.current = abandon; });
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      abandonRef.current();
+      return true;
+    });
+    return () => sub.remove();
+  }, []);
 
   const handleVerify = async () => {
     const code = otpDigits.join('');
@@ -81,7 +97,7 @@ export default function VerifyLoginOtp() {
     try {
       await verifyLoginOTP(code, rememberDevice);
       completeSecondFactor();
-      router.replace('/(tabs)');
+      resetTo(router, '/(tabs)');
     } catch (e: any) {
       const next = attempts + 1;
       setAttempts(next);
@@ -287,15 +303,40 @@ const styles = StyleSheet.create({
   errorText: { flex: 1, fontSize: moderateScale(12.5), color: '#B91C1C', lineHeight: moderateScale(18) },
   otpIconWrapper: { alignItems: 'center', marginBottom: verticalScale(14) },
   otpIconBg: { width: scale(72), height: scale(72), borderRadius: scale(36), justifyContent: 'center', alignItems: 'center' },
-  otpRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(22), gap: scale(6) },
+  otpRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(22), gap: scale(8) },
   otpBox: {
-    flex: 1, height: Math.max(56, verticalScale(74)), minHeight: 56,
-    borderRadius: scale(14), borderWidth: 1.5, borderColor: BORDER_INACTIVE, backgroundColor: SOFT_GRAY_BG,
-    fontSize: moderateScale(21), fontWeight: '800', color: '#0F172A',
-    textAlign: 'center', textAlignVertical: 'center', includeFontPadding: false, paddingVertical: 0, paddingHorizontal: 0,
+    flex: 1,
+    height: verticalScale(62),
+    minHeight: 52,
+    maxHeight: 70,
+    borderRadius: scale(14),
+    borderWidth: 1.5,
+    borderColor: BORDER_INACTIVE,
+    backgroundColor: SOFT_GRAY_BG,
+    fontSize: moderateScale(22),
+    fontWeight: '800',
+    color: '#0F172A',
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    includeFontPadding: false,
+    paddingVertical: 0,
+    paddingHorizontal: 0,
   },
-  otpBoxFocused: { borderColor: NAVY_BLUE, backgroundColor: '#FFF' },
-  otpBoxFilled: { borderColor: '#10B981', backgroundColor: '#F0FDF4' },
+  otpBoxFocused: {
+    borderColor: NAVY_BLUE,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    shadowColor: NAVY_BLUE,
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  otpBoxFilled: {
+    borderColor: NAVY_BLUE,
+    backgroundColor: '#F0F7FF',
+    borderWidth: 1.8,
+  },
   primaryButton: {
     borderRadius: scale(16), overflow: 'hidden', elevation: 5, marginTop: verticalScale(10),
     shadowColor: NAVY_BLUE, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.25, shadowRadius: 10,

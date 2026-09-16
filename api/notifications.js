@@ -8,6 +8,7 @@
 //
 // Actions and their auth models differ deliberately:
 //   register-token  — called by the Patient App with its Firebase ID token.
+//   unregister-token — same; on sign-out or when the patient turns push off.
 //   set-avatar      — same; patient saves their profile photo to their record
 //                     so the admin portal shows it too.
 //   update-profile  — same; patient edits the self-service fields of their
@@ -91,6 +92,15 @@ async function registerToken(req, res) {
     return;
   }
 
+  // A push token identifies a phone, not a patient. If another patient signed
+  // in on this phone before, their record still lists the token and would keep
+  // sending that patient's medical reminders to whoever holds the phone now.
+  // Detach it from every other record first.
+  const others = await db.collection('vaccinations').where('pushTokens', 'array-contains', pushToken).get();
+  await Promise.all(others.docs
+    .filter(d => d.id !== ref.id)
+    .map(d => d.ref.update({ pushTokens: FieldValue.arrayRemove(pushToken) }).catch(() => {})));
+
   await ref.set({
     authUid: uid,
     pushTokens: FieldValue.arrayUnion(pushToken),
@@ -98,6 +108,51 @@ async function registerToken(req, res) {
   }, { merge: true });
 
   res.status(200).json({ success: true });
+}
+
+// ── Patient App stops push on this phone (sign-out, or toggle turned off) ───
+// Only needs a valid session: it removes this one token from the records of
+// the calling account, so it cannot be used to silence anyone else.
+async function unregisterToken(req, res) {
+  const idToken = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+  const pushToken = (req.body?.pushToken || '').trim();
+  if (!idToken) {
+    res.status(401).json({ success: false, error: 'Missing authentication token.' });
+    return;
+  }
+  if (!isExpoPushToken(pushToken)) {
+    res.status(400).json({ success: false, error: 'Invalid push token.' });
+    return;
+  }
+  let decoded;
+  try {
+    decoded = await auth.verifyIdToken(idToken);
+  } catch {
+    res.status(401).json({ success: false, error: 'Invalid or expired session.' });
+    return;
+  }
+  const snap = await db.collection('vaccinations').where('pushTokens', 'array-contains', pushToken).get();
+  const email = (decoded.email || '').toLowerCase();
+  await Promise.all(snap.docs
+    .filter(d => {
+      const data = d.data() || {};
+      return data.authUid === decoded.uid || (email && String(data.email || '').toLowerCase() === email);
+    })
+    .map(d => d.ref.update({ pushTokens: FieldValue.arrayRemove(pushToken) })));
+  res.status(200).json({ success: true });
+}
+
+// Expo answers each message with a ticket. DeviceNotRegistered means the app
+// was uninstalled (or its token rotated): drop that token so the record does
+// not accumulate dead devices.
+async function pruneDeadTokens(tokens, tickets) {
+  const dead = [];
+  (tickets || []).forEach((t, i) => {
+    if (t?.status === 'error' && t?.details?.error === 'DeviceNotRegistered' && tokens[i]) dead.push(tokens[i]);
+  });
+  if (dead.length === 0) return;
+  const snap = await db.collection('vaccinations').where('pushTokens', 'array-contains-any', dead.slice(0, 30)).get();
+  await Promise.all(snap.docs.map(d => d.ref.update({ pushTokens: FieldValue.arrayRemove(...dead) }).catch(() => {})));
 }
 
 // ── Patient App edits its own contact / emergency details ───────────────────
@@ -241,7 +296,15 @@ async function sendExpoPush(tokens, { title, body, data }) {
       body: JSON.stringify(messages),
     });
     if (!resp.ok) return { sent: 0, error: `Expo responded ${resp.status}` };
-    return { sent: valid.length, error: null };
+    // HTTP 200 only means Expo accepted the batch; each ticket says whether
+    // that device's message was actually handed to FCM/APNs.
+    const json = await resp.json().catch(() => null);
+    const tickets = Array.isArray(json?.data) ? json.data : [];
+    await pruneDeadTokens(valid, tickets).catch(err => console.error('push token prune failed:', err));
+    const failures = tickets.filter(t => t?.status === 'error');
+    const sent = tickets.length ? tickets.length - failures.length : valid.length;
+    const error = failures.length ? (failures[0]?.message || failures[0]?.details?.error || 'Push rejected.') : null;
+    return { sent, error };
   } catch (err) {
     return { sent: 0, error: err?.message || 'Push request failed.' };
   }
@@ -297,7 +360,12 @@ async function sendFollowUp(req, res, caller) {
   const push = await sendExpoPush(patient.pushTokens || [], {
     title,
     body: message || 'You have a new reminder from K&A Clinic.',
-    data: { notificationId: notifRef.id, type: 'follow-up' },
+    // Lets a tap on the tray notification open the matching app screen.
+    data: {
+      notificationId: notifRef.id,
+      type: 'follow-up',
+      screen: String(req.body?.source || '').startsWith('appointment-') ? 'appt' : 'home',
+    },
   });
 
   let emailed = false;
@@ -715,7 +783,7 @@ async function backupCron(req, res) {
 }
 
 const ADMIN_ACTIONS = { 'send-followup': sendFollowUp, backup: backupNow };
-const OPEN_ACTIONS = { 'register-token': registerToken, 'set-avatar': setAvatar, 'update-profile': updateProfile, ack: acknowledge };
+const OPEN_ACTIONS = { 'register-token': registerToken, 'unregister-token': unregisterToken, 'set-avatar': setAvatar, 'update-profile': updateProfile, ack: acknowledge };
 // Runs unattended on a schedule, so it authenticates with CRON_SECRET rather
 // than an admin's ID token.
 const CRON_ACTIONS = { 'dose-sweep': doseSweep, 'backup-cron': backupCron };

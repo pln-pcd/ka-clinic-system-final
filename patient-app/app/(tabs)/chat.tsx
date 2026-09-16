@@ -2,6 +2,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
+import { goBackOr } from '../../utils/navigation';
 import {
   addDoc,
   collection,
@@ -27,6 +28,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -148,7 +150,7 @@ export default function ChatScreen() {
   const router = useRouter();
   const scrollRef = useRef<ScrollView>(null);
 
-  const goBack = () => router.back();
+  const goBack = () => goBackOr(router, '/');
   const goBackRef = useRef(goBack);
   useEffect(() => { goBackRef.current = goBack; });
 
@@ -626,36 +628,40 @@ export default function ChatScreen() {
 
           {/* ══ TALK TO CLINIC STAFF POPUP MODAL ════════════════════════════════ */}
           <Modal visible={showEscalationModal} transparent animationType="fade" statusBarTranslucent>
-            <View style={s.modalOverlay}>
-              <View style={s.modalCard}>
-                <View style={s.modalHeader}>
-                  <View style={s.modalIconWrap}>
-                    <Ionicons name="medical-outline" size={24} color={C.red} />
+            <TouchableWithoutFeedback onPress={() => setShowEscalationModal(false)}>
+              <View style={s.modalOverlay}>
+                <TouchableWithoutFeedback onPress={e => e.stopPropagation()}>
+                  <View style={s.modalCard}>
+                    <View style={s.modalHeader}>
+                      <View style={s.modalIconWrap}>
+                        <Ionicons name="medical-outline" size={24} color={C.red} />
+                      </View>
+                      <Text style={s.modalTitle}>Talk to Clinic Staff</Text>
+                    </View>
+                    <Text style={s.modalMsg}>
+                      Medical and rabies-related questions are answered by clinic staff, not the assistant. Would you like to connect directly with K&A Clinic staff?
+                    </Text>
+                    <View style={s.modalActions}>
+                      <TouchableOpacity
+                        style={s.modalCancelBtn}
+                        onPress={() => setShowEscalationModal(false)}
+                      >
+                        <Text style={s.modalCancelTxt}>Dismiss</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={s.modalConfirmBtn}
+                        onPress={() => {
+                          setShowEscalationModal(false);
+                          onStaffButtonPress();
+                        }}
+                      >
+                        <Text style={s.modalConfirmTxt}>Talk to Staff</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                  <Text style={s.modalTitle}>Talk to Clinic Staff</Text>
-                </View>
-                <Text style={s.modalMsg}>
-                  Medical and rabies-related questions are answered by clinic staff, not the assistant. Would you like to connect directly with K&A Clinic staff?
-                </Text>
-                <View style={s.modalActions}>
-                  <TouchableOpacity
-                    style={s.modalCancelBtn}
-                    onPress={() => setShowEscalationModal(false)}
-                  >
-                    <Text style={s.modalCancelTxt}>Dismiss</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={s.modalConfirmBtn}
-                    onPress={() => {
-                      setShowEscalationModal(false);
-                      onStaffButtonPress();
-                    }}
-                  >
-                    <Text style={s.modalConfirmTxt}>Talk to Staff</Text>
-                  </TouchableOpacity>
-                </View>
+                </TouchableWithoutFeedback>
               </View>
-            </View>
+            </TouchableWithoutFeedback>
           </Modal>
 
           {/* Bottom Chat Input Box */}

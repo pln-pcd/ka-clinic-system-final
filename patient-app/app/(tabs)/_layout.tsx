@@ -1,12 +1,13 @@
 // KNAPROTOTYPE/app/(tabs)/_layout.tsx
-import { Tabs } from 'expo-router';
+import * as Notifications from 'expo-notifications';
+import { Tabs, useRouter } from 'expo-router';
+import { AppState } from 'react-native';
 import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import React, { useEffect, useRef, useState } from 'react';
 import CustomAlertModal, { CustomAlertConfig } from '../../components/CustomAlertModal';
 import { db } from '../../config/firebase';
 import {
   acknowledgeNotification,
-  presentLocalNotification,
   registerForPushNotifications,
   setupNotificationChannelAsync,
 } from '../../config/notifications';
@@ -14,6 +15,7 @@ import { usePatientAuth } from '../../context/PatientAuthContext';
 
 export default function TabsLayout() {
   const { user, mrn } = usePatientAuth();
+  const router = useRouter();
   const [alertConfig, setAlertConfig] = useState<CustomAlertConfig>({
     visible: false,
     title: '',
@@ -29,6 +31,30 @@ export default function TabsLayout() {
       registerForPushNotifications(mrn).catch(() => {});
     }
   }, [user, mrn]);
+
+  // A patient who first tapped "Don't allow" and later enabled notifications
+  // in phone Settings comes back through here — register then, without
+  // waiting for the next sign-in.
+  useEffect(() => {
+    if (!user || !mrn) return;
+    const sub = AppState.addEventListener('change', state => {
+      if (state === 'active') registerForPushNotifications(mrn).catch(() => {});
+    });
+    return () => sub.remove();
+  }, [user, mrn]);
+
+  // Tapping a notification in the tray opens the screen it is about. Also
+  // covers a tap that cold-started the app from a killed state.
+  useEffect(() => {
+    const open = (response: Notifications.NotificationResponse | null) => {
+      const data: any = response?.notification.request.content.data || {};
+      if (data.screen === 'appt' || data.appointmentId) router.navigate('/appt');
+      else router.navigate('/');
+    };
+    Notifications.getLastNotificationResponseAsync().then(r => { if (r) open(r); }).catch(() => {});
+    const sub = Notifications.addNotificationResponseReceivedListener(open);
+    return () => sub.remove();
+  }, []);
 
   // Real-time listener for patient notifications across all tabs
   useEffect(() => {
@@ -64,13 +90,10 @@ export default function TabsLayout() {
             const title = n.title || 'Follow-up Reminder';
             const message = n.message || 'You have a new reminder from K&A Clinic.';
 
-            // 1. Deliver OS system heads-up notification banner with sound & vibration
-            presentLocalNotification(title, message, {
-              notificationId: n.id,
-              type: 'followup',
-            });
-
-            // 2. Pop up high-visibility in-app alert card
+            // Tray banner comes from the server's Expo push (shown in the
+            // foreground by setNotificationHandler); presenting a local one
+            // here too made every reminder appear twice. The in-app card is
+            // the part only this listener can do.
             setAlertConfig({
               visible: true,
               type: 'info',
@@ -96,6 +119,9 @@ export default function TabsLayout() {
   return (
     <>
       <Tabs
+        // Android back walks the tabs the patient actually visited (Records →
+        // Home), then exits from Home — it never unwinds into auth/onboarding.
+        backBehavior="history"
         screenOptions={{
           headerShown: false,
           tabBarStyle: { display: 'none' },

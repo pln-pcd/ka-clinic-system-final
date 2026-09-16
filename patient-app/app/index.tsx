@@ -1,6 +1,7 @@
 // app/index.tsx
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import { resetTo } from '../utils/navigation';
 import React, { useEffect, useRef } from 'react';
 import { Dimensions, Image, Platform, StyleSheet, Text, View } from 'react-native';
 import Animated, {
@@ -72,8 +73,8 @@ export default function LuxuryEntrance() {
       const seen = await hasSeenOnboarding();
       if (cancelled || navigated.current) return;
       navigated.current = true;
-      if (user) router.replace('/(tabs)');
-      else if (seen) router.replace('/auth/login');
+      if (user) resetTo(router, '/(tabs)');
+      else if (seen) resetTo(router, '/auth/login');
       else router.replace('/onboarding1');
     }, SPLASH_MS);
 

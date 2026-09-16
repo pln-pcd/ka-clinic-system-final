@@ -2,6 +2,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBackOr, resetTo } from '../../utils/navigation';
 import { useRef, useState } from 'react';
 import {
   Alert,
@@ -155,7 +156,7 @@ export default function PatientSignupScreen() {
     setLoading(true);
     try {
       await completeEmailSignup(record, password);
-      router.replace('/(tabs)');
+      resetTo(router, '/(tabs)');
     } catch (e: any) {
       setError(getAuthErrorMessage(e));
     } finally {
@@ -169,7 +170,7 @@ export default function PatientSignupScreen() {
     setGuestLoading(true);
     try {
       await signInAsGuest();
-      router.replace('/(tabs)');
+      resetTo(router, '/(tabs)');
     } catch (e: any) {
       setGuestLoading(false);
       setError(getAuthErrorMessage(e));
@@ -239,7 +240,7 @@ export default function PatientSignupScreen() {
           onPress={() => {
             if (step === 'password') setStep('otp');
             else if (step === 'otp') setStep('mrn');
-            else router.back();
+            else goBackOr(router, '/auth/login');
           }}
           activeOpacity={0.7}
         >
@@ -628,17 +629,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: verticalScale(22),
-    gap: scale(6),
+    gap: scale(8),
   },
   otpBox: {
     flex: 1,
-    height: Math.max(56, verticalScale(74)),
-    minHeight: 56,
+    height: verticalScale(62),
+    minHeight: 52,
+    maxHeight: 70,
     borderRadius: scale(14),
     borderWidth: 1.5,
     borderColor: BORDER_INACTIVE,
     backgroundColor: SOFT_GRAY_BG,
-    fontSize: moderateScale(21),
+    fontSize: moderateScale(22),
     fontWeight: '800',
     color: '#0F172A',
     textAlign: 'center',
@@ -647,8 +649,21 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
     paddingHorizontal: 0,
   },
-  otpBoxFocused: { borderColor: NAVY_BLUE, backgroundColor: '#FFF' },
-  otpBoxFilled: { borderColor: '#10B981', backgroundColor: '#F0FDF4' },
+  otpBoxFocused: {
+    borderColor: NAVY_BLUE,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    shadowColor: NAVY_BLUE,
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  otpBoxFilled: {
+    borderColor: NAVY_BLUE,
+    backgroundColor: '#F0F7FF',
+    borderWidth: 1.8,
+  },
   resendButton: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: scale(6), marginTop: verticalScale(14), padding: scale(8),

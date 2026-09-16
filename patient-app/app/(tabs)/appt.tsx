@@ -2,6 +2,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import { resetTo } from '../../utils/navigation';
 import {
   addDoc,
   collection,
@@ -506,7 +507,7 @@ export default function AppointmentsScreen() {
         primaryButtonText: 'Log In',
         onPrimaryPress: () => {
           hideAlert();
-          router.replace('/auth/login');
+          resetTo(router, '/auth/login');
         },
       });
       return;
@@ -790,12 +791,6 @@ export default function AppointmentsScreen() {
                     <Ionicons name="time-outline" size={11} color={C.muted}/>
                     <Text style={s.apptInfoSub}>{appt.time}</Text>
                   </View>
-                  {appt.cancellationReason && appt.status === 'cancellation_pending' && (
-                    <View style={[s.adminNoteBox, { backgroundColor: C.orangeFaint }]}>
-                      <Ionicons name="alert-circle-outline" size={11} color={C.orange}/>
-                      <Text style={[s.adminNoteTxt, { color: C.orange }]}>Pending Admin Approval: {appt.cancellationReason}</Text>
-                    </View>
-                  )}
                   {appt.note && appt.status === 'cancelled' && (
                     <View style={s.adminNoteBox}>
                       <Ionicons name="chatbubble-ellipses-outline" size={11} color={C.red}/>
@@ -917,94 +912,81 @@ export default function AppointmentsScreen() {
 
       {/* ══ TIME SLOT MODAL ══════════════════════════════════════════════════ */}
       <Modal visible={showSlotModal} transparent animationType="fade" statusBarTranslucent>
-        <View style={sm.overlay}>
-          <View style={sm.card}>
-            {/* Header */}
-            <LinearGradient colors={[C.navy, C.charcoal]} style={sm.header}>
-              <View style={{ flex: 1 }}>
-                <Text style={sm.headerTitle}>Pick a Time Slot</Text>
-                {selectedKey && <Text style={sm.headerSub}>{displayKey(selectedKey)}</Text>}
-              </View>
-              <TouchableOpacity onPress={() => { setShowSlotModal(false); setSelectedKey(null); setSelectedTime(null); }} style={sm.closeBtn}>
-                <Ionicons name="close" size={20} color={C.white}/>
-              </TouchableOpacity>
-            </LinearGradient>
+        <TouchableWithoutFeedback onPress={() => { setShowSlotModal(false); setSelectedKey(null); setSelectedTime(null); }}>
+          <View style={sm.overlay}>
+            <TouchableWithoutFeedback onPress={e => e.stopPropagation()}>
+              <View style={sm.card}>
+                {/* Header */}
+                <LinearGradient colors={[C.navy, C.charcoal]} style={sm.header}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={sm.headerTitle}>Pick a Time Slot</Text>
+                    {selectedKey && <Text style={sm.headerSub}>{displayKey(selectedKey)}</Text>}
+                  </View>
+                  <TouchableOpacity onPress={() => { setShowSlotModal(false); setSelectedKey(null); setSelectedTime(null); }} style={sm.closeBtn}>
+                    <Ionicons name="close" size={20} color={C.white}/>
+                  </TouchableOpacity>
+                </LinearGradient>
 
-            <View style={sm.body}>
-              {/* Time grid */}
-              <View style={s.timeGrid}>
-                {slots.map(slot => {
-                  const active   = selectedTime === slot.time;
-                  const disabled = !slot.available;
-                  return (
-                    <TouchableOpacity
-                      key={slot.time}
-                      style={[s.timeChip, active && s.timeChipActive, disabled && s.timeChipOff]}
-                      onPress={() => !disabled && setSelectedTime(slot.time)}
-                      activeOpacity={disabled ? 1 : 0.8}
-                      disabled={disabled}
-                    >
-                      {active && <LinearGradient colors={[C.navy, C.charcoal]} style={[StyleSheet.absoluteFillObject, { borderRadius: scale(16) }]}/>}
-                      <Ionicons name={active ? 'time' : 'time-outline'} size={13} color={active ? C.white : disabled ? '#CBD5E1' : C.slate}/>
-                      <Text style={[s.timeTxt, active && { color: C.white, fontWeight: '800' }, disabled && { color: '#CBD5E1', textDecorationLine: 'line-through' }]}>
-                        {slot.time}
-                      </Text>
-                      {disabled && <View style={s.fullPill}><Text style={s.fullPillTxt}>Full</Text></View>}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+                <View style={sm.body}>
+                  {/* Time grid (2-column balanced grid) */}
+                  <View style={s.timeGrid}>
+                    {slots.map(slot => {
+                      const active   = selectedTime === slot.time;
+                      const disabled = !slot.available;
+                      return (
+                        <TouchableOpacity
+                          key={slot.time}
+                          style={[s.timeChip, active && s.timeChipActive, disabled && s.timeChipOff]}
+                          onPress={() => !disabled && setSelectedTime(slot.time)}
+                          activeOpacity={disabled ? 1 : 0.8}
+                          disabled={disabled}
+                        >
+                          {active && <LinearGradient colors={[C.navy, C.charcoal]} style={[StyleSheet.absoluteFillObject, { borderRadius: scale(14) }]}/>}
+                          <Ionicons name={active ? 'time' : 'time-outline'} size={12} color={active ? C.white : disabled ? '#CBD5E1' : C.slate}/>
+                          <Text
+                            numberOfLines={1}
+                            adjustsFontSizeToFit
+                            style={[s.timeTxt, active && { color: C.white, fontWeight: '800' }, disabled && { color: '#CBD5E1', textDecorationLine: 'line-through' }]}
+                          >
+                            {slot.time}
+                          </Text>
+                          {disabled && (
+                            <View style={s.fullPill}>
+                              <Text style={s.fullPillTxt}>Full</Text>
+                            </View>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
 
-              {/* Summary */}
-              {selectedTime && (
-                <>
-                  <View style={sm.divider}/>
-                  <View style={s.summaryCard}>
-                    <View style={s.summaryHead}>
-                      <View style={s.summaryHeadIcon}>
-                        <Ionicons name="clipboard-outline" size={15} color={C.slate}/>
-                      </View>
-                      <Text style={s.summaryHeadTxt}>Summary</Text>
+                  {/* Informational note (Summary section removed per Item 6) */}
+                  {selectedTime && (
+                    <View style={s.noteBox}>
+                      <Ionicons name="information-circle" size={16} color={C.shapeBlue}/>
+                      <Text style={s.noteTxt}>Your request will be reviewed by the clinic. You&apos;ll be notified once confirmed.</Text>
                     </View>
-                    <View style={s.divider}/>
-                    {([
-                      { icon: 'calendar-outline', label: 'Date', value: displayKey(selectedKey!) },
-                      { icon: 'time-outline',     label: 'Time', value: selectedTime             },
-                    ] as const).map((r, i, arr) => (
-                      <View key={r.label} style={[s.summaryRow, i === arr.length - 1 && { marginBottom: verticalScale(0) }]}>
-                        <View style={s.summaryIcon}><Ionicons name={r.icon} size={13} color={C.slate}/></View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={s.summaryLbl}>{r.label}</Text>
-                          <Text style={s.summaryVal}>{r.value}</Text>
-                        </View>
-                      </View>
-                    ))}
-                  </View>
+                  )}
 
-                  <View style={s.noteBox}>
-                    <Ionicons name="information-circle" size={16} color={C.shapeBlue}/>
-                    <Text style={s.noteTxt}>Your request will be reviewed by the clinic. You&apos;ll be notified once confirmed.</Text>
+                  {/* Action buttons */}
+                  <View style={sm.footer}>
+                    <TouchableOpacity style={sm.cancelBtn} onPress={() => { setShowSlotModal(false); setSelectedKey(null); setSelectedTime(null); }} activeOpacity={0.8}>
+                      <Text style={sm.cancelTxt}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[sm.confirmBtn, !canConfirm && { opacity: 0.4 }]}
+                      onPress={() => { setShowSlotModal(false); handleOpenDetailsForm(); }}
+                      activeOpacity={0.8}
+                      disabled={!canConfirm}
+                    >
+                      <Text style={sm.confirmTxt}>Next</Text>
+                    </TouchableOpacity>
                   </View>
-                </>
-              )}
-
-              {/* Action buttons */}
-              <View style={sm.footer}>
-                <TouchableOpacity style={sm.cancelBtn} onPress={() => { setShowSlotModal(false); setSelectedKey(null); setSelectedTime(null); }} activeOpacity={0.8}>
-                  <Text style={sm.cancelTxt}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[sm.confirmBtn, !canConfirm && { opacity: 0.4 }]}
-                  onPress={() => { setShowSlotModal(false); handleOpenDetailsForm(); }}
-                  activeOpacity={0.8}
-                  disabled={!canConfirm}
-                >
-                  <Text style={sm.confirmTxt}>Next</Text>
-                </TouchableOpacity>
+                </View>
               </View>
-            </View>
+            </TouchableWithoutFeedback>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       </Modal>
 
       {/* ══ PATIENT DETAILS FORM MODAL ══════════════════════════════════════ */}
@@ -1034,80 +1016,78 @@ export default function AppointmentsScreen() {
                 </Text>
               </View>
 
-              {/* Appointment Type */}
-              <View style={[df.typeSection, { zIndex: 100 }]}>
-                <Text style={df.typeSectionLabel}>Appointment For <Text style={df.required}>*</Text></Text>
-                <View style={df.catRow}>
-                  {APPT_CATEGORIES.map(cat => {
-                    const active = apptCategory === cat.id;
-                    return (
-                      <TouchableOpacity
-                        key={cat.id}
-                        style={[df.catChip, active && df.catChipActive]}
-                        onPress={() => { setApptCategory(cat.id as any); setVaccineType(''); setVaccineDropdownOpen(false); }}
-                        activeOpacity={0.8}
-                      >
-                        <Ionicons name={cat.icon as any} size={15} color={active ? C.red : '#64748B'} />
-                        <Text style={[df.catLabel, active && df.catLabelActive]}>{cat.label}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-
-                {/* Vaccine sub-dropdown */}
-                {apptCategory === 'vaccination' && (
-                  <View style={df.vaccineWrap}>
-                    <TouchableOpacity
-                      style={[df.vaccineSelector, vaccineDropdownOpen && df.vaccineSelectorOpen]}
-                      onPress={() => setVaccineDropdownOpen(v => !v)}
-                      activeOpacity={0.85}
-                    >
-                      <Ionicons name="medkit-outline" size={14} color={vaccineType ? C.navy : C.muted}/>
-                      <Text style={[df.vaccineSelectorTxt, !!vaccineType && { color: C.charcoal }]}>
-                        {vaccineType ? VACCINE_OPTIONS.find(v => v.id === vaccineType)?.label : 'Select vaccine type...'}
-                      </Text>
-                      <Ionicons name={vaccineDropdownOpen ? 'chevron-up' : 'chevron-down'} size={14} color={C.muted}/>
-                    </TouchableOpacity>
-                    {vaccineDropdownOpen && (
-                      <View style={df.vaccineDropdown}>
-                        <ScrollView style={{ maxHeight: verticalScale(180) }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
-                          {VACCINE_OPTIONS.map((v, i) => {
-                            const sel = vaccineType === v.id;
-                            return (
-                              <TouchableOpacity
-                                key={v.id}
-                                style={[df.vaccineOption, sel && df.vaccineOptionActive, i < VACCINE_OPTIONS.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border }]}
-                                onPress={() => { setVaccineType(v.id); setVaccineDropdownOpen(false); }}
-                                activeOpacity={0.8}
-                              >
-                                <View style={{ flex: 1 }}>
-                                  <Text style={[df.vaccineOptionTxt, sel && { color: C.navy, fontWeight: '700' }]}>{v.label}</Text>
-                                  <Text style={df.vaccineOptionDesc}>{v.desc}</Text>
-                                </View>
-                                {sel && <Ionicons name="checkmark" size={14} color={C.navy}/>}
-                              </TouchableOpacity>
-                            );
-                          })}
-                        </ScrollView>
-                      </View>
-                    )}
-                  </View>
-                )}
-              </View>
-
-              {/* Tap backdrop to close floating dropdown when open */}
-              {vaccineDropdownOpen && (
-                <TouchableWithoutFeedback onPress={() => setVaccineDropdownOpen(false)}>
-                  <View style={df.dropdownBackdrop} />
-                </TouchableWithoutFeedback>
-              )}
-
               <ScrollView
-                style={[df.formScroll, { zIndex: 1 }]}
+                style={df.formScroll}
+                contentContainerStyle={{ paddingBottom: verticalScale(20) }}
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
-                onScrollBeginDrag={() => setVaccineDropdownOpen(false)}
+                nestedScrollEnabled={true}
               >
+                {/* Appointment Type */}
+                <View style={df.typeSection}>
+                  <Text style={df.typeSectionLabel}>Appointment For <Text style={df.required}>*</Text></Text>
+                  <View style={df.catRow}>
+                    {APPT_CATEGORIES.map(cat => {
+                      const active = apptCategory === cat.id;
+                      return (
+                        <TouchableOpacity
+                          key={cat.id}
+                          style={[df.catChip, active && df.catChipActive]}
+                          onPress={() => { setApptCategory(cat.id as any); setVaccineType(''); setVaccineDropdownOpen(false); }}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name={cat.icon as any} size={15} color={active ? C.red : '#64748B'} />
+                          <Text style={[df.catLabel, active && df.catLabelActive]}>{cat.label}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  {/* Vaccine sub-dropdown (fully scrollable, in-flow) */}
+                  {apptCategory === 'vaccination' && (
+                    <View style={df.vaccineWrap}>
+                      <TouchableOpacity
+                        style={[df.vaccineSelector, vaccineDropdownOpen && df.vaccineSelectorOpen]}
+                        onPress={() => setVaccineDropdownOpen(v => !v)}
+                        activeOpacity={0.85}
+                      >
+                        <Ionicons name="medkit-outline" size={14} color={vaccineType ? C.navy : C.muted}/>
+                        <Text style={[df.vaccineSelectorTxt, !!vaccineType && { color: C.charcoal }]}>
+                          {vaccineType ? VACCINE_OPTIONS.find(v => v.id === vaccineType)?.label : 'Select vaccine type...'}
+                        </Text>
+                        <Ionicons name={vaccineDropdownOpen ? 'chevron-up' : 'chevron-down'} size={14} color={C.muted}/>
+                      </TouchableOpacity>
+                      {vaccineDropdownOpen && (
+                        <View style={df.vaccineDropdown}>
+                          <ScrollView
+                            style={{ maxHeight: verticalScale(185) }}
+                            nestedScrollEnabled={true}
+                            showsVerticalScrollIndicator={true}
+                            keyboardShouldPersistTaps="handled"
+                          >
+                            {VACCINE_OPTIONS.map((v, i) => {
+                              const sel = vaccineType === v.id;
+                              return (
+                                <TouchableOpacity
+                                  key={v.id}
+                                  style={[df.vaccineOption, sel && df.vaccineOptionActive, i < VACCINE_OPTIONS.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border }]}
+                                  onPress={() => { setVaccineType(v.id); setVaccineDropdownOpen(false); }}
+                                  activeOpacity={0.8}
+                                >
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={[df.vaccineOptionTxt, sel && { color: C.navy, fontWeight: '700' }]}>{v.label}</Text>
+                                    <Text style={df.vaccineOptionDesc}>{v.desc}</Text>
+                                  </View>
+                                  {sel && <Ionicons name="checkmark" size={14} color={C.navy}/>}
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </ScrollView>
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </View>
                 {/* Full Name */}
                 <View style={df.fieldWrap}>
                   <Text style={df.label}>Full Name <Text style={df.required}>*</Text></Text>
@@ -1225,179 +1205,207 @@ export default function AppointmentsScreen() {
 
       {/* ── Success Modal ── */}
       <Modal visible={showSuccess} transparent animationType="fade" statusBarTranslucent>
-        <View style={ms.overlay}>
-          <View style={ms.card}>
-            <View style={ms.accentTop}>
-              <View style={ms.successIconCircle}>
-                <Ionicons name="checkmark" size={28} color={C.green}/>
-              </View>
-            </View>
-            <View style={ms.body}>
-              <View style={ms.iconRow}>
-                <View style={ms.iconWrap}>
-                  <Ionicons name="send" size={14} color={C.shapeBlue}/>
-                </View>
-                <Text style={[ms.statusTxt, { color: C.shapeBlue }]}>Request Sent</Text>
-              </View>
-              <Text style={ms.title}>Appointment Requested!</Text>
-              <Text style={ms.subtitle}>The clinic will review your request and confirm or suggest another time. You&apos;ll see the status update here.</Text>
-              <View style={ms.divider}/>
-              {selectedKey && (
-                <View style={ms.detailRow}>
-                  <View style={ms.detailIcon}><Ionicons name="calendar-outline" size={13} color={C.slate}/></View>
-                  <View>
-                    <Text style={ms.detailLbl}>Requested Date</Text>
-                    <Text style={ms.detailVal}>{displayKey(selectedKey)}</Text>
+        <TouchableWithoutFeedback onPress={handleDone}>
+          <View style={ms.overlay}>
+            <TouchableWithoutFeedback onPress={e => e.stopPropagation()}>
+              <View style={ms.card}>
+                <View style={ms.accentTop}>
+                  <View style={ms.successIconCircle}>
+                    <Ionicons name="checkmark" size={28} color={C.green}/>
                   </View>
                 </View>
-              )}
-              {selectedTime && (
-                <View style={ms.detailRow}>
-                  <View style={ms.detailIcon}><Ionicons name="time-outline" size={13} color={C.slate}/></View>
-                  <View>
-                    <Text style={ms.detailLbl}>Requested Time</Text>
-                    <Text style={ms.detailVal}>{selectedTime}</Text>
+                <View style={ms.body}>
+                  <View style={ms.iconRow}>
+                    <View style={ms.iconWrap}>
+                      <Ionicons name="send" size={14} color={C.shapeBlue}/>
+                    </View>
+                    <Text style={[ms.statusTxt, { color: C.shapeBlue }]}>Request Sent</Text>
                   </View>
-                </View>
-              )}
-              <View style={[ms.detailRow, { marginBottom: verticalScale(0) }]}>
-                <View style={[ms.detailIcon, { backgroundColor: C.orangeFaint }]}><Ionicons name="hourglass-outline" size={13} color={C.orange}/></View>
-                <View>
-                  <Text style={ms.detailLbl}>Status</Text>
-                  <Text style={[ms.detailVal, { color: C.orange }]}>Pending clinic confirmation</Text>
+                  <Text style={ms.title}>Appointment Requested!</Text>
+                  <Text style={ms.subtitle}>The clinic will review your request and confirm or suggest another time. You&apos;ll see the status update here.</Text>
+                  <View style={ms.divider}/>
+                  {selectedKey && (
+                    <View style={ms.detailRow}>
+                      <View style={ms.detailIcon}><Ionicons name="calendar-outline" size={13} color={C.slate}/></View>
+                      <View>
+                        <Text style={ms.detailLbl}>Requested Date</Text>
+                        <Text style={ms.detailVal}>{displayKey(selectedKey)}</Text>
+                      </View>
+                    </View>
+                  )}
+                  {selectedTime && (
+                    <View style={ms.detailRow}>
+                      <View style={ms.detailIcon}><Ionicons name="time-outline" size={13} color={C.slate}/></View>
+                      <View>
+                        <Text style={ms.detailLbl}>Requested Time</Text>
+                        <Text style={ms.detailVal}>{selectedTime}</Text>
+                      </View>
+                    </View>
+                  )}
+                  <View style={[ms.detailRow, { marginBottom: verticalScale(0) }]}>
+                    <View style={[ms.detailIcon, { backgroundColor: C.orangeFaint }]}><Ionicons name="hourglass-outline" size={13} color={C.orange}/></View>
+                    <View>
+                      <Text style={ms.detailLbl}>Status</Text>
+                      <Text style={[ms.detailVal, { color: C.orange }]}>Pending clinic confirmation</Text>
+                    </View>
+                  </View>
+                  <View style={ms.divider}/>
+                  <TouchableOpacity style={ms.doneBtn} onPress={handleDone} activeOpacity={0.8}>
+                    <Text style={ms.doneBtnTxt}>Got it!</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
-              <View style={ms.divider}/>
-              <TouchableOpacity style={ms.doneBtn} onPress={handleDone} activeOpacity={0.8}>
-                <Text style={ms.doneBtnTxt}>Got it!</Text>
-              </TouchableOpacity>
-            </View>
+            </TouchableWithoutFeedback>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       </Modal>
 
       {/* ══ APPOINTMENT DETAIL MODAL ═════════════════════════════════════════ */}
       <Modal visible={!!selectedApptDetail} transparent animationType="fade" statusBarTranslucent onShow={() => setCancellationReasonInput('')}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <Animated.View style={[sm.overlay, detailKeyboardLift]}>
-          <View style={sm.card}>
-            <LinearGradient colors={[C.navy, C.charcoal]} style={sm.header}>
-              <View style={{ flex: 1 }}>
-                <Text style={sm.headerTitle}>Appointment Details</Text>
-                {selectedApptDetail && (
-                  <Text style={sm.headerSub}>{displayKey(selectedApptDetail.date)}</Text>
-                )}
-              </View>
-              <TouchableOpacity onPress={() => setSelectedApptDetail(null)} style={sm.closeBtn}>
-                <Ionicons name="close" size={20} color={C.white}/>
-              </TouchableOpacity>
-            </LinearGradient>
-
-            {selectedApptDetail && (
-              <>
-                <ScrollView
-                  style={{ flexShrink: 1 }}
-                  contentContainerStyle={sm.body}
-                  keyboardShouldPersistTaps="handled"
-                  showsVerticalScrollIndicator={true}
-                >
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(16) }}>
-                    <Text style={{ fontSize: moderateScale(16), fontWeight: '800', color: C.charcoal }}>{selectedApptDetail.type}</Text>
-                    <StatusBadge status={selectedApptDetail.status} />
-                  </View>
-
-                  <View style={s.summaryCard}>
-                    <View style={[s.summaryRow, { marginBottom: verticalScale(8) }]}>
-                      <Ionicons name="time-outline" size={15} color={C.slate} style={{ marginRight: scale(8) }} />
-                      <Text style={{ fontSize: moderateScale(13), color: C.slate, fontWeight: '600' }}>Time: {selectedApptDetail.time}</Text>
-                    </View>
-                    <View style={[s.summaryRow, { marginBottom: verticalScale(8) }]}>
-                      <Ionicons name="person-outline" size={15} color={C.slate} style={{ marginRight: scale(8) }} />
-                      <Text style={{ fontSize: moderateScale(13), color: C.slate, fontWeight: '600' }}>Patient: {selectedApptDetail.name} ({selectedApptDetail.age} yrs, {selectedApptDetail.gender})</Text>
-                    </View>
-                    <View style={[s.summaryRow, { marginBottom: verticalScale(8) }]}>
-                      <Ionicons name="call-outline" size={15} color={C.slate} style={{ marginRight: scale(8) }} />
-                      <Text style={{ fontSize: moderateScale(13), color: C.slate, fontWeight: '600' }}>Contact: {selectedApptDetail.contactNumber}</Text>
-                    </View>
-                    {selectedApptDetail.address ? (
-                      <View style={[s.summaryRow, { marginBottom: verticalScale(0) }]}>
-                        <Ionicons name="location-outline" size={15} color={C.slate} style={{ marginRight: scale(8) }} />
-                        <Text style={{ fontSize: moderateScale(13), color: C.slate, fontWeight: '600' }}>Address: {selectedApptDetail.address}</Text>
-                      </View>
-                    ) : null}
-                  </View>
-
-                  {(selectedApptDetail.declineReason || (selectedApptDetail.status === 'cancelled' && selectedApptDetail.cancellationReason)) ? (
-                    <View style={[s.noteBox, { backgroundColor: '#FEF2F2', borderColor: '#FCA5A5', borderWidth: 1, marginTop: verticalScale(12) }]}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6), marginBottom: verticalScale(4) }}>
-                        <Ionicons name="close-circle" size={16} color="#DC2626" />
-                        <Text style={{ fontSize: moderateScale(12), fontWeight: '800', color: '#991B1B' }}>
-                          {selectedApptDetail.declineReason ? 'Reason for Decline' : 'Cancellation Reason'}
-                        </Text>
-                      </View>
-                      <Text style={{ fontSize: moderateScale(13), color: '#7F1D1D', fontWeight: '600', lineHeight: moderateScale(18) }}>
-                        {selectedApptDetail.declineReason || selectedApptDetail.cancellationReason}
-                      </Text>
-                    </View>
-                  ) : selectedApptDetail.cancellationReason ? (
-                    <View style={[s.noteBox, { backgroundColor: C.orangeFaint, marginTop: verticalScale(12) }]}>
-                      <Ionicons name="alert-circle-outline" size={16} color={C.orange} />
-                      <Text style={[s.noteTxt, { color: C.orange }]}>
-                        Cancellation Reason: {selectedApptDetail.cancellationReason}
-                      </Text>
-                    </View>
-                  ) : null}
-
-                  {selectedApptDetail.note ? (
-                    <View style={[s.noteBox, { marginTop: verticalScale(12) }]}>
-                      <Ionicons name="chatbubble-ellipses-outline" size={16} color={C.navy} />
-                      <Text style={s.noteTxt}>Clinic Note: {selectedApptDetail.note}</Text>
-                    </View>
-                  ) : null}
-
-                  {(selectedApptDetail.status === 'pending' || selectedApptDetail.status === 'confirmed' || selectedApptDetail.status === 'accepted') && (
-                    <View style={{ marginTop: verticalScale(16) }}>
-                      <Text style={{ fontSize: moderateScale(13), fontWeight: '700', color: C.charcoal, marginBottom: verticalScale(8) }}>
-                        Reason for Cancellation <Text style={{ color: C.red }}>*</Text>
-                      </Text>
-                      <TextInput
-                        style={[df.input, df.inputMulti, { minHeight: verticalScale(76) }]}
-                        placeholder="e.g. Schedule conflict, illness, emergency..."
-                        placeholderTextColor={C.muted}
-                        multiline
-                        numberOfLines={3}
-                        value={cancellationReasonInput}
-                        onChangeText={setCancellationReasonInput}
-                      />
-                      <Text style={{ fontSize: moderateScale(11), color: C.muted, marginTop: verticalScale(6), fontStyle: 'italic' }}>
-                        Sent to the clinic for approval. The appointment stays booked until staff approve it.
-                      </Text>
-                    </View>
-                  )}
-                </ScrollView>
-
-                <View style={sm.footer}>
-                  <TouchableOpacity style={sm.cancelBtn} onPress={() => setSelectedApptDetail(null)}>
-                    <Text style={sm.cancelTxt}>Close</Text>
-                  </TouchableOpacity>
-                  {(selectedApptDetail.status === 'pending' || selectedApptDetail.status === 'confirmed' || selectedApptDetail.status === 'accepted') && (
-                    <TouchableOpacity
-                      style={[sm.confirmBtn, { backgroundColor: '#EF4444' }, submittingCancellation && { opacity: 0.6 }]}
-                      onPress={handleRequestCancellation}
-                      disabled={submittingCancellation}
-                    >
-                      {submittingCancellation ? (
-                        <ActivityIndicator color={C.white} size="small" />
-                      ) : (
-                        <Text style={sm.confirmTxt}>Request Cancellation</Text>
+          <TouchableWithoutFeedback onPress={() => {
+            if (cancellationReasonInput.trim()) {
+              showAlert({
+                type: 'warning',
+                title: 'Discard Changes?',
+                message: 'You have typed a cancellation reason. Are you sure you want to close without submitting?',
+                primaryButtonText: 'Discard',
+                onPrimaryPress: () => {
+                  hideAlert();
+                  setSelectedApptDetail(null);
+                  setCancellationReasonInput('');
+                },
+                secondaryButtonText: 'Keep Editing',
+                onSecondaryPress: hideAlert,
+              });
+            } else {
+              setSelectedApptDetail(null);
+            }
+          }}>
+            <Animated.View style={[sm.overlay, detailKeyboardLift]}>
+              <TouchableWithoutFeedback onPress={e => e.stopPropagation()}>
+                <View style={sm.card}>
+                  <LinearGradient colors={[C.navy, C.charcoal]} style={sm.header}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={sm.headerTitle}>Appointment Details</Text>
+                      {selectedApptDetail && (
+                        <Text style={sm.headerSub}>{displayKey(selectedApptDetail.date)}</Text>
                       )}
+                    </View>
+                    <TouchableOpacity onPress={() => setSelectedApptDetail(null)} style={sm.closeBtn}>
+                      <Ionicons name="close" size={20} color={C.white}/>
                     </TouchableOpacity>
+                  </LinearGradient>
+
+                  {selectedApptDetail && (
+                    <>
+                      <ScrollView
+                        style={{ flexShrink: 1 }}
+                        contentContainerStyle={sm.body}
+                        keyboardShouldPersistTaps="handled"
+                        showsVerticalScrollIndicator={true}
+                      >
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(16) }}>
+                          <Text style={{ fontSize: moderateScale(16), fontWeight: '800', color: C.charcoal }}>{selectedApptDetail.type}</Text>
+                          <StatusBadge status={selectedApptDetail.status} />
+                        </View>
+
+                        <View style={s.summaryCard}>
+                          <View style={[s.summaryRow, { marginBottom: verticalScale(8) }]}>
+                            <Ionicons name="time-outline" size={15} color={C.slate} style={{ marginRight: scale(8) }} />
+                            <Text style={{ fontSize: moderateScale(13), color: C.slate, fontWeight: '600' }}>Time: {selectedApptDetail.time}</Text>
+                          </View>
+                          <View style={[s.summaryRow, { marginBottom: verticalScale(8) }]}>
+                            <Ionicons name="person-outline" size={15} color={C.slate} style={{ marginRight: scale(8) }} />
+                            <Text style={{ fontSize: moderateScale(13), color: C.slate, fontWeight: '600' }}>Patient: {selectedApptDetail.name} ({selectedApptDetail.age} yrs, {selectedApptDetail.gender})</Text>
+                          </View>
+                          <View style={[s.summaryRow, { marginBottom: verticalScale(8) }]}>
+                            <Ionicons name="call-outline" size={15} color={C.slate} style={{ marginRight: scale(8) }} />
+                            <Text style={{ fontSize: moderateScale(13), color: C.slate, fontWeight: '600' }}>Contact: {selectedApptDetail.contactNumber}</Text>
+                          </View>
+                          {selectedApptDetail.address ? (
+                            <View style={[s.summaryRow, { marginBottom: verticalScale(0) }]}>
+                              <Ionicons name="location-outline" size={15} color={C.slate} style={{ marginRight: scale(8) }} />
+                              <Text style={{ fontSize: moderateScale(13), color: C.slate, fontWeight: '600' }}>Address: {selectedApptDetail.address}</Text>
+                            </View>
+                          ) : null}
+                        </View>
+
+                        {(selectedApptDetail.declineReason || (selectedApptDetail.status === 'cancelled' && selectedApptDetail.cancellationReason)) ? (
+                          // noteBox is a row layout; this card overrides it to a column so the
+                          // reason sits below its label and wraps within the card width.
+                          <View style={[s.noteBox, { flexDirection: 'column', alignItems: 'stretch', gap: verticalScale(4), backgroundColor: '#FEF2F2', borderColor: '#FCA5A5', borderWidth: 1, marginTop: verticalScale(12) }]}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6) }}>
+                              <Ionicons name="close-circle" size={16} color="#DC2626" />
+                              <Text style={{ flexShrink: 1, fontSize: moderateScale(12), fontWeight: '800', color: '#991B1B' }}>
+                                {selectedApptDetail.declineReason ? 'Reason for Decline' : 'Cancellation Reason'}
+                              </Text>
+                            </View>
+                            <Text style={{ width: '100%', flexShrink: 1, fontSize: moderateScale(13), color: '#7F1D1D', fontWeight: '600', lineHeight: moderateScale(18) }}>
+                              {selectedApptDetail.declineReason || selectedApptDetail.cancellationReason}
+                            </Text>
+                          </View>
+                        ) : selectedApptDetail.cancellationReason ? (
+                          <View style={[s.noteBox, { backgroundColor: C.orangeFaint, marginTop: verticalScale(12) }]}>
+                            <Ionicons name="alert-circle-outline" size={16} color={C.orange} />
+                            <Text style={[s.noteTxt, { color: C.orange }]}>
+                              Cancellation Reason: {selectedApptDetail.cancellationReason}
+                            </Text>
+                          </View>
+                        ) : null}
+
+                        {selectedApptDetail.note ? (
+                          <View style={[s.noteBox, { marginTop: verticalScale(12) }]}>
+                            <Ionicons name="chatbubble-ellipses-outline" size={16} color={C.navy} />
+                            <Text style={s.noteTxt}>Clinic Note: {selectedApptDetail.note}</Text>
+                          </View>
+                        ) : null}
+
+                        {(selectedApptDetail.status === 'pending' || selectedApptDetail.status === 'confirmed' || selectedApptDetail.status === 'accepted') && (
+                          <View style={{ marginTop: verticalScale(16) }}>
+                            <Text style={{ fontSize: moderateScale(13), fontWeight: '700', color: C.charcoal, marginBottom: verticalScale(8) }}>
+                              Reason for Cancellation <Text style={{ color: C.red }}>*</Text>
+                            </Text>
+                            <TextInput
+                              style={[df.input, df.inputMulti, { minHeight: verticalScale(76) }]}
+                              placeholder="e.g. Schedule conflict, illness, emergency..."
+                              placeholderTextColor={C.muted}
+                              multiline
+                              numberOfLines={3}
+                              value={cancellationReasonInput}
+                              onChangeText={setCancellationReasonInput}
+                            />
+                            <Text style={{ fontSize: moderateScale(11), color: C.muted, marginTop: verticalScale(6), fontStyle: 'italic' }}>
+                              Sent to the clinic for approval. The appointment stays booked until staff approve it.
+                            </Text>
+                          </View>
+                        )}
+                      </ScrollView>
+
+                      <View style={sm.footer}>
+                        <TouchableOpacity style={sm.cancelBtn} onPress={() => setSelectedApptDetail(null)}>
+                          <Text style={sm.cancelTxt}>Close</Text>
+                        </TouchableOpacity>
+                        {(selectedApptDetail.status === 'pending' || selectedApptDetail.status === 'confirmed' || selectedApptDetail.status === 'accepted') && (
+                          <TouchableOpacity
+                            style={[sm.confirmBtn, { backgroundColor: '#EF4444' }, submittingCancellation && { opacity: 0.6 }]}
+                            onPress={handleRequestCancellation}
+                            disabled={submittingCancellation}
+                          >
+                            {submittingCancellation ? (
+                              <ActivityIndicator color={C.white} size="small" />
+                            ) : (
+                              <Text style={sm.confirmTxt}>Request Cancellation</Text>
+                            )}
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </>
                   )}
                 </View>
-              </>
-            )}
-          </View>
-        </Animated.View>
+              </TouchableWithoutFeedback>
+            </Animated.View>
+          </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -1529,13 +1537,13 @@ const s = StyleSheet.create({
   legendToday:  { width: scale(14), height: verticalScale(14), borderRadius: scale(5), borderWidth: 2, borderColor: C.red },
   legendTxt:    { fontSize: moderateScale(11.5), color: C.charcoal, fontWeight: '600' },
 
-  timeGrid:     { flexDirection: 'row', flexWrap: 'wrap', gap: scale(10) },
-  timeChip:     { flexDirection: 'row', alignItems: 'center', gap: scale(7), paddingHorizontal: scale(14), paddingVertical: verticalScale(12), borderRadius: scale(14), backgroundColor: C.white, borderWidth: 1.5, borderColor: C.border, overflow: 'hidden', shadowColor: C.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+  timeGrid:     { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: verticalScale(10) },
+  timeChip:     { width: '48.5%', minHeight: verticalScale(48), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: scale(4), paddingHorizontal: scale(4), paddingVertical: verticalScale(10), borderRadius: scale(14), backgroundColor: C.white, borderWidth: 1.5, borderColor: C.border, overflow: 'hidden', shadowColor: C.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
   timeChipActive:{ borderColor: 'transparent', shadowOpacity: 0 },
   timeChipOff:  { backgroundColor: '#F8FAFC', borderColor: '#EEF2F7', shadowOpacity: 0, elevation: 0 },
-  timeTxt:      { fontSize: moderateScale(13), fontWeight: '700', color: C.charcoal },
-  fullPill:     { backgroundColor: '#F1F5F9', paddingHorizontal: scale(5), paddingVertical: verticalScale(2), borderRadius: scale(5) },
-  fullPillTxt:  { fontSize: moderateScale(9), fontWeight: '800', color: C.muted },
+  timeTxt:      { fontSize: moderateScale(11), fontWeight: '700', color: C.charcoal },
+  fullPill:     { backgroundColor: '#F1F5F9', paddingHorizontal: scale(4), paddingVertical: verticalScale(2), borderRadius: scale(4), marginLeft: scale(2) },
+  fullPillTxt:  { fontSize: moderateScale(8.5), fontWeight: '800', color: C.muted },
 
   summaryCard:    { backgroundColor: C.white, borderRadius: scale(20), padding: scale(18), shadowColor: C.shadow, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 5 },
   summaryHead:    { flexDirection: 'row', alignItems: 'center', gap: scale(10), marginBottom: verticalScale(14) },
@@ -1607,8 +1615,8 @@ const df = StyleSheet.create({
   submitBtn:  { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: scale(8), paddingVertical: verticalScale(12), borderRadius: scale(12), backgroundColor: '#334155' },
   submitTxt:  { fontSize: moderateScale(13), fontWeight: '800', color: C.white },
 
-  typeSection:      { paddingHorizontal: scale(20), paddingTop: verticalScale(4), paddingBottom: verticalScale(8), position: 'relative', zIndex: 100 },
-  typeSectionLabel: { fontSize: moderateScale(12), fontWeight: '700', color: C.slate, marginBottom: verticalScale(10), textTransform: 'uppercase', letterSpacing: 0.3 },
+  typeSection:      { marginBottom: verticalScale(14) },
+  typeSectionLabel: { fontSize: moderateScale(12), fontWeight: '700', color: C.slate, marginBottom: verticalScale(8), textTransform: 'uppercase', letterSpacing: 0.3 },
   typeRow:          { gap: scale(8) },
   typeCard:         { flexDirection: 'row', alignItems: 'flex-start', gap: scale(12), padding: scale(14), borderRadius: scale(16), borderWidth: 1.5, borderColor: C.border, backgroundColor: C.bg },
   typeEmoji:        { fontSize: moderateScale(22), marginTop: verticalScale(1) },
@@ -1624,28 +1632,23 @@ const df = StyleSheet.create({
   catLabel:         { fontSize: moderateScale(13), fontWeight: '700', color: C.muted },
   catLabelActive:   { color: C.navy },
 
-  vaccineWrap:          { marginTop: verticalScale(10), position: 'relative', zIndex: 100 },
+  vaccineWrap:          { marginTop: verticalScale(10) },
   vaccineSelector:      { flexDirection: 'row', alignItems: 'center', gap: scale(9), backgroundColor: C.bg, borderWidth: 1.5, borderColor: C.border, borderRadius: scale(13), paddingHorizontal: scale(14), paddingVertical: verticalScale(13) },
   vaccineSelectorOpen:  { borderColor: C.navy },
   vaccineSelectorTxt:   { flex: 1, fontSize: moderateScale(14), color: C.muted, fontWeight: '500' },
   vaccineDropdown:      {
-    position: 'absolute',
-    top: verticalScale(48),
-    left: 0,
-    right: 0,
-    zIndex: 1000,
-    elevation: 10,
+    marginTop: verticalScale(8),
     borderWidth: 1.5,
     borderColor: C.navy,
     borderRadius: scale(13),
     backgroundColor: C.white,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
   },
-  dropdownBackdrop:     { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 90 },
   vaccineOption:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: scale(14), paddingVertical: verticalScale(13) },
   vaccineOptionActive:  { backgroundColor: C.navyFaint },
   vaccineOptionTxt:     { fontSize: moderateScale(14), color: C.slate, fontWeight: '600' },

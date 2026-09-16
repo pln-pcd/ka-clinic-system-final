@@ -2,6 +2,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import { goBackOr, resetTo } from '../../utils/navigation';
 import { useState } from 'react';
 import {
   Alert,
@@ -69,7 +70,7 @@ export default function LoginScreen() {
       const trusted = await checkLoginTrust();
       if (trusted) {
         completeSecondFactor();
-        router.replace('/(tabs)');
+        resetTo(router, '/(tabs)');
         return;
       }
       const { maskedEmail } = await sendLoginOTP();
@@ -106,7 +107,7 @@ export default function LoginScreen() {
       await setKeepSignedIn(false);
       await signInAsGuest();
       await markOnboardingSeen();
-      router.replace('/(tabs)');
+      resetTo(router, '/(tabs)');
     } catch (e: any) {
       setError(getAuthErrorMessage(e));
     } finally {
@@ -126,7 +127,7 @@ export default function LoginScreen() {
 
       {/* TOP NAVIGATION */}
       <View style={[styles.navHeader, { top: Math.max(insets.top + (Platform.OS === 'android' ? 12 : 8), verticalScale(42)) }]}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.backButton} onPress={() => goBackOr(router, '/onboarding4')} activeOpacity={0.7}>
           <Ionicons name="chevron-back" size={22} color="#1E293B" />
         </TouchableOpacity>
       </View>

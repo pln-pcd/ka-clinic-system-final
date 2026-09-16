@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import { resetTo } from '../utils/navigation';
 import React, { useEffect } from 'react';
 import { Dimensions, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, {
@@ -49,7 +50,7 @@ export default function Onboarding4() {
   // on, launches go straight to login (or the app, if a session is kept).
   const handleFinish = async () => {
     await markOnboardingSeen();
-    router.replace('/auth/login');
+    resetTo(router, '/auth/login');
   };
 
   // Guarantees button is safely elevated above Android 3-button nav / gesture bar

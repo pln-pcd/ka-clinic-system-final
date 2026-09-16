@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { resetTo } from '../../utils/navigation';
 import {
   collection,
   doc,
@@ -27,6 +28,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   UIManager,
   View,
 } from 'react-native';
@@ -45,7 +47,6 @@ import { db } from '../../config/firebase';
 import {
   acknowledgeNotification,
   ensureNotificationPermission,
-  presentLocalNotification,
   registerForPushNotifications,
 } from '../../config/notifications';
 import { usePatientAuth } from '../../context/PatientAuthContext';
@@ -267,8 +268,6 @@ export default function RabiesRecoveryApp() {
   const [declinedAppts, setDeclinedAppts] = useState<ApptUpdate[]>([]);
   // Appointment ids already announced. `null` until the first snapshot lands so
   // the initial batch seeds the baseline instead of firing a burst of banners.
-  const seenConfirmedIds = useRef<Set<string> | null>(null);
-  const seenDeclinedIds = useRef<Set<string> | null>(null);
   const mainScrollViewRef = useRef<ScrollView>(null);
 
   const [clinicNotifs, setClinicNotifs] = useState<ClinicNotification[]>([]);
@@ -387,7 +386,7 @@ export default function RabiesRecoveryApp() {
   }, [tabParam]);
 
   useEffect(() => {
-    if (!authLoading && !user) router.replace('/auth/login');
+    if (!authLoading && !user) resetTo(router, '/auth/login');
   }, [authLoading, user]);
 
   // Raise the OS permission prompt once the patient is signed in, rather than
@@ -489,8 +488,6 @@ export default function RabiesRecoveryApp() {
     if (!user) {
       setConfirmedAppts([]);
       setDeclinedAppts([]);
-      seenConfirmedIds.current = null;
-      seenDeclinedIds.current = null;
       return;
     }
     const q = query(collection(db, 'appointments'), where('userId', '==', user.uid));
@@ -504,39 +501,9 @@ export default function RabiesRecoveryApp() {
         .filter(a => a.status === 'cancelled' && (a.declineReason || a.cancellationReason))
         .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
-      // First snapshot only seeds the baseline — otherwise every appointment
-      // the patient already knew about would re-fire a banner on each launch.
-      if (seenConfirmedIds.current === null) {
-        seenConfirmedIds.current = new Set(confirmed.map(a => a.id));
-      } else {
-        confirmed
-          .filter(a => !seenConfirmedIds.current!.has(a.id))
-          .forEach(a => {
-            seenConfirmedIds.current!.add(a.id);
-            presentLocalNotification(
-              'Appointment Confirmed',
-              `K&A Clinic accepted your ${formatApptDate(a.date)} appointment${a.time ? ` at ${a.time}` : ''}.`,
-              { appointmentId: a.id, screen: 'appt' },
-            );
-          });
-      }
-
-      if (seenDeclinedIds.current === null) {
-        seenDeclinedIds.current = new Set(declined.map(a => a.id));
-      } else {
-        declined
-          .filter(a => !seenDeclinedIds.current!.has(a.id))
-          .forEach(a => {
-            seenDeclinedIds.current!.add(a.id);
-            const reason = a.declineReason || a.cancellationReason;
-            presentLocalNotification(
-              'Appointment Declined',
-              `Your appointment on ${formatApptDate(a.date)} was declined.${reason ? ` Reason: ${reason}` : ''}`,
-              { appointmentId: a.id, screen: 'appt' },
-            );
-          });
-      }
-
+      // No local banner here: the dashboard's approve/decline goes through
+      // /api/notifications, which pushes to this phone. A local notification on
+      // top of that showed the same news twice while the app was open.
       setConfirmedAppts(confirmed);
       setDeclinedAppts(declined);
     }, (err) => {
@@ -1028,8 +995,10 @@ export default function RabiesRecoveryApp() {
 
       {/* ── PROGRESS TRACKER POP-UP MODAL (STYLE: WEB ADD REPORT POP CARD) ── */}
       <Modal visible={showProgressModal} animationType="fade" transparent onRequestClose={() => setShowProgressModal(false)}>
-        <View style={s.centeredOverlay}>
-          <View style={s.progressBannerSheet}>
+        <TouchableWithoutFeedback onPress={() => setShowProgressModal(false)}>
+          <View style={s.centeredOverlay}>
+            <TouchableWithoutFeedback onPress={e => e.stopPropagation()}>
+              <View style={s.progressBannerSheet}>
             {/* Clean Slate-50 Header matching Web Pop Card */}
             <View style={s.trackerWebHeader}>
               <View style={{ flex: 1, paddingRight: scale(10) }}>
@@ -1125,13 +1094,17 @@ export default function RabiesRecoveryApp() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
-      </Modal>
+        </TouchableWithoutFeedback>
+      </View>
+    </TouchableWithoutFeedback>
+  </Modal>
 
       {/* ── NOTIFICATION PANEL MODAL ── */}
       <Modal visible={showNotifPanel} animationType="slide" transparent>
-        <View style={s.centeredOverlay}>
-          <View style={s.notifPanelSheet}>
+        <TouchableWithoutFeedback onPress={() => setShowNotifPanel(false)}>
+          <View style={s.centeredOverlay}>
+            <TouchableWithoutFeedback onPress={e => e.stopPropagation()}>
+              <View style={s.notifPanelSheet}>
             <View style={s.popupHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8) }}>
                 <Ionicons name="notifications" size={22} color={MEDICAL_RED} />
@@ -1237,13 +1210,17 @@ export default function RabiesRecoveryApp() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
-      </Modal>
+        </TouchableWithoutFeedback>
+      </View>
+    </TouchableWithoutFeedback>
+  </Modal>
 
       {/* ── ENLARGE CARD POPUP MODAL (Matching Reference UI) ── */}
       <Modal visible={showEnlargeModal} animationType="slide" transparent statusBarTranslucent>
-        <View style={s.enlargeModalOverlay}>
-          <View style={s.enlargeModalCard}>
+        <TouchableWithoutFeedback onPress={() => setShowEnlargeModal(false)}>
+          <View style={s.enlargeModalOverlay}>
+            <TouchableWithoutFeedback onPress={e => e.stopPropagation()}>
+              <View style={s.enlargeModalCard}>
             
             {/* Enlarged Card Display Container (90° Rotated Landscape Card matching reference photo) */}
             <View style={s.enlargeCardContainer}>
@@ -1441,8 +1418,10 @@ export default function RabiesRecoveryApp() {
             </TouchableOpacity>
 
           </View>
-        </View>
-      </Modal>
+        </TouchableWithoutFeedback>
+      </View>
+    </TouchableWithoutFeedback>
+  </Modal>
 
       {/* ── BOTTOM NAV BAR ── */}
       <View style={[nav.bar, { height: verticalScale(80) + insets.bottom, paddingBottom: verticalScale(8) + insets.bottom }]}>
