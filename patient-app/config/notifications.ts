@@ -1,22 +1,19 @@
 // config/notifications.ts
 //
-// Thin wrapper over expo-notifications for the one thing the app currently
-// needs: telling a patient the clinic accepted their appointment request.
-//
-// These are LOCAL notifications only — there is no push server or Expo push
-// token registration. The app watches the `appointments` collection itself
-// (see app/(tabs)/index.tsx) and fires a banner the moment a doc it is
-// already subscribed to flips to confirmed/accepted, so delivery depends on
-// the app being open or backgrounded with the listener still attached.
+// Push notification and local notification services for K&A Clinic Patient App.
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
+import { API_BASE_URL } from './apiBase';
+import { auth } from './firebase';
 
-const ANDROID_CHANNEL_ID = 'appointments';
+export const ANDROID_CHANNEL_ID = 'appointments';
+export const EAS_PROJECT_ID = '62297c13-8ceb-4918-9d9e-a9113cbf5acf';
 
-// Foreground notifications are suppressed by default on both platforms;
-// without this the banner only ever appears when the app is backgrounded.
+// Foreground notifications handler: ensures banners and sound trigger when app is open or backgrounded.
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
+    shouldShowAlert: true,
     shouldShowBanner: true,
     shouldShowList: true,
     shouldPlaySound: true,
@@ -24,51 +21,55 @@ Notifications.setNotificationHandler({
   }),
 });
 
-let permissionPromise: Promise<boolean> | null = null;
-
 /**
- * Asks for notification permission once per app session and creates the
- * Android channel. Safe to call repeatedly — the result is memoised, so the
- * OS prompt is only ever raised on the first call.
- *
- * Resolves false (rather than throwing) when permission is denied or the
- * platform has no notification support, so callers can just no-op.
+ * Creates the Android notification channel with high priority, sound, and vibration.
+ * Safe to call repeatedly; Android updates existing channel attributes if compatible.
  */
-export function ensureNotificationPermission(): Promise<boolean> {
-  if (permissionPromise) return permissionPromise;
-
-  permissionPromise = (async () => {
-    try {
-      if (Platform.OS === 'web') return false;
-
-      if (Platform.OS === 'android') {
-        await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
-          name: 'Appointment updates',
-          importance: Notifications.AndroidImportance.HIGH,
-          vibrationPattern: [0, 250, 250, 250],
-          lightColor: '#1E3A8A',
-        });
-      }
-
-      const { status: existing } = await Notifications.getPermissionsAsync();
-      if (existing === 'granted') return true;
-
-      const { status } = await Notifications.requestPermissionsAsync();
-      return status === 'granted';
-    } catch (e) {
-      // Expo Go on some platforms, or a user who revoked permission mid-session —
-      // the in-app notification centre still shows the update either way.
-      console.warn('Notification permission check failed:', e);
-      return false;
-    }
-  })();
-
-  return permissionPromise;
+export async function setupNotificationChannelAsync(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  try {
+    await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
+      name: 'Clinic & Appointment Updates',
+      importance: Notifications.AndroidImportance.MAX,
+      sound: 'default',
+      enableVibrate: true,
+      vibrationPattern: [0, 250, 250, 250],
+      enableLights: true,
+      lightColor: '#1E3A8A',
+      showBadge: true,
+    });
+  } catch (e) {
+    console.warn('Failed to setup notification channel:', e);
+  }
 }
 
 /**
- * Fires an immediate local notification. Silently does nothing when
- * permission was refused — the caller should not have to branch on it.
+ * Ensures notification permission is granted and Android channel is configured.
+ * Does not permanently memoize failure so users enabling permission later can retry.
+ */
+export async function ensureNotificationPermission(force = false): Promise<boolean> {
+  try {
+    if (Platform.OS === 'web') return false;
+
+    await setupNotificationChannelAsync();
+
+    const { status: existing } = await Notifications.getPermissionsAsync();
+    if (existing === 'granted') return true;
+
+    if (force || existing === 'undetermined') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      return status === 'granted';
+    }
+
+    return false;
+  } catch (e) {
+    console.warn('Notification permission check failed:', e);
+    return false;
+  }
+}
+
+/**
+ * Fires an immediate local notification to the device tray.
  */
 export async function presentLocalNotification(
   title: string,
@@ -83,65 +84,88 @@ export async function presentLocalNotification(
         title,
         body,
         data,
+        sound: 'default',
         ...(Platform.OS === 'android' ? { channelId: ANDROID_CHANNEL_ID } : null),
       },
-      trigger: null, // deliver now
+      trigger: null, // deliver immediately
     });
   } catch (e) {
     console.warn('Could not present notification:', e);
   }
 }
 
-// ── Expo push registration ──────────────────────────────────────────────────
-//
-// The local-notification helpers above only fire while the app is running with
-// a Firestore listener attached. Clinic follow-ups have to reach the patient
-// when the app is closed, so the device also registers an Expo push token with
-// the clinic server (api/notifications.js, action `register-token`), which
-// stores it against the patient's vaccination record.
-import Constants from 'expo-constants';
-import { API_BASE_URL } from './apiBase';
-import { auth } from './firebase';
+/**
+ * Schedules a local dose reminder on the morning (8:00 AM) of a scheduled vaccine date.
+ */
+export async function scheduleDoseReminder(doseLabel: string, dueDateStr: string): Promise<void> {
+  const granted = await ensureNotificationPermission();
+  if (!granted || !dueDateStr) return;
+  try {
+    const doseDate = new Date(`${dueDateStr}T08:00:00`);
+    if (doseDate.getTime() > Date.now()) {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'Vaccination Dose Reminder 💉',
+          body: `Reminder: Your ${doseLabel} is scheduled for today (${dueDateStr}). Please visit K&A Clinic on time.`,
+          sound: 'default',
+          data: { type: 'dose-reminder', dueDate: dueDateStr },
+          ...(Platform.OS === 'android' ? { channelId: ANDROID_CHANNEL_ID } : null),
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: doseDate,
+        },
+      });
+    }
+  } catch (e) {
+    console.warn('Could not schedule dose reminder:', e);
+  }
+}
 
-
-let registrationPromise: Promise<string | null> | null = null;
+let cachedRegisteredToken: string | null = null;
+let registrationInProgress: Promise<string | null> | null = null;
 
 /**
- * Obtains this device's Expo push token and registers it with the clinic
- * server. Memoised per app session — repeated calls resolve the same token
- * without re-hitting the server.
- *
- * Resolves null (never throws) whenever push is unavailable: web, a simulator
- * with no push support, denied permission, a missing projectId in a bare Expo
- * Go session, or an unconfigured API base URL. Callers can fire and forget;
- * the in-app notification centre and email still work regardless.
+ * Obtains this device's Expo push token and registers it with the clinic server.
+ * Retries cleanly if previously unauthenticated or permissions were not yet granted.
  */
-export function registerForPushNotifications(mrn?: string | null): Promise<string | null> {
-  if (registrationPromise) return registrationPromise;
+export async function registerForPushNotifications(
+  mrn?: string | null,
+  force = false,
+): Promise<string | null> {
+  if (cachedRegisteredToken && !force) return cachedRegisteredToken;
+  if (registrationInProgress && !force) return registrationInProgress;
 
-  registrationPromise = (async () => {
+  registrationInProgress = (async () => {
     try {
       if (Platform.OS === 'web') return null;
-      if (!API_BASE_URL) return null;
-
-      const granted = await ensureNotificationPermission();
-      if (!granted) return null;
-
-      // EAS builds carry the projectId in extra.eas; without it Expo cannot
-      // mint a push token, which is the normal case in a plain Expo Go run.
-      const projectId =
-        Constants.expoConfig?.extra?.eas?.projectId ??
-        (Constants as any).easConfig?.projectId;
-      if (!projectId) {
-        console.warn('No EAS projectId configured — skipping push registration.');
+      if (!API_BASE_URL) {
+        console.warn('Push registration skipped: API_BASE_URL is not set.');
         return null;
       }
 
+      const granted = await ensureNotificationPermission(force);
+      if (!granted) {
+        console.warn('Push registration skipped: permissions not granted.');
+        return null;
+      }
+
+      const projectId =
+        Constants.expoConfig?.extra?.eas?.projectId ??
+        (Constants as any).easConfig?.projectId ??
+        EAS_PROJECT_ID;
+
       const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
-      if (!token) return null;
+      if (!token) {
+        console.warn('Push registration failed: no push token returned.');
+        return null;
+      }
 
       const idToken = await auth.currentUser?.getIdToken();
-      if (!idToken) return null;
+      if (!idToken) {
+        console.warn('Push registration postponed: no auth session available.');
+        return null;
+      }
 
       const res = await fetch(`${API_BASE_URL}/api/notifications`, {
         method: 'POST',
@@ -151,25 +175,28 @@ export function registerForPushNotifications(mrn?: string | null): Promise<strin
         },
         body: JSON.stringify({ action: 'register-token', pushToken: token, mrn: mrn || '' }),
       });
+
       const json = await res.json().catch(() => null);
       if (!json?.success) {
-        console.warn('Push token registration rejected:', json?.error);
+        console.warn('Push token registration rejected by server:', json?.error);
         return null;
       }
+
+      cachedRegisteredToken = token;
       return token;
     } catch (e) {
-      console.warn('Push registration failed:', e);
+      console.warn('Push registration error:', e);
       return null;
+    } finally {
+      registrationInProgress = null;
     }
   })();
 
-  return registrationPromise;
+  return registrationInProgress;
 }
 
 /**
- * Tells the clinic the patient saw a notification — the app-side counterpart
- * of the "I received this notification" button in the follow-up email.
- * Resolves false on any failure so the caller can leave the button enabled.
+ * Tells the clinic the patient saw a notification.
  */
 export async function acknowledgeNotification(notificationId: string): Promise<boolean> {
   try {

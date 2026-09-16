@@ -232,6 +232,8 @@ async function sendExpoPush(tokens, { title, body, data }) {
       body,
       data: data || {},
       channelId: 'appointments',
+      priority: 'high',
+      _displayInForeground: true,
     }));
     const resp = await fetch(EXPO_PUSH_ENDPOINT, {
       method: 'POST',

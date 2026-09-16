@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { usePatientAuth } from '../context/PatientAuthContext';
+import { setupNotificationChannelAsync } from '../config/notifications';
 
 const PUBLIC_ROUTES = ['auth', 'onboarding', 'onboarding1', 'onboarding2', 'onboarding3', 'onboarding4'];
 
@@ -13,6 +14,10 @@ export default function MobileApp() {
   const { user, loading } = usePatientAuth();
   const router = useRouter();
   const segments = useSegments();
+
+  useEffect(() => {
+    setupNotificationChannelAsync().catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (loading) return;

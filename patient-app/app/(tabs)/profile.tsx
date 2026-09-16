@@ -32,6 +32,11 @@ import {
 import { usePatientAuth } from '../../context/PatientAuthContext';
 import { moderateScale, scale, verticalScale } from '../../constants/scale';
 import CustomAlertModal, { CustomAlertConfig } from '../../components/CustomAlertModal';
+import {
+  ensureNotificationPermission,
+  presentLocalNotification,
+  registerForPushNotifications,
+} from '../../config/notifications';
 
 // "3 hours ago" style stamp for the device list — absolute dates read as noise
 // for something the patient checks to spot an unfamiliar session.
@@ -515,26 +520,87 @@ export default function ProfileScreen() {
       });
       return;
     }
-    setNotificationsEnabled(value);
+
     const uid = user?.uid || 'guest';
-    await AsyncStorage.setItem(`kna:pushNotifs:${uid}`, value ? 'true' : 'false').catch(() => {});
+
     if (value) {
+      const granted = await ensureNotificationPermission(true);
+      if (!granted) {
+        setNotificationsEnabled(false);
+        await AsyncStorage.setItem(`kna:pushNotifs:${uid}`, 'false').catch(() => {});
+        showAlert({
+          type: 'warning',
+          title: 'Permission Required',
+          message: 'Notifications are disabled in your phone settings. Please enable notifications for K&A Clinic in your device Settings.',
+          primaryButtonText: 'OK',
+          onPrimaryPress: hideAlert,
+        });
+        return;
+      }
+
+      setNotificationsEnabled(true);
+      await AsyncStorage.setItem(`kna:pushNotifs:${uid}`, 'true').catch(() => {});
+
+      // Register live device token with the clinic server
+      registerForPushNotifications(mrn, true).catch(() => {});
+
+      // Immediate visual & audible proof to device tray
+      await presentLocalNotification(
+        '🔔 Push Notifications Active',
+        'You will now receive vaccine dose schedules, reminders, and clinic alerts on this phone.',
+        { type: 'enabled-confirmation' },
+      );
+
       showAlert({
         type: 'success',
         title: 'Push Notifications Active',
-        message: 'You will receive dose schedules and appointment alerts.',
+        message: 'Notifications enabled! A confirmation notification was just sent to your device tray.',
         primaryButtonText: 'OK',
         onPrimaryPress: hideAlert,
       });
     } else {
+      setNotificationsEnabled(false);
+      await AsyncStorage.setItem(`kna:pushNotifs:${uid}`, 'false').catch(() => {});
       showAlert({
         type: 'info',
         title: 'Push Notifications Disabled',
-        message: 'Notification preferences saved.',
+        message: 'Notification preferences saved. You will not receive alerts on this device.',
         primaryButtonText: 'OK',
         onPrimaryPress: hideAlert,
       });
     }
+  };
+
+  const handleSendTestNotification = async () => {
+    const granted = await ensureNotificationPermission(true);
+    if (!granted) {
+      showAlert({
+        type: 'warning',
+        title: 'Permission Denied',
+        message: 'Please enable notifications for K&A Clinic in your phone Settings first.',
+        primaryButtonText: 'OK',
+        onPrimaryPress: hideAlert,
+      });
+      return;
+    }
+
+    // Fire immediate local banner
+    await presentLocalNotification(
+      '🔔 K&A Clinic Test Notification',
+      'Push notifications are working properly on your phone!',
+      { test: true },
+    );
+
+    // Also register / refresh token
+    registerForPushNotifications(mrn, true).catch(() => {});
+
+    showAlert({
+      type: 'success',
+      title: 'Test Notification Sent',
+      message: 'A test notification has been dispatched to your notification bar.',
+      primaryButtonText: 'OK',
+      onPrimaryPress: hideAlert,
+    });
   };
 
   // ── Sub-components ──────────────────────────────────────────
@@ -1003,6 +1069,22 @@ export default function ProfileScreen() {
                       thumbColor={C.white}
                     />
                   </View>
+                )}
+                {notificationsEnabled && !isGuest && !user?.isAnonymous && (
+                  <TouchableOpacity
+                    style={[s.item, { borderTopWidth: 1, borderTopColor: '#F1F5F9' }]}
+                    onPress={handleSendTestNotification}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[s.iconBox, { backgroundColor: '#EFF6FF' }]}>
+                      <Ionicons name="paper-plane-outline" size={18} color="#1E3A8A" />
+                    </View>
+                    <View style={{ flex: 1, marginLeft: scale(14) }}>
+                      <Text style={[s.itemLabel, { color: '#1E3A8A', fontWeight: '700' }]}>Send Test Notification</Text>
+                      <Text style={{ fontSize: moderateScale(11), color: C.muted, marginTop: verticalScale(1) }}>Verify notifications on your phone</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color={C.muted} />
+                  </TouchableOpacity>
                 )}
                 {!user?.isAnonymous && !isGuest && (
                   <ProfileItem icon="phone-portrait-outline" label="Logged-in Devices" color={C.slate} onPress={() => setCurrentView('devices')} />
