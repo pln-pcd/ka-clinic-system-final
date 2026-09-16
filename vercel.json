@@ -21,6 +21,10 @@
       "destination": "/api/admin-otp?op=verify"
     },
     {
+      "source": "/api/send-report",
+      "destination": "/api/send-patient-report"
+    },
+    {
       "source": "/((?!api/)(?!@)(?!src/)(?!node_modules/)(?!.*\\.).*)",
       "destination": "/index.html"
     }

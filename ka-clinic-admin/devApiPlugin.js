@@ -88,7 +88,12 @@ export function devApiPlugin() {
 
         await loadRepoEnv(true);
 
-        const route = url.pathname.slice('/api/'.length).replace(/\/+$/, '');
+        let route = url.pathname.slice('/api/'.length).replace(/\/+$/, '');
+        if (route === 'send-report') route = 'send-patient-report';
+        if (route === 'admin-forgot-password') route = 'admin-password';
+        if (route === 'admin-reset-password') route = 'admin-password';
+        if (route === 'send-admin-otp' || route === 'verify-admin-otp') route = 'admin-otp';
+
         // Guard against path traversal reaching outside api/.
         const file = resolve(API_DIR, `${route}.js`);
         if (!file.startsWith(API_DIR) || !existsSync(file)) {

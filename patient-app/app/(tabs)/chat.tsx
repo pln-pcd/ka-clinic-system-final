@@ -73,6 +73,44 @@ const SUGGESTIONS = [
   { icon: 'phone-portrait', label: 'How do I use this app?' },
 ];
 
+function renderFormattedMessage(rawText: string, isPatient: boolean) {
+  if (!rawText) return null;
+  // 1. Normalize line bullets and remove markdown heading hashes
+  const cleaned = rawText
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^[\*\-\+]\s+/gm, '• ')
+    .replace(/\n[\*\-\+]\s+/g, '\n• ');
+
+  // 2. Parse bold blocks: **bold** or <b>bold</b>
+  const regex = /(\*\*.*?\*\*|<b>.*?<\/b>)/gs;
+  const parts = cleaned.split(regex);
+
+  return parts.map((part, idx) => {
+    if (!part) return null;
+    const isBold =
+      (part.startsWith('**') && part.endsWith('**')) ||
+      (part.startsWith('<b>') && part.endsWith('</b>'));
+    if (isBold) {
+      const inner = part.startsWith('**') ? part.slice(2, -2) : part.slice(3, -4);
+      const cleanInner = inner.replace(/\*/g, '');
+      return (
+        <Text
+          key={idx}
+          style={{
+            fontWeight: '800',
+            color: isPatient ? '#FFFFFF' : '#0F172A',
+          }}
+        >
+          {cleanInner}
+        </Text>
+      );
+    }
+    // Plain text: strip out any stray raw asterisks or markdown backticks
+    const plain = part.replace(/\*/g, '').replace(/`/g, '');
+    return plain;
+  });
+}
+
 export default function ChatScreen() {
   const { user, mrn } = usePatientAuth();
 
@@ -98,15 +136,14 @@ export default function ChatScreen() {
   const [keyboardVisible, setKeyboardVisible] = useState(false);
 
   const insets = useSafeAreaInsets();
-  // Android runs edge-to-edge (app.json android.edgeToEdgeEnabled): the window
-  // is never resized for the keyboard, so KeyboardAvoidingView and the
-  // Keyboard.addListener height both proved unreliable in release APKs — the
-  // input bar stayed under the keyboard. Reanimated reads the keyboard inset
-  // natively (WindowInsets) and animates with it, which is the documented
-  // approach for edge-to-edge. iOS keeps KeyboardAvoidingView.
+  const navBarHeight = verticalScale(80) + insets.bottom;
+  // Android runs edge-to-edge (app.json android.edgeToEdgeEnabled). Reanimated
+  // reads the keyboard inset natively. The bottom nav bar stays in its stationary
+  // position at the bottom of the screen; the composer lifts above the keyboard
+  // by keyboard.height minus navBarHeight.
   const keyboard = useAnimatedKeyboard({ isStatusBarTranslucentAndroid: true, isNavigationBarTranslucentAndroid: true });
   const keyboardLift = useAnimatedStyle(() => ({
-    paddingBottom: Platform.OS === 'android' ? keyboard.height.value : 0,
+    paddingBottom: Platform.OS === 'android' ? Math.max(0, keyboard.height.value - navBarHeight) : 0,
   }));
   const router = useRouter();
   const scrollRef = useRef<ScrollView>(null);
@@ -521,7 +558,7 @@ export default function ChatScreen() {
                       )}
                       <View style={[s.bubble, isPatient ? s.bubbleUser : s.bubbleAi]}>
                         <Text style={[s.msgText, isPatient && { color: '#fff' }]}>
-                          {m.text}
+                          {renderFormattedMessage(m.text, isPatient)}
                         </Text>
                       </View>
                     </View>
@@ -621,14 +658,12 @@ export default function ChatScreen() {
             </View>
           </Modal>
 
-          {/* Bottom Chat Input Box — cushioned above foot/navigation bar and lifts cleanly above keyboard */}
+          {/* Bottom Chat Input Box */}
           <View
             style={[
               s.inputContainer,
               {
-                paddingBottom: keyboardVisible
-                  ? verticalScale(8)
-                  : verticalScale(10),
+                paddingBottom: verticalScale(10),
               },
             ]}
           >
@@ -646,30 +681,28 @@ export default function ChatScreen() {
               </TouchableOpacity>
             </View>
           </View>
-
-          {/* ── BOTTOM NAV BAR ── same bar as Home/Appts/Account. Lives inside the
-              keyboard-lifted region so it rides up with the composer and stays
-              visible while typing; bottom inset only when the keyboard is down. */}
-          <View style={[nav.bar, { height: verticalScale(80) + insets.bottom, paddingBottom: verticalScale(8) + insets.bottom }]}>
-            <TouchableOpacity style={nav.tab} activeOpacity={0.7} onPress={() => router.navigate('/')}>
-              <Ionicons name="home-outline" size={24} color="#64748B" />
-              <Text style={nav.label}>Home</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={nav.tab} activeOpacity={0.7} onPress={() => router.navigate('/appt')}>
-              <Ionicons name="calendar-outline" size={24} color="#64748B" />
-              <Text style={nav.label}>Appts</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={nav.tab} activeOpacity={0.7}>
-              <Ionicons name="chatbubble-ellipses" size={24} color={C.red} />
-              <Text style={[nav.label, nav.labelActive]}>Chat</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={nav.tab} activeOpacity={0.7} onPress={() => router.navigate('/profile')}>
-              <Ionicons name="person-outline" size={24} color="#64748B" />
-              <Text style={nav.label}>Account</Text>
-            </TouchableOpacity>
-          </View>
         </Animated.View>
       </KeyboardAvoidingView>
+
+      {/* ── BOTTOM NAV BAR ── Anchored stationary at the bottom of the screen */}
+      <View style={[nav.bar, { height: navBarHeight, paddingBottom: verticalScale(8) + insets.bottom }]}>
+        <TouchableOpacity style={nav.tab} activeOpacity={0.7} onPress={() => router.navigate('/')}>
+          <Ionicons name="home-outline" size={24} color="#64748B" />
+          <Text style={nav.label}>Home</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={nav.tab} activeOpacity={0.7} onPress={() => router.navigate('/appt')}>
+          <Ionicons name="calendar-outline" size={24} color="#64748B" />
+          <Text style={nav.label}>Appts</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={nav.tab} activeOpacity={0.7}>
+          <Ionicons name="chatbubble-ellipses" size={24} color={C.red} />
+          <Text style={[nav.label, nav.labelActive]}>Chat</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={nav.tab} activeOpacity={0.7} onPress={() => router.navigate('/profile')}>
+          <Ionicons name="person-outline" size={24} color="#64748B" />
+          <Text style={nav.label}>Account</Text>
+        </TouchableOpacity>
+      </View>
 
       <CustomAlertModal config={alertConfig} onClose={hideAlert} />
     </View>

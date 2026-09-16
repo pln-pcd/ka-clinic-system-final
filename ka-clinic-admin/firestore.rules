@@ -44,16 +44,17 @@ service cloud.firestore {
         && d.date is string && d.date.size() > 0 && d.date.size() < 60;
     }
 
-    // A patient may cancel (never re-open) their own appointment, or delete
-    // their own already-cancelled appointment to clear it from their history.
+    // A patient may cancel (never re-open) their own appointment, request cancellation
+    // for staff review (status == 'cancellation_pending'), or delete their own
+    // already-cancelled appointment to clear it from their history.
     function isOwnCancellation() {
       return request.auth != null
-        && resource.data.userId == request.auth.uid
-        && request.resource.data.status == 'cancelled';
+        && (resource.data.userId == request.auth.uid || resource.data.patientUid == request.auth.uid)
+        && (request.resource.data.status == 'cancelled' || request.resource.data.status == 'cancellation_pending');
     }
     function isOwnCancelledAppt() {
       return request.auth != null
-        && resource.data.userId == request.auth.uid
+        && (resource.data.userId == request.auth.uid || resource.data.patientUid == request.auth.uid)
         && resource.data.status == 'cancelled';
     }
 
@@ -126,7 +127,10 @@ service cloud.firestore {
     // signInWithMRN/completeMRNSignup), so token.email == resource.data.email
     // is a real identity check, not just a same-document tautology.
     function ownsVaccinationDoc() {
-      return request.auth != null && request.auth.token.email == resource.data.email;
+      return request.auth != null && (
+        (resource.data.authUid != null && resource.data.authUid == request.auth.uid)
+        || (resource.data.email != null && request.auth.token.email != null && resource.data.email.lower() == request.auth.token.email.lower())
+      );
     }
 
     // Patients read their own clinical record but never write to it. The one
@@ -163,7 +167,13 @@ service cloud.firestore {
     function ownsPatientNotification() {
       return request.auth != null
         && exists(/databases/$(database)/documents/vaccinations/$(resource.data.patientId))
-        && get(/databases/$(database)/documents/vaccinations/$(resource.data.patientId)).data.email == request.auth.token.email;
+        && (
+          get(/databases/$(database)/documents/vaccinations/$(resource.data.patientId)).data.authUid == request.auth.uid
+          || (
+            request.auth.token.email != null
+            && get(/databases/$(database)/documents/vaccinations/$(resource.data.patientId)).data.email.lower() == request.auth.token.email.lower()
+          )
+        );
     }
 
     // Patient profile photos (api/notifications.js set-avatar). Doc id is the

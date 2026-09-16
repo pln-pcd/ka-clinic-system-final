@@ -38,26 +38,29 @@ export default async function handler(req, res) {
       return;
     }
 
+    console.log(`[report-mailer] Sending report to ${to}, subject: "${subject}", hasAttachment: ${Boolean(attachmentBase64)}`);
+
     const attachments = attachmentBase64
       ? [{ filename: attachmentFilename, content: attachmentBase64, encoding: 'base64' }]
       : undefined;
 
-    const { error: sendError } = await sendMail({
+    const { error: sendError, messageId, sender } = await sendMail({
       to,
       subject,
-      html: html || '<p>Please find your K&amp;A Clinic report attached.</p>',
+      html: html || '<p>Please find your official K&amp;A Clinic report attached.</p>',
       attachments,
       role: 'appointments',
     });
     if (sendError) {
       console.error('send-patient-report mail error:', sendError);
-      res.status(502).json({ success: false, error: 'Failed to send the email. Please try again.' });
+      res.status(502).json({ success: false, error: 'Failed to send the email: ' + (sendError.message || 'SMTP transport failure') });
       return;
     }
 
-    res.status(200).json({ success: true });
+    console.log(`[report-mailer] Successfully delivered via ${sender}: ${messageId}`);
+    res.status(200).json({ success: true, messageId });
   } catch (err) {
     console.error('send-patient-report error:', err);
-    res.status(500).json({ success: false, error: 'Something went wrong sending the report.' });
+    res.status(500).json({ success: false, error: 'Something went wrong sending the report: ' + (err?.message || 'Server error') });
   }
 }

@@ -1,3 +1,5 @@
+import { db } from './_lib/firebaseAdmin.js';
+
 // Shared K&A Health Assistant engine — single backend implementation used by
 // both the landing page chatbot (ka-clinic-admin/src/geminiService.js) and
 // the patient app chatbot (patient-app/app/services/chatbot.ts), so both
@@ -65,10 +67,14 @@ VERIFIED CLINIC KNOWLEDGE:
 IMPORTANT NOTE ON HEPATITIS:
 • K&A Clinic is NO LONGER catering or offering Hepatitis vaccines. If asked about Hepatitis, state clearly that the clinic no longer offers Hepatitis vaccination.
 
-TONE & SAFETY:
+TONE & FORMATTING:
+• Bold key headings, dates, services, and important terms using standard markdown double asterisks **like this**.
+• Never use single asterisks (*word*), raw asterisks, or markdown heading hashes (#).
+• Use clean bullet points (•) for itemized lists.
+• When the user greets you (e.g. "hi", "hello", "good morning"), greet them back warmly and state how you can help.
 • Never generate medical diagnoses, triage, exposure-category determination, or treatment recommendations.
 • There is no "general information" exception for clinical topics. "What is rabies?" is Category 2.
-• Keep responses professional, neutral, short, and direct.
+• Keep responses professional, clear, helpful, and direct.
 • Never mention 'Gemini' or any AI model name.
 `;
 
@@ -100,9 +106,9 @@ TONE & SAFETY:
 const CLINICAL_PATTERNS = [
   // The domain itself.
   /\b(rabies|rabid|abtc|anti-?rabies|lyssa\w*)\b/,
-  // Exposure events and wounds.
-  /\b(bite|bit|bitten|scratch|scratched|lick(ed)?|wound|bleed\w*|puncture|laceration)\b/,
-  /\b(dog|cat|puppy|kitten|bat|monkey|rat|animal)\b/,
+  // Exposure events and wounds (English & Filipino / Tagalog).
+  /\b(bite|bit|bitten|scratch|scratched|lick(ed)?|wound|bleed\w*|puncture|laceration|kagat|nakagat|kinagat|mangagat|kalmot|nakalmot|kinamot|dilaan|dinilaan|laway|sugat|dugo|nagdurugo)\b/,
+  /\b(dog|cat|puppy|kitten|bat|monkey|rat|animal|aso|tuta|pusa|kuting|hayop)\b/,
   // Vaccines, biologics, protocols.
   /\b(vaccin\w*|pep|prep|post-?exposure|pre-?exposure|rig|erig|hrig|immunoglobulin|booster|tetanus|toxoid|essen|antigen|serum)\b/,
   /\b(dose|dosage|jab|injection|inject\w*|intradermal|intramuscular|day\s*\d+)\b/,
@@ -156,6 +162,167 @@ const OUT_OF_SCOPE_PATTERNS = [
 // matched phone numbers, 'fee' matched "coffee".
 const PRICING_RE = /\b(price|prices|pricing|cost|costs|fee|fees|rate|rates|how\s+much|magkano|payment|package|packages|bayad|pesos?|presyo|₱)\b|₱/;
 const HEPATITIS_RE = /\b(hepatitis|hepa)\b/;
+const GREETING_RE = /^(hi|hello|hey|good\s*(morning|afternoon|evening|day)|greetings?|kumusta|kamusta|howdy|sup|yo)\b/i;
+const APPT_AVAILABILITY_RE = /\b(availab\w*|open\w*|free\w*)\s+(appointment|appt|slot|time)s?\b|\b(appointment|appt|slot)s?\s+(availab\w*|open\w*|schedule)\b|\bwhat\s+(are\s+the\s+)?(availab\w*\s+)?(appointment|appt|slot)s?\b|\bany\s+available\s+(appointment|appt|slot)s?\b/i;
+const SERVICES_RE = /\b(services?|what\s+services|services\s+(offered|available|do\s+you)|what\s+vaccines?(\s+do\s+you)?\s+(have|offer|provide|carry)|do\s+you\s+(have|offer|provide|carry)\s+(anti-?rabies|tetanus|pneumonia|pep|vaccine|vaccines|shots?)|available\s+vaccines?|list\s+of\s+vaccines?|vaccine\s+(list|types|options|packages?)|anong\s+(mga\s+)?(bakuna|serbisyo))\b/i;
+const WALKIN_RE = /\b(walk[- ]?in|can\s+i\s+walk[- ]?in|do\s+you\s+(accept|take)\s+walk[- ]?ins?|walk[- ]?in\s+(ba|pwede))\b/i;
+const PREPARATION_RE = /\b(what\s+(to|should\s+i)\s+bring|requirements?|what\s+do\s+i\s+need(\s+to\s+bring)?|ano(ng)?\s+(dapat\s+dalhin|mga\s+kailangan))\b/i;
+const RECORDS_HELP_RE = /\b(how\s+to\s+(view|see|check|export|download|save)\s+(my\s+)?(record|records|card|vaccin\w*\s+card)|paano\s+(makita|i-?download|i-?export)\s+ang\s+(card|record))\b/i;
+const ACTIVE_WOUND_RE = /\b(bit|bitten|bite|scratch|bleeding|wound|pus|swelling|symptom|fever|pain|rash|puncture|laceration|am\s+i\s+(infected|sick)|kagat|nakagat|kinagat|kalmot|nakalmot|sugat|dugo|nagdurugo|lagnat|namamaga|nana)\b/i;
+
+const CLINIC_TIME_SLOTS = [
+  '8:00 AM - 9:00 AM',
+  '9:00 AM - 10:00 AM',
+  '10:00 AM - 11:00 AM',
+  '11:00 AM - 12:00 PM',
+  '1:00 PM - 2:00 PM',
+  '2:00 PM - 3:00 PM',
+  '3:00 PM - 4:00 PM',
+  '4:00 PM - 5:00 PM',
+];
+
+const GREETING_REPLY =
+  "**Hello!** Welcome to **K&A Animal Bite Center**. I am **KAI**, your clinic virtual assistant.\n\n" +
+  "How can I help you today? You can ask me about:\n" +
+  "• **Clinic Operating Hours** and walk-in schedule\n" +
+  "• **Available Appointments** and booking steps\n" +
+  "• **Vaccine Pricing & Packages** (PEP, Anti-Tetanus, Pneumonia)\n" +
+  "• **Clinic Location & Directions**\n" +
+  "• Using the **Patient App** features";
+
+function isPureGreeting(text) {
+  const q = (text || '').toLowerCase().trim();
+  if (!GREETING_RE.test(q)) return false;
+  // If the user combined a greeting with an actual question, answer the question
+  const questionWords = ['hour', 'open', 'close', 'price', 'cost', 'fee', 'vaccin', 'appoint', 'slot', 'book', 'where', 'address', 'locat', 'staff', 'doctor'];
+  if (questionWords.some(w => q.includes(w))) return false;
+  return true;
+}
+
+async function getAvailableAppointmentsReply(queryStr) {
+  try {
+    const q = (queryStr || '').toLowerCase();
+
+    // Philippine time zone (Asia/Manila: UTC+8)
+    const now = new Date(Date.now() + 8 * 3600 * 1000);
+    const dayOfWeek = now.getUTCDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
+    const todayIso = now.toISOString().slice(0, 10);
+
+    let targetIso = todayIso;
+    let targetDayOfWeek = dayOfWeek;
+
+    // Check if user specified an ISO date (e.g. 2026-09-26)
+    const isoMatch = q.match(/\b(202\d-[01]\d-[0-3]\d)\b/);
+    if (isoMatch) {
+      targetIso = isoMatch[1];
+      const d = new Date(`${targetIso}T00:00:00Z`);
+      targetDayOfWeek = d.getUTCDay();
+    } else if (q.includes('tomorrow')) {
+      const tomorrow = new Date(now.getTime() + 86400000);
+      targetIso = tomorrow.toISOString().slice(0, 10);
+      targetDayOfWeek = tomorrow.getUTCDay();
+    } else if (q.includes('sunday')) {
+      const daysUntilSunday = (7 - dayOfWeek) % 7 || 7;
+      const sun = new Date(now.getTime() + daysUntilSunday * 86400000);
+      targetIso = sun.toISOString().slice(0, 10);
+      targetDayOfWeek = 0;
+    } else if (q.includes('saturday')) {
+      const daysUntilSaturday = (6 - dayOfWeek + 7) % 7 || 7;
+      const sat = new Date(now.getTime() + daysUntilSaturday * 86400000);
+      targetIso = sat.toISOString().slice(0, 10);
+      targetDayOfWeek = 6;
+    } else if (q.includes('today')) {
+      targetIso = todayIso;
+      targetDayOfWeek = dayOfWeek;
+    } else {
+      // Default: if today is weekend, check today; else upcoming Saturday
+      if (dayOfWeek === 0 || dayOfWeek === 6) {
+        targetIso = todayIso;
+        targetDayOfWeek = dayOfWeek;
+      } else {
+        const daysUntilSat = (6 - dayOfWeek + 7) % 7;
+        const nextSat = new Date(now.getTime() + daysUntilSat * 86400000);
+        targetIso = nextSat.toISOString().slice(0, 10);
+        targetDayOfWeek = 6;
+      }
+    }
+
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+    const [tY, tM, tD] = targetIso.split('-').map(Number);
+    const dateFormatted = `${dayNames[targetDayOfWeek]}, ${monthNames[tM - 1]} ${tD}, ${tY}`;
+
+    // If target day is Monday - Friday (weekday)
+    if (targetDayOfWeek >= 1 && targetDayOfWeek <= 5) {
+      // Find upcoming Saturday for booking
+      const daysUntilSat = (6 - targetDayOfWeek + 7) % 7;
+      const nextSat = new Date(new Date(`${targetIso}T12:00:00Z`).getTime() + daysUntilSat * 86400000);
+      const satIso = nextSat.toISOString().slice(0, 10);
+      const [sY, sM, sD] = satIso.split('-').map(Number);
+      const satFormatted = `Saturday, ${monthNames[sM - 1]} ${sD}, ${sY}`;
+
+      // Query slots for upcoming Saturday
+      const slotsSnap = await db.collection('appointmentSlots').where('date', '==', satIso).get();
+      const apptsSnap = await db.collection('appointments').where('date', '==', satIso).get();
+      const bookedSet = new Set();
+      slotsSnap.docs.forEach(d => bookedSet.add(d.data().time));
+      apptsSnap.docs.forEach(d => {
+        const st = d.data().status;
+        if (st !== 'cancelled' && st !== 'declined') bookedSet.add(d.data().time);
+      });
+
+      const openSlots = CLINIC_TIME_SLOTS.filter(t => !bookedSet.has(t));
+
+      return (
+        `🏥 **K&A Clinic Appointment Information:**\n\n` +
+        `• **${dateFormatted}** is a **weekday** (Monday – Friday). K&A Clinic operates on an **immediate walk-in basis** from **8:00 AM – 5:00 PM** (no scheduled appointment required).\n\n` +
+        `• **Scheduled weekend appointments** run on **Saturdays & Sundays (8:00 AM – 12:00 PM and 1:00 PM – 5:00 PM)**.\n\n` +
+        `📅 **Available Slots for Upcoming Clinic Day (${satFormatted}):**\n` +
+        (openSlots.length > 0
+          ? openSlots.map(s => `• **${s}** — Available`).join('\n')
+          : `• All slots are currently booked for ${satFormatted}.`) +
+        `\n\n` +
+        `You can book open slots in the **Appts** tab in the app or via the website booking form.`
+      );
+    }
+
+    // Target day is Saturday or Sunday (appointment day)
+    const slotsSnap = await db.collection('appointmentSlots').where('date', '==', targetIso).get();
+    const apptsSnap = await db.collection('appointments').where('date', '==', targetIso).get();
+    const bookedSet = new Set();
+    slotsSnap.docs.forEach(d => bookedSet.add(d.data().time));
+    apptsSnap.docs.forEach(d => {
+      const st = d.data().status;
+      if (st !== 'cancelled' && st !== 'declined') bookedSet.add(d.data().time);
+    });
+
+    const openSlots = CLINIC_TIME_SLOTS.filter(t => !bookedSet.has(t));
+    const bookedSlots = CLINIC_TIME_SLOTS.filter(t => bookedSet.has(t));
+
+    return (
+      `📅 **Available Appointments for ${dateFormatted}:**\n\n` +
+      `**Open Slots (${openSlots.length} available):**\n` +
+      (openSlots.length > 0
+        ? openSlots.map(s => `• **${s}** — Available`).join('\n')
+        : `• All appointment slots are fully booked for this day.`) +
+      (bookedSlots.length > 0
+        ? `\n\n**Booked Slots (${bookedSlots.length}):**\n` +
+          bookedSlots.map(s => `• ${s} (Booked)`).join('\n')
+        : '') +
+      `\n\n` +
+      `To book any open slot, go to the **Appts** tab in the patient app or tap **Book Appointment** on the website.`
+    );
+  } catch (err) {
+    console.error('Error fetching available appointments:', err);
+    return (
+      `📅 **K&A Clinic Appointment Information:**\n\n` +
+      `• Scheduled appointments are available on **Saturdays & Sundays (8:00 AM – 12:00 PM and 1:00 PM – 5:00 PM)**.\n` +
+      `• Monday to Friday are **walk-in days (8:00 AM – 5:00 PM)**.\n\n` +
+      `Please check the **Appts** tab in the app to view live available slots and book your preferred time.`
+    );
+  }
+}
 
 function classifyMessage(text) {
   const q = (text || '').toLowerCase().trim();
@@ -164,10 +331,18 @@ function classifyMessage(text) {
   // Questions about prices/cost or hepatitis availability are in-scope logistics.
   if (PRICING_RE.test(q) || HEPATITIS_RE.test(q)) return 'in_scope';
 
-  // Clinical wins outright, and wins over the non-clinical patterns too. A
-  // message like "can I book an appointment for my next dose" mentions
-  // booking, but it also mentions a dose — and the bot must not be the thing
-  // that decides which half of that sentence it is safe to engage with.
+  // Available appointment queries and greetings are in-scope logistics.
+  if (APPT_AVAILABILITY_RE.test(q) || GREETING_RE.test(q)) return 'in_scope';
+
+  // General clinic catalog, services, walk-in, requirements, and record management questions
+  // are in-scope logistics as long as they do not describe an active wound, bite, or symptom.
+  if (!ACTIVE_WOUND_RE.test(q)) {
+    if (SERVICES_RE.test(q) || WALKIN_RE.test(q) || PREPARATION_RE.test(q) || RECORDS_HELP_RE.test(q)) {
+      return 'in_scope';
+    }
+  }
+
+  // Clinical wins outright, and wins over the non-clinical patterns too.
   if (CLINICAL_PATTERNS.some(re => re.test(q))) return 'clinical';
 
   if (NON_CLINICAL_PATTERNS.some(re => re.test(q))) return 'in_scope';
@@ -251,12 +426,16 @@ const isModelNonAnswer = (reply) => !isModelOutOfScope(reply) && MODEL_NON_ANSWE
 function getFallbackReply(text) {
   const q = (text || '').toLowerCase().trim();
 
+  if (GREETING_RE.test(q)) {
+    return GREETING_REPLY;
+  }
+
   const CLINIC_INFO =
-    '🏥 K&A Clinic Information:\n' +
-    '• Operating Hours: 8:00 AM – 5:00 PM (Monday to Sunday)\n' +
-    '• Walk-ins: Accepted Monday – Friday\n' +
-    '• Scheduled Appointments: Saturdays & Sundays (8:00 AM – 12:00 PM)\n' +
-    '• Address: San Juan St., Libon, Albay';
+    '🏥 **K&A Clinic Operating Information:**\n' +
+    '• **Operating Hours:** 8:00 AM – 5:00 PM (Monday to Sunday)\n' +
+    '• **Immediate Walk-ins:** Accepted Monday – Friday\n' +
+    '• **Scheduled Appointments:** Saturdays & Sundays (8:00 AM – 12:00 PM and 1:00 PM – 5:00 PM)\n' +
+    '• **Address:** San Juan St., Libon, Albay';
 
   const hoursKeywords = ['hour', 'opening time', 'open', 'when close', 'close time', 'operating', 'walk-in', 'what time', 'weekend', 'saturday', 'sunday'];
   const contactKeywords = ['location', 'address', 'where', 'contact', 'phone', 'number', 'email', 'direction', 'map'];
@@ -265,23 +444,66 @@ function getFallbackReply(text) {
   }
 
   if (q.includes('book') || q.includes('appointment') || q.includes('reserve') || q.includes('slot') || q.includes('reschedul') || q.includes('cancel')) {
-    return '📅 To book an appointment, open the "Appts" tab in the K&A Clinic app (or the "Book Appointment" button on our website), pick a weekend date and an available time slot, and confirm. You can reschedule or cancel from the same tab. Weekend slots run Saturday & Sunday, 8:00 AM – 12:00 PM.';
+    return '📅 **Booking an Appointment:**\n\n' +
+      'To book an appointment, open the **Appts** tab in the K&A Clinic app (or tap **Book Appointment** on our website), pick a weekend date and an available time slot, and confirm.\n\n' +
+      '• **Appointment Days:** Saturdays & Sundays (8:00 AM – 12:00 PM and 1:00 PM – 5:00 PM)\n' +
+      '• **Weekdays:** Immediate walk-ins (Monday – Friday, 8:00 AM – 5:00 PM)\n' +
+      '• You can reschedule or request cancellation directly from the **Appts** tab.';
   }
 
   if (q.includes('log in') || q.includes('login') || q.includes('sign in') || q.includes('sign up') || q.includes('password') || q.includes('account') || q.includes('otp') || q.includes('verif')) {
-    return '🔐 Sign in with the email address on file with the clinic. If you cannot get in, use "Forgot Password" on the login screen to reset it, or contact the clinic so staff can check the email on your record.';
+    return '🔐 **Sign In & Account:**\n\n' +
+      'Sign in with the email address and **Medical Record Number (MRN)** on file with the clinic. If you cannot get in, use **Forgot Password** on the login screen to reset your password, or visit the clinic front desk for account assistance.';
   }
 
   if (q.includes('app') || q.includes('tab') || q.includes('screen') || q.includes('navigate') || q.includes('how do i use') || q.includes('record') || q.includes('profile') || q.includes('notification')) {
-    return '📱 Getting around the app: "Home" shows your vaccination card and next appointment, "Appts" is for booking, "Records" holds your medical records, "Chat" is this assistant, and "Account" has your profile and settings.';
+    return '📱 **Navigating the Patient App:**\n\n' +
+      '• **Home:** View your digital vaccination card and upcoming schedule\n' +
+      '• **Appts:** Book, view, or manage weekend appointment slots\n' +
+      '• **Records:** Review official medical records and reports\n' +
+      '• **Chat:** Chat with this virtual assistant or connect with clinic staff\n' +
+      '• **Account:** Manage profile settings and notification preferences';
   }
 
   if (PRICING_RE.test(q)) {
-    return '💉 K&A Clinic Vaccine Pricing:\n' +
-      '• PEP Category 2 (with Anti-Tetanus): ₱1,000 for the 1st session, and ₱800 for each of the next 3 sessions.\n' +
-      '• PEP Category 3: ₱4,500 for 4 sessions (complete package includes Anti-Tetanus and IRIG / Rabies Immunoglobulin).\n' +
-      '• Pneumonia Vaccine: ₱4,500.\n\n' +
+    return '💉 **K&A Clinic Vaccine Pricing:**\n' +
+      '• **PEP Category 2 (with Anti-Tetanus):** ₱1,000 for the 1st session, and ₱800 for each of the next 3 sessions.\n' +
+      '• **PEP Category 3:** ₱4,500 for 4 sessions (complete package includes Anti-Tetanus and IRIG / Rabies Immunoglobulin).\n' +
+      '• **Pneumonia Vaccine:** ₱4,500.\n\n' +
       'Notice: K&A Clinic is no longer catering or offering Hepatitis vaccines.';
+  }
+
+  if (SERVICES_RE.test(q)) {
+    return '💉 **K&A Clinic Available Services & Vaccines:**\n\n' +
+      '• **Anti-Rabies Post-Exposure Prophylaxis (PEP):** Active immunization course for animal bite/scratch exposures.\n' +
+      '• **Anti-Tetanus Immunization:** Protection against tetanus wound infection.\n' +
+      '• **Rabies Immunoglobulin (RIG / IRIG):** Immediate passive antibody protection for high-risk exposures.\n' +
+      '• **Pneumonia Vaccine:** Available for general respiratory protection (₱4,500).\n\n' +
+      '⚠️ **Notice:** K&A Clinic is **no longer offering Hepatitis vaccines**.\n\n' +
+      'For package pricing, ask "How much are the vaccines?" or tap the **Appts** tab to schedule your visit.';
+  }
+
+  if (WALKIN_RE.test(q)) {
+    return '🏥 **K&A Clinic Walk-in Schedule:**\n\n' +
+      '• **Mondays to Fridays:** Walk-in patients are accepted from **8:00 AM – 5:00 PM** (no advance appointment required).\n' +
+      '• **Saturdays & Sundays:** Advance appointment slots only (**8:00 AM – 12:00 PM and 1:00 PM – 5:00 PM**).\n\n' +
+      'Weekend slots can be scheduled in the **Appts** tab of the patient app or on our website.';
+  }
+
+  if (PREPARATION_RE.test(q)) {
+    return '📋 **What to Bring to K&A Clinic:**\n\n' +
+      '• **Valid Government or Student ID** for patient identity verification.\n' +
+      '• **K&A Medical Record Number (MRN)** or Clinic Card (if returning patient).\n' +
+      '• **Previous Vaccination Records** (if you have received prior rabies or tetanus doses).\n' +
+      '• For minors, please come with an accompanying parent or guardian.\n\n' +
+      'Payment is settled at the clinic front desk during your visit.';
+  }
+
+  if (RECORDS_HELP_RE.test(q)) {
+    return '📄 **Viewing & Exporting Your Vaccination Record:**\n\n' +
+      '• Open the **Records** tab in the patient app to view your official immunization log.\n' +
+      '• Tap on the **Vaccination Record Card** to flip between the front and back views in 3D.\n' +
+      '• Tap **Export Card** to save an official digital image directly to your photo gallery.';
   }
 
   if (HEPATITIS_RE.test(q)) {
@@ -324,6 +546,33 @@ export default async function handler(req, res) {
       res.status(200).json({
         success: true, text: OUT_OF_SCOPE_REPLY, source: 'classifier',
         category, needsEscalation: false, fallbackReason: null,
+      });
+      return;
+    }
+
+    // Pure greeting check (e.g. "hi", "hello", "good morning")
+    if (isPureGreeting(prompt)) {
+      res.status(200).json({
+        success: true,
+        text: GREETING_REPLY,
+        source: 'greeting',
+        category: 'in_scope',
+        needsEscalation: false,
+        fallbackReason: null,
+      });
+      return;
+    }
+
+    // Available appointment inquiries: query live Firestore database
+    if (APPT_AVAILABILITY_RE.test(prompt)) {
+      const apptReply = await getAvailableAppointmentsReply(prompt);
+      res.status(200).json({
+        success: true,
+        text: apptReply,
+        source: 'appointments_db',
+        category: 'in_scope',
+        needsEscalation: false,
+        fallbackReason: null,
       });
       return;
     }

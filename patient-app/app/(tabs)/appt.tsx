@@ -1294,82 +1294,89 @@ export default function AppointmentsScreen() {
             </LinearGradient>
 
             {selectedApptDetail && (
-              <View style={sm.body}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(16) }}>
-                  <Text style={{ fontSize: moderateScale(16), fontWeight: '800', color: C.charcoal }}>{selectedApptDetail.type}</Text>
-                  <StatusBadge status={selectedApptDetail.status} />
-                </View>
+              <>
+                <ScrollView
+                  style={{ flexShrink: 1 }}
+                  contentContainerStyle={sm.body}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={true}
+                >
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(16) }}>
+                    <Text style={{ fontSize: moderateScale(16), fontWeight: '800', color: C.charcoal }}>{selectedApptDetail.type}</Text>
+                    <StatusBadge status={selectedApptDetail.status} />
+                  </View>
 
-                <View style={s.summaryCard}>
-                  <View style={[s.summaryRow, { marginBottom: verticalScale(8) }]}>
-                    <Ionicons name="time-outline" size={15} color={C.slate} style={{ marginRight: scale(8) }} />
-                    <Text style={{ fontSize: moderateScale(13), color: C.slate, fontWeight: '600' }}>Time: {selectedApptDetail.time}</Text>
-                  </View>
-                  <View style={[s.summaryRow, { marginBottom: verticalScale(8) }]}>
-                    <Ionicons name="person-outline" size={15} color={C.slate} style={{ marginRight: scale(8) }} />
-                    <Text style={{ fontSize: moderateScale(13), color: C.slate, fontWeight: '600' }}>Patient: {selectedApptDetail.name} ({selectedApptDetail.age} yrs, {selectedApptDetail.gender})</Text>
-                  </View>
-                  <View style={[s.summaryRow, { marginBottom: verticalScale(8) }]}>
-                    <Ionicons name="call-outline" size={15} color={C.slate} style={{ marginRight: scale(8) }} />
-                    <Text style={{ fontSize: moderateScale(13), color: C.slate, fontWeight: '600' }}>Contact: {selectedApptDetail.contactNumber}</Text>
-                  </View>
-                  {selectedApptDetail.address ? (
-                    <View style={[s.summaryRow, { marginBottom: verticalScale(0) }]}>
-                      <Ionicons name="location-outline" size={15} color={C.slate} style={{ marginRight: scale(8) }} />
-                      <Text style={{ fontSize: moderateScale(13), color: C.slate, fontWeight: '600' }}>Address: {selectedApptDetail.address}</Text>
+                  <View style={s.summaryCard}>
+                    <View style={[s.summaryRow, { marginBottom: verticalScale(8) }]}>
+                      <Ionicons name="time-outline" size={15} color={C.slate} style={{ marginRight: scale(8) }} />
+                      <Text style={{ fontSize: moderateScale(13), color: C.slate, fontWeight: '600' }}>Time: {selectedApptDetail.time}</Text>
                     </View>
-                  ) : null}
-                </View>
+                    <View style={[s.summaryRow, { marginBottom: verticalScale(8) }]}>
+                      <Ionicons name="person-outline" size={15} color={C.slate} style={{ marginRight: scale(8) }} />
+                      <Text style={{ fontSize: moderateScale(13), color: C.slate, fontWeight: '600' }}>Patient: {selectedApptDetail.name} ({selectedApptDetail.age} yrs, {selectedApptDetail.gender})</Text>
+                    </View>
+                    <View style={[s.summaryRow, { marginBottom: verticalScale(8) }]}>
+                      <Ionicons name="call-outline" size={15} color={C.slate} style={{ marginRight: scale(8) }} />
+                      <Text style={{ fontSize: moderateScale(13), color: C.slate, fontWeight: '600' }}>Contact: {selectedApptDetail.contactNumber}</Text>
+                    </View>
+                    {selectedApptDetail.address ? (
+                      <View style={[s.summaryRow, { marginBottom: verticalScale(0) }]}>
+                        <Ionicons name="location-outline" size={15} color={C.slate} style={{ marginRight: scale(8) }} />
+                        <Text style={{ fontSize: moderateScale(13), color: C.slate, fontWeight: '600' }}>Address: {selectedApptDetail.address}</Text>
+                      </View>
+                    ) : null}
+                  </View>
 
-                {(selectedApptDetail.declineReason || (selectedApptDetail.status === 'cancelled' && selectedApptDetail.cancellationReason)) ? (
-                  <View style={[s.noteBox, { backgroundColor: '#FEF2F2', borderColor: '#FCA5A5', borderWidth: 1, marginTop: verticalScale(12) }]}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6), marginBottom: verticalScale(4) }}>
-                      <Ionicons name="close-circle" size={16} color="#DC2626" />
-                      <Text style={{ fontSize: moderateScale(12), fontWeight: '800', color: '#991B1B' }}>
-                        {selectedApptDetail.declineReason ? 'Reason for Decline' : 'Cancellation Reason'}
+                  {(selectedApptDetail.declineReason || (selectedApptDetail.status === 'cancelled' && selectedApptDetail.cancellationReason)) ? (
+                    <View style={[s.noteBox, { backgroundColor: '#FEF2F2', borderColor: '#FCA5A5', borderWidth: 1, marginTop: verticalScale(12) }]}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6), marginBottom: verticalScale(4) }}>
+                        <Ionicons name="close-circle" size={16} color="#DC2626" />
+                        <Text style={{ fontSize: moderateScale(12), fontWeight: '800', color: '#991B1B' }}>
+                          {selectedApptDetail.declineReason ? 'Reason for Decline' : 'Cancellation Reason'}
+                        </Text>
+                      </View>
+                      <Text style={{ fontSize: moderateScale(13), color: '#7F1D1D', fontWeight: '600', lineHeight: moderateScale(18) }}>
+                        {selectedApptDetail.declineReason || selectedApptDetail.cancellationReason}
                       </Text>
                     </View>
-                    <Text style={{ fontSize: moderateScale(13), color: '#7F1D1D', fontWeight: '600', lineHeight: moderateScale(18) }}>
-                      {selectedApptDetail.declineReason || selectedApptDetail.cancellationReason}
-                    </Text>
-                  </View>
-                ) : selectedApptDetail.cancellationReason ? (
-                  <View style={[s.noteBox, { backgroundColor: C.orangeFaint, marginTop: verticalScale(12) }]}>
-                    <Ionicons name="alert-circle-outline" size={16} color={C.orange} />
-                    <Text style={[s.noteTxt, { color: C.orange }]}>
-                      Cancellation Reason: {selectedApptDetail.cancellationReason}
-                    </Text>
-                  </View>
-                ) : null}
+                  ) : selectedApptDetail.cancellationReason ? (
+                    <View style={[s.noteBox, { backgroundColor: C.orangeFaint, marginTop: verticalScale(12) }]}>
+                      <Ionicons name="alert-circle-outline" size={16} color={C.orange} />
+                      <Text style={[s.noteTxt, { color: C.orange }]}>
+                        Cancellation Reason: {selectedApptDetail.cancellationReason}
+                      </Text>
+                    </View>
+                  ) : null}
 
-                {selectedApptDetail.note ? (
-                  <View style={[s.noteBox, { marginTop: verticalScale(12) }]}>
-                    <Ionicons name="chatbubble-ellipses-outline" size={16} color={C.navy} />
-                    <Text style={s.noteTxt}>Clinic Note: {selectedApptDetail.note}</Text>
-                  </View>
-                ) : null}
+                  {selectedApptDetail.note ? (
+                    <View style={[s.noteBox, { marginTop: verticalScale(12) }]}>
+                      <Ionicons name="chatbubble-ellipses-outline" size={16} color={C.navy} />
+                      <Text style={s.noteTxt}>Clinic Note: {selectedApptDetail.note}</Text>
+                    </View>
+                  ) : null}
 
-                {(selectedApptDetail.status === 'pending' || selectedApptDetail.status === 'confirmed' || selectedApptDetail.status === 'accepted') && (
-                  <View style={{ marginTop: verticalScale(16) }}>
-                    <Text style={{ fontSize: moderateScale(13), fontWeight: '700', color: C.charcoal, marginBottom: verticalScale(8) }}>
-                      Reason for Cancellation <Text style={{ color: C.red }}>*</Text>
-                    </Text>
-                    <TextInput
-                      style={[df.input, df.inputMulti, { minHeight: verticalScale(80) }]}
-                      placeholder="e.g. Schedule conflict, illness, emergency..."
-                      placeholderTextColor={C.muted}
-                      multiline
-                      numberOfLines={3}
-                      value={cancellationReasonInput}
-                      onChangeText={setCancellationReasonInput}
-                    />
-                    <Text style={{ fontSize: moderateScale(11), color: C.muted, marginTop: verticalScale(6), fontStyle: 'italic' }}>
-                      Sent to the clinic for approval. The appointment stays booked until staff approve it.
-                    </Text>
-                  </View>
-                )}
+                  {(selectedApptDetail.status === 'pending' || selectedApptDetail.status === 'confirmed' || selectedApptDetail.status === 'accepted') && (
+                    <View style={{ marginTop: verticalScale(16) }}>
+                      <Text style={{ fontSize: moderateScale(13), fontWeight: '700', color: C.charcoal, marginBottom: verticalScale(8) }}>
+                        Reason for Cancellation <Text style={{ color: C.red }}>*</Text>
+                      </Text>
+                      <TextInput
+                        style={[df.input, df.inputMulti, { minHeight: verticalScale(76) }]}
+                        placeholder="e.g. Schedule conflict, illness, emergency..."
+                        placeholderTextColor={C.muted}
+                        multiline
+                        numberOfLines={3}
+                        value={cancellationReasonInput}
+                        onChangeText={setCancellationReasonInput}
+                      />
+                      <Text style={{ fontSize: moderateScale(11), color: C.muted, marginTop: verticalScale(6), fontStyle: 'italic' }}>
+                        Sent to the clinic for approval. The appointment stays booked until staff approve it.
+                      </Text>
+                    </View>
+                  )}
+                </ScrollView>
 
-                <View style={[sm.footer, { marginTop: verticalScale(20) }]}>
+                <View style={sm.footer}>
                   <TouchableOpacity style={sm.cancelBtn} onPress={() => setSelectedApptDetail(null)}>
                     <Text style={sm.cancelTxt}>Close</Text>
                   </TouchableOpacity>
@@ -1387,7 +1394,7 @@ export default function AppointmentsScreen() {
                     </TouchableOpacity>
                   )}
                 </View>
-              </View>
+              </>
             )}
           </View>
         </Animated.View>
@@ -1691,14 +1698,14 @@ const nav = StyleSheet.create({
 
 const sm = StyleSheet.create({
   overlay:    { flex: 1, backgroundColor: 'rgba(10,25,47,0.6)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: scale(20) },
-  card:       { backgroundColor: C.white, borderRadius: scale(28), width: '100%', overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 24, shadowOffset: { width: 0, height: 12 }, elevation: 20 },
+  card:       { backgroundColor: C.white, borderRadius: scale(28), width: '100%', maxHeight: '85%', overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 24, shadowOffset: { width: 0, height: 12 }, elevation: 20 },
   header:     { flexDirection: 'row', alignItems: 'center', paddingHorizontal: scale(20), paddingVertical: verticalScale(18), gap: scale(12) },
   headerTitle:{ fontSize: moderateScale(17), fontWeight: '800', color: C.white, letterSpacing: -0.3 },
   headerSub:  { fontSize: moderateScale(11), color: 'rgba(255,255,255,0.6)', marginTop: verticalScale(2), fontWeight: '500' },
   closeBtn:   { width: scale(34), height: verticalScale(34), borderRadius: scale(11), backgroundColor: 'rgba(255,255,255,0.18)', justifyContent: 'center', alignItems: 'center' },
   body:       { padding: scale(20) },
   divider:    { height: 1, backgroundColor: C.border, marginVertical: verticalScale(16) },
-  footer:     { flexDirection: 'row', gap: scale(10), marginTop: verticalScale(16) },
+  footer:     { flexDirection: 'row', gap: scale(10), paddingHorizontal: scale(20), paddingVertical: verticalScale(14), borderTopWidth: 1, borderTopColor: C.border, backgroundColor: C.white },
   cancelBtn:  { flex: 1, paddingVertical: verticalScale(12), borderRadius: scale(12), borderWidth: 1, borderColor: C.border, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center' },
   cancelTxt:  { fontSize: moderateScale(13), fontWeight: '700', color: C.slate },
   confirmBtn: { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: verticalScale(12), borderRadius: scale(12), backgroundColor: '#334155' },

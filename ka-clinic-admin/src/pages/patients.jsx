@@ -3551,27 +3551,35 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
       onToast('Enter a valid recipient email address.', 'error');
       return;
     }
+    if (!auth.currentUser) {
+      onToast('You must be signed in as an administrator to send reports.', 'error');
+      return;
+    }
     setSending(true);
     try {
-      const idToken = await auth.currentUser?.getIdToken();
+      const idToken = await auth.currentUser.getIdToken(true);
       const res = await fetch('/api/send-patient-report', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
         body: JSON.stringify({
           to: trimmed, subject, html,
           ...(attachment ? { attachmentBase64: attachment.base64, attachmentFilename: attachment.filename } : {}),
         }),
       });
-      const data = await res.json();
-      if (data?.success) {
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
         onToast(`Report emailed to ${trimmed}`, 'success');
         setSentTo(trimmed);
         setEmailTo('');
       } else {
-        onToast(data?.error || 'Failed to send the email.', 'error');
+        onToast(data?.error || `Failed to send email (${res.status} ${res.statusText})`, 'error');
       }
-    } catch {
-      onToast('Network error while sending the email.', 'error');
+    } catch (err) {
+      console.error('sendReportEmail error:', err);
+      onToast(err?.message || 'Network error while sending the email.', 'error');
     } finally {
       setSending(false);
     }
@@ -4679,42 +4687,52 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
   // failed, so the registry now travels as the same PDF the Export button
   // produces, with a short covering note as the body.
   async function emailBulkReportPdf(to) {
-    const rows = getFilteredPatients();
-    if (rows.length === 0) {
-      onToast('No patients found for this period', 'error');
-      return;
+    try {
+      const rows = getFilteredPatients();
+      if (rows.length === 0) {
+        onToast('No patients found for this period', 'error');
+        return;
+      }
+      const logo = (await getClinicLogoBase64()) || logoDataUrl || CLINIC_LOGO_BASE64;
+      const base64 = pdfToBase64(buildBulkPdf(rows, logo));
+      if (!base64) {
+        onToast('Could not generate the PDF report. Please try again.', 'error');
+        return;
+      }
+      const statusSlug = statusFilter !== 'all' ? `-${statusFilter}` : '';
+      await sendReportEmail(
+        to,
+        `K&A Clinic — Health Monitoring Report (${periodLabel()})`,
+        `<p>Attached is the K&amp;A Animal Bite Center health monitoring report for <strong>${periodLabel()}</strong>.</p>`
+          + `<p>Service: ${serviceFilterLabel()} &bull; Status: ${statusFilterLabel()} &bull; ${rows.length} patient record${rows.length !== 1 ? 's' : ''}.</p>`
+          + `<p>&mdash; K&amp;A Animal Bite Center</p>`,
+        { base64, filename: `health-monitoring-report-${period}${statusSlug}-${getTodayDateString()}.pdf` }
+      );
+    } catch (err) {
+      console.error('emailBulkReportPdf error:', err);
+      onToast('Failed to prepare PDF report for emailing.', 'error');
     }
-    const logo = (await getClinicLogoBase64()) || logoDataUrl || CLINIC_LOGO_BASE64;
-    const base64 = pdfToBase64(buildBulkPdf(rows, logo));
-    if (!base64) {
-      onToast('Could not generate the PDF report. Please try again.', 'error');
-      return;
-    }
-    const statusSlug = statusFilter !== 'all' ? `-${statusFilter}` : '';
-    await sendReportEmail(
-      to,
-      `K&A Clinic — Health Monitoring Report (${periodLabel()})`,
-      `<p>Attached is the K&amp;A Animal Bite Center health monitoring report for <strong>${periodLabel()}</strong>.</p>`
-        + `<p>Service: ${serviceFilterLabel()} &bull; Status: ${statusFilterLabel()} &bull; ${rows.length} patient record${rows.length !== 1 ? 's' : ''}.</p>`
-        + `<p>&mdash; K&amp;A Animal Bite Center</p>`,
-      { base64, filename: `health-monitoring-report-${period}${statusSlug}-${getTodayDateString()}.pdf` }
-    );
   }
 
   async function emailSinglePatientPdf(p, to) {
     if (!p) return;
-    const logo = (await getClinicLogoBase64()) || logoDataUrl || CLINIC_LOGO_BASE64;
-    const base64 = pdfToBase64(buildDocumentPdf(p, docType, 'patient', logo));
-    if (!base64) {
-      onToast('Could not generate the PDF attachment. Please try again.', 'error');
-      return;
+    try {
+      const logo = (await getClinicLogoBase64()) || logoDataUrl || CLINIC_LOGO_BASE64;
+      const base64 = pdfToBase64(buildDocumentPdf(p, docType, 'patient', logo));
+      if (!base64) {
+        onToast('Could not generate the PDF attachment. Please try again.', 'error');
+        return;
+      }
+      await sendReportEmail(
+        to,
+        `K&A Clinic — Medical Report for ${formatTitleCase(p.name)}`,
+        `<p>Dear ${formatTitleCase(p.name)},</p><p>Please find your official patient medical report from K&amp;A Animal Bite Center attached as a PDF.</p><p>&mdash; K&amp;A Animal Bite Center</p>`,
+        { base64, filename: `medical-report-${p.id || p.mrn || p.firestoreId || 'patient'}.pdf` }
+      );
+    } catch (err) {
+      console.error('emailSinglePatientPdf error:', err);
+      onToast('Failed to prepare patient document for emailing.', 'error');
     }
-    await sendReportEmail(
-      to,
-      `K&A Clinic — Medical Report for ${formatTitleCase(p.name)}`,
-      `<p>Dear ${formatTitleCase(p.name)},</p><p>Please find your official patient medical report from K&amp;A Animal Bite Center attached as a PDF.</p><p>&mdash; K&amp;A Animal Bite Center</p>`,
-      { base64, filename: `medical-report-${p.id || p.mrn || p.firestoreId || 'patient'}.pdf` }
-    );
   }
 
   // The measured height belongs to one specific rendered document; re-measure

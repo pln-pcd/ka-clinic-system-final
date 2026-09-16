@@ -1167,7 +1167,7 @@ export default function RabiesRecoveryApp() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={{ maxHeight: verticalScale(340) }} showsVerticalScrollIndicator={false}>
+            <ScrollView style={{ maxHeight: verticalScale(400) }} showsVerticalScrollIndicator={false}>
               {displayedNotifications.length === 0 ? (
                 <View style={s.emptyNotifBox}>
                   <Ionicons name="notifications-off-outline" size={32} color={C.muted} />
@@ -1190,7 +1190,7 @@ export default function RabiesRecoveryApp() {
                       <View style={[s.notifIconBox, n.type === 'dose' ? { backgroundColor: '#EFF6FF' } : n.type === 'appointment' ? { backgroundColor: '#ECFDF5' } : n.type === 'followup' ? { backgroundColor: '#FEF2F2' } : { backgroundColor: '#F8FAFC' }]}>
                         <Ionicons
                           name={n.type === 'dose' ? 'calendar' : n.type === 'appointment' ? 'checkmark-circle' : n.type === 'followup' ? 'notifications' : 'medkit'}
-                          size={18}
+                          size={21}
                           color={n.type === 'dose' ? '#2563EB' : n.type === 'appointment' ? '#059669' : n.type === 'followup' ? MEDICAL_RED : '#64748B'}
                         />
                       </View>
@@ -2678,30 +2678,41 @@ const s = StyleSheet.create({
   },
 
   // NOTIFICATION PANEL MODAL
-  notifPanelSheet: { width: '100%', backgroundColor: '#FFF', borderRadius: scale(28), padding: scale(20), elevation: 10 },
-  notifCountPill: { backgroundColor: '#EFF6FF', borderRadius: scale(10), paddingHorizontal: scale(8), paddingVertical: verticalScale(2) },
-  notifCountPillText: { fontSize: moderateScale(11), fontWeight: '800', color: MEDICAL_RED },
+  notifPanelSheet: { 
+    width: '100%', 
+    maxWidth: 420, 
+    backgroundColor: '#FFF', 
+    borderRadius: scale(32), 
+    padding: scale(22), 
+    elevation: 12,
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.18,
+    shadowRadius: 28,
+    shadowOffset: { width: 0, height: 10 },
+  },
+  notifCountPill: { backgroundColor: '#EFF6FF', borderRadius: scale(10), paddingHorizontal: scale(10), paddingVertical: verticalScale(3) },
+  notifCountPillText: { fontSize: moderateScale(11.5), fontWeight: '800', color: MEDICAL_RED },
   notifFilterRow: { flexDirection: 'row', alignItems: 'center', gap: scale(8), marginBottom: verticalScale(14), borderBottomWidth: 1, borderBottomColor: '#F1F5F9', paddingBottom: verticalScale(10) },
-  notifFilterTab: { paddingHorizontal: scale(10), paddingVertical: verticalScale(4), borderRadius: scale(10), backgroundColor: SOFT_GRAY_BG },
+  notifFilterTab: { paddingHorizontal: scale(12), paddingVertical: verticalScale(6), borderRadius: scale(12), backgroundColor: SOFT_GRAY_BG },
   notifFilterTabActive: { backgroundColor: C.softRed },
-  notifFilterTabText: { fontSize: moderateScale(12), fontWeight: '600', color: C.slate },
+  notifFilterTabText: { fontSize: moderateScale(12.5), fontWeight: '600', color: C.slate },
   notifFilterTabTextActive: { color: MEDICAL_RED, fontWeight: '800' },
-  notifActionLink: { fontSize: moderateScale(12), fontWeight: '800', color: '#0284C7' },
+  notifActionLink: { fontSize: moderateScale(12.5), fontWeight: '800', color: '#0284C7' },
   notifItem: {
     flexDirection: 'row',
-    gap: scale(10),
-    paddingVertical: verticalScale(12),
-    paddingHorizontal: scale(12),
+    gap: scale(12),
+    paddingVertical: verticalScale(14),
+    paddingHorizontal: scale(14),
     backgroundColor: '#FFFFFF',
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#F1F5F9',
     alignItems: 'flex-start',
   },
   notifItemUnread: {},
-  notifIconBox: { width: scale(36), height: verticalScale(36), borderRadius: scale(12), justifyContent: 'center', alignItems: 'center' },
-  notifItemTitle: { fontSize: moderateScale(13), fontWeight: '800', color: C.charcoal },
-  notifItemTime: { fontSize: moderateScale(10), color: C.muted, fontWeight: '600' },
-  notifItemMsg: { fontSize: moderateScale(12), color: C.slate, marginTop: verticalScale(2), lineHeight: moderateScale(16) },
+  notifIconBox: { width: scale(42), height: verticalScale(42), borderRadius: scale(14), justifyContent: 'center', alignItems: 'center' },
+  notifItemTitle: { fontSize: moderateScale(14), fontWeight: '800', color: C.charcoal },
+  notifItemTime: { fontSize: moderateScale(11), color: C.muted, fontWeight: '600' },
+  notifItemMsg: { fontSize: moderateScale(12.8), color: C.slate, marginTop: verticalScale(3), lineHeight: moderateScale(17.5) },
   ackBtn: {
     flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: scale(5),
     marginTop: verticalScale(8), paddingVertical: verticalScale(6), paddingHorizontal: scale(12),

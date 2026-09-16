@@ -1,10 +1,15 @@
 // kna-admin/src/inventory.jsx
 import { addDoc, collection, doc, limit, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
-import { AlertCircle, Check, Download, Edit3, FileText, Minus, Package, Plus, Search, X, XCircle } from 'lucide-react';
+import { AlertCircle, Check, Download, Edit3, FileText, Minus, Package, Plus, Search, X, XCircle, Printer, Mail, Loader2 } from 'lucide-react';
 import { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { db } from '../lib/firebase';
-import { today, getTodayDateString } from '../lib/dates';
+import { auth, db } from '../lib/firebase';
+import { today, getTodayDateString, formatDateNumeric, formatDateLong } from '../lib/dates';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
+import Toast from '../components/Toast';
+import { CLINIC_LOGO_BASE64 } from '../assets/clinicLogoBase64';
 
 /* ─────────────────────────── CSS ─────────────────────────── */
 const globalCSS = `
@@ -114,120 +119,1010 @@ const globalCSS = `
   .export-option-selected { border-color: #3B50DF !important; background: #EEF2FF !important; }
 `;
 
-/* ─────────────────────────── HELPERS ─────────────────────────── */
-const liveStatus = item => (parseInt(item.stock) || 0) <= 0 ? 'out-of-stock' : 'in-stock';
+/* ─────────────────────────── EXPORT INVENTORY REPORT MODAL ─────────────────────────── */
+let clinicLogoBase64Cache = CLINIC_LOGO_BASE64;
+async function getClinicLogoBase64() {
+  if (clinicLogoBase64Cache) return clinicLogoBase64Cache;
+  try {
+    const res = await fetch('/assets/dashboard/logo-white-nobg.png');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        clinicLogoBase64Cache = reader.result;
+        resolve(reader.result);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    clinicLogoBase64Cache = CLINIC_LOGO_BASE64;
+    return CLINIC_LOGO_BASE64;
+  }
+}
+
+function pdfToBase64(doc) {
+  const uri = doc.output('datauristring');
+  const comma = uri.indexOf(',');
+  return comma === -1 ? '' : uri.slice(comma + 1);
+}
 
 const fmtUnit = (u) => u ? u.charAt(0).toUpperCase() + u.slice(1) : '';
 
-const INVENTORY_HEADERS = ['Item Name', 'Category', 'Stock', 'Unit', 'Expiry', 'Status'];
+function deriveStockStatus(item) {
+  const stock = parseInt(item.stock, 10) || 0;
+  const min = parseInt(item.minStock, 10) || 10;
+  if (stock <= 0) return 'out-of-stock';
+  if (stock <= min) return 'low-stock';
+  return 'in-stock';
+}
 
-const statusLabel = r => liveStatus(r) === 'in-stock' ? 'In Stock' : 'Out of Stock';
+function deriveStockLabel(item) {
+  const st = deriveStockStatus(item);
+  if (st === 'out-of-stock') return 'Out of Stock';
+  if (st === 'low-stock') return 'Low Stock';
+  return 'In Stock';
+}
 
-// One source of truth for the report body — official Philippine institutional letterhead format
-const buildInventoryReportHtml = (rows, periodLabel) => {
-  const tableRows = rows.map((r, i) => `<tr>
-    <td style="text-align:center;color:#64748B;">${i + 1}</td>
-    <td style="font-weight:700;color:#0F172A;">${r.name}</td>
-    <td style="text-align:center;font-weight:600;">${r.category}</td>
-    <td style="text-align:center;font-weight:700;color:#0F172A;">${r.stock} ${fmtUnit(r.unit)}</td>
-    <td style="text-align:center;">${r.expiry || '—'}</td>
-    <td style="text-align:center;font-weight:700;color:${liveStatus(r) === 'in-stock' ? '#15803D' : '#DC2626'};">${statusLabel(r).toUpperCase()}</td>
-  </tr>`).join('');
+const PAGE_1_ROWS = 22;
+const CONT_PAGE_ROWS = 24;
 
-  return `<!DOCTYPE html><html><head><title>Inventory Stock Report</title>
-  <style>
-    *{box-sizing:border-box;}
-    body{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,sans-serif;color:#0F172A;padding:28px 36px;margin:0;font-size:11.5px;line-height:1.5;background:#FFFFFF;}
-    table{width:100%;border-collapse:collapse;font-size:11px;border:1px solid #CBD5E1;margin-bottom:20px;}
-    th{background:#F1F5F9;border:1px solid #CBD5E1;padding:8px 10px;text-align:left;color:#334155;font-size:9px;text-transform:uppercase;letter-spacing:.5px;font-weight:700;}
-    td{border:1px solid #E2E8F0;padding:7px 10px;}
-    tr:nth-child(even) td{background:#FAFAFA;}
-    .footer{font-size:9px;color:#94A3B8;margin-top:24px;border-top:1px solid #E2E8F0;padding-top:10px;display:flex;justify-content:space-between;align-items:center;}
-    @media print{@page{margin:10mm 15mm;}}
-  </style></head><body>
+function chunkInventoryIntoPages(rows) {
+  if (!rows || rows.length === 0) return [[]];
+  const pages = [];
+  pages.push(rows.slice(0, PAGE_1_ROWS));
+  let idx = PAGE_1_ROWS;
+  while (idx < rows.length) {
+    pages.push(rows.slice(idx, idx + CONT_PAGE_ROWS));
+    idx += CONT_PAGE_ROWS;
+  }
+  return pages;
+}
 
-  <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:14px;border-bottom:2px solid #0F172A;margin-bottom:16px;">
-    <div style="width:58px;height:58px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:#FAFAFA;border:1px solid #CBD5E1;flex-shrink:0;">
-      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#3B50DF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10"/>
-        <path d="M12 6v12M6 12h12"/>
-      </svg>
-    </div>
-    <div style="text-align:center;flex:1;padding:0 16px;font-family:'Plus Jakarta Sans','Inter',-apple-system,sans-serif;">
-      <div style="font-size:10px;font-weight:700;color:#475569;letter-spacing:1.2px;text-transform:uppercase;">Republic of the Philippines</div>
-      <div style="font-size:18px;font-weight:800;color:#1E293B;margin:2px 0 1px;letter-spacing:-0.01em;">K&amp;A Anti-Rabies Vaccine Clinic</div>
-      <div style="font-size:10.5px;font-weight:700;color:#0F172A;text-transform:uppercase;letter-spacing:0.5px;">Animal Bite Treatment Center</div>
-      <div style="font-size:9px;color:#64748B;margin-top:3px;">Polangui, Albay &bull; Contact: (052) 486-1220 &bull; Email: knaclinic.ph@gmail.com</div>
-    </div>
-    <div style="width:58px;height:58px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:#0F172A;border:1px solid #0F172A;flex-shrink:0;">
-      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-        <path d="M12 8v8M8 12h8"/>
-      </svg>
-    </div>
-  </div>
+function ExportInventoryModal({ inventory, onClose, onToast }) {
+  const [logoDataUrl, setLogoDataUrl] = useState(clinicLogoBase64Cache || CLINIC_LOGO_BASE64);
+  useEffect(() => {
+    getClinicLogoBase64().then(b64 => {
+      if (b64) setLogoDataUrl(b64);
+    });
+  }, []);
 
-  <div style="text-align:center;margin-bottom:14px;font-size:11px;color:#0F172A;line-height:1.8;">
-    <strong>Reporting Period:</strong> <span style="text-decoration:underline;margin-right:16px;">${periodLabel}</span>
-    <strong>Date Exported:</strong> <span style="text-decoration:underline;margin-right:16px;">${new Date().toLocaleString('en-PH')}</span>
-    <strong>Total Items:</strong> <span style="text-decoration:underline;">${rows.length} Items</span>
-  </div>
+  const [period, setPeriod] = useState('monthly');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [exportFormat, setExportFormat] = useState('pdf'); // 'pdf' | 'xls'
+  const [zoomLevel, setZoomLevel] = useState(0.85);
+  const [docSheetHeight, setDocSheetHeight] = useState(null);
 
-  <div style="text-align:center;font-size:13.5px;font-weight:800;color:#0F172A;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:18px;">
-    OFFICIAL INVENTORY STOCK REPORT
-  </div>
+  const [showEmailInput, setShowEmailInput] = useState(false);
+  const [emailTo, setEmailTo] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sentTo, setSentTo] = useState('');
 
-  <table>
-    <thead><tr><th style="text-align:center;">#</th><th>Item Name</th><th style="text-align:center;">Category</th><th style="text-align:center;">Stock Level</th><th style="text-align:center;">Expiration Date</th><th style="text-align:center;">Stock Status</th></tr></thead>
-    <tbody>${tableRows}</tbody>
-  </table>
+  // Extract unique categories
+  const categories = Array.from(new Set(inventory.map(i => (i.category || '').trim()).filter(Boolean)));
 
-  <div class="footer">
-    <span>K&amp;A Clinic &bull; Official Inventory Stock Report</span>
-    <span>Page 1 of 1</span>
-  </div>
-  </body></html>`;
-};
+  function getItemTimestamp(item) {
+    if (item.createdAt) {
+      if (typeof item.createdAt === 'number') return item.createdAt;
+      if (item.createdAt.toDate) return item.createdAt.toDate().getTime();
+      if (item.createdAt.toMillis) return item.createdAt.toMillis();
+      const d = new Date(item.createdAt);
+      if (!isNaN(d.getTime())) return d.getTime();
+    }
+    if (item.date) {
+      const d = new Date(item.date);
+      if (!isNaN(d.getTime())) return d.getTime();
+    }
+    return null;
+  }
 
-// Excel HTML export helper
-const exportXLS = (rows, filename, periodLabel) => {
-  const cols = INVENTORY_HEADERS.length;
-  const tableRows = rows.map((r, i) => `<tr>
-    <td>${i + 1}</td><td>${r.name}</td><td>${r.category}</td><td>${r.stock} ${fmtUnit(r.unit)}</td>
-    <td>${r.expiry || ''}</td><td>${statusLabel(r)}</td>
-  </tr>`).join('');
-  const html = `<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8">
+  function getFilteredItems() {
+    const now = new Date();
+    const curYear = now.getFullYear();
+    const curMonth = now.getMonth();
+    const todayStr = getTodayDateString();
+
+    return inventory.filter(item => {
+      // Period filter
+      if (period !== 'all') {
+        const ts = getItemTimestamp(item);
+        if (ts) {
+          const itemDate = new Date(ts);
+          const itemDateStr = getTodayDateString(itemDate);
+          if (period === 'daily') {
+            if (itemDateStr !== todayStr) return false;
+          } else if (period === 'weekly') {
+            const diffMs = now.getTime() - ts;
+            if (diffMs < 0 || diffMs > 7 * 24 * 60 * 60 * 1000) return false;
+          } else if (period === 'monthly') {
+            if (itemDate.getFullYear() !== curYear || itemDate.getMonth() !== curMonth) return false;
+          } else if (period === 'yearly') {
+            if (itemDate.getFullYear() !== curYear) return false;
+          }
+        }
+      }
+
+      // Category filter
+      if (categoryFilter !== 'all') {
+        if ((item.category || '').trim().toLowerCase() !== categoryFilter.trim().toLowerCase()) return false;
+      }
+
+      // Status filter
+      const st = deriveStockStatus(item);
+      if (statusFilter !== 'all' && st !== statusFilter) return false;
+
+      return true;
+    });
+  }
+
+  function periodLabel() {
+    const now = new Date();
+    if (period === 'all') return 'All Time (Full Inventory)';
+    if (period === 'daily') return now.toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    if (period === 'weekly') {
+      const from = new Date(now); from.setDate(from.getDate() - 6);
+      return `${from.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })} – ${now.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+    }
+    if (period === 'monthly') return now.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' });
+    if (period === 'yearly') return String(now.getFullYear());
+    return 'All Records';
+  }
+
+  function categoryFilterLabel() {
+    if (categoryFilter === 'all') return 'All Categories';
+    return categoryFilter;
+  }
+
+  function statusFilterLabel() {
+    if (statusFilter === 'in-stock') return 'In Stock';
+    if (statusFilter === 'low-stock') return 'Low Stock';
+    if (statusFilter === 'out-of-stock') return 'Out of Stock';
+    return 'All Statuses';
+  }
+
+  async function sendReportEmail(to, subject, html, attachment) {
+    const trimmed = to.trim();
+    if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      onToast('Enter a valid recipient email address.', 'error');
+      return;
+    }
+    if (!auth.currentUser) {
+      onToast('You must be signed in as an administrator to send reports.', 'error');
+      return;
+    }
+    setSending(true);
+    try {
+      const idToken = await auth.currentUser.getIdToken(true);
+      const res = await fetch('/api/send-patient-report', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          to: trimmed,
+          subject,
+          html,
+          ...(attachment ? { attachmentBase64: attachment.base64, attachmentFilename: attachment.filename } : {}),
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
+        onToast(`Report emailed to ${trimmed}`, 'success');
+        setSentTo(trimmed);
+        setEmailTo('');
+      } else {
+        onToast(data?.error || `Failed to send email (${res.status} ${res.statusText})`, 'error');
+      }
+    } catch (err) {
+      console.error('sendReportEmail error:', err);
+      onToast(err?.message || 'Network error while sending the email.', 'error');
+    } finally {
+      setSending(false);
+    }
+  }
+
+  // Realistic Microsoft Excel Live Table Preview HTML
+  function buildExcelPreviewHtml(rows, periodLabelStr) {
+    const statusCount = { inStock: 0, lowStock: 0, outOfStock: 0 };
+    rows.forEach(item => {
+      const st = deriveStockStatus(item);
+      if (st === 'in-stock') statusCount.inStock++;
+      else if (st === 'low-stock') statusCount.lowStock++;
+      else statusCount.outOfStock++;
+    });
+
+    const headers = ['#', 'Item Name / Description', 'Category', 'Stock Level', 'Unit', 'Min Stock', 'Expiration Date', 'Stock Status'];
+    const colLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+
+    const tableRows = rows.length === 0
+      ? `<tr><td class="row-num">6</td><td colspan="8" style="text-align:center;padding:16px;color:#64748B;font-style:italic;">No ${statusFilter === 'all' ? '' : statusFilterLabel() + ' '}inventory items found for this period.</td></tr>`
+      : rows.map((item, idx) => {
+          const st = deriveStockStatus(item);
+          const stLabel = deriveStockLabel(item);
+          const stColor = st === 'in-stock' ? '#15803D' : st === 'low-stock' ? '#D97706' : '#DC2626';
+          const rowNum = idx + 6;
+          return `<tr>
+            <td class="row-num">${rowNum}</td>
+            <td style="text-align:center;">${idx + 1}</td>
+            <td style="font-weight:bold;color:#0F172A;">${item.name || '—'}</td>
+            <td style="text-align:center;">${item.category || 'General'}</td>
+            <td style="text-align:center;font-weight:bold;">${item.stock !== undefined && item.stock !== null ? item.stock : 0}</td>
+            <td style="text-align:center;">${fmtUnit(item.unit) || 'Vials'}</td>
+            <td style="text-align:center;">${item.minStock !== undefined && item.minStock !== null ? item.minStock : 10}</td>
+            <td style="text-align:center;">${item.expiry || item.expiryDate || '—'}</td>
+            <td style="text-align:center;font-weight:bold;color:${stColor};">${stLabel.toUpperCase()}</td>
+          </tr>`;
+        }).join('');
+
+    return `<!DOCTYPE html><html><head><title>Excel Preview</title>
+      <style>
+        *{box-sizing:border-box;}
+        body{font-family:Calibri,'Segoe UI',Arial,sans-serif;margin:0;padding:0;background:#FFFFFF;font-size:11px;color:#1E293B;user-select:none;}
+        .sheet-container{background:#FFFFFF;overflow-x:auto;padding:0;}
+        table.excel-grid{border-collapse:collapse;width:100%;table-layout:fixed;}
+        table.excel-grid th, table.excel-grid td{border:1px solid #CBD5E1;padding:6px 9px;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        th.col-head{background:#EFF6FF;color:#1D4ED8;font-weight:700;text-align:center;font-size:10px;border:1px solid #CBD5E1;}
+        td.row-num{background:#F8FAFC;color:#64748B;font-weight:700;text-align:center;font-size:10px;width:36px;border:1px solid #CBD5E1;}
+        .sheet-tabs{background:#F1F5F9;border-top:1px solid #CBD5E1;padding:4px 12px;display:flex;align-items:center;gap:4px;font-size:11px;position:sticky;bottom:0;}
+        .tab{background:#FFFFFF;border:1px solid #CBD5E1;border-bottom:none;padding:4px 12px;font-weight:700;color:#1D4ED8;border-top:2px solid #1D4ED8;border-radius:3px 3px 0 0;}
+      </style></head><body>
+
+      <div class="sheet-container">
+        <table class="excel-grid">
+          <thead>
+            <tr>
+              <th class="col-head" style="width:36px;"></th>
+              ${colLetters.map(c => `<th class="col-head">${c}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="row-num">1</td>
+              <td colspan="8" style="font-size:13px;font-weight:bold;color:#1D4ED8;background:#EFF6FF;">INVENTORY &amp; STOCK MANAGEMENT REGISTRY REPORT</td>
+            </tr>
+            <tr>
+              <td class="row-num">2</td>
+              <td colspan="8" style="color:#475569;background:#F8FAFC;">Period Covered: <strong>${periodLabelStr}</strong> &nbsp;|&nbsp; Category: <strong>${categoryFilterLabel()}</strong> &nbsp;|&nbsp; Status: <strong>${statusFilterLabel()}</strong> &nbsp;|&nbsp; Date Generated: ${new Date().toLocaleString('en-PH')}</td>
+            </tr>
+            <tr>
+              <td class="row-num">3</td>
+              <td colspan="2" style="background:#F1F5F9;font-weight:bold;">Total Items: ${rows.length}</td>
+              <td colspan="2" style="background:#F1F5F9;font-weight:bold;color:#15803D;">In Stock: ${statusCount.inStock}</td>
+              <td colspan="2" style="background:#F1F5F9;font-weight:bold;color:#D97706;">Low Stock: ${statusCount.lowStock}</td>
+              <td colspan="2" style="background:#F1F5F9;font-weight:bold;color:#DC2626;">Out of Stock: ${statusCount.outOfStock}</td>
+            </tr>
+            <tr>
+              <td class="row-num">4</td>
+              <td colspan="8" style="background:#FFFFFF;height:4px;"></td>
+            </tr>
+            <tr style="background:#1D4ED8;color:#FFFFFF;font-weight:bold;">
+              <td class="row-num" style="background:#F1F5F9;color:#64748B;">5</td>
+              ${headers.map(h => `<td style="background:#1D4ED8;color:#FFFFFF;font-weight:bold;text-align:${h === '#' || h === 'Stock Level' || h === 'Unit' || h === 'Min Stock' || h === 'Expiration Date' || h === 'Stock Status' ? 'center' : 'left'};">${h}</td>`).join('')}
+            </tr>
+            ${tableRows}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sheet-tabs">
+        <div class="tab">Sheet1</div>
+        <span style="color:#64748B;margin-left:8px;">+</span>
+        <span style="margin-left:auto;color:#64748B;font-size:10px;">Ready</span>
+      </div>
+
+      </body></html>`;
+  }
+
+  // Exact Landscape Multi-Page HTML Report with physical cut lines and page breaks
+  function buildInventoryReportHtml(rows, logoSrc = CLINIC_LOGO_BASE64) {
+    const pages = chunkInventoryIntoPages(rows);
+    const totalPages = pages.length;
+    const dateGeneratedStr = new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const currentLogo = logoSrc || clinicLogoBase64Cache || CLINIC_LOGO_BASE64;
+
+    const renderedPagesHtml = pages.map((pageRows, pIdx) => {
+      const pageNum = pIdx + 1;
+      const startNum = pIdx === 0 ? 0 : PAGE_1_ROWS + (pIdx - 1) * CONT_PAGE_ROWS;
+
+      const tableRows = pageRows.length === 0
+        ? `<tr><td colspan="8" style="text-align:center;padding:24px;color:#64748B;font-style:italic;">No ${statusFilter === 'all' ? '' : statusFilterLabel() + ' '}inventory items found for this period.</td></tr>`
+        : pageRows.map((item, i) => {
+            const st = deriveStockStatus(item);
+            const stLabel = deriveStockLabel(item);
+            const stColor = st === 'in-stock' ? '#15803D' : st === 'low-stock' ? '#D97706' : '#DC2626';
+
+            return `
+            <tr>
+              <td class="col-center">${startNum + i + 1}</td>
+              <td class="col-left" style="font-weight:700;">${item.name || '—'}</td>
+              <td class="col-center">${item.category || 'General'}</td>
+              <td class="col-center" style="font-weight:700;">${item.stock !== undefined && item.stock !== null ? item.stock : 0}</td>
+              <td class="col-center">${fmtUnit(item.unit) || 'Vials'}</td>
+              <td class="col-center">${item.minStock !== undefined && item.minStock !== null ? item.minStock : 10}</td>
+              <td class="col-center">${item.expiry || item.expiryDate || '—'}</td>
+              <td class="col-center" style="font-weight:700;color:${stColor};">${stLabel.toUpperCase()}</td>
+            </tr>`;
+          }).join('');
+
+      const pageHeader = `
+        <div class="report-header">
+          <div class="header-left">
+            <img src="${currentLogo}" alt="K&A Clinic Logo" class="header-logo" />
+            <div>
+              <div class="header-muni">Municipality of Libon, Province of Albay</div>
+              <div class="header-brand">K&amp;A ANIMAL BITE CENTER &mdash; INVENTORY REPORT</div>
+              <div class="header-sub">Inventory Stock Summary &mdash; ${periodLabel()}${pIdx > 0 ? ' &bull; Continuation' : ''}</div>
+            </div>
+          </div>
+          <div class="header-right">
+            <span>Category: ${categoryFilterLabel()}</span> &nbsp;|&nbsp; <span>Status: ${statusFilterLabel()}</span> &nbsp;|&nbsp; <span>Date: ${dateGeneratedStr}</span>
+          </div>
+        </div>
+        <div class="header-line"></div>
+      `;
+
+      const cutSeparator = pIdx > 0
+        ? `
+          <div class="page-cut-separator">
+            <span class="cut-scissors">✂</span>
+            <span class="cut-label">Page ${pageNum} of ${totalPages} &mdash; Separate Sheet</span>
+          </div>
+        `
+        : '';
+
+      return `
+        ${cutSeparator}
+        <div class="report-page" id="page-${pageNum}">
+          <div>
+            ${pageHeader}
+            <table class="report-table">
+              <thead>
+                <tr>
+                  <th style="width:4%;text-align:center;">#</th>
+                  <th style="width:26%;text-align:left;">Item Name / Description</th>
+                  <th style="width:14%;text-align:center;">Category</th>
+                  <th style="width:12%;text-align:center;">Stock Level</th>
+                  <th style="width:8%;text-align:center;">Unit</th>
+                  <th style="width:10%;text-align:center;">Min Stock</th>
+                  <th style="width:13%;text-align:center;">Expiration Date</th>
+                  <th style="width:13%;text-align:center;">Stock Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${tableRows}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="footer">
+            <span>K&amp;A Animal Bite Treatment Center &bull; Rural Health Unit &bull; Official Inventory Registry Report</span>
+            <span>Page ${pageNum} of ${totalPages}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    return `<!DOCTYPE html><html><head><title>Inventory Report — ${periodLabel()}</title>
+    <base href="${typeof window !== 'undefined' ? window.location.origin : ''}/">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-      td,th{font-family:Calibri,Arial,sans-serif;font-size:11pt;}
-      .brand{font-size:16pt;font-weight:bold;color:#0F172A;}
-      .tagline{font-size:9pt;color:#475569;}
-      .meta{font-size:10pt;color:#475569;}
-      th.col{background:#F1F5F9;font-weight:bold;color:#0F172A;text-align:left;}
-    </style></head><body>
-    <table border="0">
-      <tr><td class="brand" colspan="${cols}">K&amp;A Clinic</td></tr>
-      <tr><td class="tagline" colspan="${cols}">Anti-Rabies &amp; Animal Bite Center</td></tr>
-      <tr><td class="meta" colspan="${cols}">Inventory Stock Report — ${periodLabel}</td></tr>
-      <tr><td class="meta" colspan="${cols}">Generated: ${new Date().toLocaleString('en-PH')} | Total Items: ${rows.length}</td></tr>
-      <tr><td colspan="${cols}"></td></tr>
-    </table>
-    <table border="1"><thead><tr>${INVENTORY_HEADERS.map(h => `<th class="col">${h}</th>`).join('')}</tr></thead><tbody>${tableRows}</tbody></table>
-    </body></html>`;
-  const blob = new Blob(['\uFEFF' + html], { type: 'application/vnd.ms-excel' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-};
+      *{box-sizing:border-box;}
+      html, body{margin:0;padding:0;font-family:'Plus Jakarta Sans','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0F172A;background:#EDF0FA;}
+      .pages-wrapper{display:flex;flex-direction:column;align-items:center;padding:0 0 4px;}
+      .page-cut-separator{width:1060px;display:flex;align-items:center;justify-content:center;gap:12px;color:#64748B;font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;margin:18px 0;user-select:none;}
+      .page-cut-separator::before, .page-cut-separator::after{content:'';flex:1;border-bottom:2px dashed #CBD5E1;}
+      .cut-scissors{font-size:13px;color:#3B50DF;}
+      .cut-label{background:#FFFFFF;padding:4px 12px;border-radius:999px;border:1px solid #CBD5E1;box-shadow:0 1px 3px rgba(0,0,0,0.05);}
+      .report-page{width:1060px;height:750px;min-height:750px;max-height:750px;background:#FFFFFF;border-radius:6px;border:1px solid #D8DEF0;box-shadow:0 4px 18px rgba(15,23,42,0.10);padding:16px 26px 14px;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;margin:0 auto;box-sizing:border-box;}
+      
+      .report-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;}
+      .header-left{display:flex;align-items:center;gap:12px;}
+      .header-logo{width:38px;height:38px;object-fit:contain;display:block;flex-shrink:0;}
+      .header-muni{font-size:8.5px;color:#64748B;font-weight:600;letter-spacing:0.3px;text-transform:uppercase;}
+      .header-brand{font-size:13px;font-weight:900;color:#0F172A;letter-spacing:0.3px;margin:1px 0;text-transform:uppercase;}
+      .header-sub{font-size:9.5px;color:#475569;font-weight:600;font-style:italic;}
+      .header-right{font-size:8.5px;color:#475569;font-weight:600;text-align:right;white-space:nowrap;}
+      .header-line{border-bottom:1.5px solid #0A1D47;margin:4px 0 8px;}
 
-const exportPDF = (rows, periodLabel) => {
-  const w = window.open('', '_blank');
-  w.document.write(buildInventoryReportHtml(rows, periodLabel));
-  w.document.close();
-  w.print();
-};
+      table.report-table{width:100%;border-collapse:collapse;font-size:9px;table-layout:fixed;border:1px solid #CBD5E1;}
+      table.report-table th, table.report-table td{border:1px solid #CBD5E1;vertical-align:middle;}
+      table.report-table th{background:#EFF6FF;color:#000000;font-size:8.5px;font-weight:800;padding:6px 8px;white-space:nowrap;}
+      table.report-table td{padding:5.8px 8px;color:#0F172A;font-size:9px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+      
+      .col-center{text-align:center;}
+      .col-left{text-align:left;}
+
+      .footer{font-size:8px;color:#94A3B8;margin-top:auto;padding-top:8px;display:flex;justify-content:space-between;}
+      @media print{
+        @page{size:A4 landscape;margin:8mm 10mm;}
+        html,body{background:#FFFFFF!important;padding:0!important;margin:0!important;}
+        .pages-wrapper{display:block!important;padding:0!important;}
+        .page-cut-separator{display:none!important;}
+        .report-page{width:100%!important;min-height:100vh!important;height:100vh!important;margin:0!important;box-shadow:none!important;border:none!important;border-radius:0!important;padding:8mm 10mm!important;page-break-after:always!important;break-after:page!important;}
+        .report-page:last-child{page-break-after:auto!important;break-after:auto!important;}
+      }
+    </style></head><body>
+      <div class="pages-wrapper">
+        ${renderedPagesHtml}
+      </div>
+    </body></html>`;
+  }
+
+  function exportPrint() {
+    const rows = getFilteredItems();
+    if (rows.length === 0) { onToast('No inventory items found for this period', 'error'); return; }
+    const w = window.open('', '_blank');
+    w.document.write(buildInventoryReportHtml(rows, logoDataUrl || CLINIC_LOGO_BASE64));
+    w.document.close();
+    w.focus();
+    setTimeout(() => {
+      w.print();
+    }, 250);
+    onToast(`${period.charAt(0).toUpperCase() + period.slice(1)} inventory report opened for printing`, 'success');
+  }
+
+  function buildInventoryBulkPdf(rows, logoDataUrl = CLINIC_LOGO_BASE64) {
+    const doc = new jsPDF({ orientation: 'landscape', format: 'a4', unit: 'mm' });
+    const pageWidth = doc.internal.pageSize.getWidth(); // 297mm
+    const pageHeight = doc.internal.pageSize.getHeight(); // 210mm
+    const dateGeneratedStr = new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const logoToUse = logoDataUrl || clinicLogoBase64Cache || CLINIC_LOGO_BASE64;
+
+    const MARGIN = 14;
+    const CONTENT_WIDTH = pageWidth - MARGIN * 2;
+    const COL_PERCENT = [4, 26, 14, 12, 8, 10, 13, 13];
+    const COL_ALIGN = ['center', 'left', 'center', 'center', 'center', 'center', 'center', 'center'];
+    const columnStyles = COL_PERCENT.reduce((acc, pct, i) => {
+      acc[i] = {
+        halign: COL_ALIGN[i],
+        cellWidth: (CONTENT_WIDTH * pct) / 100,
+        ...(i === 7 ? { fontStyle: 'bold' } : {}),
+      };
+      return acc;
+    }, {});
+
+    function drawPdfHeader(isContinuation) {
+      const hasLogo = Boolean(logoToUse);
+      const textX = hasLogo ? 27 : MARGIN;
+
+      if (hasLogo) {
+        try {
+          doc.addImage(logoToUse, 'PNG', MARGIN, 5.8, 10.5, 10.5);
+        } catch (e) {
+          console.warn('Could not add logo to PDF:', e);
+        }
+      }
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(6.5);
+      doc.setTextColor(100, 116, 139);
+      doc.text('MUNICIPALITY OF LIBON, PROVINCE OF ALBAY', textX, 8);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(15, 23, 42);
+      doc.text('K&A ANIMAL BITE CENTER — INVENTORY REPORT', textX, 12.5);
+
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(7.5);
+      doc.setTextColor(71, 85, 105);
+      doc.text(`Inventory Stock Summary — ${periodLabel()}${isContinuation ? ' • Continuation' : ''}`, textX, 16.8);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
+      doc.setTextColor(71, 85, 105);
+      doc.text(`Category: ${categoryFilterLabel()}  |  Status: ${statusFilterLabel()}  |  Date: ${dateGeneratedStr}`, pageWidth - MARGIN, 16.8, { align: 'right' });
+
+      doc.setDrawColor(10, 29, 71);
+      doc.setLineWidth(0.5);
+      doc.line(MARGIN, 19.5, pageWidth - MARGIN, 19.5);
+    }
+
+    const bodyForChunk = (pageRows, startNum) => pageRows.map((item, i) => {
+      const stLabel = deriveStockLabel(item);
+      return [
+        startNum + i + 1,
+        item.name || '—',
+        item.category || 'General',
+        item.stock !== undefined && item.stock !== null ? String(item.stock) : '0',
+        fmtUnit(item.unit) || 'Vials',
+        item.minStock !== undefined && item.minStock !== null ? String(item.minStock) : '10',
+        item.expiry || item.expiryDate || '—',
+        stLabel.toUpperCase(),
+      ];
+    });
+
+    const pages = chunkInventoryIntoPages(rows);
+    pages.forEach((pageRows, pIdx) => {
+      if (pIdx > 0) doc.addPage();
+      drawPdfHeader(pIdx > 0);
+
+      const startNum = pIdx === 0 ? 0 : PAGE_1_ROWS + (pIdx - 1) * CONT_PAGE_ROWS;
+      autoTable(doc, {
+        startY: 21.5,
+        margin: { top: 21.5, bottom: 12, left: MARGIN, right: MARGIN },
+        head: [['#', 'Item Name / Description', 'Category', 'Stock Level', 'Unit', 'Min Stock', 'Expiration Date', 'Stock Status']],
+        body: pageRows.length
+          ? bodyForChunk(pageRows, startNum)
+          : [[{ content: `No ${statusFilter === 'all' ? '' : statusFilterLabel() + ' '}inventory items found for this period.`, colSpan: 8, styles: { halign: 'center', textColor: [100, 116, 139], fontStyle: 'italic' } }]],
+        theme: 'grid',
+        headStyles: {
+          fillColor: [239, 246, 255],
+          textColor: [0, 0, 0],
+          fontSize: 7.5,
+          fontStyle: 'bold',
+          cellPadding: 1.9,
+          lineColor: [203, 213, 225],
+          lineWidth: 0.1,
+        },
+        styles: {
+          fontSize: 7.5,
+          cellPadding: 1.6,
+          textColor: [15, 23, 42],
+          lineColor: [203, 213, 225],
+          lineWidth: 0.1,
+          overflow: 'ellipsize',
+          valign: 'middle',
+        },
+        columnStyles,
+        didParseCell: function (data) {
+          if (data.section === 'body' && data.column.index === 7) {
+            if (data.cell.raw === 'IN STOCK') {
+              data.cell.styles.textColor = [21, 128, 61];
+            } else if (data.cell.raw === 'LOW STOCK') {
+              data.cell.styles.textColor = [217, 119, 6];
+            } else {
+              data.cell.styles.textColor = [220, 38, 38];
+            }
+          }
+        },
+      });
+    });
+
+    const totalPages = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
+      doc.setTextColor(148, 163, 184);
+      doc.text('K&A Animal Bite Treatment Center · Rural Health Unit · Confidential Inventory Report', MARGIN, pageHeight - 6);
+      doc.text(`Page ${i} of ${totalPages}`, pageWidth - MARGIN, pageHeight - 6, { align: 'right' });
+    }
+
+    return doc;
+  }
+
+  function exportBulkPdf() {
+    const rows = getFilteredItems();
+    if (rows.length === 0) { onToast('No inventory items found for this period', 'error'); return; }
+    const logoToUse = logoDataUrl || clinicLogoBase64Cache || CLINIC_LOGO_BASE64;
+    const statusSlug = statusFilter !== 'all' ? `-${statusFilter}` : '';
+    buildInventoryBulkPdf(rows, logoToUse).save(`inventory-report-${period}${statusSlug}-${getTodayDateString()}.pdf`);
+    onToast(`Landscape PDF exported (${rows.length} item${rows.length !== 1 ? 's' : ''})`, 'success');
+  }
+
+  function exportBulkXLS() {
+    const rows = getFilteredItems();
+    if (rows.length === 0) { onToast('No inventory items found for this period', 'error'); return; }
+
+    const statusCount = { inStock: 0, lowStock: 0, outOfStock: 0 };
+    const categoryCount = {};
+    rows.forEach(item => {
+      const st = deriveStockStatus(item);
+      if (st === 'in-stock') statusCount.inStock++;
+      else if (st === 'low-stock') statusCount.lowStock++;
+      else statusCount.outOfStock++;
+
+      const cat = (item.category || 'Unspecified').trim() || 'Unspecified';
+      categoryCount[cat] = (categoryCount[cat] || 0) + 1;
+    });
+
+    const categoryPct = (n) => (rows.length ? `${Math.round((n / rows.length) * 1000) / 10}%` : '0%');
+    const categoryRows = Object.entries(categoryCount)
+      .sort((a, b) => b[1] - a[1])
+      .map(([cat, n]) => [cat, n, categoryPct(n)]);
+
+    const headers = ['#', 'Item Name / Description', 'Category', 'Stock Level', 'Unit', 'Min Stock', 'Expiration Date', 'Stock Status'];
+
+    const aoa = [
+      ['INVENTORY & STOCK MANAGEMENT REGISTRY REPORT'],
+      ['RURAL HEALTH UNIT • ANIMAL BITE TREATMENT CENTER • LIBON, ALBAY'],
+      [`Period Covered: ${periodLabel()}`, `Category: ${categoryFilterLabel()}`, `Status: ${statusFilterLabel()}`, `Date Generated: ${new Date().toLocaleString('en-PH')}`],
+      [],
+      ['SUMMARY METRICS'],
+      ['Total Items', rows.length, 'In Stock', statusCount.inStock, 'Low Stock', statusCount.lowStock, 'Out of Stock', statusCount.outOfStock],
+      [],
+      ['CATEGORY BREAKDOWN'],
+      ['Category', 'Items', 'Share'],
+      ...categoryRows,
+      [],
+      headers,
+    ];
+
+    const HEADER_ROW = aoa.length - 1;
+    rows.forEach((item, idx) => {
+      aoa.push([
+        idx + 1,
+        item.name || '—',
+        item.category || 'General',
+        item.stock !== undefined && item.stock !== null ? Number(item.stock) : 0,
+        fmtUnit(item.unit) || 'Vials',
+        item.minStock !== undefined && item.minStock !== null ? Number(item.minStock) : 10,
+        item.expiry || item.expiryDate || '—',
+        deriveStockLabel(item).toUpperCase(),
+      ]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+    const TEXT_COLUMNS = [6];
+    for (let r = HEADER_ROW + 1; r < aoa.length; r++) {
+      TEXT_COLUMNS.forEach(c => {
+        const ref = XLSX.utils.encode_cell({ r, c });
+        const cell = ws[ref];
+        if (cell) { cell.t = 's'; cell.z = '@'; cell.v = String(cell.v); }
+      });
+    }
+
+    ws['!cols'] = [
+      { wch: 5 }, { wch: 28 }, { wch: 16 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 16 }, { wch: 16 }
+    ];
+    ws['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: headers.length - 1 } },
+      { s: { r: 4, c: 0 }, e: { r: 4, c: headers.length - 1 } },
+    ];
+    ws['!freeze'] = { xSplit: 0, ySplit: HEADER_ROW + 1 };
+    ws['!autofilter'] = {
+      ref: `${XLSX.utils.encode_cell({ r: HEADER_ROW, c: 0 })}:${XLSX.utils.encode_cell({ r: aoa.length - 1, c: headers.length - 1 })}`,
+    };
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Inventory Registry');
+
+    const statusSlug = statusFilter !== 'all' ? `-${statusFilter}` : '';
+    XLSX.writeFile(wb, `inventory-report-${period}${statusSlug}-${getTodayDateString()}.xlsx`);
+    onToast(`Excel report exported (${rows.length} item${rows.length !== 1 ? 's' : ''})`, 'success');
+  }
+
+  function runExport() {
+    if (exportFormat === 'xls') exportBulkXLS();
+    else exportBulkPdf();
+  }
+
+  async function emailBulkReportPdf(to) {
+    try {
+      const rows = getFilteredItems();
+      if (rows.length === 0) {
+        onToast('No inventory items found for this period', 'error');
+        return;
+      }
+      const logo = (await getClinicLogoBase64()) || logoDataUrl || CLINIC_LOGO_BASE64;
+      const base64 = pdfToBase64(buildInventoryBulkPdf(rows, logo));
+      if (!base64) {
+        onToast('Could not generate the PDF report. Please try again.', 'error');
+        return;
+      }
+      const statusSlug = statusFilter !== 'all' ? `-${statusFilter}` : '';
+      await sendReportEmail(
+        to,
+        `K&A Clinic — Inventory Stock Report (${periodLabel()})`,
+        `<p>Attached is the K&amp;A Animal Bite Center official inventory stock report for <strong>${periodLabel()}</strong>.</p>`
+          + `<p>Category: ${categoryFilterLabel()} &bull; Status: ${statusFilterLabel()} &bull; ${rows.length} item record${rows.length !== 1 ? 's' : ''}.</p>`
+          + `<p>&mdash; K&amp;A Animal Bite Center</p>`,
+        { base64, filename: `inventory-report-${period}${statusSlug}-${getTodayDateString()}.pdf` }
+      );
+    } catch (err) {
+      console.error('emailBulkReportPdf error:', err);
+      onToast('Failed to prepare PDF report for emailing.', 'error');
+    }
+  }
+
+  useEffect(() => { setDocSheetHeight(null); }, [exportFormat, period, categoryFilter, statusFilter]);
+
+  const preview = getFilteredItems();
+  const previewPages = chunkInventoryIntoPages(preview).length;
+  const sheetWidth = 1100;
+  const sheetHeight = docSheetHeight || (previewPages * 790);
+
+  const previewPane = (html, onMeasure) => (
+    <iframe
+      title="Report preview"
+      sandbox="allow-same-origin"
+      srcDoc={html}
+      onLoad={onMeasure ? (e) => {
+        const body = e.currentTarget.contentDocument?.body;
+        if (body) onMeasure(Math.ceil(body.scrollHeight));
+      } : undefined}
+      style={{ display: 'block', width: '100%', height: '100%', border: 'none', background: '#FFFFFF' }}
+    />
+  );
+
+  const selectStyle = {
+    width: '100%', padding: '9px 12px', fontSize: '.8125rem', fontWeight: 600, color: '#0F172A',
+    border: '1px solid #CBD5E1', borderRadius: 12, background: '#FFFFFF', outline: 'none', cursor: 'pointer',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+  };
+  const labelStyle = {
+    display: 'block', fontSize: '.71875rem', fontWeight: 700, color: '#334155',
+    textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 6
+  };
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md"
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="bg-white rounded-3xl shadow-2xl border border-slate-200"
+        style={{ width: '1360px', maxWidth: '98vw', height: '92vh', maxHeight: '960px', padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Card header */}
+        <div
+          className="px-6 py-4 flex items-center justify-between"
+          style={{ flexShrink: 0, background: '#F4F6FE', borderBottom: '1px solid #E0E5FA' }}
+        >
+          <div className="flex items-center gap-3">
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: '#3B50DF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Export Inventory Report</h3>
+              <p className="text-[11px] text-slate-500 font-normal mt-0.5">Download, print, or email official clinic inventory reports</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer transition-colors"
+            aria-label="Close"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* 2-column split body */}
+        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+
+          {/* LEFT PANEL: settings */}
+          <div style={{
+            width: '340px', flexShrink: 0, background: '#F7F8FD',
+            borderRight: '1px solid #E3E7F5', padding: '20px',
+            display: 'flex', flexDirection: 'column', gap: 18, overflowY: 'auto'
+          }}>
+            {/* Report Period */}
+            <div>
+              <label style={labelStyle}>Report Period</label>
+              <select value={period} onChange={e => setPeriod(e.target.value)} style={selectStyle}>
+                <option value="monthly">Monthly (This Calendar Month)</option>
+                <option value="daily">Daily (Today)</option>
+                <option value="weekly">Weekly (Last 7 Days)</option>
+                <option value="yearly">Yearly (This Calendar Year)</option>
+                <option value="all">All Time (Full Inventory)</option>
+              </select>
+            </div>
+
+            {/* Category */}
+            <div>
+              <label style={labelStyle}>Item Category</label>
+              <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} style={selectStyle}>
+                <option value="all">All Categories</option>
+                {categories.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Stock Status */}
+            <div>
+              <label style={labelStyle}>Stock Status</label>
+              <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={selectStyle}>
+                <option value="all">All Statuses</option>
+                <option value="in-stock">In Stock</option>
+                <option value="low-stock">Low Stock (Reorder Needed)</option>
+                <option value="out-of-stock">Out of Stock</option>
+              </select>
+            </div>
+
+            {/* Export Format */}
+            <div>
+              <label style={labelStyle}>Export Format</label>
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setExportFormat('pdf')}
+                  className={`p-2.5 rounded-xl border text-left flex items-center gap-2.5 transition-all cursor-pointer ${
+                    exportFormat === 'pdf' ? 'border-[#3B50DF] bg-[#EEF2FF] shadow-xs ring-1 ring-[#3B50DF]/30' : 'border-slate-200 bg-white hover:border-slate-300'
+                  }`}
+                >
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-[10px] shrink-0 ${exportFormat === 'pdf' ? 'bg-[#3B50DF] text-white' : 'bg-slate-100 text-slate-600'}`}>
+                    PDF
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-bold text-slate-900">PDF</div>
+                    <div className="text-[10px] text-slate-600">Official printout</div>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExportFormat('xls')}
+                  className={`p-2.5 rounded-xl border text-left flex items-center gap-2.5 transition-all cursor-pointer ${
+                    exportFormat === 'xls' ? 'border-[#3B50DF] bg-[#EEF2FF] shadow-xs ring-1 ring-[#3B50DF]/30' : 'border-slate-200 bg-white hover:border-slate-300'
+                  }`}
+                >
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-[10px] shrink-0 ${exportFormat === 'xls' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                    XLS
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-bold text-slate-900">Excel</div>
+                    <div className="text-[10px] text-slate-600">Raw data</div>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Matching result banner */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200 text-xs">
+              <span className="font-medium text-slate-600">Matching records:</span>
+              <span className="font-extrabold text-[#3B50DF] bg-[#EEF2FF] px-2.5 py-1 rounded-full border border-[#E0E7FF]">
+                {preview.length} item{preview.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 'auto', paddingTop: 16, borderTop: '1px solid #E2E8F0' }}>
+              <button
+                type="button"
+                onClick={runExport}
+                disabled={preview.length === 0}
+                style={{
+                  width: '100%', height: 42, padding: '0 16px', borderRadius: 12, border: '1px solid transparent',
+                  background: '#3B50DF', color: '#FFFFFF', fontSize: '.8125rem', fontWeight: 700,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer',
+                  opacity: preview.length === 0 ? 0.5 : 1
+                }}
+              >
+                <Download size={14} />
+                Export {exportFormat === 'xls' ? 'Excel (XLS)' : 'PDF'} ({preview.length})
+              </button>
+              <button
+                type="button"
+                onClick={exportPrint}
+                disabled={preview.length === 0}
+                style={{
+                  width: '100%', height: 42, padding: '0 16px', borderRadius: 12, border: '1px solid #CBD5E1',
+                  background: '#FFFFFF', color: '#0F172A', fontSize: '.8125rem', fontWeight: 700,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer',
+                  opacity: preview.length === 0 ? 0.5 : 1
+                }}
+              >
+                <Printer size={14} />
+                Print Report
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEmailInput(v => !v);
+                  setSentTo('');
+                }}
+                disabled={preview.length === 0}
+                style={{
+                  width: '100%', height: 42, padding: '0 16px', borderRadius: 12,
+                  border: showEmailInput ? '1px solid #3B50DF' : '1px solid #CBD5E1',
+                  background: showEmailInput ? '#EEF2FF' : '#FFFFFF',
+                  color: showEmailInput ? '#3B50DF' : '#0F172A',
+                  fontSize: '.8125rem', fontWeight: 700,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer',
+                  opacity: preview.length === 0 ? 0.5 : 1
+                }}
+              >
+                <Mail size={14} />
+                Email Report
+              </button>
+
+              {showEmailInput && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px', background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 8, marginTop: 2 }}>
+                  {sentTo && (
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 8 }}>
+                      <span style={{ color: '#047857', fontWeight: 800, lineHeight: 1.2 }}>✓</span>
+                      <div style={{ fontSize: '.71875rem', color: '#065F46', lineHeight: 1.45 }}>
+                        <strong>Sent.</strong> The report was emailed to <strong>{sentTo}</strong>.
+                      </div>
+                    </div>
+                  )}
+                  <input
+                    type="email"
+                    placeholder="Enter recipient email…"
+                    value={emailTo}
+                    onChange={e => { setEmailTo(e.target.value); setSentTo(''); }}
+                    style={{ width: '100%', padding: '8px 10px', fontSize: '.8125rem', border: '1px solid #CBD5E1', borderRadius: 6, outline: 'none', background: '#fff' }}
+                  />
+                  <button
+                    type="button"
+                    disabled={sending || !emailTo.trim()}
+                    onClick={() => emailBulkReportPdf(emailTo)}
+                    style={{ width: '100%', height: 38, background: '#3B50DF', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: '.8125rem', cursor: 'pointer', opacity: (sending || !emailTo.trim()) ? 0.6 : 1 }}
+                  >
+                    {sending ? 'Sending… this can take a few seconds' : 'Send via Email'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* RIGHT PANEL: live paper document preview */}
+          <div style={{ flex: 1, background: '#EDF0FA', padding: '16px 24px 24px', overflow: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+
+            {/* Viewer toolbar */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+              background: '#FFFFFF', padding: '6px 16px', borderRadius: 12,
+              border: '1px solid #E2E8F0',
+              color: '#334155', fontSize: '.8125rem', fontWeight: 600,
+              boxShadow: '0 2px 8px rgba(15,23,42,0.06)', marginBottom: 16, flexShrink: 0,
+              position: 'sticky', top: 0, zIndex: 10
+            }}>
+              <span style={{ fontSize: '.78125rem', color: '#64748B' }}>
+                {previewPages} page{previewPages !== 1 ? 's' : ''}
+              </span>
+
+              <div style={{ width: 1, height: 16, background: '#E2E8F0', margin: '0 4px' }} />
+
+              <button type="button" onClick={() => setZoomLevel(z => Math.max(0.4, Math.round((z - 0.1) * 100) / 100))} style={{ background: 'transparent', border: 'none', color: '#334155', fontSize: '1.1rem', fontWeight: 800, cursor: 'pointer', padding: '0 6px' }} title="Zoom Out">−</button>
+
+              <span style={{ minWidth: 46, textAlign: 'center', fontWeight: 700, color: '#0F172A', background: '#F1F5F9', padding: '2px 8px', borderRadius: 6, fontSize: '.78125rem' }}>
+                {Math.round(zoomLevel * 100)}%
+              </span>
+
+              <button type="button" onClick={() => setZoomLevel(z => Math.min(1.6, Math.round((z + 0.1) * 100) / 100))} style={{ background: 'transparent', border: 'none', color: '#334155', fontSize: '1.1rem', fontWeight: 800, cursor: 'pointer', padding: '0 6px' }} title="Zoom In">+</button>
+
+              <div style={{ width: 1, height: 16, background: '#E2E8F0', margin: '0 4px' }} />
+
+              <button type="button" onClick={() => setZoomLevel(0.85)} style={{ background: 'transparent', border: 'none', color: '#334155', fontSize: '.9rem', cursor: 'pointer', padding: '0 4px' }} title="Fit to Page">↕</button>
+            </div>
+
+            {/* Paper sheet container */}
+            <div style={{
+              width: `${sheetWidth * zoomLevel}px`,
+              height: `${sheetHeight * zoomLevel}px`,
+              flexShrink: 0,
+              transition: 'width 0.15s ease, height 0.15s ease',
+            }}>
+              <div style={{
+                width: `${sheetWidth}px`,
+                height: `${sheetHeight}px`,
+                background: 'transparent',
+                overflow: 'hidden', display: 'flex', flexDirection: 'column',
+                transform: `scale(${zoomLevel})`,
+                transformOrigin: 'top left',
+                transition: 'transform 0.15s ease',
+              }}>
+                {previewPane(
+                  exportFormat === 'xls'
+                    ? buildExcelPreviewHtml(preview, periodLabel())
+                    : buildInventoryReportHtml(preview, logoDataUrl),
+                  setDocSheetHeight
+                )}
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
 
 /* ─────────────────────────── COMPONENT ─────────────────────────── */
 export default function VaccineInventoryPage() {
@@ -235,13 +1130,11 @@ export default function VaccineInventoryPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
-  const [exportPeriod, setExportPeriod] = useState('all');
-  const [exportFormat, setExportFormat] = useState('pdf'); // 'xls' | 'pdf'
-  const [exportZoomLevel, setExportZoomLevel] = useState(0.85);
-  const [exportRotation, setExportRotation] = useState(0);
-  // Preview gate — the report is shown in-app before anything is downloaded
-  // or sent to the printer. 'form' = pick period/format, 'preview' = review.
-  const [exportStep, setExportStep] = useState('form');
+  const [toast, setToast] = useState(null);
+  const showToast = (msg, type = 'info') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 4000);
+  };
   const [selectedItem, setSelectedItem] = useState(null);
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({ name: '', category: 'Vaccine', unit: 'Vials', stock: '', minStock: '10', expiry: '' });
@@ -364,46 +1257,7 @@ export default function VaccineInventoryPage() {
     });
   };
 
-  /* ── Export helpers ── */
-  const periods = [
-    { key: 'daily', label: 'Daily Report', sub: 'Items added today' },
-    { key: 'weekly', label: 'Weekly Report', sub: 'Items added this week' },
-    { key: 'monthly', label: 'Monthly Report', sub: 'Items added this month' },
-    { key: 'yearly', label: 'Yearly Report', sub: 'Items added this year' },
-    { key: 'all', label: 'Full Report', sub: 'All inventory items' },
-  ];
 
-  const getExportRows = () => {
-    const now = new Date();
-    const cutoff = {
-      all: null,
-      daily: new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime(),
-      weekly: (() => { const d = new Date(now); d.setDate(d.getDate() - d.getDay()); d.setHours(0, 0, 0, 0); return d.getTime(); })(),
-      monthly: new Date(now.getFullYear(), now.getMonth(), 1).getTime(),
-      yearly: new Date(now.getFullYear(), 0, 1).getTime(),
-    }[exportPeriod];
-    return cutoff ? inventory.filter(i => (i.createdAt || 0) >= cutoff) : inventory;
-  };
-
-  const exportPeriodLabel = () => periods.find(p => p.key === exportPeriod)?.label || exportPeriod;
-
-  const handleExport = () => {
-    const rows = getExportRows();
-    const label = exportPeriodLabel().replace(' ', '-');
-    if (exportFormat === 'xls') {
-      exportXLS(rows, `inventory-${label}-${today()}.xls`, exportPeriodLabel());
-    } else if (exportFormat === 'pdf') {
-      exportPDF(rows, exportPeriodLabel());
-    }
-    closeExportModal();
-  };
-
-  const closeExportModal = () => {
-    setShowExportModal(false);
-    setExportStep('form');
-  };
-
-  const exportRowCount = getExportRows().length;
 
   return (
     <div className="p-4">
@@ -815,161 +1669,16 @@ export default function VaccineInventoryPage() {
         document.body
       )}
 
-      {/* ── Export Report Modal (Print Preview Split Layout, Portaled to body) ── */}
-      {showExportModal && createPortal(
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div style={{ background: '#FFFFFF', borderRadius: 24, width: '1360px', maxWidth: '98vw', height: '92vh', maxHeight: '960px', boxShadow: '0 24px 64px rgba(0,0,0,0.25)', overflow: 'hidden', display: 'flex', flexDirection: 'column', border: '1px solid #E2E8F0' }}>
-            
-            {/* Light Clean Header Bar (Matching Export Clinic Report) */}
-            <div
-              className="px-6 py-4 flex items-center justify-between"
-              style={{ flexShrink: 0, background: '#F4F6FE', borderBottom: '1px solid #E0E5FA' }}
-            >
-              <div className="flex items-center gap-3">
-                <div style={{ width: 34, height: 34, borderRadius: 10, background: '#3B50DF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900">Export Inventory Report</h3>
-                  <p className="text-[11px] text-slate-500 font-normal mt-0.5">Generate, print, and download inventory stock reports</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={closeExportModal}
-                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer transition-colors"
-                aria-label="Close"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            {/* Modal 2-Column Split Body */}
-            <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-
-              {/* LEFT PANEL: Settings Controls */}
-              <div style={{
-                width: '330px', flexShrink: 0, background: '#F7F8FD',
-                borderRight: '1px solid #E3E7F5', padding: '20px 20px',
-                display: 'flex', flexDirection: 'column', gap: 18, overflowY: 'auto'
-              }}>
-                {/* Period selection */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '.71875rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 6 }}>
-                    REPORT PERIOD:
-                  </label>
-                  <select
-                    value={exportPeriod}
-                    onChange={e => setExportPeriod(e.target.value)}
-                    style={{
-                      width: '100%', padding: '8px 12px', borderRadius: 10,
-                      border: '1px solid #CBD5E1', fontSize: '.8125rem', fontWeight: 600,
-                      color: '#0F172A', background: '#FFFFFF', outline: 'none'
-                    }}
-                  >
-                    <option value="all">All Items (Full Database)</option>
-                    <option value="daily">Daily (Added Today)</option>
-                    <option value="weekly">Weekly (Last 7 Days)</option>
-                    <option value="monthly">Monthly (This Month)</option>
-                    <option value="yearly">Yearly (This Year)</option>
-                  </select>
-                </div>
-
-                {/* Format selection */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '.71875rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 6 }}>
-                    EXPORT FORMAT:
-                  </label>
-                  <select
-                    value={exportFormat}
-                    onChange={e => setExportFormat(e.target.value)}
-                    style={{
-                      width: '100%', padding: '9px 12px', fontSize: '.8125rem', fontWeight: 600, color: '#0F172A',
-                      border: '1px solid #CBD5E1', borderRadius: 12, background: '#FFFFFF', outline: 'none', cursor: 'pointer',
-                      boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
-                    }}
-                  >
-                    <option value="pdf">PDF Document</option>
-                    <option value="xls">Excel Spreadsheet (XLS)</option>
-                  </select>
-                </div>
-
-                {/* Left Sidebar Action Buttons */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 'auto', paddingTop: 16, borderTop: '1px solid #E2E8F0' }}>
-                  <button
-                    type="button"
-                    onClick={handleExport}
-                    disabled={exportRowCount === 0}
-                    style={{
-                      width: '100%', height: 42, padding: '0 16px', borderRadius: 12, border: '1px solid transparent',
-                      background: '#3B50DF', color: '#FFFFFF',
-                      fontSize: '.8125rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer',
-                      opacity: exportRowCount === 0 ? 0.5 : 1
-                    }}
-                  >
-                    <Download size={15} />
-                    {exportFormat === 'pdf' ? 'Print / Export PDF' : 'Export XLS'}
-                  </button>
-                </div>
-              </div>
-
-              {/* RIGHT PANEL: Live Paper Document Preview Workspace */}
-              <div style={{ flex: 1, background: '#1E293B', padding: '16px 24px 24px', overflow: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                
-                {/* Top Centered Dark PDF Viewer Toolbar */}
-                <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-                  background: '#1E293B', padding: '6px 16px', borderRadius: 8,
-                  color: '#FFFFFF', fontSize: '.8125rem', fontWeight: 600,
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)', marginBottom: 16, flexShrink: 0,
-                  position: 'sticky', top: 0, zIndex: 10
-                }}>
-                  {/* Page indicator */}
-                  <span style={{ fontSize: '.78125rem', color: '#CBD5E1' }}>1 / 1</span>
-                  
-                  <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.2)', margin: '0 4px' }} />
-                  
-                  {/* Zoom controls */}
-                  <button type="button" onClick={() => setExportZoomLevel(z => Math.max(0.4, Math.round((z - 0.1) * 100) / 100))} style={{ background: 'transparent', border: 'none', color: '#FFF', fontSize: '1.1rem', fontWeight: 800, cursor: 'pointer', padding: '0 6px' }} title="Zoom Out">-</button>
-                  
-                  <span style={{ minWidth: 46, textAlign: 'center', fontWeight: 700, color: '#FFFFFF', background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: 4, fontSize: '.78125rem' }}>
-                    {Math.round(exportZoomLevel * 100)}%
-                  </span>
-                  
-                  <button type="button" onClick={() => setExportZoomLevel(z => Math.min(1.6, Math.round((z + 0.1) * 100) / 100))} style={{ background: 'transparent', border: 'none', color: '#FFF', fontSize: '1.1rem', fontWeight: 800, cursor: 'pointer', padding: '0 6px' }} title="Zoom In">+</button>
-                  
-                  <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.2)', margin: '0 4px' }} />
-                  
-                  {/* Rotate Page */}
-                  <button type="button" onClick={() => setExportRotation(r => (r + 90) % 360)} style={{ background: 'transparent', border: 'none', color: '#FFF', fontSize: '1rem', cursor: 'pointer', padding: '0 4px' }} title="Rotate Page">↻</button>
-                </div>
-
-                {/* Paper Sheet Preview Container (Scales as a whole paper sheet!) */}
-                <div style={{
-                  width: '820px', height: '1060px',
-                  background: '#FFFFFF', borderRadius: 4, boxShadow: '0 8px 30px rgba(0,0,0,0.5)',
-                  overflow: 'hidden', display: 'flex', flexDirection: 'column', flexShrink: 0,
-                  transform: `scale(${exportZoomLevel}) ${exportRotation ? `rotate(${exportRotation}deg)` : ''}`,
-                  transformOrigin: 'top center',
-                  transition: 'transform 0.15s ease',
-                  marginBottom: exportZoomLevel < 1 ? `-${(1 - exportZoomLevel) * 1060}px` : `${(exportZoomLevel - 1) * 200}px`
-                }}>
-                  <iframe
-                    title="Inventory report preview"
-                    sandbox=""
-                    srcDoc={buildInventoryReportHtml(getExportRows(), exportPeriodLabel())}
-                    style={{ display: 'block', width: '100%', height: '100%', border: 'none', background: '#FFFFFF' }}
-                  />
-                </div>
-              </div>
-
-            </div>
-          </div>
-        </div>,
-        document.body
+      {/* ── Export Report Modal ── */}
+      {showExportModal && (
+        <ExportInventoryModal
+          inventory={inventory}
+          onClose={() => setShowExportModal(false)}
+          onToast={showToast}
+        />
       )}
+
+      {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
 
     </div>
   );
