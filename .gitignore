@@ -52,3 +52,6 @@ app-example
 
 *-private-key.json
 service-account*.json
+
+# Android release signing key (back it up; never commit)
+/patient-app/keystore/
