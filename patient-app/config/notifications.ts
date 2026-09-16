@@ -7,7 +7,7 @@ import Constants from 'expo-constants';
 import { API_BASE_URL } from './apiBase';
 import { auth } from './firebase';
 
-export const ANDROID_CHANNEL_ID = 'appointments';
+export const ANDROID_CHANNEL_ID = 'clinic_notifications_v2';
 export const EAS_PROJECT_ID = '62297c13-8ceb-4918-9d9e-a9113cbf5acf';
 
 // Foreground notifications handler: ensures banners and sound trigger when app is open or backgrounded.
@@ -29,15 +29,20 @@ Notifications.setNotificationHandler({
 export async function setupNotificationChannelAsync(): Promise<void> {
   if (Platform.OS !== 'android') return;
   try {
+    // Delete legacy channel if present so everything routes through v2
+    await Notifications.deleteNotificationChannelAsync('appointments').catch(() => {});
+
     await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
-      name: 'Clinic & Appointment Updates',
+      name: 'K&A Clinic Alerts & Reminders',
       importance: Notifications.AndroidImportance.MAX,
       sound: 'default',
       enableVibrate: true,
       vibrationPattern: [0, 250, 250, 250],
       enableLights: true,
-      lightColor: '#1E3A8A',
+      lightColor: '#C8102E',
       showBadge: true,
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      bypassDnd: false,
     });
   } catch (e) {
     console.warn('Failed to setup notification channel:', e);

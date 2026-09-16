@@ -231,7 +231,7 @@ async function sendExpoPush(tokens, { title, body, data }) {
       title,
       body,
       data: data || {},
-      channelId: 'appointments',
+      channelId: 'clinic_notifications_v2',
       priority: 'high',
       _displayInForeground: true,
     }));

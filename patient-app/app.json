@@ -43,6 +43,7 @@
       "bundleIdentifier": "com.anonymous.kna-rabies-monitoring"
     },
     "android": {
+      "googleServicesFile": "./google-services.json",
       "edgeToEdgeEnabled": true,
       "permissions": [
         "android.permission.CAMERA",
