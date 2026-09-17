@@ -6246,9 +6246,9 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
                 <tr style={{ background: '#FAFAFA', borderBottom: '1px solid #E2E8F0', color: '#64748B', fontSize: '.6875rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.5px' }}>
                   <th style={{ padding: '16px 12px 16px 20px', width: '10%', fontWeight: 600, color: '#64748B' }}>Patient ID</th>
                   <th style={{ padding: '16px 12px', width: '16%', fontWeight: 600, color: '#64748B' }}>Name</th>
-                  <th style={{ padding: '16px 12px', width: '22%', fontWeight: 600, color: '#64748B' }}>Email</th>
+                  <th style={{ padding: '16px 12px', width: '19%', fontWeight: 600, color: '#64748B' }}>Email</th>
                   <th style={{ padding: '16px 12px', width: '14%', fontWeight: 600, color: '#64748B' }}>Mobile</th>
-                  <th style={{ padding: '16px 12px', width: '8%', fontWeight: 600, color: '#64748B' }}>Service</th>
+                  <th style={{ padding: '16px 12px', width: '11%', fontWeight: 600, color: '#64748B' }}>Service</th>
                   <th style={{ padding: '16px 8px', width: '10%', fontWeight: 600, color: '#64748B' }}>Status</th>
                   <th style={{ padding: '16px 12px', width: '10%', fontWeight: 600, color: '#64748B' }}>Submitted On</th>
                   <th style={{ padding: '16px 16px 16px 8px', width: '10%', textAlign: 'center', fontWeight: 600, color: '#64748B' }}>Actions</th>

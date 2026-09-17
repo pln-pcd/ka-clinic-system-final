@@ -28,7 +28,7 @@
         "expo-notifications",
         {
           "icon": "./assets/notification-icon.png",
-          "color": "#C8102E"
+          "color": "#0A1D47"
         }
       ],
       "expo-router",

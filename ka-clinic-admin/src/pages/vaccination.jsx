@@ -668,7 +668,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
     return (
       <span style={{
         display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 9px', borderRadius: 6,
-        background: '#F1F5F9', color: '#334155', border: '1px solid #CBD5E1', fontSize: '.71875rem', fontWeight: 700
+        background: '#F1F5F9', color: '#334155', border: '1px solid #CBD5E1', fontSize: '.71875rem', fontWeight: 700, whiteSpace: 'nowrap'
       }}>
         {sLabel}
       </span>
@@ -840,8 +840,8 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
               <thead>
                 <tr style={{ background: '#FAFAFA', borderBottom: '1px solid #E2E8F0', color: '#64748B', fontSize: '.6875rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.5px' }}>
                   <th style={{ padding: '16px 12px 16px 20px', width: '10%', textAlign: 'left', fontWeight: 600, color: '#64748B' }}>Patient ID</th>
-                  <th style={{ padding: '16px 12px', width: '22%', textAlign: 'left', fontWeight: 600, color: '#64748B' }}>Patient Name</th>
-                  <th style={{ padding: '16px 12px', width: '8%', textAlign: 'left', fontWeight: 600, color: '#64748B' }}>Service</th>
+                  <th style={{ padding: '16px 12px', width: '19%', textAlign: 'left', fontWeight: 600, color: '#64748B' }}>Patient Name</th>
+                  <th style={{ padding: '16px 12px', width: '11%', textAlign: 'left', fontWeight: 600, color: '#64748B' }}>Service</th>
                   <th style={{ padding: '16px 12px', width: '12%', textAlign: 'left', fontWeight: 600, color: '#64748B' }}>Status</th>
                   <th style={{ padding: '16px 12px', width: '23%', textAlign: 'left', fontWeight: 600, color: '#64748B' }}>
                     {/* Matches the progress bar's own max width so the label centers over the bar, not the wider cell */}

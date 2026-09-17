@@ -40,7 +40,7 @@ export async function setupNotificationChannelAsync(): Promise<void> {
       enableVibrate: true,
       vibrationPattern: [0, 250, 250, 250],
       enableLights: true,
-      lightColor: '#C8102E',
+      lightColor: '#0A1D47',
       showBadge: true,
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
       bypassDnd: false,

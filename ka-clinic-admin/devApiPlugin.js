@@ -90,9 +90,18 @@ export function devApiPlugin() {
 
         let route = url.pathname.slice('/api/'.length).replace(/\/+$/, '');
         if (route === 'send-report') route = 'send-patient-report';
-        if (route === 'admin-forgot-password') route = 'admin-password';
-        if (route === 'admin-reset-password') route = 'admin-password';
-        if (route === 'send-admin-otp' || route === 'verify-admin-otp') route = 'admin-otp';
+        // Mirror vercel.json rewrites, including the ?op= each one adds.
+        const REWRITE_OPS = {
+          'admin-forgot-password': ['admin-password', 'forgot'],
+          'admin-reset-password': ['admin-password', 'reset'],
+          'send-admin-otp': ['admin-otp', 'send'],
+          'verify-admin-otp': ['admin-otp', 'verify'],
+        };
+        if (REWRITE_OPS[route]) {
+          const [target, op] = REWRITE_OPS[route];
+          route = target;
+          if (!url.searchParams.has('op')) url.searchParams.set('op', op);
+        }
 
         // Guard against path traversal reaching outside api/.
         const file = resolve(API_DIR, `${route}.js`);

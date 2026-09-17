@@ -166,7 +166,12 @@ export async function askClinicAssistant(prompt: string, history: ChatTurn[] = [
 
   // Check if query is about available appointments; if so, skip LOCAL_FAQS so
   // it goes to the server API to query real-time Firestore appointment slots.
-  const isAvailableApptQuery = /\b(availab\w*|open\w*|free\w*)\s+(appointment|appt|slot|time)s?\b|\b(appointment|appt|slot)s?\s+(availab\w*|open\w*|schedule)\b|\bwhat\s+(are\s+the\s+)?(availab\w*\s+)?(appointment|appt|slot)s?\b/i.test(pLower);
+  // Any specific date ("Sept 27", "9/27", "tomorrow", "Saturday") also goes to
+  // the server, which resolves the real weekday and live slots for it.
+  const mentionsDate = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}\b|\b\d{1,2}(st|nd|rd|th)?\s+(of\s+)?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)|\b\d{1,2}\/\d{1,2}\b|\b20\d\d-\d{1,2}-\d{1,2}\b|\b(today|tomorrow|bukas|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/i.test(pLower);
+  const isAvailableApptQuery = mentionsDate ||
+    /\b(availab\w*|vacant|slots?|left|remaining)\b/i.test(pLower) ||
+    /\b(availab\w*|open\w*|free\w*)\s+(appointment|appt|slot|time)s?\b|\b(appointment|appt|slot)s?\s+(availab\w*|open\w*|schedule)\b|\bwhat\s+(are\s+the\s+)?(availab\w*\s+)?(appointment|appt|slot)s?\b/i.test(pLower);
 
   if (!isAvailableApptQuery) {
     for (const faq of LOCAL_FAQS) {

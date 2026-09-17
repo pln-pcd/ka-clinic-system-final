@@ -45,7 +45,7 @@ VERIFIED CLINIC KNOWLEDGE:
 🏥 K&A Clinic Information:
 • Operating Hours: 8:00 AM – 5:00 PM (Monday to Sunday)
 • Walk-ins: Accepted Monday – Friday
-• Scheduled Appointments: Saturdays & Sundays (8:00 AM – 12:00 PM)
+• Scheduled Appointments: Saturdays & Sundays, hourly slots 8:00 AM – 12:00 PM and 1:00 PM – 5:00 PM (no slots 12:00 – 1:00 PM)
 • Address: San Juan St., Libon, Albay
 • Booking: use the "Appts" tab in the app, or the "Book Appointment" button on the website.
 • Booking slots: Saturdays & Sundays only, one patient per hour slot. Reschedule or cancel from the "Appts" tab; a cancellation request is reviewed by staff.
@@ -139,6 +139,7 @@ const NON_CLINICAL_PATTERNS = [
   /\b(hours?|open(ing|ed)?|close?[sd]?|closing|what\s+time|when\s+(are|do)\s+you|walk-?in|weekend|saturday|sunday|holiday)\b/,
   // Booking and appointments.
   /\b(book\w*|appointment|reschedul\w*|cancel\w*|slot|reserve|reservation|schedule\s+(a\s+)?(visit|appointment)|availab\w*)\b/,
+  /\b(times?|slots?|hours?)\b.*\b(left|remaining|still|vacant|free)\b/,
   // Contact and location.
   /\b(address|location|where\s+(are|is)|direction|contact|phone|number|email|reach\s+you|map)\b/,
   // App and account usage.
@@ -163,6 +164,9 @@ const OUT_OF_SCOPE_PATTERNS = [
 const PRICING_RE = /\b(price|prices|pricing|cost|costs|fee|fees|rate|rates|how\s+much|magkano|payment|package|packages|bayad|pesos?|presyo|₱)\b|₱/;
 const HEPATITIS_RE = /\b(hepatitis|hepa)\b/;
 const GREETING_RE = /^(hi|hello|hey|good\s*(morning|afternoon|evening|day)|greetings?|kumusta|kamusta|howdy|sup|yo)\b/i;
+// Any sign the user is asking about times/slots/booking on some day. Paired
+// with a resolved date, this routes to the live Firestore availability reply.
+const SCHEDULING_RE = /\b(availab\w*|vacant|slots?|time|times|oras|book\w*|appointments?|appts?|schedul\w*|reserv\w*|still\s+open|free|left|remaining|bakante)\b/i;
 const APPT_AVAILABILITY_RE = /\b(availab\w*|open\w*|free\w*)\s+(appointment|appt|slot|time)s?\b|\b(appointment|appt|slot)s?\s+(availab\w*|open\w*|schedule)\b|\bwhat\s+(are\s+the\s+)?(availab\w*\s+)?(appointment|appt|slot)s?\b|\bany\s+available\s+(appointment|appt|slot)s?\b/i;
 const SERVICES_RE = /\b(services?|what\s+services|services\s+(offered|available|do\s+you)|what\s+vaccines?(\s+do\s+you)?\s+(have|offer|provide|carry)|do\s+you\s+(have|offer|provide|carry)\s+(anti-?rabies|tetanus|pneumonia|pep|vaccine|vaccines|shots?)|available\s+vaccines?|list\s+of\s+vaccines?|vaccine\s+(list|types|options|packages?)|anong\s+(mga\s+)?(bakuna|serbisyo))\b/i;
 const WALKIN_RE = /\b(walk[- ]?in|can\s+i\s+walk[- ]?in|do\s+you\s+(accept|take)\s+walk[- ]?ins?|walk[- ]?in\s+(ba|pwede))\b/i;
@@ -199,129 +203,236 @@ function isPureGreeting(text) {
   return true;
 }
 
-async function getAvailableAppointmentsReply(queryStr) {
+// ─── Dates & live slot availability ──────────────────────────────────────────
+// The model is bad at calendar arithmetic (it called Sunday, Sept 27 a
+// weekday), so every date is resolved here, in clinic time (Asia/Manila,
+// UTC+8, no DST), and the model is only ever handed pre-computed facts.
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const MONTH_RE_SRC = '(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?';
+const WEEKDAY_RE = /\b(next\s+|this\s+(?:coming\s+)?)?(sun|mon|tues?|wed(?:nes)?|thu(?:rs?)?|fri|sat(?:ur)?)(?:day)?\b/i;
+
+const pad2 = (n) => String(n).padStart(2, '0');
+const toIso = (y, m, d) => `${y}-${pad2(m)}-${pad2(d)}`;
+const isoDow = (iso) => new Date(`${iso}T00:00:00Z`).getUTCDay();
+const addDaysIso = (iso, n) => new Date(new Date(`${iso}T00:00:00Z`).getTime() + n * 86400000).toISOString().slice(0, 10);
+const isWeekendIso = (iso) => { const d = isoDow(iso); return d === 0 || d === 6; };
+
+function formatIso(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return `${DAY_NAMES[isoDow(iso)]}, ${MONTH_NAMES[m - 1]} ${d}, ${y}`;
+}
+
+function manilaNow() {
+  const now = new Date(Date.now() + 8 * 3600 * 1000);
+  return { iso: now.toISOString().slice(0, 10), hour: now.getUTCHours(), minute: now.getUTCMinutes() };
+}
+
+// Rejects impossible dates like Feb 30 instead of letting Date roll them over.
+function validIso(y, m, d) {
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+  const iso = toIso(y, m, d);
+  return new Date(`${iso}T00:00:00Z`).toISOString().slice(0, 10) === iso ? iso : null;
+}
+
+// A month/day with no year means the next time that date comes around.
+function withInferredYear(m, d, yearStr, todayIso) {
+  const thisYear = Number(todayIso.slice(0, 4));
+  if (yearStr) return validIso(Number(yearStr), m, d);
+  const iso = validIso(thisYear, m, d);
+  if (iso && iso < todayIso) return validIso(thisYear + 1, m, d);
+  return iso;
+}
+
+const monthIndex = (word) => ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'].indexOf(word.slice(0, 3).toLowerCase()) + 1;
+
+// Pulls one concrete date out of free text: ISO, "September 27", "Sept 27, 2026",
+// "27 September", "9/27", "today", "tomorrow", "next Saturday". Null if none.
+function extractDate(text, todayIso) {
+  const q = (text || '').toLowerCase();
+  let m;
+
+  if ((m = q.match(/\b(20\d\d)-(\d{1,2})-(\d{1,2})\b/))) return validIso(+m[1], +m[2], +m[3]);
+  if ((m = q.match(new RegExp(`\\b${MONTH_RE_SRC}\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b(?:,?\\s+(20\\d\\d))?`)))) {
+    return withInferredYear(monthIndex(m[0]), +m[2], m[3], todayIso);
+  }
+  if ((m = q.match(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?${MONTH_RE_SRC}(?:,?\\s+(20\\d\\d))?`)))) {
+    const word = q.slice(m.index).replace(/^\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?/, '');
+    return withInferredYear(monthIndex(word), +m[1], m[3], todayIso);
+  }
+  if ((m = q.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(20\d\d))?\b/))) return withInferredYear(+m[1], +m[2], m[3], todayIso);
+  if (/\b(day\s+after\s+tomorrow|samakalawa)\b/.test(q)) return addDaysIso(todayIso, 2);
+  if (/\b(tomorrow|bukas)\b/.test(q)) return addDaysIso(todayIso, 1);
+  if (/\b(today|tonight|ngayon)\b/.test(q)) return todayIso;
+  if ((m = q.match(WEEKDAY_RE))) {
+    const target = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'].indexOf(m[2].slice(0, 3));
+    let diff = (target - isoDow(todayIso) + 7) % 7;
+    if (m[1] && /next/.test(m[1]) && diff === 0) diff = 7;
+    return addDaysIso(todayIso, diff);
+  }
+  return null;
+}
+
+// "What times are left that day?" carries no date of its own — take the most
+// recent one the user mentioned earlier in the conversation.
+function extractDateFromHistory(history, todayIso) {
+  for (let i = history.length - 1; i >= 0 && i >= history.length - 8; i--) {
+    const turn = history[i];
+    if (turn?.role !== 'user') continue;
+    const iso = extractDate(turn.text || '', todayIso);
+    if (iso) return iso;
+  }
+  return null;
+}
+
+// Admin-entered times may use an en dash or odd spacing; compare canonically.
+const normTime = (t) => String(t || '').replace(/[–—]/g, '-').replace(/\s+/g, ' ').trim();
+
+// Slot occupancy for every date in [startIso, endIso]. appointmentSlots is the
+// booking system's own source of truth (one doc per taken hour; cancellations
+// keep their hold until staff release it), unioned with live appointment
+// records in case a hold is missing. Range queries on one field — no index needed.
+async function getTakenSlots(startIso, endIso) {
+  const taken = new Map();
+  const add = (date, time) => {
+    if (!date || !time) return;
+    if (!taken.has(date)) taken.set(date, new Set());
+    taken.get(date).add(normTime(time));
+  };
+  const [slotsSnap, apptsSnap] = await Promise.all([
+    db.collection('appointmentSlots').where('date', '>=', startIso).where('date', '<=', endIso).get(),
+    db.collection('appointments').where('date', '>=', startIso).where('date', '<=', endIso).get(),
+  ]);
+  slotsSnap.docs.forEach(d => add(d.data().date, d.data().time));
+  apptsSnap.docs.forEach(d => {
+    const { date, time, status } = d.data();
+    if (status !== 'cancelled' && status !== 'declined') add(date, time);
+  });
+  return taken;
+}
+
+// Start hour (24h) of a "8:00 AM - 9:00 AM" slot label.
+function slotStartHour(label) {
+  const m = label.match(/^(\d{1,2}):\d{2}\s*(AM|PM)/i);
+  if (!m) return 0;
+  let h = Number(m[1]) % 12;
+  if (m[2].toUpperCase() === 'PM') h += 12;
+  return h;
+}
+
+// Open/booked split for one weekend date. Hours already started today are
+// dropped from "open" — they cannot be booked any more.
+function slotsForDate(iso, taken, now) {
+  const set = taken.get(iso) || new Set();
+  const open = [];
+  const booked = [];
+  for (const t of CLINIC_TIME_SLOTS) {
+    if (set.has(normTime(t))) booked.push(t);
+    else if (iso === now.iso && slotStartHour(t) <= now.hour) continue;
+    else open.push(t);
+  }
+  return { open, booked };
+}
+
+// Next `count` Saturdays/Sundays on or after fromIso.
+function upcomingWeekendDays(fromIso, count) {
+  const days = [];
+  for (let iso = fromIso; days.length < count; iso = addDaysIso(iso, 1)) {
+    if (isWeekendIso(iso)) days.push(iso);
+  }
+  return days;
+}
+
+const BOOKING_TAIL = 'To book, open the **Appts** tab in the patient app or tap **Book Appointment** on the website.';
+
+function slotListText(iso, { open, booked }) {
+  const lines = [`📅 **${formatIso(iso)}**`];
+  if (open.length === 0) lines.push('• All appointment slots are **fully booked** for this day.');
+  else lines.push(`**Open slots (${open.length}):**`, ...open.map(s => `• **${s}**`));
+  if (booked.length > 0) lines.push(`(${booked.length} slot${booked.length === 1 ? '' : 's'} already booked)`);
+  return lines.join('\n');
+}
+
+async function getAvailableAppointmentsReply(targetIso) {
+  const now = manilaNow();
   try {
-    const q = (queryStr || '').toLowerCase();
-
-    // Philippine time zone (Asia/Manila: UTC+8)
-    const now = new Date(Date.now() + 8 * 3600 * 1000);
-    const dayOfWeek = now.getUTCDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
-    const todayIso = now.toISOString().slice(0, 10);
-
-    let targetIso = todayIso;
-    let targetDayOfWeek = dayOfWeek;
-
-    // Check if user specified an ISO date (e.g. 2026-09-26)
-    const isoMatch = q.match(/\b(202\d-[01]\d-[0-3]\d)\b/);
-    if (isoMatch) {
-      targetIso = isoMatch[1];
-      const d = new Date(`${targetIso}T00:00:00Z`);
-      targetDayOfWeek = d.getUTCDay();
-    } else if (q.includes('tomorrow')) {
-      const tomorrow = new Date(now.getTime() + 86400000);
-      targetIso = tomorrow.toISOString().slice(0, 10);
-      targetDayOfWeek = tomorrow.getUTCDay();
-    } else if (q.includes('sunday')) {
-      const daysUntilSunday = (7 - dayOfWeek) % 7 || 7;
-      const sun = new Date(now.getTime() + daysUntilSunday * 86400000);
-      targetIso = sun.toISOString().slice(0, 10);
-      targetDayOfWeek = 0;
-    } else if (q.includes('saturday')) {
-      const daysUntilSaturday = (6 - dayOfWeek + 7) % 7 || 7;
-      const sat = new Date(now.getTime() + daysUntilSaturday * 86400000);
-      targetIso = sat.toISOString().slice(0, 10);
-      targetDayOfWeek = 6;
-    } else if (q.includes('today')) {
-      targetIso = todayIso;
-      targetDayOfWeek = dayOfWeek;
-    } else {
-      // Default: if today is weekend, check today; else upcoming Saturday
-      if (dayOfWeek === 0 || dayOfWeek === 6) {
-        targetIso = todayIso;
-        targetDayOfWeek = dayOfWeek;
-      } else {
-        const daysUntilSat = (6 - dayOfWeek + 7) % 7;
-        const nextSat = new Date(now.getTime() + daysUntilSat * 86400000);
-        targetIso = nextSat.toISOString().slice(0, 10);
-        targetDayOfWeek = 6;
-      }
+    // No date given: today if it is a weekend, otherwise the coming weekend.
+    if (!targetIso) {
+      const days = upcomingWeekendDays(now.iso, 2);
+      const taken = await getTakenSlots(days[0], days[1]);
+      return `Today is **${formatIso(now.iso)}**. Appointments are booked on **Saturdays & Sundays** only.\n\n` +
+        days.map(iso => slotListText(iso, slotsForDate(iso, taken, now))).join('\n\n') +
+        `\n\n${BOOKING_TAIL}`;
     }
 
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-
-    const [tY, tM, tD] = targetIso.split('-').map(Number);
-    const dateFormatted = `${dayNames[targetDayOfWeek]}, ${monthNames[tM - 1]} ${tD}, ${tY}`;
-
-    // If target day is Monday - Friday (weekday)
-    if (targetDayOfWeek >= 1 && targetDayOfWeek <= 5) {
-      // Find upcoming Saturday for booking
-      const daysUntilSat = (6 - targetDayOfWeek + 7) % 7;
-      const nextSat = new Date(new Date(`${targetIso}T12:00:00Z`).getTime() + daysUntilSat * 86400000);
-      const satIso = nextSat.toISOString().slice(0, 10);
-      const [sY, sM, sD] = satIso.split('-').map(Number);
-      const satFormatted = `Saturday, ${monthNames[sM - 1]} ${sD}, ${sY}`;
-
-      // Query slots for upcoming Saturday
-      const slotsSnap = await db.collection('appointmentSlots').where('date', '==', satIso).get();
-      const apptsSnap = await db.collection('appointments').where('date', '==', satIso).get();
-      const bookedSet = new Set();
-      slotsSnap.docs.forEach(d => bookedSet.add(d.data().time));
-      apptsSnap.docs.forEach(d => {
-        const st = d.data().status;
-        if (st !== 'cancelled' && st !== 'declined') bookedSet.add(d.data().time);
-      });
-
-      const openSlots = CLINIC_TIME_SLOTS.filter(t => !bookedSet.has(t));
-
-      return (
-        `🏥 **K&A Clinic Appointment Information:**\n\n` +
-        `• **${dateFormatted}** is a **weekday** (Monday – Friday). K&A Clinic operates on an **immediate walk-in basis** from **8:00 AM – 5:00 PM** (no scheduled appointment required).\n\n` +
-        `• **Scheduled weekend appointments** run on **Saturdays & Sundays (8:00 AM – 12:00 PM and 1:00 PM – 5:00 PM)**.\n\n` +
-        `📅 **Available Slots for Upcoming Clinic Day (${satFormatted}):**\n` +
-        (openSlots.length > 0
-          ? openSlots.map(s => `• **${s}** — Available`).join('\n')
-          : `• All slots are currently booked for ${satFormatted}.`) +
-        `\n\n` +
-        `You can book open slots in the **Appts** tab in the app or via the website booking form.`
-      );
+    if (targetIso < now.iso) {
+      return `**${formatIso(targetIso)}** has already passed. Today is **${formatIso(now.iso)}**. ` +
+        'Ask me about an upcoming date and I will check the open slots.';
     }
 
-    // Target day is Saturday or Sunday (appointment day)
-    const slotsSnap = await db.collection('appointmentSlots').where('date', '==', targetIso).get();
-    const apptsSnap = await db.collection('appointments').where('date', '==', targetIso).get();
-    const bookedSet = new Set();
-    slotsSnap.docs.forEach(d => bookedSet.add(d.data().time));
-    apptsSnap.docs.forEach(d => {
-      const st = d.data().status;
-      if (st !== 'cancelled' && st !== 'declined') bookedSet.add(d.data().time);
-    });
+    if (!isWeekendIso(targetIso)) {
+      const days = upcomingWeekendDays(targetIso, 2);
+      const taken = await getTakenSlots(days[0], days[1]);
+      return `**${formatIso(targetIso)}** is a **weekday**, so there are no bookable appointment slots — ` +
+        'walk-ins are accepted **Monday to Friday, 8:00 AM – 5:00 PM** (no booking needed).\n\n' +
+        'If you prefer a scheduled visit, here are the nearest weekend days:\n\n' +
+        days.map(iso => slotListText(iso, slotsForDate(iso, taken, now))).join('\n\n') +
+        `\n\n${BOOKING_TAIL}`;
+    }
 
-    const openSlots = CLINIC_TIME_SLOTS.filter(t => !bookedSet.has(t));
-    const bookedSlots = CLINIC_TIME_SLOTS.filter(t => bookedSet.has(t));
-
-    return (
-      `📅 **Available Appointments for ${dateFormatted}:**\n\n` +
-      `**Open Slots (${openSlots.length} available):**\n` +
-      (openSlots.length > 0
-        ? openSlots.map(s => `• **${s}** — Available`).join('\n')
-        : `• All appointment slots are fully booked for this day.`) +
-      (bookedSlots.length > 0
-        ? `\n\n**Booked Slots (${bookedSlots.length}):**\n` +
-          bookedSlots.map(s => `• ${s} (Booked)`).join('\n')
-        : '') +
-      `\n\n` +
-      `To book any open slot, go to the **Appts** tab in the patient app or tap **Book Appointment** on the website.`
-    );
+    // Weekend date: its own slots, plus the next weekend day that still has room if it is full.
+    const lookahead = upcomingWeekendDays(targetIso, 6);
+    const taken = await getTakenSlots(targetIso, lookahead[lookahead.length - 1]);
+    const target = slotsForDate(targetIso, taken, now);
+    let reply = slotListText(targetIso, target);
+    if (target.open.length === 0) {
+      const alt = lookahead.slice(1).find(iso => slotsForDate(iso, taken, now).open.length > 0);
+      if (alt) reply += `\n\nThe next weekend day with open slots:\n\n${slotListText(alt, slotsForDate(alt, taken, now))}`;
+    }
+    return `${reply}\n\n${BOOKING_TAIL}`;
   } catch (err) {
     console.error('Error fetching available appointments:', err);
-    return (
-      `📅 **K&A Clinic Appointment Information:**\n\n` +
-      `• Scheduled appointments are available on **Saturdays & Sundays (8:00 AM – 12:00 PM and 1:00 PM – 5:00 PM)**.\n` +
-      `• Monday to Friday are **walk-in days (8:00 AM – 5:00 PM)**.\n\n` +
-      `Please check the **Appts** tab in the app to view live available slots and book your preferred time.`
-    );
+    return '📅 **K&A Clinic Appointment Information:**\n\n' +
+      '• Scheduled appointments: **Saturdays & Sundays**, one patient per hour (**8:00 AM – 12:00 PM** and **1:00 PM – 5:00 PM**).\n' +
+      '• Monday to Friday: **walk-ins, 8:00 AM – 5:00 PM**.\n\n' +
+      'I could not load live slots just now — please check the **Appts** tab, which always shows current availability.';
   }
+}
+
+// Facts handed to the model on every in-scope turn so it never has to work out
+// a weekday or guess at availability on its own.
+async function buildLiveContext(prompt, history) {
+  const now = manilaNow();
+  const calendar = [];
+  for (let i = 0; i < 21; i++) {
+    const iso = addDaysIso(now.iso, i);
+    calendar.push(`${iso} = ${formatIso(iso)}${isWeekendIso(iso) ? ' (appointment day)' : ' (walk-in day)'}`);
+  }
+  let availability = '';
+  try {
+    const days = upcomingWeekendDays(now.iso, 6);
+    const mentioned = extractDate(prompt, now.iso) || extractDateFromHistory(history, now.iso);
+    if (mentioned && mentioned >= now.iso && isWeekendIso(mentioned) && !days.includes(mentioned)) days.push(mentioned);
+    const sorted = [...days].sort();
+    const taken = await getTakenSlots(sorted[0], sorted[sorted.length - 1]);
+    availability = sorted.map(iso => {
+      const { open } = slotsForDate(iso, taken, now);
+      return `${formatIso(iso)}: ${open.length ? `open ${open.join(', ')}` : 'fully booked'}`;
+    }).join('\n');
+  } catch (err) {
+    console.warn('Live availability unavailable for model context:', err);
+    availability = 'Unavailable right now — tell the user to check the Appts tab for live slots.';
+  }
+  return `
+LIVE CLINIC CONTEXT (authoritative, computed by the clinic system — Asia/Manila time):
+Today is ${formatIso(now.iso)}, ${pad2(now.hour)}:${pad2(now.minute)}.
+Calendar (use ONLY this for days of the week; never calculate a weekday yourself):
+${calendar.join('\n')}
+Live appointment slot availability (weekend days):
+${availability}
+If the user states a weekday that contradicts the calendar, politely correct them using the calendar.
+Only state slot availability that appears above; never invent times.
+`;
 }
 
 function classifyMessage(text) {
@@ -346,6 +457,9 @@ function classifyMessage(text) {
   if (CLINICAL_PATTERNS.some(re => re.test(q))) return 'clinical';
 
   if (NON_CLINICAL_PATTERNS.some(re => re.test(q))) return 'in_scope';
+
+  // A bare date ("Sept 27?", "27 September") is a scheduling question here.
+  if (extractDate(q, manilaNow().iso)) return 'in_scope';
 
   if (OUT_OF_SCOPE_PATTERNS.some(re => re.test(q))) return 'out_of_scope';
 
@@ -563,9 +677,19 @@ export default async function handler(req, res) {
       return;
     }
 
-    // Available appointment inquiries: query live Firestore database
-    if (APPT_AVAILABILITY_RE.test(prompt)) {
-      const apptReply = await getAvailableAppointmentsReply(prompt);
+    // Availability inquiries are answered straight from Firestore, never by the
+    // model: a date in this message (or, for "what times are left?", the last
+    // date the user mentioned) plus scheduling language, or a bare date.
+    const todayIso = manilaNow().iso;
+    const promptDate = extractDate(prompt, todayIso);
+    const isOtherTopic = PRICING_RE.test(prompt.toLowerCase()) || SERVICES_RE.test(prompt) || PREPARATION_RE.test(prompt) ||
+      /\b(what\s+time\s+(do|does|will)\s+(you|the\s+clinic|k&a)\s+(open|close)|opening\s+hours?|closing\s+time|operating\s+hours?|clinic\s+hours?)\b/i.test(prompt);
+    const wantsAvailability = APPT_AVAILABILITY_RE.test(prompt) ||
+      (!isOtherTopic && (promptDate || extractDateFromHistory(history, todayIso)) && SCHEDULING_RE.test(prompt));
+    const bareDate = promptDate && !isOtherTopic && prompt.replace(/[^a-z]/gi, '').length <= 40;
+    if (wantsAvailability || bareDate) {
+      const targetIso = promptDate || extractDateFromHistory(history, todayIso);
+      const apptReply = await getAvailableAppointmentsReply(targetIso);
       res.status(200).json({
         success: true,
         text: apptReply,
@@ -582,7 +706,7 @@ export default async function handler(req, res) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
     const contents = [
-      { role: 'user', parts: [{ text: CLINIC_SYSTEM_INSTRUCTION }] },
+      { role: 'user', parts: [{ text: CLINIC_SYSTEM_INSTRUCTION + (apiKey ? await buildLiveContext(prompt, history) : '') }] },
       ...history.slice(-20).map(m => ({
         role: m.role === 'user' ? 'user' : 'model',
         parts: [{ text: m.text || m.html || '' }],

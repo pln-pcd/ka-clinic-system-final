@@ -281,12 +281,68 @@ export default function AdminDashboard({ onLogout }) {
   const searchContainerRef = useRef(null);
   const [activeToast, setActiveToast] = useState(null);
 
-  const triggerToast = (title, message, type = 'info', time = 'Just now') => {
-    setActiveToast({ id: Date.now(), title, message, type, time });
+  const triggerToast = (title, message, type = 'info', time = 'Just now', { duration = 5000, page = null } = {}) => {
+    const id = Date.now();
+    setActiveToast({ id, title, message, type, time, page });
     setTimeout(() => {
-      setActiveToast(prev => (prev?.id ? null : prev));
-    }, 5000);
+      setActiveToast(prev => (prev?.id === id ? null : prev));
+    }, duration);
   };
+
+  // ── Pending-task reminder rule ──
+  // Staff get nudged again while work is waiting on them: online appointment
+  // requests awaiting approval and patient cancellation requests. First reminder
+  // shortly after sign-in, then every PENDING_REMINDER_MS for as long as anything
+  // is still pending. A request waiting longer than PENDING_OVERDUE_MS is flagged
+  // critical. Reminders stop by themselves once the queue is empty.
+  const PENDING_REMINDER_MS = 15 * 60 * 1000;
+  const PENDING_FIRST_REMINDER_MS = 60 * 1000;
+  const PENDING_OVERDUE_MS = 24 * 60 * 60 * 1000;
+  const [pendingTasks, setPendingTasks] = useState({ approvals: [], cancellations: [] });
+  const pendingTasksRef = useRef(pendingTasks);
+  pendingTasksRef.current = pendingTasks;
+
+  useEffect(() => {
+    const q = query(collection(db, 'appointments'), where('status', 'in', ['pending', 'cancellation_pending']));
+    return onSnapshot(q, snap => {
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setPendingTasks({
+        approvals: docs.filter(a => a.status === 'pending' && a.source !== 'walk-in'),
+        cancellations: docs.filter(a => a.status === 'cancellation_pending'),
+      });
+    }, err => console.error('Pending task listener error:', err));
+  }, []);
+
+  useEffect(() => {
+    const toMillis = (v) => typeof v === 'number' ? v : (v?.toMillis?.() || Date.parse(v) || 0);
+    const ageLabel = (ms) => {
+      const mins = Math.floor(ms / 60000);
+      if (mins < 60) return `${Math.max(1, mins)}m`;
+      const hrs = Math.floor(mins / 60);
+      return hrs < 24 ? `${hrs}h` : `${Math.floor(hrs / 24)}d`;
+    };
+    const remind = () => {
+      const { approvals, cancellations } = pendingTasksRef.current;
+      const total = approvals.length + cancellations.length;
+      if (total === 0) return;
+      const now = Date.now();
+      const oldest = Math.min(...[...approvals, ...cancellations].map(a => toMillis(a.updatedAt || a.createdAt) || now));
+      const waited = now - oldest;
+      const parts = [];
+      if (approvals.length) parts.push(`${approvals.length} appointment request${approvals.length === 1 ? '' : 's'} awaiting approval`);
+      if (cancellations.length) parts.push(`${cancellations.length} cancellation request${cancellations.length === 1 ? '' : 's'} to review`);
+      triggerToast(
+        'Reminder: Pending Tasks',
+        `${parts.join(' and ')}. Oldest has been waiting ${ageLabel(waited)}.`,
+        waited >= PENDING_OVERDUE_MS ? 'critical' : 'warning',
+        'Reminder',
+        { duration: 15000, page: 'appointments' },
+      );
+    };
+    const first = setTimeout(remind, PENDING_FIRST_REMINDER_MS);
+    const every = setInterval(remind, PENDING_REMINDER_MS);
+    return () => { clearTimeout(first); clearInterval(every); };
+  }, []);
 
   // Keyboard listener for Ctrl+K / Cmd+K search shortcut
   useEffect(() => {
@@ -1243,6 +1299,7 @@ export default function AdminDashboard({ onLogout }) {
               message={activeToast.message}
               time={activeToast.time}
               onDismiss={() => setActiveToast(null)}
+              onClick={activeToast.page ? () => { setActivePage(activeToast.page); setActiveToast(null); } : undefined}
             />
           </div>
         )}

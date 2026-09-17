@@ -11,7 +11,11 @@ const HANDLERS = {
 };
 
 export default async function handler(req, res) {
-  const op = req.query?.op || req.body?.op || '';
+  // Fall back to the legacy URL itself: the local dev server (devApiPlugin)
+  // routes /api/admin-forgot-password here without adding vercel.json's ?op= query.
+  const path = String(req.url || '');
+  const op = req.query?.op || req.body?.op ||
+    (path.includes('admin-forgot-password') ? 'forgot' : path.includes('admin-reset-password') ? 'reset' : '');
   const target = HANDLERS[op];
   if (!target) {
     res.status(404).json({ success: false, error: 'Unknown password operation.' });

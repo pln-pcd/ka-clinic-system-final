@@ -224,7 +224,7 @@ const globalCSS = `
   .cal-grid {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    gap: 6px;
+    gap: 3px;
   }
   .cal-day-name {
     text-align: center;
@@ -233,22 +233,22 @@ const globalCSS = `
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.4px;
-    padding-bottom: 10px;
+    padding-bottom: 6px;
   }
   .cal-day-cell {
     background: transparent;
     border-radius: 10px;
     border: none;
-    padding: 10px 8px;
+    padding: 6px 2px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    gap: 4px;
+    gap: 3px;
     cursor: pointer;
     transition: all 0.15s ease;
     position: relative;
-    min-height: 60px;
+    min-height: 40px;
   }
   .cal-day-cell:hover {
     background: var(--bg-subtle);
@@ -1028,7 +1028,9 @@ export default function AppointmentPage() {
   const timelineApts = appointments.filter(a => a.date === selectedDate);
   const pendingOnlineRequests = appointments.filter(a => a.status === 'pending' && a.source !== 'walk-in');
   const cancellationRequests = appointments.filter(a => a.status === 'cancellation_pending');
-  const allCancelledApts = appointments.filter(a => a.status === 'cancelled' || a.status === 'cancellation_pending');
+  // Only finalized cancellations. Requests still awaiting review live in
+  // cancellationRequests; counting them here listed the same visit twice.
+  const allCancelledApts = appointments.filter(a => a.status === 'cancelled');
 
   // Metrics
   const todayStr = getTodayDateString();
@@ -1172,14 +1174,14 @@ export default function AppointmentPage() {
         ))}
       </div>
 
-      {/* 2-Column Equal Height Row: Enlarged Calendar (500px Left) + Expanded Requests/Cancellation Card (1fr Right) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '500px 1fr', gap: 16, alignItems: 'stretch', marginBottom: 16 }}>
+      {/* 2-Column Equal Height Row: Compact Calendar (380px Left) + Wide Requests/Cancellation Card (1fr Right) */}
+      <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: 16, alignItems: 'stretch', marginBottom: 16 }}>
 
         {/* LEFT PANEL: COMPACT CALENDAR CARD */}
         <div className="card calendar-card" style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
           
           {/* Calendar Header */}
-          <div className="calendar-head" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
+          <div className="calendar-head" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-start', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
             
             {/* Left Header Info: Month Navigator on top, Today & Selected Date below month */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1307,7 +1309,7 @@ export default function AppointmentPage() {
                   </div>
                 ) : (
                   <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.71875rem' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
                       <thead>
                         <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-subtle)' }}>
                           <th style={{ padding: '6px 8px', fontWeight: 700, color: 'var(--text-muted)' }}>Patient</th>
@@ -1329,7 +1331,7 @@ export default function AppointmentPage() {
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); openEditModal(apt); }}
                                 className="text-left font-bold text-slate-800 hover:text-blue-600 cursor-pointer"
-                                style={{ fontSize: '0.78125rem', background: 'none', border: 'none', padding: 0 }}
+                                style={{ fontSize: '0.8125rem', background: 'none', border: 'none', padding: 0 }}
                               >
                                 {apt.name}
                               </button>
@@ -1340,9 +1342,9 @@ export default function AppointmentPage() {
                                 {apt.type}
                               </div>
                             </td>
-                            <td style={{ padding: '6px 8px', color: 'var(--text-muted)', fontSize: '0.6875rem', whiteSpace: 'nowrap' }}>
+                            <td style={{ padding: '8px 10px', color: 'var(--text-muted)', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
                               <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>{apt.date}</div>
-                              <div style={{ fontSize: '0.65625rem' }}>{apt.time}</div>
+                              <div style={{ fontSize: '0.75rem' }}>{apt.time}</div>
                             </td>
                             <td style={{ padding: '6px 8px', textAlign: 'center' }}>
                               <div style={{ display: 'flex', gap: 6, justifyContent: 'center', alignItems: 'center' }}>
@@ -1376,35 +1378,6 @@ export default function AppointmentPage() {
 
               {/* RIGHT COLUMN: Cancellation Table & Requests */}
               <div style={{ paddingLeft: 4, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {/* Pending Cancellation Requests Alerts */}
-                {cancellationRequests.length > 0 && (
-                  <div style={{ padding: 8, background: '#FFF5F5', borderRadius: 8, border: '1px solid #FCA5A5', marginBottom: 6 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 5 }}>
-                      <AlertCircle size={13} style={{ color: '#DC2626' }} />
-                      <span style={{ fontSize: '0.6875rem', fontWeight: 800, color: '#991B1B' }}>
-                        Pending Cancellation Requests ({cancellationRequests.length})
-                      </span>
-                    </div>
-                    {cancellationRequests.map(apt => (
-                      <div key={apt.id} style={{ background: '#FFFFFF', padding: 6, borderRadius: 6, border: '1px solid #FECACA', marginBottom: 4 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: '0.71875rem', fontWeight: 700 }}>{apt.name}</span>
-                          <span className="badge-source" style={{ background: '#FEE2E2', color: '#991B1B', fontSize: '0.625rem' }}>Cancel Request</span>
-                        </div>
-                        <div style={{ fontSize: '0.65625rem', color: '#64748B', marginTop: 1 }}><CalendarIcon size={10} style={{ display: 'inline', marginRight: 3 }} />{apt.date} · <Clock size={10} style={{ display: 'inline', marginRight: 3 }} />{apt.time}</div>
-                        <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-                          <button className="btn-queue-action btn-queue-cancel" onClick={() => promptQuickAction(apt, 'cancelled')} style={{ background: '#DC2626', color: '#FFF', fontSize: '0.625rem', padding: '2px 6px' }}>
-                            <X size={10} /> Approve
-                          </button>
-                          <button className="btn-queue-action btn-queue-confirm" onClick={() => promptQuickAction(apt, 'confirmed')} style={{ fontSize: '0.625rem', padding: '2px 6px' }}>
-                            <UserCheck size={10} /> Reject
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
                 {allCancelledApts.length === 0 ? (
                   <div style={{ padding: '24px 16px', textAlign: 'center', background: '#F8FAFC', borderRadius: 10, border: '1px solid #F1F5F9' }}>
                     <CheckCircle2 size={22} style={{ color: '#16A34A', margin: '0 auto 6px', opacity: 0.8 }} />
@@ -1413,12 +1386,12 @@ export default function AppointmentPage() {
                   </div>
                 ) : (
                   <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.6875rem' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
                       <thead>
                         <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-subtle)' }}>
-                          <th style={{ padding: '5px 6px', fontWeight: 700, color: 'var(--text-muted)' }}>Patient</th>
-                          <th style={{ padding: '5px 6px', fontWeight: 700, color: 'var(--text-muted)' }}>Date / Time</th>
-                          <th style={{ padding: '5px 6px', fontWeight: 700, color: 'var(--text-muted)' }}>Reason</th>
+                          <th style={{ padding: '8px 10px', fontWeight: 700, color: 'var(--text-muted)' }}>Patient</th>
+                          <th style={{ padding: '8px 10px', fontWeight: 700, color: 'var(--text-muted)' }}>Date / Time</th>
+                          <th style={{ padding: '8px 10px', fontWeight: 700, color: 'var(--text-muted)' }}>Reason</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1430,7 +1403,7 @@ export default function AppointmentPage() {
                             className="transition-colors hover:bg-slate-50"
                             title="Click to view appointment details"
                           >
-                            <td style={{ padding: '5px 6px', fontWeight: 700, fontSize: '0.71875rem' }}>
+                            <td style={{ padding: '8px 10px', fontWeight: 700, fontSize: '0.8125rem' }}>
                               <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); openEditModal(apt); }}
@@ -1440,14 +1413,68 @@ export default function AppointmentPage() {
                                 {apt.name}
                               </button>
                             </td>
-                            <td style={{ padding: '5px 6px', color: 'var(--text-muted)', fontSize: '0.65625rem', whiteSpace: 'nowrap' }}>{apt.date}<br />{apt.time}</td>
-                            <td style={{ padding: '5px 6px', color: '#991B1B', fontSize: '0.65625rem' }}>
+                            <td style={{ padding: '8px 10px', color: 'var(--text-muted)', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>{apt.date}<br />{apt.time}</td>
+                            <td style={{ padding: '8px 10px', color: '#991B1B', fontSize: '0.75rem' }}>
                               {apt.cancellationReason || apt.notes || 'No reason'}
                             </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                )}
+
+                {/* Pending cancellation requests — below the finalized list */}
+                {cancellationRequests.length > 0 && (
+                  <div style={{ marginTop: 6, padding: 12, background: '#FFFBEB', borderRadius: 10, border: '1px solid #FDE68A' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                      <AlertCircle size={15} style={{ color: '#B45309' }} />
+                      <span style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#92400E' }}>
+                        Pending Cancellation Requests ({cancellationRequests.length})
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {cancellationRequests.map(apt => (
+                        <div key={apt.id} style={{ background: '#FFFFFF', padding: '10px 12px', borderRadius: 8, border: '1px solid #FDE68A' }}>
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(apt)}
+                            className="text-left font-bold text-slate-800 hover:text-blue-600 cursor-pointer"
+                            style={{ fontSize: '0.8125rem', background: 'none', border: 'none', padding: 0 }}
+                          >
+                            {apt.name}
+                          </button>
+                          <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                            <CalendarIcon size={12} /> {apt.date}
+                            <span style={{ margin: '0 2px' }}>·</span>
+                            <Clock size={12} /> {apt.time}
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: '#92400E', marginTop: 4 }}>
+                            <strong>Reason:</strong> {apt.cancellationReason || apt.notes || 'No reason given'}
+                          </div>
+                          <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                            <button
+                              type="button"
+                              className="btn-queue-action"
+                              onClick={() => promptQuickAction(apt, 'cancelled')}
+                              title="Approve the patient's request and cancel this appointment"
+                              style={{ background: '#DC2626', color: '#FFFFFF', border: '1px solid #DC2626', fontSize: '0.75rem', fontWeight: 700, padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                            >
+                              <CheckCircle2 size={13} /> Approve Cancellation
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-queue-action"
+                              onClick={() => promptQuickAction(apt, 'confirmed')}
+                              title="Reject the request and keep this appointment"
+                              style={{ background: '#FFFFFF', color: '#334155', border: '1px solid #CBD5E1', fontSize: '0.75rem', fontWeight: 700, padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                            >
+                              <RotateCcw size={13} /> Keep Appointment
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
