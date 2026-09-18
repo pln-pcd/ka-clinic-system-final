@@ -1292,7 +1292,7 @@ export default function AdminDashboard({ onLogout }) {
 
         {/* Floating Real-Time Noticeable Toast Container */}
         {activeToast && (
-          <div className="fixed top-24 right-6 z-50 w-96 transition-all duration-300" style={{ animation: 'kna-notif-in 0.25s cubic-bezier(0.22,1,0.36,1) both' }}>
+          <div className="fixed bottom-6 right-6 z-50 w-96 transition-all duration-300" style={{ animation: 'kna-notif-in-bottom 0.25s cubic-bezier(0.22,1,0.36,1) both' }}>
             <ToastNotificationCard
               type={activeToast.type}
               title={activeToast.title}
@@ -1640,6 +1640,10 @@ export default function AdminDashboard({ onLogout }) {
         @keyframes kna-notif-in {
           from{opacity:0;transform:translateY(-10px) scale(0.96);}
           to  {opacity:1;transform:translateY(0)     scale(1);}
+        }
+        @keyframes kna-notif-in-bottom {
+          from{opacity:0;transform:translateY(12px) scale(0.96);}
+          to  {opacity:1;transform:translateY(0)    scale(1);}
         }
         @keyframes kna-notif-item {
           from{opacity:0;transform:translateX(8px);}
