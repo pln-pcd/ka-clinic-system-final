@@ -14,6 +14,9 @@ import { CLINIC_LOGO_BASE64 } from "../assets/clinicLogoBase64";
 import { Printer, Download, MapPin, AlertTriangle, AlertCircle } from "lucide-react";
 import { trackEvent } from "../lib/analytics";
 
+const getName = (p) => (p?.name || [p?.fname, p?.lname].filter(Boolean).join(' ') || 'Unnamed Patient');
+const SEED_PATIENTS = [];
+
 /* ─────────────────────────── CSS ─────────────────────────── */
 const globalCSS = `
   :root {
@@ -645,7 +648,7 @@ function ServiceFields({ service, form, set }) {
 
 
 /* ─────────────────────────── ADD PATIENT MODAL (MULTI-STEP WIZARD) ─────────────────────────── */
-function AddPatientModal({ onClose, onAdd, inventoryItems = [] }) {
+function AddPatientModal({ onClose, onAdd, inventoryItems = [], onToast }) {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [form, setForm] = useState({
     fname: '', mname: '', lname: '', suffix: '', email: '', age: '', sex: 'Male',
@@ -730,7 +733,7 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [] }) {
     const result = validateStep();
     if (result.messages.length > 0) {
       setStepErrors(result);
-      showToast('Please complete the required fields before proceeding', 'error');
+      if (typeof onToast === 'function') onToast('Please complete the required fields before proceeding', 'error');
       return;
     }
     setStepErrors({ fields: [], messages: [] });
@@ -6437,7 +6440,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
         </div>
       </div>
 
-      {showModal && <AddPatientModal onClose={handleCloseAddModal} onAdd={handleAddPatient} inventoryItems={inventoryItems} />}
+      {showModal && <AddPatientModal onClose={handleCloseAddModal} onAdd={handleAddPatient} inventoryItems={inventoryItems} onToast={showToast} />}
       {dupCheck && (
         <DuplicatePatientModal
           form={dupCheck.form}

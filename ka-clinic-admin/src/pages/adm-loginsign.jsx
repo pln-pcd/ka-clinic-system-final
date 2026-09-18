@@ -463,24 +463,6 @@ export default function AdminLogin({ onSuccess, onBack }) {
       }
       return;
     }
-
-    try {
-      const data = await postJson('/api/admin-reset-password', {
-        email: trimmedEmail,
-        code: trimmedCode,
-        newPassword,
-      });
-      if (!data?.success) {
-        setForgotError(data?.error || 'Failed to update password. Please check your code.');
-        return;
-      }
-      setForgotStep('success');
-      setPassword(newPassword);
-    } catch {
-      setForgotError('Network error. Please check your connection.');
-    } finally {
-      setForgotSending(false);
-    }
   }
 
   function handleResetSuccessDone() {

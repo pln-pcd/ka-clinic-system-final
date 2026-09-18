@@ -165,6 +165,8 @@ function deriveStockLabel(item) {
   return 'In Stock';
 }
 
+const liveStatus = (item) => deriveStockStatus(item);
+
 const PAGE_1_ROWS = 22;
 const CONT_PAGE_ROWS = 24;
 
@@ -1369,14 +1371,24 @@ export default function VaccineInventoryPage() {
                     {item.expiry || '—'}
                   </td>
                   <td style={{ padding: '16px 12px' }}>
-                    <span style={{
-                      display: 'inline-block', padding: '4px 10px', borderRadius: '9999px', fontSize: '.6875rem', fontWeight: 600,
-                      background: liveStatus(item) === 'in-stock' ? '#ECFDF5' : '#FEF2F2',
-                      color: liveStatus(item) === 'in-stock' ? '#059669' : '#DC2626',
-                      border: liveStatus(item) === 'in-stock' ? '1px solid #A7F3D0' : '1px solid #FCA5A5'
-                    }}>
-                      {liveStatus(item) === 'in-stock' ? 'In Stock' : 'Empty'}
-                    </span>
+                    {(() => {
+                      const st = deriveStockStatus(item);
+                      const isOut = st === 'out-of-stock';
+                      const isLow = st === 'low-stock';
+                      const bg = isOut ? '#FEF2F2' : isLow ? '#FFFBEB' : '#ECFDF5';
+                      const color = isOut ? '#DC2626' : isLow ? '#D97706' : '#059669';
+                      const border = isOut ? '1px solid #FCA5A5' : isLow ? '1px solid #FDE68A' : '1px solid #A7F3D0';
+                      return (
+                        <span style={{
+                          display: 'inline-block', padding: '4px 10px', borderRadius: '9999px', fontSize: '.6875rem', fontWeight: 600,
+                          background: bg,
+                          color: color,
+                          border: border
+                        }}>
+                          {deriveStockLabel(item)}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td style={{ padding: '16px 20px 16px 12px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
                     <div style={{ display: 'flex', gap: 6, justifyContent: 'center', alignItems: 'center' }}>
