@@ -13,13 +13,11 @@ const INCIDENT_TYPES = ['Dog Bite', 'Cat Scratch', 'Bat Contact', 'Other Animal 
 
 // Severity colors mirror the Category I/II/III convention used across the
 // rest of the app (vaccination tracker, patient records).
-const CATEGORY_COLOR = { 'Category I': '#059669', 'Category II': '#D97706', 'Category III': '#C8151A' };
+const CATEGORY_COLOR = { 'Category II': '#D97706', 'Category III': '#C8151A' };
 const categoryColor = (cat) => CATEGORY_COLOR[cat] || CATEGORY_COLOR['Category III'];
 
-const LAYER_OPTIONS = [
-  { key: 'all', label: 'All Incidents' },
-  { key: 'highrisk', label: 'High-Risk Zones Only' },
-];
+// Barangay filter options: 'all' plus each Libon barangay
+// Built dynamically from LIBON_BARANGAYS in patients.jsx
 
 const EMPTY_FORM = {
   barangay: 'San Juan',
@@ -58,7 +56,7 @@ export default function IncidentMapPage() {
   const [mapLoaded, setMapLoaded] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [pendingLatLng, setPendingLatLng] = useState(null);
-  const [layerFilter, setLayerFilter] = useState('all');
+  const [barangayFilter, setBarangayFilter] = useState('all');
   const [layerMenuOpen, setLayerMenuOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -259,9 +257,9 @@ export default function IncidentMapPage() {
   // ── Layer filter — applied to both the map and the feed list so the two
   const filteredIncidents = useMemo(() => {
     const list = incidents.filter(inc => {
-      if (layerFilter === 'highrisk') {
-        const key = (inc.barangay || inc.address || inc.location || '').trim().toLowerCase();
-        return repeatZoneKeys.has(key);
+      if (barangayFilter !== 'all') {
+        const incBgy = (inc.barangay || '').trim().toLowerCase();
+        return incBgy === barangayFilter.toLowerCase();
       }
       return true;
     });
@@ -270,7 +268,7 @@ export default function IncidentMapPage() {
       const dateB = b.date || b.exposureDate || '';
       return dateB.localeCompare(dateA) || (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
     });
-  }, [incidents, layerFilter, repeatZoneKeys]);
+  }, [incidents, barangayFilter, repeatZoneKeys]);
 
   // ── Memoize Leaflet Incident Marker Data ─────────────────────
   const memoizedIncidentLayers = useMemo(() => {
@@ -416,7 +414,7 @@ export default function IncidentMapPage() {
           <ShieldAlert size={14} className="text-gray-400" /> Rabies Incident Surveillance Map — Libon, Albay
         </div>
         <div className="flex items-center gap-3">
-          {/* Pin severity legend — inline beside layer toggle */}
+          {/* Pin severity legend */}
           <div className="flex items-center gap-3 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-[11px] font-semibold text-slate-600">
             <span className="text-[10px] font-extrabold text-slate-800 uppercase tracking-wider">Pin</span>
             {Object.entries(CATEGORY_COLOR).map(([cat, color]) => (
@@ -432,21 +430,30 @@ export default function IncidentMapPage() {
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
           >
             <Layers size={13} className="text-gray-400" />
-            {LAYER_OPTIONS.find(o => o.key === layerFilter)?.label}
+            {barangayFilter === 'all' ? 'All Barangays' : `Brgy. ${barangayFilter}`}
             <ChevronDown size={13} className="text-gray-400" />
           </button>
           {layerMenuOpen && (
-            <div className="absolute right-0 top-full mt-1.5 min-w-[190px] bg-white border border-gray-200 rounded-xl shadow-lg p-1.5 z-30">
-              {LAYER_OPTIONS.map(opt => (
+            <div className="absolute right-0 top-full mt-1.5 min-w-[200px] bg-white border border-gray-200 rounded-xl shadow-lg p-1.5 z-30 max-h-64 overflow-y-auto">
+              <button
+                onClick={() => { setBarangayFilter('all'); setLayerMenuOpen(false); }}
+                className={`flex items-center justify-between w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                  barangayFilter === 'all' ? 'bg-indigo-50 text-[#3B50DF]' : 'text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                All Barangays
+                {barangayFilter === 'all' && <CheckCircle2 size={13} />}
+              </button>
+              {LIBON_BARANGAYS.map(bgy => (
                 <button
-                  key={opt.key}
-                  onClick={() => { setLayerFilter(opt.key); setLayerMenuOpen(false); }}
+                  key={bgy}
+                  onClick={() => { setBarangayFilter(bgy); setLayerMenuOpen(false); }}
                   className={`flex items-center justify-between w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                    layerFilter === opt.key ? 'bg-indigo-50 text-[#3B50DF]' : 'text-gray-600 hover:bg-gray-50'
+                    barangayFilter === bgy ? 'bg-indigo-50 text-[#3B50DF]' : 'text-gray-600 hover:bg-gray-50'
                   }`}
                 >
-                  {opt.label}
-                  {layerFilter === opt.key && <CheckCircle2 size={13} />}
+                  Brgy. {bgy}
+                  {barangayFilter === bgy && <CheckCircle2 size={13} />}
                 </button>
               ))}
             </div>

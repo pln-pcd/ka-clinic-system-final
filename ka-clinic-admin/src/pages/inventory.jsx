@@ -1052,9 +1052,9 @@ function ExportInventoryModal({ inventory, onClose, onToast }) {
                     type="button"
                     disabled={sending || !emailTo.trim()}
                     onClick={() => emailBulkReportPdf(emailTo)}
-                    style={{ width: '100%', height: 38, background: '#3B50DF', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: '.8125rem', cursor: 'pointer', opacity: (sending || !emailTo.trim()) ? 0.6 : 1 }}
+                    style={{ width: '100%', height: 38, background: '#3B50DF', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: '.8125rem', cursor: 'pointer', opacity: (sending || !emailTo.trim()) ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
                   >
-                    {sending ? 'Sending… this can take a few seconds' : 'Send via Email'}
+                    {sending ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />Sending… this can take a few seconds</> : 'Send via Email'}
                   </button>
                 </div>
               )}

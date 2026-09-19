@@ -1,7 +1,7 @@
 // kna-admin/src/vaccination.jsx
 import {
   collection, doc, getDocs,
-  increment, limit, onSnapshot, orderBy, query, runTransaction, updateDoc, where
+  limit, onSnapshot, orderBy, query, updateDoc, where
 } from 'firebase/firestore';
 import {
   AlertCircle, Bell, CheckCircle, ChevronDown, ChevronLeft,
@@ -517,72 +517,42 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
       return;
     }
 
-    // ── AUTO-REDUCE / RESTORE INVENTORY STOCK ──
-    const brandForStock = nextStatus === 'done' ? brandToUse : (cur.brand || fresh.vaccineBrand);
-    if (!brandForStock && nextStatus === 'done') {
-      showToast('No Vaccine Brand recorded for this dose, so stock could not be adjusted.', 'warning');
-    }
-
-    if (brandForStock) {
+    // ── ADJUST INVENTORY STOCK (simple, reliable) ──
+    if (nextStatus === 'done' || (isCurrentlyDone && (cur.brand || fresh.vaccineBrand))) {
+      const brandForStock = nextStatus === 'done' ? brandToUse : (cur.brand || fresh.vaccineBrand || '');
       const delta = nextStatus === 'done' ? -1 : 1;
-      try {
-        const invQ = query(collection(db, 'inventory'), where('name', '==', brandForStock));
-        const invSnap = await getDocs(invQ);
-        if (invSnap.empty) {
-          showToast(`Vaccine brand "${brandForStock}" not found in inventory. The dose was saved but stock was not adjusted.`, 'error');
-          return;
-        }
-
-        const invRef = doc(db, 'inventory', invSnap.docs[0].id);
-        const movementId = `${p.firestoreId}_${doseKey}_${nextStatus}`;
-
-        const newStock = await runTransaction(db, async (tx) => {
-          const movementRef = doc(db, 'stockMovements', movementId);
-          const [invSnapTx, movementSnap] = await Promise.all([tx.get(invRef), tx.get(movementRef)]);
-          if (movementSnap.exists()) return null;             // already applied
-          if (!invSnapTx.exists()) throw new Error('inventory item vanished');
-
-          const current = parseInt(invSnapTx.data().stock) || 0;
-          const next = Math.max(0, current + delta);
-          tx.update(invRef, { stock: next });
-          tx.set(movementRef, {
-            patientId: p.firestoreId,
-            patientName: getName(fresh),
-            doseKey,
-            doseLabel: cur.label,
-            brand: brandForStock,
-            delta,
-            resultingStock: next,
-            at: Date.now(),
-          });
-          return next;
-        });
-
-        if (newStock === null) {
-          showToast(`Dose ${di + 1} saved. Stock was already adjusted for this dose.`, 'info');
-        } else if (delta < 0) {
-          showToast(`Dose ${di + 1} completed with ${brandForStock}. Stock reduced to ${newStock}.`, 'success');
-        } else {
-          showToast(`Dose ${di + 1} marked pending. ${brandForStock} stock restored to ${newStock}.`, 'info');
-        }
-      } catch (invErr) {
-        console.warn('Ledgered stock update failed, falling back to increment:', invErr);
+      if (brandForStock) {
         try {
-          const invQ2 = query(collection(db, 'inventory'), where('name', '==', brandForStock));
-          const invSnap2 = await getDocs(invQ2);
-          if (!invSnap2.empty) {
-            await updateDoc(doc(db, 'inventory', invSnap2.docs[0].id), { stock: increment(delta) });
-            showToast(`Dose ${di + 1} saved and ${brandForStock} stock adjusted (audit entry unavailable).`, 'info');
+          const invSnap = await getDocs(query(collection(db, 'inventory'), where('name', '==', brandForStock)));
+          if (!invSnap.empty) {
+            const invDoc = invSnap.docs[0];
+            const currentStock = parseInt(invDoc.data().stock) || 0;
+            const newStock = Math.max(0, currentStock + delta);
+            await updateDoc(doc(db, 'inventory', invDoc.id), { stock: newStock });
+            if (delta < 0) {
+              showToast(`Dose ${di + 1} saved. ${brandForStock} stock: ${currentStock} → ${newStock}.`, 'success');
+            } else {
+              showToast(`Dose ${di + 1} undone. ${brandForStock} stock restored to ${newStock}.`, 'info');
+            }
+          } else {
+            showToast(`Dose saved. Brand "${brandForStock}" not found in inventory — stock not adjusted.`, 'warning');
           }
-        } catch (fallbackErr) {
-          console.error('Inventory stock update failed:', fallbackErr);
-          showToast('The dose was saved, but the stock count could not be updated.', 'error');
+        } catch (invErr) {
+          console.error('Inventory stock update failed:', invErr);
+          showToast('Dose saved, but stock count could not be updated. Check inventory manually.', 'error');
         }
       }
     }
   };
 
   const filtered = patients.filter(p => {
+    // Hide archived/completed patients from the default view — they are
+    // deceased or have finished treatment and should not clutter the active
+    // vaccination queue. They still appear when the admin deliberately picks
+    // the "Completed" filter so the data is never lost.
+    const isArchivedOrCompleted = p.isArchived || p.status === 'completed' || p.status === 'archived';
+    if (isArchivedOrCompleted && filterStatus !== 'completed') return false;
+
     const name   = getName(p).toLowerCase();
     const cat    = (p.cat || '').toLowerCase();
     const animal = (p.animal || '').toLowerCase();
@@ -597,7 +567,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
       filterStatus === 'today'       ? hasDoseToday(p) :
       filterStatus === 'overdue'     ? status === 'overdue' :
       filterStatus === 'in-progress' ? status === 'in-progress' :
-      filterStatus === 'completed'   ? status === 'completed' :
+      filterStatus === 'completed'   ? (isArchivedOrCompleted || status === 'completed') :
       filterStatus === 'prep'        ? pSvc === 'prep' :
       filterStatus === 'pep'         ? pSvc === 'pep' :
       filterStatus === 'tetanus'     ? (pSvc === 'tetanus' || pSvc === 'antitetano') :
@@ -626,10 +596,10 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
   const paginated  = filtered.slice((safePage - 1) * itemsPerPage, safePage * itemsPerPage);
 
   const stats = [
-    { label: 'Total Patients',     value: patients.length,                                                icon: Users,       sub: 'Active & Master Records' },
-    { label: 'Completed',          value: patients.filter(p => deriveStatus(p) === 'completed').length,   icon: CheckCircle, sub: 'Fully Vaccinated' },
-    { label: 'In Progress',        value: patients.filter(p => deriveStatus(p) === 'in-progress').length, icon: Clock,       sub: 'Ongoing Doses' },
-    { label: 'Overdue Follow-ups', value: patients.filter(p => deriveStatus(p) === 'overdue').length,     icon: AlertCircle, sub: 'Attention Required' },
+    { label: 'Total Patients',     value: patients.filter(p => !p.isArchived && p.status !== 'completed' && p.status !== 'archived').length, icon: Users,       sub: 'Active Records' },
+    { label: 'Completed',          value: patients.filter(p => p.isArchived || p.status === 'completed' || p.status === 'archived' || deriveStatus(p) === 'completed').length, icon: CheckCircle, sub: 'Fully Vaccinated' },
+    { label: 'In Progress',        value: patients.filter(p => !p.isArchived && p.status !== 'completed' && p.status !== 'archived' && deriveStatus(p) === 'in-progress').length, icon: Clock,       sub: 'Ongoing Doses' },
+    { label: 'Overdue Follow-ups', value: patients.filter(p => !p.isArchived && p.status !== 'completed' && p.status !== 'archived' && deriveStatus(p) === 'overdue').length,     icon: AlertCircle, sub: 'Attention Required' },
   ];
 
   const statusBadge = (s) => {
@@ -1217,22 +1187,24 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                     ))}
                   </div>
 
-                  {/* Inventory Vaccine Brand Allocation */}
+                </div>
+
+                {/* Right Column: Dose Checklist */}
+                <div className="w-[440px] shrink-0 px-6 py-5 bg-white overflow-y-auto">
+                  {/* Assigned Vaccine Brand — sits above checklist */}
                   {(() => {
                     const serviceName = p.service || 'PEP';
                     const eligibleVaccines = getEligibleVaccinesForService(serviceName, inventoryItems);
                     const allOptions = [...eligibleVaccines];
-                    // Keep currently selected brand in list if not already present
                     if (assignedBrand && !allOptions.some(item => item.name === assignedBrand)) {
                       allOptions.unshift({ id: 'current_selected', name: assignedBrand, stock: '?' });
                     }
-
                     const nextPendingDose = doses.find(d => d.status !== 'done');
                     const allCompleted = !nextPendingDose;
 
                     if (allCompleted) {
                       return (
-                        <div className="mt-4 bg-emerald-50/60 border border-emerald-200/90 rounded-2xl p-4 shadow-2xs">
+                        <div className="mb-4 bg-emerald-50/60 border border-emerald-200/90 rounded-2xl p-3.5 shadow-2xs">
                           <div className="flex items-center gap-2 text-emerald-800 font-bold text-xs">
                             <CheckCircle size={16} className="text-emerald-600 shrink-0" />
                             <span>All scheduled doses completed</span>
@@ -1245,7 +1217,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                     }
 
                     return (
-                      <div className={`mt-3 bg-white border rounded-2xl p-4 shadow-2xs transition-all ${
+                      <div className={`mb-4 bg-white border rounded-2xl p-3.5 shadow-2xs transition-all ${
                         !assignedBrand ? 'border-amber-300 bg-amber-50/25' : 'border-indigo-300 bg-indigo-50/15'
                       }`}>
                         <div className="flex items-center justify-between mb-2">
@@ -1256,14 +1228,12 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                             {serviceName}
                           </span>
                         </div>
-
                         <div className="text-[11.5px] font-semibold text-slate-700 mb-1.5 flex items-center justify-between">
                           <span>For: <strong className="text-[#3B50DF]">{nextPendingDose?.label || 'Next Dose'}</strong></span>
                           {assignedBrand && (
-                            <span className="text-[10.5px] text-emerald-700 font-bold">1 vial will deduct on check</span>
+                            <span className="text-[10.5px] text-emerald-700 font-bold">1 vial deducts on check</span>
                           )}
                         </div>
-
                         <div className="relative">
                           <select
                             value={assignedBrand}
@@ -1274,35 +1244,28 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                                 : 'border-[#3B50DF] bg-white text-slate-800 focus:border-[#3B50DF]'
                             }`}
                           >
-                            <option value="">— Select {serviceName} Vaccine Stock Brand —</option>
+                            <option value="">— Select {serviceName} Vaccine Brand —</option>
                             {allOptions.map(item => (
                               <option key={item.id} value={item.name}>
                                 {item.name} ({item.stock} {item.unit || 'pcs'} left)
                               </option>
                             ))}
                           </select>
-                          <ChevronDown
-                            size={16}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
-                          />
+                          <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                         </div>
                         {!assignedBrand ? (
                           <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200/80 rounded-lg p-2 mt-2">
                             <AlertCircle size={14} className="shrink-0 text-amber-600" />
-                            <span>Select a vaccine brand for {nextPendingDose?.label || 'this dose'} to unlock checklist &amp; auto-deduct stock.</span>
+                            <span>Select a brand to unlock the checklist and auto-deduct stock.</span>
                           </div>
                         ) : (
-                          <p className="text-[10.5px] font-medium text-slate-500 mt-2">
-                            Only vaccines approved for <strong className="text-slate-700">{serviceName}</strong> are selectable.
+                          <p className="text-[10.5px] font-medium text-slate-500 mt-1.5">
+                            Only vaccines approved for <strong className="text-slate-700">{serviceName}</strong> are listed.
                           </p>
                         )}
                       </div>
                     );
                   })()}
-                </div>
-
-                {/* Right Column: Dose Checklist */}
-                <div className="w-[440px] shrink-0 px-6 py-5 bg-white overflow-y-auto">
                   <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
                     <div>
                       <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">

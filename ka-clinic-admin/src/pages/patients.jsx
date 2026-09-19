@@ -11,7 +11,7 @@ import * as XLSX from "xlsx";
 import autoTable from "jspdf-autotable";
 import Toast from "../components/Toast";
 import { CLINIC_LOGO_BASE64 } from "../assets/clinicLogoBase64";
-import { Printer, Download, MapPin, AlertTriangle, AlertCircle } from "lucide-react";
+import { Printer, Download, MapPin, AlertTriangle, AlertCircle, Mail, Loader2 } from "lucide-react";
 import { trackEvent } from "../lib/analytics";
 
 const getName = (p) => (p?.name || [p?.fname, p?.lname].filter(Boolean).join(' ') || 'Unnamed Patient');
@@ -990,33 +990,9 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [], onToast }) {
                     setForm(f => ({
                       ...f,
                       service: v,
-                      vaccineBrand: f.vaccineBrand && isVaccineForService(v, f.vaccineBrand) ? f.vaccineBrand : ''
                     }));
                   }}
                 />
-              </div>
-
-              {/* Vaccine Brand Selector */}
-              <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '.75rem', padding: '16px 20px', marginTop: 16 }}>
-                <div style={{ fontSize: '.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.5px', color: '#475569', marginBottom: 8 }}>
-                  Vaccine Brand Allocation <span style={{ fontWeight: 400, textTransform: 'none', color: '#64748B' }}>(Inventory lookup)</span>
-                </div>
-                <select
-                  value={form.vaccineBrand}
-                  onChange={e => set('vaccineBrand', e.target.value)}
-                  style={{ width: '100%', fontFamily: 'inherit', fontSize: '.875rem', fontWeight: 500, padding: '10px 14px', border: '1.5px solid #CBD5E1', borderRadius: '.625rem', background: '#FFFFFF', color: '#0F172A', outline: 'none' }}
-                >
-                  <option value="">— Select available vaccine brand from inventory —</option>
-                  {vaccineItems.map(item => (
-                    <option key={item.id} value={item.name}>{item.name} ({item.stock} {item.unit || 'pcs'} available)</option>
-                  ))}
-                </select>
-                {vaccineItems.length === 0 && (
-                  <div style={{ fontSize: '.71875rem', color: '#D97706', marginTop: 6, fontWeight: 500 }}>
-                    Notice: No active vaccine stock found in inventory. You can specify a custom brand or add inventory stock later.
-                  </div>
-                )}
-              </div>
             </div>
           )}
 
@@ -3127,6 +3103,10 @@ function AddReportModal({ patient, doses = [], existingReports = [], onClose, on
     setSaving(true);
     try {
       await onSave(pending);
+      setPending(null);
+      onClose();
+    } catch (err) {
+      console.error('handleConfirm error:', err);
     } finally {
       setSaving(false);
     }
@@ -5065,6 +5045,7 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
                   opacity: (mode === 'bulk' ? preview.length === 0 : !selectedPatient) ? 0.5 : 1
                 }}
               >
+                <Mail size={14} />
                 Email Report
               </button>
 
@@ -5093,9 +5074,9 @@ function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
                         ? emailBulkReportPdf(emailTo)
                         : emailSinglePatientPdf(selectedPatient, emailTo)
                     }
-                    style={{ width: '100%', height: 38, background: '#3B50DF', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: '.8125rem', cursor: 'pointer', opacity: (sending || !emailTo.trim()) ? 0.6 : 1 }}
+                    style={{ width: '100%', height: 38, background: '#3B50DF', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: '.8125rem', cursor: 'pointer', opacity: (sending || !emailTo.trim()) ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
                   >
-                    {sending ? 'Sending… this can take a few seconds' : 'Send via Email'}
+                    {sending ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />Sending… this can take a few seconds</> : 'Send via Email'}
                   </button>
                 </div>
               )}
