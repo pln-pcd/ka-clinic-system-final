@@ -993,6 +993,7 @@ function AddPatientModal({ onClose, onAdd, inventoryItems = [], onToast }) {
                     }));
                   }}
                 />
+              </div>
             </div>
           )}
 
