@@ -1204,12 +1204,12 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
 
                     if (allCompleted) {
                       return (
-                        <div className="mb-4 bg-emerald-50/60 border border-emerald-200/90 rounded-2xl p-3.5 shadow-2xs">
-                          <div className="flex items-center gap-2 text-emerald-800 font-bold text-xs">
-                            <CheckCircle size={16} className="text-emerald-600 shrink-0" />
+                        <div className="mb-4 bg-slate-50 border border-slate-200 rounded-2xl p-3.5">
+                          <div className="flex items-center gap-2 text-slate-700 font-bold text-xs">
+                            <CheckCircle size={16} className="text-slate-500 shrink-0" />
                             <span>All scheduled doses completed</span>
                           </div>
-                          <p className="text-[11px] text-emerald-700/90 mt-1 font-medium">
+                          <p className="text-[11px] text-slate-500 mt-1 font-medium">
                             All doses have been administered and recorded.
                           </p>
                         </div>
@@ -1217,32 +1217,26 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                     }
 
                     return (
-                      <div className={`mb-4 bg-white border rounded-2xl p-3.5 shadow-2xs transition-all ${
-                        !assignedBrand ? 'border-amber-300 bg-amber-50/25' : 'border-indigo-300 bg-indigo-50/15'
-                      }`}>
+                      <div className="mb-4 bg-white border border-slate-200 rounded-2xl p-3.5">
                         <div className="flex items-center justify-between mb-2">
                           <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
                             Assigned Vaccine Brand (Stock Sync)
                           </div>
-                          <span className="text-[10px] font-bold text-[#3B50DF] bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full">
+                          <span className="text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
                             {serviceName}
                           </span>
                         </div>
                         <div className="text-[11.5px] font-semibold text-slate-700 mb-1.5 flex items-center justify-between">
-                          <span>For: <strong className="text-[#3B50DF]">{nextPendingDose?.label || 'Next Dose'}</strong></span>
+                          <span>For: <strong className="text-slate-900">{nextPendingDose?.label || 'Next Dose'}</strong></span>
                           {assignedBrand && (
-                            <span className="text-[10.5px] text-emerald-700 font-bold">1 vial deducts on check</span>
+                            <span className="text-[10.5px] text-slate-500 font-semibold">1 vial deducts on check</span>
                           )}
                         </div>
                         <div className="relative">
                           <select
                             value={assignedBrand}
                             onChange={e => setAssignedBrand(e.target.value)}
-                            className={`w-full py-2.5 pl-3 pr-9 border rounded-xl outline-none font-bold text-xs cursor-pointer appearance-none ${
-                              !assignedBrand
-                                ? 'border-amber-400 bg-amber-50/50 text-amber-900 focus:border-amber-500'
-                                : 'border-[#3B50DF] bg-white text-slate-800 focus:border-[#3B50DF]'
-                            }`}
+                            className="w-full py-2.5 pl-3 pr-9 border border-slate-300 rounded-xl outline-none font-bold text-xs cursor-pointer appearance-none bg-white text-slate-800 focus:border-slate-400"
                           >
                             <option value="">— Select {serviceName} Vaccine Brand —</option>
                             {allOptions.map(item => (
@@ -1254,8 +1248,8 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                           <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                         </div>
                         {!assignedBrand ? (
-                          <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200/80 rounded-lg p-2 mt-2">
-                            <AlertCircle size={14} className="shrink-0 text-amber-600" />
+                          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 bg-slate-50 border border-slate-200 rounded-lg p-2 mt-2">
+                            <AlertCircle size={14} className="shrink-0 text-slate-400" />
                             <span>Select a brand to unlock the checklist and auto-deduct stock.</span>
                           </div>
                         ) : (
@@ -1290,16 +1284,16 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                         const doseUsedBrand = d.brand || (isDone ? (d.vaccineBrand || p.vaccineBrand || '') : '');
 
                         const cardBg = isDone
-                          ? 'bg-emerald-50/40 border-emerald-200/90'
+                          ? 'bg-slate-50 border-slate-200'
                           : isNext
-                          ? (hasBrand ? 'bg-indigo-50/50 border-[#3B50DF] shadow-2xs' : 'bg-amber-50/30 border-amber-200/70')
-                          : 'bg-slate-50/50 border-slate-200/80';
+                          ? 'bg-white border-slate-400'
+                          : 'bg-white border-slate-200';
 
                         const badgeBg = isDone
-                          ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                          ? 'bg-slate-200 text-slate-600 border-slate-300'
                           : isNext
-                          ? (hasBrand ? 'bg-[#3B50DF] text-white border-indigo-600' : 'bg-amber-100 text-amber-800 border-amber-300')
-                          : 'bg-slate-200/80 text-slate-600 border-slate-300';
+                          ? 'bg-slate-700 text-white border-slate-700'
+                          : 'bg-slate-100 text-slate-500 border-slate-200';
 
                         return (
                           <div
@@ -1319,7 +1313,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                                 D{di + 1}
                               </div>
                               <div className="min-w-0 flex-1">
-                                <div className={`text-xs font-bold truncate leading-tight ${isDone ? 'text-slate-700 line-through decoration-emerald-500/60' : 'text-slate-900'}`}>
+                                <div className={`text-xs font-bold truncate leading-tight ${isDone ? 'text-slate-400 line-through decoration-slate-400/60' : 'text-slate-900'}`}>
                                   {d.label}
                                 </div>
                                 <div className={`text-[11px] font-medium mt-0.5 flex items-center gap-1.5 flex-wrap ${(d.date || '').slice(0, 10) === getTodayStr() ? 'text-[#1D4ED8] font-bold' : 'text-slate-500'}`}>
@@ -1331,19 +1325,17 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                                   )}
                                   {isDone && doseUsedBrand && (
                                     <span
-                                      className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-bold border border-emerald-200/90 inline-flex items-center gap-1 max-w-[240px]"
+                                      className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500 font-semibold border border-slate-200 inline-flex items-center gap-1 max-w-[240px]"
                                       title={`Vaccine used: ${doseUsedBrand}`}
                                     >
-                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
                                       <span className="truncate">{doseUsedBrand}</span>
                                     </span>
                                   )}
                                   {!isDone && isNext && assignedBrand && (
                                     <span
-                                      className="text-[10px] px-1.5 py-0.5 rounded-md bg-indigo-100 text-[#3B50DF] font-bold border border-indigo-200 inline-flex items-center gap-1 max-w-[240px]"
+                                      className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-700 font-semibold border border-slate-200 inline-flex items-center gap-1 max-w-[240px]"
                                       title={`Selected brand: ${assignedBrand}`}
                                     >
-                                      <span className="w-1.5 h-1.5 rounded-full bg-[#3B50DF] shrink-0" />
                                       <span className="truncate">{assignedBrand}</span>
                                     </span>
                                   )}
