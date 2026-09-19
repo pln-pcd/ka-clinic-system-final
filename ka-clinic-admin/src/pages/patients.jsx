@@ -64,7 +64,7 @@ const globalCSS = `
   .service-pneumonia{background:#F3E8FF;color:#6D28D9;border:1px solid #DDD6FE;}
 
   /* Service selector grid */
-  .service-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+  .service-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
   .service-select-btn{padding:10px 8px;border-radius:var(--r-lg);border:2px solid var(--border);background:var(--bg);cursor:pointer;font-family:inherit;text-align:center;transition:all .15s;}
   .service-select-btn:hover{border-color:var(--blue);background:var(--blue-light);}
   .service-select-btn.sel-pep{border-color:#3B50DF;background:#EEF2FF;}
