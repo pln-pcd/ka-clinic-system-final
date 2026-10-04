@@ -1,14 +1,35 @@
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import React, { useEffect, useState } from "react";
-import AdminLogin from "./pages/adm-loginsign.jsx";
-import AdminDashboard from "./pages/AdminDashboard.jsx";
-import AcceptInvite from "./pages/AcceptInvite.jsx";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { auth } from "./lib/firebase";
-import { authedPostJson } from "./lib/apiClient";
+import { authedPostJson } from "./lib/adminSession";
+import { PageErrorBoundary } from "./components/ErrorPages";
+import BrandLoader from "./components/BrandLoader";
 
 const isAcceptInvitePath = window.location.pathname === '/accept-invite';
 const urlParams = new URLSearchParams(window.location.search);
 const isResetPassPath = urlParams.get('mode') === 'resetPassword' || Boolean(urlParams.get('oobCode')) || window.location.pathname === '/reset-password';
+// Any other path is not a page: signed in it shows the 404 page inside the
+// dashboard, signed out it goes to the login screen at "/".
+const KNOWN_PATHS = ['/', '/index.html', '/accept-invite', '/reset-password'];
+const isUnknownPath = !KNOWN_PATHS.includes(window.location.pathname.replace(/\/+$/, '') || '/');
+
+// Each screen is its own download. The login and dashboard code start
+// downloading right away, alongside the session check, so neither screen
+// normally waits on its code when the check finishes.
+const loadLogin = () => import("./features/auth/LoginPage.jsx");
+const loadDashboard = () => import("./features/dashboard/AdminDashboard.jsx");
+const AdminLogin = lazy(loadLogin);
+const AdminDashboard = lazy(loadDashboard);
+const AcceptInvite = lazy(() => import("./features/auth/AcceptInvitePage.jsx"));
+if (!isAcceptInvitePath) {
+  loadLogin().catch(() => {});
+  loadDashboard().catch(() => {});
+}
+
+function ScreenLoading() {
+  // Usually follows the session check, so the logo is already drawn.
+  return <BrandLoader label="Loading…" intro={false} />;
+}
 
 export default function App() {
   // Firebase's own persisted session (browserLocalPersistence, set when
@@ -63,14 +84,16 @@ export default function App() {
     return () => unsub();
   }, []);
 
+  // Last line of defence: a crash outside a dashboard page (the shell, the
+  // login screen) still shows the reload card rather than a blank screen.
+  useEffect(() => {
+    if (view === 'login' && isUnknownPath && !isResetPassPath) window.history.replaceState({}, '', '/');
+  }, [view]);
+
   return (
-    <>
-      {view === 'checking' && (
-        <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-[#060e24] text-white">
-          <div className="w-7 h-7 rounded-full border-2 border-white/15 border-t-white/80 animate-spin" />
-          <p className="text-sm font-semibold text-blue-100/80">Checking your session…</p>
-        </div>
-      )}
+    <PageErrorBoundary resetKey={view}>
+    <Suspense fallback={<ScreenLoading />}>
+      {view === 'checking' && <BrandLoader label="Restoring your session…" />}
 
       {view === 'accept-invite' && (
         <AcceptInvite
@@ -86,8 +109,9 @@ export default function App() {
       )}
 
       {view === 'dashboard' && (
-        <AdminDashboard onLogout={() => setView('login')} />
+        <AdminDashboard onLogout={() => setView('login')} notFound={isUnknownPath} />
       )}
-    </>
+    </Suspense>
+    </PageErrorBoundary>
   );
 }

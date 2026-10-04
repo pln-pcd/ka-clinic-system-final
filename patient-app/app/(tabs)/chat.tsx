@@ -33,11 +33,11 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useAnimatedKeyboard, useAnimatedStyle } from 'react-native-reanimated';
-import { db } from '../../config/firebase';
+import { db } from '../../config/backend';
 import { usePatientAuth } from '../../context/PatientAuthContext';
-import { moderateScale, scale, verticalScale } from '../../constants/scale';
+import { moderateScale, scale, verticalScale } from '../../utils/scale';
 import CustomAlertModal, { CustomAlertConfig } from '../../components/CustomAlertModal';
-import { askClinicAssistant, type ChatTurn } from '../services/chatbot';
+import { askClinicAssistant, type ChatTurn } from '../../services/chatbot';
 
 type BubbleMessage = {
   id: string;
@@ -329,11 +329,10 @@ export default function ChatScreen() {
   };
 
   // ── End the conversation from the patient side ──────────────────────────
-  // Marks the same `resolved` flag staff use (ka-clinic-admin/src/messages.jsx
-  // handleArchive) rather than introducing a second notion of "done". Note it
-  // leaves `unread: false` and does NOT archive: the nightly sweep only files
-  // away conversations an admin has already read, so a thread the patient ends
-  // without staff ever opening it stays in the inbox.
+  // Marks the same `resolved` flag staff use (ka-clinic-admin/src/features/messages/MessagesPage.jsx
+  // handleArchive) rather than introducing a second notion of "done". It does
+  // NOT archive: only staff archive conversations, from the Messages page, so
+  // a thread the patient ends stays in the clinic's inbox.
   // Confirmations use the app's own card rather than the OS alert, so the
   // wording and styling match every other destructive step in the app.
   const [alertConfig, setAlertConfig] = useState<CustomAlertConfig>({ visible: false, title: '', message: '' });
@@ -345,9 +344,7 @@ export default function ChatScreen() {
     setChatError('');
     try {
       // `unread` is deliberately left alone: it means "unread by an admin", so
-      // the patient must not clear it on staff's behalf. Writing unread:false
-      // here would satisfy the nightly sweep's resolved && !unread condition
-      // and file the conversation away before anyone at the clinic read it.
+      // the patient must not clear it on staff's behalf.
       await updateDoc(doc(db, 'chatThreads', openThreadId), {
         resolved: true,
         closedBy: 'patient',
@@ -412,16 +409,28 @@ export default function ChatScreen() {
     });
   };
 
+  // One message in flight at a time. The keyboard's Send key (onSubmitEditing)
+  // ignores the disabled Send button, and can fire twice on some keyboards,
+  // which sent the same question twice and showed the answer twice. A ref,
+  // not state, so a second call in the same tick sees it immediately.
+  const sendingRef = useRef(false);
+
   // ── Bot mode: ask the shared K&A Health Assistant engine (api/chatbot.js) ──
   const sendBotMessage = async (override?: string) => {
     const text = (override ?? input).trim();
-    if (!text) return;
+    if (!text || sendingRef.current) return;
+    sendingRef.current = true;
     setInput('');
     const history: ChatTurn[] = botMessages.map(m => ({ role: m.sender === 'patient' ? 'user' : 'bot', text: m.text }));
     setBotMessages(m => [...m, { id: `u-${Date.now()}`, text, sender: 'patient', createdAt: Date.now() }]);
     setBotTyping(true);
-    const reply = await askClinicAssistant(text, history);
-    setBotTyping(false);
+    let reply;
+    try {
+      reply = await askClinicAssistant(text, history);
+    } finally {
+      setBotTyping(false);
+      sendingRef.current = false;
+    }
     setBotMessages(m => [...m, {
       id: `b-${Date.now()}`, text: reply.text, sender: 'bot',
       createdAt: Date.now(), senderName: BOT_SENDER_LABEL,
@@ -437,7 +446,8 @@ export default function ChatScreen() {
   // ── Admin mode: message the escalated thread ──
   const sendAdminMessage = async () => {
     const text = input.trim();
-    if (!text || !openThreadId || !user) return;
+    if (!text || !openThreadId || !user || sendingRef.current) return;
+    sendingRef.current = true;
     setInput('');
     setSending(true);
     try {
@@ -461,6 +471,7 @@ export default function ChatScreen() {
         : 'Message failed to send. Please try again.');
     } finally {
       setSending(false);
+      sendingRef.current = false;
     }
   };
 

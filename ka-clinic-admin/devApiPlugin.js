@@ -16,7 +16,20 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const API_DIR = resolve(HERE, '..', 'api');
+const VERCEL_JSON = resolve(HERE, '..', 'vercel.json');
 const ENV_FILES = ['.env', '.env.local'];
+
+// The exact-path /api rewrites from vercel.json, so old URLs such as
+// /api/send-otp reach the merged function (/api/patient-auth?route=send-otp)
+// the same way they do on Vercel. Read on every request, like the handlers.
+async function loadApiRewrites() {
+  const config = JSON.parse(await readFile(VERCEL_JSON, 'utf8'));
+  const out = {};
+  for (const { source, destination } of config.rewrites || []) {
+    if (/^\/api\/[\w-]+$/.test(source)) out[source.slice('/api/'.length)] = new URL(destination, 'http://localhost');
+  }
+  return out;
+}
 
 // Minimal .env loader. The api handlers read process.env directly (GEMINI_API_KEY,
 // CRON_SECRET, FIREBASE_*), and Vite's own loadEnv only exposes VITE_-prefixed
@@ -80,6 +93,14 @@ export function devApiPlugin() {
     name: 'kna-dev-api',
     apply: 'serve', // never runs during build
     async configureServer(server) {
+      // `npm run dev:emulator` (vite --mode emulator): the /api handlers use the
+      // local Firebase Emulator instead of the live project.
+      if (server.config.mode === 'emulator') {
+        process.env.FIRESTORE_EMULATOR_HOST ||= '127.0.0.1:8080';
+        process.env.FIREBASE_AUTH_EMULATOR_HOST ||= '127.0.0.1:9099';
+        process.env.FIREBASE_EMULATOR_PROJECT_ID ||= 'demo-ka-clinic';
+        console.log('[dev-api] emulator mode: Firestore 127.0.0.1:8080, Auth 127.0.0.1:9099, project demo-ka-clinic');
+      }
       await loadRepoEnv();
 
       server.middlewares.use(async (req, res, next) => {
@@ -89,18 +110,13 @@ export function devApiPlugin() {
         await loadRepoEnv(true);
 
         let route = url.pathname.slice('/api/'.length).replace(/\/+$/, '');
-        if (route === 'send-report') route = 'send-patient-report';
-        // Mirror vercel.json rewrites, including the ?op= each one adds.
-        const REWRITE_OPS = {
-          'admin-forgot-password': ['admin-password', 'forgot'],
-          'admin-reset-password': ['admin-password', 'reset'],
-          'send-admin-otp': ['admin-otp', 'send'],
-          'verify-admin-otp': ['admin-otp', 'verify'],
-        };
-        if (REWRITE_OPS[route]) {
-          const [target, op] = REWRITE_OPS[route];
-          route = target;
-          if (!url.searchParams.has('op')) url.searchParams.set('op', op);
+        // Mirror vercel.json rewrites, including the query each one adds.
+        const rewrite = (await loadApiRewrites())[route];
+        if (rewrite) {
+          route = rewrite.pathname.slice('/api/'.length);
+          for (const [key, value] of rewrite.searchParams) {
+            if (!url.searchParams.has(key)) url.searchParams.set(key, value);
+          }
         }
 
         // Guard against path traversal reaching outside api/.

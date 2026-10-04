@@ -1,4 +1,3 @@
-import React from 'react';
 
 /* ─────────────────────────────────────────────
    Shared toast / notification banner.
@@ -70,7 +69,7 @@ export default function Toast({ msg, message, title, type = 'info', onClose }) {
         position: 'fixed',
         bottom: 28,
         right: 28,
-        zIndex: 9999,
+        zIndex: 20000,
         display: 'flex',
         alignItems: 'center',
         gap: 15,

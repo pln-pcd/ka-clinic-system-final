@@ -36,6 +36,12 @@ export default function Chatbot() {
   const [badge, setBadge] = useState(false);
   const [quickShown, setQuickShown] = useState(true);
   const msgsRef = useRef(null);
+  // One question in flight at a time (Enter plus a click, or a held Enter key,
+  // used to send the same question twice), and the latest transcript for the
+  // history, not a copy captured when send() was created.
+  const sendingRef = useRef(false);
+  const messagesRef = useRef([]);
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
 
   /* Inject styles */
   useEffect(() => {
@@ -77,21 +83,24 @@ export default function Chatbot() {
 
   const send = useCallback(async (msg) => {
     const text = (msg || input).trim();
-    if (!text) return;
+    if (!text || sendingRef.current) return;
+    sendingRef.current = true;
+    const history = messagesRef.current;
     setInput('');
     setQuickShown(false);
     addMsg('user', text);
     setTyping(true);
 
     try {
-      const replyText = await askGemini(text, messages);
-      setTyping(false);
+      const replyText = await askGemini(text, history);
       addMsg('bot', replyText);
     } catch (err) {
-      setTyping(false);
       addMsg('bot', "I'm having trouble connecting right now. Please call or visit K&A Clinic at San Juan St., Libon, Albay, or try again shortly.");
+    } finally {
+      setTyping(false);
+      sendingRef.current = false;
     }
-  }, [input, messages, addMsg]);
+  }, [input, addMsg]);
 
   const QUICK = [
     ['💉 Vaccine Prices', 'How much are your vaccine prices and packages?'],
@@ -350,7 +359,7 @@ export default function Chatbot() {
           <input
             value={input}
             onChange={e => setInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), send())}
+            onKeyDown={e => e.key === 'Enter' && !e.shiftKey && !e.repeat && !e.nativeEvent.isComposing && (e.preventDefault(), send())}
             placeholder="Ask about hours, booking, or the app…"
             style={{
               flex: 1, background: 'rgba(241,245,249,0.8)',
@@ -363,7 +372,7 @@ export default function Chatbot() {
           />
           <button
             onClick={() => send()}
-            disabled={!input.trim() && !typing}
+            disabled={!input.trim() || typing}
             aria-label="Send message"
             style={{
               width: 36, height: 36, borderRadius: '50%',

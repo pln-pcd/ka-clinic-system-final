@@ -10,7 +10,7 @@ import Animated, {
   withTiming
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { moderateScale, scale, verticalScale } from '../constants/scale';
+import { moderateScale, scale, verticalScale } from '../utils/scale';
 
 const { width } = Dimensions.get('window');
 const NAVY_BLUE = '#1E3A8A';
@@ -84,7 +84,7 @@ export default function Onboarding1() {
             <Text style={styles.title}>Strict Dose{"\n"}Protocol</Text>
             
             <Text style={styles.description}>
-              Your Day 0, 3, 7 and 28 doses are mapped out automatically from your exposure date. See what's done, what's next, and get a reminder before every visit so no dose is ever missed.
+              Your Day 0, 3, 7 and 28 doses are mapped out automatically from your exposure date. See what&apos;s done, what&apos;s next, and get a reminder before every visit so no dose is ever missed.
             </Text>
           </View>
 

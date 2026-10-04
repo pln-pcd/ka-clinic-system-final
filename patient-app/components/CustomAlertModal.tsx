@@ -9,7 +9,7 @@ import {
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
-import { moderateScale, scale, verticalScale } from '../constants/scale';
+import { moderateScale, scale, verticalScale } from '../utils/scale';
 
 export type AlertType = 'info' | 'success' | 'warning' | 'error' | 'guest' | 'signout';
 
@@ -23,6 +23,8 @@ export interface CustomAlertConfig {
   secondaryButtonText?: string;
   onSecondaryPress?: () => void;
   isDestructive?: boolean;
+  /** Show the secondary (left) action in red, for a destructive choice. */
+  secondaryDestructive?: boolean;
 }
 
 interface Props {
@@ -43,11 +45,13 @@ const TYPE_CONFIG = {
     iconBg: '#ECFDF5',
     primaryBtnBg: '#10B981',
   },
+  // Warnings use amber, like the admin app; destructive actions stay red
+  // (isDestructive).
   warning: {
     icon: 'alert-circle-outline' as const,
-    iconColor: '#F59E0B',
+    iconColor: '#D97706',
     iconBg: '#FEF3C7',
-    primaryBtnBg: '#1E3A8A',
+    primaryBtnBg: '#D97706',
   },
   error: {
     icon: 'close-circle-outline' as const,
@@ -80,6 +84,7 @@ export default function CustomAlertModal({ config, onClose }: Props) {
     secondaryButtonText,
     onSecondaryPress,
     isDestructive = false,
+    secondaryDestructive = false,
   } = config;
 
   if (!visible) return null;
@@ -125,7 +130,7 @@ export default function CustomAlertModal({ config, onClose }: Props) {
                     onPress={handleSecondary}
                     activeOpacity={0.7}
                   >
-                    <Text style={s.secondaryBtnText}>{secondaryButtonText}</Text>
+                    <Text style={[s.secondaryBtnText, secondaryDestructive && { color: '#DC2626' }]}>{secondaryButtonText}</Text>
                   </TouchableOpacity>
                 ) : null}
 

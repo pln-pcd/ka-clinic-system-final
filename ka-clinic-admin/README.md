@@ -33,7 +33,7 @@ npm run dev
 | `vite.config.js` | Vite development server setup |
 | `tailwind.config.js` | Tailwind CSS configuration |
 | `index.html` | Main HTML file |
-| `src/AdminDashboard.jsx` | The main dashboard component |
+| `src/features/dashboard/AdminDashboard.jsx` | The main dashboard component |
 | `src/App.jsx` | App wrapper |
 | `src/main.jsx` | React entry point |
 | `src/index.css` | Global styles |

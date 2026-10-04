@@ -1,5 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
-
+/* Google Fonts are loaded once, by the <link> in index.html. */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -9,24 +8,23 @@
   --header-height: 80px;
 }
 
-/* Modals dynamically adjust when sidebar is open vs collapsed and stay below top nav */
+/* Every popup renders through components/Modal.jsx, which covers the whole
+   viewport. The old overlay classes are kept full-screen too, for any
+   overlay still using them. */
 .modal-overlay,
 .admin-modal-overlay {
   position: fixed !important;
-  top: max(80px, var(--header-height, 80px)) !important;
-  bottom: 0 !important;
-  right: 0 !important;
-  left: var(--sidebar-width, 256px) !important;
-  width: calc(100vw - var(--sidebar-width, 256px)) !important;
-  height: calc(100vh - max(80px, var(--header-height, 80px))) !important;
+  inset: 0 !important;
+  z-index: 10000;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
   overflow-y: auto !important;
-  padding: 1.25rem !important;
+  padding: 1rem !important;
   box-sizing: border-box !important;
-  transition: left 0.4s cubic-bezier(0.22, 1, 0.36, 1), width 0.4s cubic-bezier(0.22, 1, 0.36, 1), top 0.4s cubic-bezier(0.22, 1, 0.36, 1), height 0.4s cubic-bezier(0.22, 1, 0.36, 1) !important;
 }
+
+@keyframes kna-modal-fade { from { opacity: 0; } to { opacity: 1; } }
 
 *, html, body, button, input, select, textarea, table, div, span, p, a, h1, h2, h3, h4, h5, h6, nav, header, aside, section, main {
   font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
@@ -67,11 +65,64 @@
   backdrop-filter: blur(8px);
   border: 1px solid rgba(241, 245, 249, 1);
   box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05), 0 2px 6px -1px rgba(15, 23, 42, 0.02);
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: box-shadow 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
 }
+/* Hover is shadow-only — a card that lifts shifts under the cursor. */
 .glass-card:hover {
   box-shadow: 0 10px 25px -3px rgba(15, 23, 42, 0.08), 0 4px 10px -2px rgba(15, 23, 42, 0.04);
-  transform: translateY(-1px);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   INTERACTIVE STABILITY
+   Buttons, tabs, chips and clickable cards never move or resize on
+   hover/press: feedback is limited to color, shadow and opacity. Keyboard
+   focus always gets a visible ring. An outline takes no layout space, so it
+   can't shift anything either — and it wins over the scattered
+   outline-none / focus:outline-none utilities, which were meant for mouse
+   focus, not keyboard users.
+───────────────────────────────────────────────────────────── */
+:is(button, a[href], [role="button"], [role="tab"], summary):focus-visible {
+  outline: 2px solid #2563EB !important;
+  outline-offset: 2px !important;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   ADMIN SHELL LAYOUT STABILITY
+───────────────────────────────────────────────────────────── */
+/* Page scroller inside the dashboard's <main>. The gutter is always
+   reserved, so pages that scroll and pages that don't have the same content
+   width — switching sections never nudges the layout sideways. */
+.page-scroll {
+  height: 100%;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+/* Some pages (Settings, Manage Admins) bring their own full-height scroller.
+   Hand the gutter to that inner element instead of reserving it twice. */
+.page-scroll:has(> .h-full.overflow-y-auto) {
+  overflow-y: hidden;
+  scrollbar-gutter: auto;
+}
+.page-scroll > .h-full.overflow-y-auto {
+  scrollbar-gutter: stable;
+}
+
+/* Sidebar nav scrolls on its own on short screens, but without a visible
+   scrollbar: one appearing would steal width from every item and break the
+   active tab's join with the content area. Wheel, touch and keyboard
+   focus still scroll it. */
+.sidebar-nav {
+  scrollbar-width: none;
+  overscroll-behavior: contain;
+}
+.sidebar-nav::-webkit-scrollbar {
+  display: none;
+}
+/* Nav items span to the sidebar's clipped edge, so draw the keyboard ring
+   inside the item, in white against the navy. */
+.sidebar-nav button:focus-visible {
+  outline-color: #FFFFFF !important;
+  outline-offset: -2px !important;
 }
 
 @keyframes drift {
@@ -83,6 +134,18 @@
 }
 .animate-drift-slower {
   animation: drift 13s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate-reverse;
+}
+
+/* Login backdrop drift. Applied permanently to every stacked slide (never
+   toggled with the active one), so the zoom is continuous and the crossfade
+   is opacity-only. Transform + opacity keep it on the compositor. */
+@keyframes login-bg-drift {
+  from { transform: scale(1.02) translate3d(0, 0, 0); }
+  to   { transform: scale(1.1) translate3d(-1.5%, -1%, 0); }
+}
+.login-bg-slide {
+  animation: login-bg-drift 24s ease-in-out infinite alternate;
+  backface-visibility: hidden;
 }
 
 @keyframes float-y {
@@ -133,7 +196,8 @@
   .animate-float,
   .animate-pop-in,
   .animate-spin-slow,
-  .animate-dot-pulse {
+  .animate-dot-pulse,
+  .login-bg-slide {
     animation: none !important;
   }
 }
@@ -258,3 +322,88 @@
     animation: none !important;
   }
 }
+
+/* One body layout for every form popup: 16px under the header, 24px at the
+   sides and bottom, 16px between field groups, 6px between a label and its
+   field. Grid rows inside keep a 16px gap. */
+.kna-form-body {
+  padding: 16px 24px 24px !important;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.kna-form-body > * { margin-top: 0 !important; margin-bottom: 0 !important; }
+.kna-form-body label { display: block; margin-bottom: 6px !important; }
+.kna-form-body .grid { gap: 16px !important; }
+/* The footer under a form body always has breathing room above it. */
+.kna-form-footer { padding: 16px 24px 24px !important; }
+
+/* Inline validation (components/FormValidation.jsx): an invalid field gets a
+   red border and a faint red fill; the message sits right under it. */
+input[aria-invalid="true"],
+textarea[aria-invalid="true"],
+button.kna-select[aria-invalid="true"] {
+  border-color: #F43F5E !important;
+  background-color: #FFF7F8 !important;
+}
+input[aria-invalid="true"]:focus,
+textarea[aria-invalid="true"]:focus,
+button.kna-select[aria-invalid="true"]:focus {
+  box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.14) !important;
+}
+
+/* One cell padding for every data table: 16px between columns, 24px at the
+   table's left and right edges, and the Actions column centred. */
+.kna-table th, .kna-table td { padding-left: 16px !important; padding-right: 16px !important; }
+.kna-table th:first-child, .kna-table td:first-child { padding-left: 24px !important; }
+.kna-table th:last-child, .kna-table td:last-child { padding-right: 24px !important; }
+.kna-table td[colspan] { padding-left: 0 !important; padding-right: 0 !important; }
+/* Extra breathing room between two dense neighbouring columns. */
+.kna-table .kna-gap-r { padding-right: 36px !important; }
+.kna-table .kna-gap-l { padding-left: 20px !important; }
+
+/* Segmented tabs: keyboard focus is a soft ring inside the pill, not the
+   heavy blue outline used for other controls. */
+.kna-seg-tab:focus-visible {
+  outline: 2px solid rgba(59, 80, 223, 0.35) !important;
+  outline-offset: -2px !important;
+}
+
+/* ── Brand loader (components/BrandLoader.jsx) ─────────────────────────────
+   Indigo #3B50DF disc (breathing 1 → 1.04, ~2s) with a soft glow, the white
+   logo drawing itself once (~0.8s), and a comet arc orbiting it: one turn
+   every 1.35s while its tail stretches and shrinks over 2.7s. Only transform,
+   opacity and stroke-dash animate, so it stays on the compositor. */
+.kna-bl-stage { position: relative; display: grid; place-items: center; }
+.kna-bl-disc,
+.kna-bl-glow {
+  position: absolute; left: 50%; top: 50%;
+  width: 120px; height: 120px; margin: -60px 0 0 -60px;
+  border-radius: 9999px; background: #3B50DF;
+}
+.kna-bl-disc { display: grid; place-items: center; animation: kna-bl-breathe 2s ease-in-out infinite; }
+.kna-bl-glow { filter: blur(18px); opacity: 0.5; animation: kna-bl-glow 2s ease-in-out infinite; }
+.kna-bl-logo { width: 55%; height: 55%; overflow: visible; }
+.kna-bl-logo path { stroke-dasharray: 1; stroke-dashoffset: 1; animation: kna-bl-draw 0.8s cubic-bezier(0.45, 0, 0.2, 1) 0.1s forwards; }
+.kna-bl-no-intro .kna-bl-logo path { animation: none; stroke-dashoffset: 0; }
+.kna-bl-orbit { position: absolute; inset: 0; overflow: visible; }
+.kna-bl-spin { transform-origin: 84px 84px; animation: kna-bl-spin 1.35s linear infinite; }
+.kna-bl-tail { stroke-dasharray: 2 452.4; animation: kna-bl-stretch 2.7s ease-in-out infinite; }
+
+@keyframes kna-bl-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.04); } }
+@keyframes kna-bl-glow { 0%, 100% { opacity: 0.5; transform: scale(1); } 50% { opacity: 0.32; transform: scale(1.08); } }
+@keyframes kna-bl-draw { to { stroke-dashoffset: 0; } }
+@keyframes kna-bl-spin { to { transform: rotate(360deg); } }
+/* Tail length along the ring (circumference 452.4): a dot → ~75° → a dot. */
+@keyframes kna-bl-stretch {
+  0%, 100% { stroke-dasharray: 2 452.4; }
+  50% { stroke-dasharray: 94 452.4; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kna-bl-orbit { display: none; }
+  .kna-bl-logo path { animation: none; stroke-dashoffset: 0; }
+  .kna-bl-glow { animation: none; }
+  .kna-bl-disc { animation: kna-bl-fade 2.4s ease-in-out infinite; }
+}
+@keyframes kna-bl-fade { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }

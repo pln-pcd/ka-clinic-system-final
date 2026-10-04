@@ -13,7 +13,7 @@ import Chatbot from '../components/landing/Chatbot';
 import { useFadeIn } from '../components/landing/useFadeIn';
 import { GLOBAL_STYLES } from '../components/landing/constants';
 
-export default function LandingPage({ onAdminClick }) {
+export default function LandingPage() {
   const pageRef = useRef(null);
   useFadeIn(pageRef);
 
@@ -35,7 +35,7 @@ export default function LandingPage({ onAdminClick }) {
 
   return (
     <div ref={pageRef} style={{fontFamily:"'Plus Jakarta Sans', 'Outfit', sans-serif",background:'var(--bg-light)',color:'var(--text)',overflowX:'hidden',lineHeight:1.6}}>
-      <Navbar onAdminClick={onAdminClick} />
+      <Navbar />
       <HeroSection />
       <HowItWorksSection />
       <AboutSection />

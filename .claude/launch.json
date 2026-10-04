@@ -2,15 +2,14 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "landing",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "landing", "run", "dev"],
-      "port": 5175
-    },
-    {
       "name": "ka-clinic-admin",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "ka-clinic-admin", "run", "dev"],
+      "runtimeArgs": [
+        "--prefix",
+        "ka-clinic-admin",
+        "run",
+        "dev"
+      ],
       "port": 5173
     }
   ]

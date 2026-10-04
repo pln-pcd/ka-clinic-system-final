@@ -3,6 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { resetTo } from '../../utils/navigation';
+import { clinicToday } from '../../utils/patientRecord';
 import {
   addDoc,
   collection,
@@ -32,8 +33,8 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { db } from '../../config/firebase';
-import { moderateScale, scale, verticalScale } from '../../constants/scale';
+import { db } from '../../config/backend';
+import { moderateScale, scale, verticalScale } from '../../utils/scale';
 import { usePatientAuth } from '../../context/PatientAuthContext';
 import CustomAlertModal, { CustomAlertConfig } from '../../components/CustomAlertModal';
 const { width } = Dimensions.get('window');
@@ -43,6 +44,9 @@ const C = {
   redLight:   '#2563EB',
   redDeep:    '#172554',
   redFaint:   'rgba(30,58,138,0.07)',
+  // "red" above is the brand navy; errors and ended visits use a real red.
+  danger:      '#DC2626',
+  dangerFaint: 'rgba(220,38,38,0.08)',
   bg:         '#F5F7FA',
   white:      '#FFFFFF',
   border:     '#E8EDF3',
@@ -95,7 +99,7 @@ const shortKeyWithDay = (key: string) => {
 
 // ─── Available slots ──────────────────────────────────────────────────────────
 // The clinic only takes appointment bookings on Saturday and Sunday — mirrors
-// isWeekendDate() in ka-clinic-admin/src/appts.jsx so a request made here is
+// isWeekendDate() in ka-clinic-admin/src/features/appointments/AppointmentsPage.jsx so a request made here is
 // never one the Admin Dashboard's calendar would reject, and the same
 // TIME_SLOTS list the admin uses when manually booking a walk-in.
 const TIME_SLOTS = [
@@ -130,7 +134,8 @@ type FirestoreAppt = {
   date: string;
   time: string;
   type: string;
-  status: 'pending' | 'confirmed' | 'accepted' | 'done' | 'cancelled' | 'cancellation_pending';
+  status: 'pending' | 'confirmed' | 'accepted' | 'done' | 'cancelled' | 'declined' | 'cancellation_pending';
+  declinedBy?: string;
   note?: string;
   cancellationReason?: string;
   declineReason?: string;
@@ -151,14 +156,20 @@ type PatientForm = {
 };
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
-const StatusBadge = ({ status }: { status: string }) => {
-  const config = {
+// Same wording as the Admin Dashboard. A visit the clinic declined is stored
+// as cancelled with a declineReason (or declinedBy): it reads "Declined by clinic".
+const endedByClinic = (a: { status?: string; declineReason?: string; declinedBy?: string }) =>
+  a.status === 'declined' || !!a.declineReason || !!a.declinedBy;
+const isEnded = (a: { status?: string }) => a.status === 'cancelled' || a.status === 'declined';
+
+const StatusBadge = ({ status, declined = false }: { status: string; declined?: boolean }) => {
+  const config = (declined ? { bg: C.dangerFaint, color: C.danger, icon: 'close-circle-outline', label: 'Declined by clinic' } : null) ?? {
     pending:              { bg: C.orangeFaint, color: C.orange, icon: 'time-outline',            label: 'Pending'              },
-    cancellation_pending: { bg: C.orangeFaint, color: C.orange, icon: 'alert-circle-outline',   label: 'Cancellation Pending' },
+    cancellation_pending: { bg: C.orangeFaint, color: C.orange, icon: 'alert-circle-outline',   label: 'Cancellation requested' },
     confirmed:            { bg: C.greenFaint,  color: C.green,  icon: 'checkmark-circle',        label: 'Confirmed'            },
     accepted:             { bg: C.greenFaint,  color: C.green,  icon: 'checkmark-circle',        label: 'Confirmed'            },
-    done:                 { bg: C.greenFaint,  color: C.green,  icon: 'checkmark-done-circle',   label: 'Completed'            },
-    cancelled:            { bg: C.redFaint,    color: C.red,    icon: 'close-circle-outline',    label: 'Cancelled'            },
+    done:                 { bg: C.greenFaint,  color: C.green,  icon: 'checkmark-done-circle',   label: 'Done'                 },
+    cancelled:            { bg: C.dangerFaint, color: C.danger, icon: 'close-circle-outline',    label: 'Cancelled'            },
   }[status] ?? { bg: C.redFaint, color: C.muted, icon: 'help-circle-outline', label: status };
 
   return (
@@ -171,7 +182,7 @@ const StatusBadge = ({ status }: { status: string }) => {
 
 // ─── Appointment Categories ───────────────────────────────────────────────────
 const APPT_CATEGORIES = [
-  { id: 'checkup',     label: 'Check-up',    icon: 'stethoscope' },
+  { id: 'checkup',     label: 'Check-up',    icon: 'pulse-outline' },
   { id: 'vaccination', label: 'Vaccination', icon: 'medkit'      },
 ] as const;
 
@@ -191,7 +202,8 @@ export default function AppointmentsScreen() {
   const { user, mrn } = usePatientAuth();
   const insets   = useSafeAreaInsets();
   const now      = new Date();
-  const todayKey = toKey(now.getFullYear(), now.getMonth(), now.getDate());
+  // The clinic's calendar (Asia/Manila), whatever the phone's timezone.
+  const todayKey = clinicToday(now);
 
   const [viewYear,  setViewYear]  = useState(now.getFullYear());
   const [viewMonth, setViewMonth] = useState(now.getMonth());
@@ -210,6 +222,7 @@ export default function AppointmentsScreen() {
   // ── Appointment Details & Cancellation Modals ─────────────────────────────
   const [selectedApptDetail, setSelectedApptDetail] = useState<FirestoreAppt | null>(null);
   const [cancellationReasonInput, setCancellationReasonInput] = useState('');
+  const [cancelReasonError, setCancelReasonError] = useState('');
   // Android: KeyboardAvoidingView 'height' inside a translucent Modal fights
   // the window inset and jitters. Reanimated reads the keyboard natively and
   // lifts the sheet smoothly instead (same approach as chat.tsx). iOS keeps
@@ -225,13 +238,7 @@ export default function AppointmentsScreen() {
     const target = selectedApptDetail;
     if (!target) return;
     if (!cancellationReasonInput.trim()) {
-      showAlert({
-        type: 'warning',
-        title: 'Reason Required',
-        message: 'Please provide a reason for the cancellation so the clinic can review it.',
-        primaryButtonText: 'OK',
-        onPrimaryPress: hideAlert,
-      });
+      setCancelReasonError('Enter a reason so the clinic can review your request');
       return;
     }
     setSubmittingCancellation(true);
@@ -303,7 +310,9 @@ export default function AppointmentsScreen() {
       prefilledRef.current = true;
     }, (err) => console.error('Patient record prefill failed:', err));
   }, [mrn, user?.displayName]);
-  const [apptCategory,       setApptCategory]       = useState<'checkup' | 'vaccination'>('checkup');
+  // Nothing preselected: the patient picks what the visit is for.
+  const [apptCategory,       setApptCategory]       = useState<'checkup' | 'vaccination' | null>(null);
+  const [typeError,          setTypeError]          = useState('');
   const [vaccineType,        setVaccineType]        = useState<string>('');
   const [vaccineDropdownOpen,setVaccineDropdownOpen] = useState(false);
 
@@ -330,16 +339,6 @@ export default function AppointmentsScreen() {
 
   const [aptsError, setAptsError] = useState('');
 
-  // Clinic-wide maintenance switch (admin portal → Settings → System). The
-  // landing-page booking form already honours it; the app must too, otherwise
-  // "halts public appointment booking" is only half true.
-  const [maintenanceMode, setMaintenanceMode] = useState(false);
-  useEffect(() => {
-    return onSnapshot(doc(db, 'settings', 'config'), snap => {
-      setMaintenanceMode(!!snap.data()?.system?.maintenanceMode);
-    }, err => console.warn('Settings listener error:', err));
-  }, []);
-
   useEffect(() => {
     if (!user) return;
     const q = query(
@@ -362,12 +361,12 @@ export default function AppointmentsScreen() {
   }, [user]);
 
   const upcomingApts = myAppointments.filter(a =>
-    a.status !== 'cancelled' && a.date >= todayKey
+    !isEnded(a) && a.date >= todayKey
   );
   const pastApts = myAppointments.filter(a =>
     (a.status === 'confirmed' || a.status === 'accepted' || a.status === 'done') && a.date < todayKey
   );
-  const cancelledApts = myAppointments.filter(a => a.status === 'cancelled');
+  const cancelledApts = myAppointments.filter(isEnded);
 
   // Slot holds across the visible month, so the calendar can mark a weekend
   // whose every hour is gone as full rather than inviting a tap that leads to
@@ -473,13 +472,21 @@ export default function AppointmentsScreen() {
     else if (!/^[0-9+\-\s]{7,15}$/.test(patientForm.contactNumber.trim()))
                                            errors.contactNumber = 'Enter a valid contact number';
     setFormErrors(errors);
-    return Object.keys(errors).length === 0;
+    const tErr = !apptCategory ? 'Choose what the appointment is for'
+      : apptCategory === 'vaccination' && !vaccineType ? 'Choose a vaccine type' : '';
+    setTypeError(tErr);
+    return Object.keys(errors).length === 0 && !tErr;
   };
 
   // ── Open details form (called from "Request Appointment" button) ──────────
   const handleOpenDetailsForm = () => {
     if (!canConfirm) return;
+    // Each opening starts clean: no leftover choice or errors.
     setFormErrors({});
+    setTypeError('');
+    setApptCategory(null);
+    setVaccineType('');
+    setVaccineDropdownOpen(false);
     setShowDetailsForm(true);
   };
 
@@ -488,16 +495,6 @@ export default function AppointmentsScreen() {
     if (!validateForm()) return;
     if (!selectedKey || !selectedTime) return;
 
-    if (maintenanceMode) {
-      showAlert({
-        type: 'warning',
-        title: 'Booking Temporarily Unavailable',
-        message: 'The clinic has paused online appointment booking for maintenance. Please try again later or contact the clinic directly.',
-        primaryButtonText: 'OK',
-        onPrimaryPress: hideAlert,
-      });
-      return;
-    }
 
     if (!user) {
       showAlert({
@@ -530,6 +527,7 @@ export default function AppointmentsScreen() {
       return;
     }
 
+    const vaccineLabel = VACCINE_OPTIONS.find(v => v.id === vaccineType)?.label || '';
     setSaving(true);
     try {
       // Claim the hour first, inside a transaction. Whoever creates the slot doc
@@ -552,7 +550,7 @@ export default function AppointmentsScreen() {
       setShowDetailsForm(false);
       setPatientForm({ name: '', age: '', gender: '', address: '', contactNumber: '' });
       prefilledRef.current = false;
-      setApptCategory('checkup');
+      setApptCategory(null);
       setVaccineType('');
       setVaccineDropdownOpen(false);
       setShowToast(true);
@@ -570,7 +568,11 @@ export default function AppointmentsScreen() {
         contactNumber: patientForm.contactNumber.trim(),
         date:          selectedKey,
         time:          selectedTime,
-        type:          apptCategory === 'vaccination' ? `Vaccination – ${vaccineType}` : 'Check-up',
+        // Saved as the readable label ("Vaccination – Anti-Rabies (PEP)"); with
+        // no vaccine picked it is just "Vaccination", never a dangling dash.
+        type:          apptCategory === 'vaccination'
+          ? (vaccineLabel ? `Vaccination – ${vaccineLabel}` : 'Vaccination')
+          : 'Check-up',
         status:        'pending',
         // Distinguishes an in-app booking from a walk-in the clinic keyed in and
         // from the landing page's 'online' form — the dashboard groups on this.
@@ -697,9 +699,7 @@ export default function AppointmentsScreen() {
                 const isToday    = key === todayKey;
                 const isSelected = key === selectedKey;
                 const hasSlots   = isWeekendDate(key);
-                const cellDate   = new Date(viewYear, viewMonth, day); cellDate.setHours(0,0,0,0);
-                const refDate    = new Date(); refDate.setHours(0,0,0,0);
-                const isPast     = cellDate < refDate;
+                const isPast     = key < todayKey; // clinic calendar (Manila)
                 // Every hour claimed — still a clinic day, but nothing left to book.
                 const isFull     = hasSlots && (monthSlotCounts[key] || 0) >= TIME_SLOTS.length;
                 const tappable   = !isPast && hasSlots && !isFull;
@@ -748,7 +748,7 @@ export default function AppointmentsScreen() {
         {!selectedKey && (
           <View style={s.hint}>
             <Ionicons name="hand-left-outline" size={14} color={C.muted}/>
-            <Text style={s.hintTxt}>The clinic accepts appointments on Saturdays & Sundays only — tap a highlighted date to see time slots</Text>
+            <Text style={s.hintTxt}>Appointments are on Saturdays & Sundays. Weekdays (Mon–Fri) are for walk-ins, no booking needed. Tap a highlighted date to see time slots.</Text>
           </View>
         )}
 
@@ -769,7 +769,7 @@ export default function AppointmentsScreen() {
             </View>
           ) : upcomingApts.length === 0 ? (
             <View style={s.emptyCard}>
-              <Ionicons name="calendar-outline" size={22} color={C.muted}/>
+              <Ionicons name="calendar-outline" size={28} color={C.muted}/>
               <Text style={s.emptyCardTxt}>No upcoming appointments</Text>
             </View>
           ) : (
@@ -805,7 +805,7 @@ export default function AppointmentsScreen() {
                   )}
                 </View>
                 <View style={s.apptRight}>
-                  <StatusBadge status={appt.status}/>
+                  <StatusBadge status={appt.status} declined={isEnded(appt) && endedByClinic(appt)}/>
                   {appt.status === 'pending' && (
                     <TouchableOpacity style={s.cancelBtn} onPress={() => { setCancellationReasonInput(''); setSelectedApptDetail(appt); }}>
                       <Ionicons name="close" size={12} color={C.muted}/>
@@ -891,7 +891,7 @@ export default function AppointmentsScreen() {
                         <View style={[s.adminNoteBox, { backgroundColor: '#FEF2F2', borderColor: '#FECACA', borderWidth: 0.5, marginTop: 4 }]}>
                           <Ionicons name="alert-circle-outline" size={11} color={C.red}/>
                           <Text style={[s.adminNoteTxt, { color: '#B91C1C', fontWeight: '600' }]} numberOfLines={2}>
-                            {appt.declineReason ? `Declined: ${appt.declineReason}` : `Reason: ${appt.cancellationReason}`}
+                            {appt.declineReason ? `Declined by clinic: ${appt.declineReason}` : `Reason: ${appt.cancellationReason}`}
                           </Text>
                         </View>
                       ) : appt.note ? (
@@ -941,7 +941,7 @@ export default function AppointmentsScreen() {
                           activeOpacity={disabled ? 1 : 0.8}
                           disabled={disabled}
                         >
-                          {active && <LinearGradient colors={[C.navy, C.charcoal]} style={[StyleSheet.absoluteFillObject, { borderRadius: scale(14) }]}/>}
+                          {active && <LinearGradient colors={[C.navy, C.charcoal]} style={[StyleSheet.absoluteFill, { borderRadius: scale(14) }]}/>}
                           <Ionicons name={active ? 'time' : 'time-outline'} size={12} color={active ? C.white : disabled ? '#CBD5E1' : C.slate}/>
                           <Text
                             numberOfLines={1}
@@ -1033,7 +1033,7 @@ export default function AppointmentsScreen() {
                         <TouchableOpacity
                           key={cat.id}
                           style={[df.catChip, active && df.catChipActive]}
-                          onPress={() => { setApptCategory(cat.id as any); setVaccineType(''); setVaccineDropdownOpen(false); }}
+                          onPress={() => { setApptCategory(cat.id as any); setVaccineType(''); setVaccineDropdownOpen(false); setTypeError(''); }}
                           activeOpacity={0.8}
                         >
                           <Ionicons name={cat.icon as any} size={15} color={active ? C.red : '#64748B'} />
@@ -1042,6 +1042,8 @@ export default function AppointmentsScreen() {
                       );
                     })}
                   </View>
+
+                  {typeError ? <Text style={df.errorTxt}>{typeError}</Text> : null}
 
                   {/* Vaccine sub-dropdown (fully scrollable, in-flow) */}
                   {apptCategory === 'vaccination' && (
@@ -1071,7 +1073,7 @@ export default function AppointmentsScreen() {
                                 <TouchableOpacity
                                   key={v.id}
                                   style={[df.vaccineOption, sel && df.vaccineOptionActive, i < VACCINE_OPTIONS.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border }]}
-                                  onPress={() => { setVaccineType(v.id); setVaccineDropdownOpen(false); }}
+                                  onPress={() => { setVaccineType(v.id); setVaccineDropdownOpen(false); setTypeError(''); }}
                                   activeOpacity={0.8}
                                 >
                                   <View style={{ flex: 1 }}>
@@ -1261,7 +1263,7 @@ export default function AppointmentsScreen() {
       </Modal>
 
       {/* ══ APPOINTMENT DETAIL MODAL ═════════════════════════════════════════ */}
-      <Modal visible={!!selectedApptDetail} transparent animationType="fade" statusBarTranslucent onShow={() => setCancellationReasonInput('')}>
+      <Modal visible={!!selectedApptDetail} transparent animationType="fade" statusBarTranslucent onShow={() => { setCancellationReasonInput(''); setCancelReasonError(''); }}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
           <TouchableWithoutFeedback onPress={() => {
             if (cancellationReasonInput.trim()) {
@@ -1307,7 +1309,7 @@ export default function AppointmentsScreen() {
                       >
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(16) }}>
                           <Text style={{ fontSize: moderateScale(16), fontWeight: '800', color: C.charcoal }}>{selectedApptDetail.type}</Text>
-                          <StatusBadge status={selectedApptDetail.status} />
+                          <StatusBadge status={selectedApptDetail.status} declined={isEnded(selectedApptDetail) && endedByClinic(selectedApptDetail)} />
                         </View>
 
                         <View style={s.summaryCard}>
@@ -1367,14 +1369,15 @@ export default function AppointmentsScreen() {
                               Reason for Cancellation <Text style={{ color: C.red }}>*</Text>
                             </Text>
                             <TextInput
-                              style={[df.input, df.inputMulti, { minHeight: verticalScale(76) }]}
+                              style={[df.input, df.inputMulti, { minHeight: verticalScale(76) }, !!cancelReasonError && df.inputError]}
                               placeholder="e.g. Schedule conflict, illness, emergency..."
                               placeholderTextColor={C.muted}
                               multiline
                               numberOfLines={3}
                               value={cancellationReasonInput}
-                              onChangeText={setCancellationReasonInput}
+                              onChangeText={v => { setCancellationReasonInput(v); if (cancelReasonError) setCancelReasonError(''); }}
                             />
+                            {cancelReasonError ? <Text style={df.errorTxt}>{cancelReasonError}</Text> : null}
                             <Text style={{ fontSize: moderateScale(11), color: C.muted, marginTop: verticalScale(6), fontStyle: 'italic' }}>
                               Sent to the clinic for approval. The appointment stays booked until staff approve it.
                             </Text>
@@ -1388,7 +1391,7 @@ export default function AppointmentsScreen() {
                         </TouchableOpacity>
                         {(selectedApptDetail.status === 'pending' || selectedApptDetail.status === 'confirmed' || selectedApptDetail.status === 'accepted') && (
                           <TouchableOpacity
-                            style={[sm.confirmBtn, { backgroundColor: '#EF4444' }, submittingCancellation && { opacity: 0.6 }]}
+                            style={[sm.confirmBtn, { backgroundColor: '#D97706' }, submittingCancellation && { opacity: 0.6 }]}
                             onPress={handleRequestCancellation}
                             disabled={submittingCancellation}
                           >
@@ -1560,8 +1563,9 @@ const s = StyleSheet.create({
   confirmBtn:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: verticalScale(58), borderRadius: scale(18), backgroundColor: C.charcoal, shadowColor: C.charcoal, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 6 },
   confirmTxt:  { fontSize: moderateScale(15), fontWeight: '800', color: C.white, flex: 1, textAlign: 'center' },
 
-  emptyCard:    { backgroundColor: C.white, borderRadius: scale(16), padding: scale(22), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: scale(10), shadowColor: C.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
-  emptyCardTxt: { fontSize: moderateScale(13), color: C.muted, fontWeight: '500' },
+  // Centred empty/loading state: icon above one line of text, like the other tabs.
+  emptyCard:    { backgroundColor: C.white, borderRadius: scale(16), paddingVertical: verticalScale(28), paddingHorizontal: scale(22), flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: verticalScale(8), shadowColor: C.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
+  emptyCardTxt: { fontSize: moderateScale(13), color: C.muted, fontWeight: '600', textAlign: 'center' },
 
   apptCard:     { flexDirection: 'row', alignItems: 'center', backgroundColor: C.white, borderRadius: scale(18), padding: scale(14), marginBottom: verticalScale(10), shadowColor: C.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 4 },
   apptDateBox:  { width: scale(48), height: verticalScale(54), borderRadius: scale(13), backgroundColor: C.redFaint, justifyContent: 'center', alignItems: 'center', marginRight: scale(14) },
@@ -1600,8 +1604,8 @@ const df = StyleSheet.create({
   required:    { color: C.red },
   input:       { backgroundColor: C.bg, borderWidth: 1.5, borderColor: C.border, borderRadius: scale(13), paddingHorizontal: scale(14), paddingVertical: verticalScale(12), fontSize: moderateScale(14), color: C.charcoal, fontWeight: '500' },
   inputMulti:  { minHeight: verticalScale(64), textAlignVertical: 'top', paddingTop: verticalScale(12) },
-  inputError:  { borderColor: C.red, backgroundColor: 'rgba(200,16,46,0.04)' },
-  errorTxt:    { fontSize: moderateScale(11), color: C.red, fontWeight: '600', marginTop: verticalScale(4) },
+  inputError:  { borderColor: C.danger, backgroundColor: C.dangerFaint },
+  errorTxt:    { fontSize: moderateScale(11), color: C.danger, fontWeight: '600', marginTop: verticalScale(4) },
 
   genderRow:      { flexDirection: 'row', gap: scale(6) },
   genderChip:     { flex: 1, paddingVertical: verticalScale(11), borderRadius: scale(12), borderWidth: 1.5, borderColor: C.border, backgroundColor: C.bg, alignItems: 'center' },

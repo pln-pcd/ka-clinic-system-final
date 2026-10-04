@@ -7,12 +7,10 @@
 // tracker's fallback handed every service the rabies ARV schedule. Everything
 // now reads this file.
 //
-// Anchoring: most schedules count from the patient's Day 0 (the exposure or
-// registration date on their record). The paediatric series count from the
-// patient's DATE OF BIRTH instead, because "the dose at 4 months old" is a
-// fact about the child, not about when the clinic first saw them.
-
-import { addDaysToDateString } from './dates.js';
+// Anchoring: every schedule counts from the patient's Day 0 (the exposure or
+// registration date on their record). The clinic runs no infant series, so no
+// schedule depends on date of birth or an age group.
+import { addDaysToDateString, getTodayDateString } from './formatters.js';
 
 /** Calendar-month arithmetic — "1 month later" is not "30 days later". */
 export function addMonthsToDateString(dStr, months) {
@@ -65,37 +63,13 @@ const SCHEDULES = {
     ],
   },
 
-  // Childhood DTaP, counted from date of birth.
-  'Tetanus:infant': {
-    anchor: 'dob',
-    label: 'DTaP Childhood Series',
-    doses: [
-      { key: 'd1', label: '1st DTaP (2 Months)', ageMonths: 2 },
-      { key: 'd2', label: '2nd DTaP (4 Months)', ageMonths: 4 },
-      { key: 'd3', label: '3rd DTaP (6 Months)', ageMonths: 6 },
-      { key: 'd4', label: '4th DTaP (15–18 Months)', ageMonths: 15 },
-      { key: 'd5', label: '5th DTaP (4–6 Years)', ageMonths: 48 },
-    ],
-  },
-
-  // Adult pneumococcal — a single dose at the visit.
+  // Pneumococcal is adult only at this clinic: a single dose on Day 0
+  // (Prevnar 20 or Pneumovax 23).
   Pneumonia: {
     anchor: 'day0',
     label: 'Pneumococcal (Adult)',
     doses: [
       { key: 'd1', label: 'Pneumococcal Dose', day: 0 },
-    ],
-  },
-
-  // Infant PCV, counted from date of birth.
-  'Pneumonia:infant': {
-    anchor: 'dob',
-    label: 'Pneumococcal Conjugate (PCV) — Infant Series',
-    doses: [
-      { key: 'd1', label: '1st PCV (2 Months)', ageMonths: 2 },
-      { key: 'd2', label: '2nd PCV (4 Months)', ageMonths: 4 },
-      { key: 'd3', label: '3rd PCV (6 Months)', ageMonths: 6 },
-      { key: 'd4', label: 'PCV Booster (12–15 Months)', ageMonths: 12 },
     ],
   },
 };
@@ -106,53 +80,22 @@ const FALLBACK = {
   doses: [{ key: 'd1', label: 'Initial Dose', day: 0 }],
 };
 
-/** Services whose schedule depends on an adult/infant choice at intake. */
-export const AGE_GROUPED_SERVICES = ['Tetanus', 'Pneumonia'];
-
-export const isAgeGrouped = (service) => AGE_GROUPED_SERVICES.includes(service);
-
-function scheduleKey(service, ageGroup) {
-  const base = String(service || '').trim();
-  if (ageGroup === 'infant' && SCHEDULES[`${base}:infant`]) return `${base}:infant`;
-  return base;
-}
-
 /** The schedule definition itself — used by previews that only need labels. */
-export function getSchedule(service, ageGroup) {
-  return SCHEDULES[scheduleKey(service, ageGroup)] || FALLBACK;
+export function getSchedule(service) {
+  return SCHEDULES[String(service || '').trim()] || FALLBACK;
 }
 
-export function scheduleLabel(service, ageGroup) {
-  return getSchedule(service, ageGroup).label;
+export function scheduleLabel(service) {
+  return getSchedule(service).label;
 }
 
-/**
- * Resolves a schedule to real calendar dates.
- *
- * `day0` is the exposure/registration date; `dob` is required only for the
- * paediatric series. A DOB-anchored schedule with no DOB falls back to Day 0
- * anchoring so a record is never left with no schedule at all — the caller is
- * expected to require DOB at intake for those services.
- */
-export function buildScheduleDates(service, { day0, dob, ageGroup } = {}) {
-  const schedule = getSchedule(service, ageGroup);
-  const usesDob = schedule.anchor === 'dob' && !!dob;
-  const anchorDate = usesDob ? String(dob).slice(0, 10) : String(day0 || '').slice(0, 10);
-
-  return schedule.doses.map((d) => {
-    let date;
-    if (usesDob && typeof d.ageMonths === 'number') {
-      date = addMonthsToDateString(anchorDate, d.ageMonths);
-    } else if (typeof d.month === 'number') {
-      date = addMonthsToDateString(anchorDate, d.month);
-    } else if (typeof d.ageMonths === 'number') {
-      // DOB-anchored schedule without a DOB — space the visits from Day 0 so
-      // the intervals between doses are still right.
-      const first = schedule.doses[0].ageMonths || 0;
-      date = addMonthsToDateString(anchorDate, d.ageMonths - first);
-    } else {
-      date = addDaysToDateString(anchorDate, d.day || 0);
-    }
+/** Resolves a schedule to real calendar dates, counted from `day0`. */
+export function buildScheduleDates(service, { day0 } = {}) {
+  const anchorDate = String(day0 || '').slice(0, 10);
+  return getSchedule(service).doses.map((d) => {
+    const date = typeof d.month === 'number'
+      ? addMonthsToDateString(anchorDate, d.month)
+      : addDaysToDateString(anchorDate, d.day || 0);
     return { key: d.key, label: d.label, date };
   });
 }
@@ -165,8 +108,8 @@ export function buildScheduleDates(service, { day0, dob, ageGroup } = {}) {
  * never deducted a vial — inventory could not reconcile against doses given.
  * Staff tick the first session like any other.
  */
-export function buildInitialDoses(service, { day0, dob, ageGroup } = {}) {
-  return buildScheduleDates(service, { day0, dob, ageGroup }).map(({ key, label, date }) => ({
+export function buildInitialDoses(service, { day0 } = {}) {
+  return buildScheduleDates(service, { day0 }).map(({ key, label, date }) => ({
     key,
     n: label,
     label,
@@ -241,13 +184,113 @@ export function isVaccineForService(service, item) {
 }
 
 /**
- * Returns the list of inventory vaccine items valid for the specified service.
- * If no matching items exist in stock, falls back to all vaccine items so
- * clinic staff are never blocked by unusual brand names.
+ * Returns the inventory vaccine items that belong to the specified service
+ * (rabies vaccines for PEP/PrEP, tetanus biologics for Anti-Tetanus,
+ * pneumococcal vaccines for Pneumonia). No service, or no match, gives an
+ * empty list: other services' brands are never offered.
  */
 export function getEligibleVaccinesForService(service, inventoryItems = []) {
-  const vaccineCategoryItems = inventoryItems.filter(i => i.category === 'Vaccine');
-  const matched = vaccineCategoryItems.filter(i => isVaccineForService(service, i));
-  return matched.length > 0 ? matched : vaccineCategoryItems;
+  if (!service) return [];
+  return inventoryItems.filter(i => i.category === 'Vaccine' && isVaccineForService(service, i));
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+// Dose rows for a patient record (buildDoses)
+// ══════════════════════════════════════════════════════════════════════════
+// Dose rows for a patient record: the stored doses when there are any,
+// otherwise the schedule from src/lib/doseSchedules.js. Shared by the
+// Vaccination Tracker, the Dashboard and the Patients pages.
+
+// A record with no stored doses falls back to the shared schedule definitions
+// in src/lib/doseSchedules.js — the same ones registration writes from, so a
+// PrEP patient can never be handed the post-exposure series by default.
+const scheduleDatesFor = (p) => buildScheduleDates(p?.service, {
+  day0: p?.date || getTodayStr(),
+});
+
+export const getTodayStr = () => getTodayDateString();
+
+export const isOverdue = (dateStr) => {
+  if (!dateStr) return false;
+  const todayStr = getTodayStr();
+  return dateStr < todayStr;
+};
+
+export const buildDoses = (p) => {
+  const stored = p?.doses || [];
+  if (stored.length > 0) {
+    return stored.map((d, i) => {
+      const rawStatus = String(d.status || d.s || 'pending').toLowerCase();
+      let status = (rawStatus === 'done' || rawStatus === 'completed' || d.done === true)
+        ? 'done'
+        : (rawStatus === 'miss' || rawStatus === 'missed' || rawStatus === 'overdue')
+        ? 'miss'
+        : 'pending';
+
+      // Normalize date to standard YYYY-MM-DD
+      let normalizedDate = '';
+      const rawDate = d.date;
+      if (rawDate) {
+        if (typeof rawDate === 'string') {
+          normalizedDate = rawDate.includes('T') ? rawDate.split('T')[0] : rawDate;
+        } else if (rawDate?.toDate && typeof rawDate.toDate === 'function') {
+          normalizedDate = getTodayDateString(rawDate.toDate());
+        } else if (rawDate instanceof Date) {
+          normalizedDate = getTodayDateString(rawDate);
+        } else if (typeof rawDate === 'number') {
+          normalizedDate = getTodayDateString(new Date(rawDate));
+        }
+      }
+
+      const overdueFlag = status === 'pending' && isOverdue(normalizedDate);
+      if (overdueFlag) status = 'miss';
+      const label = d.n || d.label || d.dose || d.name || `Dose ${i + 1}`;
+      const doseBrand = d.brand || (status === 'done' ? (d.vaccineBrand || p?.vaccineBrand || '') : '');
+      return {
+        key:        d.key || `d${i + 1}`,
+        label,
+        n:          label,
+        dose:       label,
+        date:       normalizedDate || null,
+        status,
+        s:          status,
+        note:       d.note || '',
+        brand:      doseBrand,
+        autoMissed: overdueFlag && status !== 'done',
+      };
+    });
+  }
+
+  // Derive registration date accurately: never fallback to today if record has createdAt or no date!
+  let regDate = p?.date || p?.regDate || '';
+  if (!regDate && p?.createdAt) {
+    if (typeof p.createdAt === 'object' && p.createdAt?.toDate) {
+      regDate = getTodayDateString(p.createdAt.toDate());
+    } else if (typeof p.createdAt === 'number') {
+      regDate = getTodayDateString(new Date(p.createdAt));
+    } else if (typeof p.createdAt === 'string') {
+      regDate = p.createdAt.split('T')[0];
+    }
+  }
+
+  // If patient has absolutely no registration date or creation timestamp, do not invent doses!
+  if (!regDate) {
+    return [];
+  }
+  if (typeof regDate === 'string' && regDate.includes('T')) {
+    regDate = regDate.split('T')[0];
+  }
+
+  return scheduleDatesFor({ ...p, date: regDate }).map(s => {
+    const overdueFlag = isOverdue(s.date);
+    return {
+      key:        s.key,
+      label:      s.label,
+      date:       s.date,
+      status:     overdueFlag ? 'miss' : 'pending',
+      note:       '',
+      brand:      '',
+      autoMissed: overdueFlag,
+    };
+  });
+};

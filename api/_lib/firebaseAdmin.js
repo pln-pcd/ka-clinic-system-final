@@ -16,9 +16,17 @@ function loadServiceAccount() {
   return JSON.parse(json);
 }
 
+// Local Firebase Emulator: when FIRESTORE_EMULATOR_HOST is set the Admin SDK
+// talks to the emulator (it reads that variable, and FIREBASE_AUTH_EMULATOR_HOST,
+// by itself). No service account is used, and the project id is the
+// emulator-only demo project, so nothing here can reach the live project.
+export const USING_EMULATOR = Boolean(process.env.FIRESTORE_EMULATOR_HOST);
+export const EMULATOR_PROJECT_ID = process.env.FIREBASE_EMULATOR_PROJECT_ID || 'demo-ka-clinic';
+
 function getAdminApp() {
   const existing = getApps();
   if (existing.length) return existing[0];
+  if (USING_EMULATOR) return initializeApp({ projectId: EMULATOR_PROJECT_ID });
   return initializeApp({
     credential: cert(loadServiceAccount()),
     projectId: process.env.FIREBASE_PROJECT_ID,

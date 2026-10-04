@@ -17,7 +17,7 @@
 //     the server and signed out if this device is not trusted.
 import type { User } from 'firebase/auth';
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { auth, checkLoginTrust, onAuthStateChanged, resolveMRNForUser, signOut } from '../config/firebase';
+import { auth, checkLoginTrust, onAuthStateChanged, resolveMRNForUser, signOut } from '../config/backend';
 import { getKeepSignedIn } from '../config/appPrefs';
 import { clearThisDeviceSession, registerThisDevice, watchOwnSession } from '../config/deviceSessions';
 

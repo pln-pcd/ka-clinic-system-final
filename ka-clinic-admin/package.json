@@ -5,12 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:emulator": "vite --mode emulator --host",
     "build": "vite build",
     "preview": "vite preview",
-    "check-smtp": "node --env-file=../.env ../scripts/check-smtp-usage.mjs"
+    "check-smtp": "node --env-file=../.env ../scripts/admin-tools.mjs check-smtp"
   },
   "dependencies": {
-    "firebase": "^10.14.1",
+    "firebase": "^12.19.0",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "lucide-react": "^0.263.1",
@@ -23,7 +24,6 @@
     "@types/react-dom": "^18.2.17",
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.16",
-    "firebase-admin": "^13.10.0",
     "postcss": "^8.4.32",
     "tailwindcss": "^3.3.6",
     "vite": "^7.3.1"

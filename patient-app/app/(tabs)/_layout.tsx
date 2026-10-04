@@ -1,13 +1,14 @@
 // KNAPROTOTYPE/app/(tabs)/_layout.tsx
-import * as Notifications from 'expo-notifications';
+import type { NotificationResponse } from 'expo-notifications';
 import { Tabs, useRouter } from 'expo-router';
 import { AppState } from 'react-native';
 import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import React, { useEffect, useRef, useState } from 'react';
 import CustomAlertModal, { CustomAlertConfig } from '../../components/CustomAlertModal';
-import { db } from '../../config/firebase';
+import { db } from '../../config/backend';
 import {
   acknowledgeNotification,
+  Notifications,
   registerForPushNotifications,
   setupNotificationChannelAsync,
 } from '../../config/notifications';
@@ -46,7 +47,8 @@ export default function TabsLayout() {
   // Tapping a notification in the tray opens the screen it is about. Also
   // covers a tap that cold-started the app from a killed state.
   useEffect(() => {
-    const open = (response: Notifications.NotificationResponse | null) => {
+    if (!Notifications) return undefined; // Expo Go on Android: no notifications module
+    const open = (response: NotificationResponse | null) => {
       const data: any = response?.notification.request.content.data || {};
       if (data.screen === 'appt' || data.appointmentId) router.navigate('/appt');
       else router.navigate('/');
@@ -142,3 +144,6 @@ export default function TabsLayout() {
     </>
   );
 }
+
+// A crash shows a full-screen "Something went wrong" with Try again.
+export { default as ErrorBoundary } from '../../components/ErrorScreen';

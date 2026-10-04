@@ -2,7 +2,7 @@ import { db } from './_lib/firebaseAdmin.js';
 
 // Shared K&A Health Assistant engine — single backend implementation used by
 // both the landing page chatbot (ka-clinic-admin/src/geminiService.js) and
-// the patient app chatbot (patient-app/app/services/chatbot.ts), so both
+// the patient app chatbot (patient-app/services/chatbot.ts), so both
 // give identical, guardrailed answers. Moved here (server-side) from the
 // old ka-clinic-admin/src/geminiService.js so the Gemini API key never ships
 // in a client bundle.
@@ -24,7 +24,7 @@ Categorize every incoming user message into exactly one of three categories and 
 
 CATEGORY 1 — GENERAL CLINIC INFORMATION (answer directly)
 Scope: clinic operating hours, clinic address/directions, appointment booking steps, walk-in schedules,
-accepted payment methods, general descriptions of available clinic services, vaccine pricing and packages,
+general descriptions of available clinic services, vaccine pricing and packages,
 and using the patient app or website (tabs, records, account and login help).
 Action: give a clear, polite, concise, direct answer using ONLY the verified clinic knowledge below. Do not guess.
 
@@ -35,7 +35,7 @@ Action: do not answer any part of it, do not summarize, do not caveat, do not of
 "That is a clinical question, so I will pass it to K&A Clinic staff rather than answer it myself."
 
 CATEGORY 3 — OUT-OF-SCOPE, INAPPROPRIATE OR UNRELATED (polite rejection only)
-Scope: anything NOT about K&A Clinic's services or operations — general knowledge, trivia, casual small talk,
+Scope: anything NOT about K&A Clinic's services or operations, and questions about payment methods (GCash, cards, cash, installments) — general knowledge, trivia, casual small talk,
 jokes, trolling, illicit substances, sales of items the clinic does not provide, criminal behavior, anything outside the clinic helpdesk.
 Action: reply with exactly:
 "That request is outside what I can help with — I am only able to assist with K&A Clinic information such as hours, location, appointments, services, and pricing."
@@ -49,8 +49,7 @@ VERIFIED CLINIC KNOWLEDGE:
 • Address: San Juan St., Libon, Albay
 • Booking: use the "Appts" tab in the app, or the "Book Appointment" button on the website.
 • Booking slots: Saturdays & Sundays only, one patient per hour slot. Reschedule or cancel from the "Appts" tab; a cancellation request is reviewed by staff.
-• Services: anti-rabies post-exposure prophylaxis (PEP) sessions, anti-tetanus, rabies immunoglobulin, and pneumonia vaccination. Describe services only in general terms; never advise which one a person needs.
-• Payment: settled at the clinic front desk on the day of the visit. If asked about a specific payment method, say to confirm accepted options with the front desk.
+• Services: anti-rabies post-exposure prophylaxis (PEP) sessions, anti-tetanus, rabies immunoglobulin, and pneumonia vaccination (adults only, a single dose). These are the only services; for any other vaccine, say the clinic does not offer it and suggest asking staff. Describe services only in general terms; never advise which one a person needs.
 
 📱 Patient App & Account:
 • Sign in with the Medical Record Number (MRN) given by the clinic and your password. The email on your clinic record is used for verification codes.
@@ -62,12 +61,11 @@ VERIFIED CLINIC KNOWLEDGE:
 💉 Vaccine Pricing & Packages:
 • PEP Category 2 (with Anti-Tetanus): ₱1,000 for the 1st session, and ₱800 for each of the next 3 sessions.
 • PEP Category 3: ₱4,500 for 4 sessions (complete package includes Anti-Tetanus and IRIG / Rabies Immunoglobulin).
-• Pneumonia Vaccine: ₱4,500.
-
-IMPORTANT NOTE ON HEPATITIS:
-• K&A Clinic is NO LONGER catering or offering Hepatitis vaccines. If asked about Hepatitis, state clearly that the clinic no longer offers Hepatitis vaccination.
+• Pneumonia Vaccine (adults, single dose): ₱4,500.
 
 TONE & FORMATTING:
+• Answer only the latest message. Do not repeat or summarize earlier answers from the conversation, and do not re-introduce yourself.
+• Only greet when the user's message is itself a greeting.
 • Bold key headings, dates, services, and important terms using standard markdown double asterisks **like this**.
 • Never use single asterisks (*word*), raw asterisks, or markdown heading hashes (#).
 • Use clean bullet points (•) for itemized lists.
@@ -162,7 +160,9 @@ const OUT_OF_SCOPE_PATTERNS = [
 // Word-boundary anchored: a plain includes('rate') matched "operate", '800'
 // matched phone numbers, 'fee' matched "coffee".
 const PRICING_RE = /\b(price|prices|pricing|cost|costs|fee|fees|rate|rates|how\s+much|magkano|payment|package|packages|bayad|pesos?|presyo|₱)\b|₱/;
-const HEPATITIS_RE = /\b(hepatitis|hepa)\b/;
+// How to pay (GCash, cards, cash, installments) is out of scope and refused.
+// Checked before PRICING_RE, so "how much" questions still get prices.
+const PAYMENT_METHOD_RE = /\b(gcash|g-cash|maya|paymaya|credit\s+cards?|debit\s+cards?|cards?|cash|installments?|e-?wallets?|bank\s+transfer|pay\s+(with|using|by|via|through|in)|payment\s+(methods?|options?|modes?)|mode\s+of\s+payment)\b/;
 const GREETING_RE = /^(hi|hello|hey|good\s*(morning|afternoon|evening|day)|greetings?|kumusta|kamusta|howdy|sup|yo)\b/i;
 // Any sign the user is asking about times/slots/booking on some day. Paired
 // with a resolved date, this routes to the live Firestore availability reply.
@@ -439,8 +439,11 @@ function classifyMessage(text) {
   const q = (text || '').toLowerCase().trim();
   if (!q) return 'in_scope';
 
-  // Questions about prices/cost or hepatitis availability are in-scope logistics.
-  if (PRICING_RE.test(q) || HEPATITIS_RE.test(q)) return 'in_scope';
+  // Payment methods are out of scope (refused, no staff hand-off).
+  if (PAYMENT_METHOD_RE.test(q)) return 'out_of_scope';
+
+  // Questions about prices/cost are in-scope logistics.
+  if (PRICING_RE.test(q)) return 'in_scope';
 
   // Available appointment queries and greetings are in-scope logistics.
   if (APPT_AVAILABILITY_RE.test(q) || GREETING_RE.test(q)) return 'in_scope';
@@ -458,10 +461,12 @@ function classifyMessage(text) {
 
   if (NON_CLINICAL_PATTERNS.some(re => re.test(q))) return 'in_scope';
 
+  // Unrelated topics are checked before the bare-date rule, so "what is the
+  // weather tomorrow?" is refused instead of being answered with slot times.
+  if (OUT_OF_SCOPE_PATTERNS.some(re => re.test(q))) return 'out_of_scope';
+
   // A bare date ("Sept 27?", "27 September") is a scheduling question here.
   if (extractDate(q, manilaNow().iso)) return 'in_scope';
-
-  if (OUT_OF_SCOPE_PATTERNS.some(re => re.test(q))) return 'out_of_scope';
 
   // Unrecognized: nothing clinical matched, so it is not a staff matter. Staff
   // hand-off is reserved for rabies/medical messages; everything else the bot
@@ -532,6 +537,40 @@ const MODEL_NON_ANSWER_PATTERNS = [
 ];
 
 const isModelOutOfScope = (reply) => MODEL_OUT_OF_SCOPE_RE.test(reply || '');
+
+// Conversation history as Gemini expects it: roles alternate, it starts with
+// a user turn, and a turn sent twice in a row (a double-tapped Send) is kept
+// once. A duplicated turn in the history is what made the model restate an
+// earlier answer inside a new one.
+function cleanHistory(history) {
+  const turns = [];
+  for (const m of history.slice(-20)) {
+    const role = m?.role === 'user' ? 'user' : 'model';
+    const text = String(m?.text || m?.html || '').trim();
+    if (!text) continue;
+    const last = turns[turns.length - 1];
+    if (last && last.role === role) {
+      if (last.text === text) continue;         // exact repeat: drop it
+      last.text = `${last.text}\n\n${text}`;    // same speaker twice: merge
+      continue;
+    }
+    turns.push({ role, text });
+  }
+  while (turns.length && turns[0].role !== 'user') turns.shift();
+  return turns;
+}
+
+// Last line of defense: a reply never shows the same paragraph twice.
+function dedupeParagraphs(text) {
+  const seen = new Set();
+  return String(text).split(/\n{2,}/).filter(p => {
+    const key = p.trim().toLowerCase().replace(/\s+/g, ' ');
+    if (!key) return false;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).join('\n\n');
+}
 const isModelNonAnswer = (reply) => !isModelOutOfScope(reply) && MODEL_NON_ANSWER_PATTERNS.some(re => re.test(reply || ''));
 
 // Keyword fallback for when Gemini is unavailable. Only ever reached for
@@ -583,8 +622,7 @@ function getFallbackReply(text) {
     return '💉 **K&A Clinic Vaccine Pricing:**\n' +
       '• **PEP Category 2 (with Anti-Tetanus):** ₱1,000 for the 1st session, and ₱800 for each of the next 3 sessions.\n' +
       '• **PEP Category 3:** ₱4,500 for 4 sessions (complete package includes Anti-Tetanus and IRIG / Rabies Immunoglobulin).\n' +
-      '• **Pneumonia Vaccine:** ₱4,500.\n\n' +
-      'Notice: K&A Clinic is no longer catering or offering Hepatitis vaccines.';
+      '• **Pneumonia Vaccine (adults, single dose):** ₱4,500.';
   }
 
   if (SERVICES_RE.test(q)) {
@@ -592,8 +630,7 @@ function getFallbackReply(text) {
       '• **Anti-Rabies Post-Exposure Prophylaxis (PEP):** Active immunization course for animal bite/scratch exposures.\n' +
       '• **Anti-Tetanus Immunization:** Protection against tetanus wound infection.\n' +
       '• **Rabies Immunoglobulin (RIG / IRIG):** Immediate passive antibody protection for high-risk exposures.\n' +
-      '• **Pneumonia Vaccine:** Available for general respiratory protection (₱4,500).\n\n' +
-      '⚠️ **Notice:** K&A Clinic is **no longer offering Hepatitis vaccines**.\n\n' +
+      '• **Pneumonia Vaccine:** For adults, a single dose (₱4,500).\n\n' +
       'For package pricing, ask "How much are the vaccines?" or tap the **Appts** tab to schedule your visit.';
   }
 
@@ -618,10 +655,6 @@ function getFallbackReply(text) {
       '• Open the **Records** tab in the patient app to view your official immunization log.\n' +
       '• Tap on the **Vaccination Record Card** to flip between the front and back views in 3D.\n' +
       '• Tap **Export Card** to save an official digital image directly to your photo gallery.';
-  }
-
-  if (HEPATITIS_RE.test(q)) {
-    return 'Notice: K&A Clinic is no longer catering or offering Hepatitis vaccines.';
   }
 
   return GENERIC_FALLBACK_REPLY;
@@ -705,14 +738,18 @@ export default async function handler(req, res) {
     const modelName = process.env.GEMINI_MODEL || process.env.VITE_GEMINI_MODEL || 'gemini-3.5-flash-lite';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
+    // The instructions go in systemInstruction, not in a user turn. Sent as
+    // the first user message each time, the model treated every request as a
+    // new conversation and opened replies with a fresh greeting and intro.
+    const turns = cleanHistory(history);
+    if (turns.length && turns[turns.length - 1].role === 'user') turns.pop();
     const contents = [
-      { role: 'user', parts: [{ text: CLINIC_SYSTEM_INSTRUCTION + (apiKey ? await buildLiveContext(prompt, history) : '') }] },
-      ...history.slice(-20).map(m => ({
-        role: m.role === 'user' ? 'user' : 'model',
-        parts: [{ text: m.text || m.html || '' }],
-      })),
+      ...turns.map(t => ({ role: t.role, parts: [{ text: t.text }] })),
       { role: 'user', parts: [{ text: prompt }] },
     ];
+    const systemInstruction = {
+      parts: [{ text: CLINIC_SYSTEM_INSTRUCTION + (apiKey ? await buildLiveContext(prompt, history) : '') }],
+    };
 
     // Visibility into which path produced the reply — Gemini vs. the
     // keyword fallback — and, on fallback, exactly why: a 429 (free-tier
@@ -730,13 +767,18 @@ export default async function handler(req, res) {
       const geminiRes = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents }),
+        body: JSON.stringify({ systemInstruction, contents }),
       });
       if (geminiRes.ok) {
         const data = await geminiRes.json();
-        const candidate = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (candidate) {
-          text = candidate.trim();
+        // Join every text part (thinking models can split a reply), skipping
+        // any internal "thought" parts, then drop repeated paragraphs.
+        const candidate = (data.candidates?.[0]?.content?.parts || [])
+          .filter(p => typeof p.text === 'string' && !p.thought)
+          .map(p => p.text)
+          .join('');
+        if (candidate.trim()) {
+          text = dedupeParagraphs(candidate.trim());
           source = 'gemini';
         } else {
           fallbackReason = 'empty_response';

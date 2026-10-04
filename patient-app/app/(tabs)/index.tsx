@@ -33,7 +33,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { formatDoseDate } from '../../config/dates';
+import { formatDoseDate, protocolLabel as buildProtocolLabel, serviceCopy, EMPTY, doseStatus, isPepService, clinicToday, displayPatientId, doseBrand, doseState, exposureCategory, splitName } from '../../utils/patientRecord';
 import Animated, {
   Easing,
   interpolate,
@@ -41,17 +41,17 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import { saveImageToGallery } from '../../config/saveImage';
+import { saveImageToGallery } from '../../utils/saveImage';
 import ViewShot from 'react-native-view-shot';
-import { db } from '../../config/firebase';
+import { db } from '../../config/backend';
 import {
   acknowledgeNotification,
   ensureNotificationPermission,
   registerForPushNotifications,
 } from '../../config/notifications';
 import { usePatientAuth } from '../../context/PatientAuthContext';
-import { moderateScale, scale, verticalScale } from '../../constants/scale';
-import { protocolLabel as buildProtocolLabel, serviceCopy } from '../../constants/vaccineTypes';
+import { moderateScale, scale, verticalScale } from '../../utils/scale';
+import BrandLoader from '../../components/BrandLoader';
 import CustomAlertModal, { CustomAlertConfig } from '../../components/CustomAlertModal';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -108,7 +108,7 @@ type ClinicNotification = {
 
 // Subset of the `appointments` doc this screen needs to announce a decision.
 // The Admin Dashboard writes 'confirmed' (and 'accepted' as a legacy alias)
-// from ka-clinic-admin/src/appts.jsx handleQuickAction.
+// from ka-clinic-admin/src/features/appointments/AppointmentsPage.jsx handleQuickAction.
 type ApptUpdate = {
   id: string;
   date: string;
@@ -135,24 +135,16 @@ function formatApptDate(ds?: string | null): string {
   return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
-const DEFAULT_RECORD_DOSES = [
-  { id: 'd1', label: '1st Dose (Day 0)', vaccineBrand: 'Speeda ARV (Lot #2026-08A)', dosage: '0.5 mL (IM)', date: '08/04/26', provider: 'K&A Main Clinic / RN S. Santos' },
-  { id: 'd2', label: '2nd Dose (Day 3)', vaccineBrand: 'Speeda ARV (Lot #2026-08A)', dosage: '0.5 mL (IM)', date: '08/07/26', provider: 'K&A Main Clinic / RN S. Santos' },
-  { id: 'd3', label: '3rd Dose (Day 7)', vaccineBrand: 'Speeda ARV (Lot #2026-08A)', dosage: '0.5 mL (IM)', date: '08/11/26', provider: 'K&A Main Clinic / RN S. Santos' },
-  { id: 'd4', label: '4th Dose (Day 14)', vaccineBrand: 'Speeda ARV (Lot #2026-08A)', dosage: '0.5 mL (IM)', date: '08/18/26', provider: 'K&A Main Clinic / RN' },
-  { id: 'd5', label: 'RIG (Immunoglobulin)', vaccineBrand: 'ERIG (Equine Rabies)', dosage: '20 IU/kg (Infiltration)', date: '08/04/26', provider: 'K&A Emergency Unit' },
-];
-
-// Guests get the standard PEP schedule's shape — dose labels only, no brand,
+// Guests get the standard PEP schedule's shape (Day 0, 3, 7, 28, the same
+// labels the dashboard generates) — dose labels only, no brand,
 // dosage, lot or date — so the card and tracker show the real row structure
 // while making it obvious nothing has been administered yet. `blankRow: true`
 // tells the renderers to print '—' instead of falling back to sample values.
 const GUEST_PLACEHOLDER_DOSES = [
-  { id: 'g1', label: '1st Dose (Day 0)',    done: false, blankRow: true },
-  { id: 'g2', label: '2nd Dose (Day 3)',    done: false, blankRow: true },
-  { id: 'g3', label: '3rd Dose (Day 7)',    done: false, blankRow: true },
-  { id: 'g4', label: '4th Dose (Day 14)',   done: false, blankRow: true },
-  { id: 'g5', label: 'RIG (Immunoglobulin)', done: false, blankRow: true },
+  { id: 'g1', label: 'Session 1 (Day 0)',  done: false, blankRow: true },
+  { id: 'g2', label: 'Session 2 (Day 3)',  done: false, blankRow: true },
+  { id: 'g3', label: 'Session 3 (Day 7)',  done: false, blankRow: true },
+  { id: 'g4', label: 'Session 4 (Day 28)', done: false, blankRow: true },
 ];
 
 const NotifSwipeToDeleteRow = ({ children, onDelete }: { children: React.ReactNode; onDelete: () => void }) => {
@@ -284,10 +276,10 @@ export default function RabiesRecoveryApp() {
   const [isFlippedState, setIsFlippedState] = useState(false);
   const [showEnlargeModal, setShowEnlargeModal] = useState(false);
   const [enlargeFlipped, setEnlargeFlipped] = useState(false);
-  const cardFrontShotRef = useRef<ViewShot>(null);
-  const cardBackShotRef = useRef<ViewShot>(null);
-  const modalCardFrontShotRef = useRef<ViewShot>(null);
-  const modalCardBackShotRef = useRef<ViewShot>(null);
+  const cardFrontShotRef = useRef<React.ComponentRef<typeof ViewShot>>(null);
+  const cardBackShotRef = useRef<React.ComponentRef<typeof ViewShot>>(null);
+  const modalCardFrontShotRef = useRef<React.ComponentRef<typeof ViewShot>>(null);
+  const modalCardBackShotRef = useRef<React.ComponentRef<typeof ViewShot>>(null);
   const [exportingCard, setExportingCard] = useState(false);
 
   const toggleCardFlip = () => {
@@ -404,7 +396,7 @@ export default function RabiesRecoveryApp() {
   }, [user?.uid, mrn]);
 
   // Reads the same `vaccinations/{mrn}` doc the Admin Dashboard's Vaccination
-  // Tracker writes to (see ka-clinic-admin/src/vaccination.jsx cycleStatus) —
+  // Tracker writes to (see ka-clinic-admin/src/features/vaccination/VaccinationTrackerPage.jsx cycleStatus) —
   // guest sessions have no MRN, so no vaccination record exists for them.
   useEffect(() => {
     if (!mrn) { setVaccineSchedule([]); setNextDoseNotif(null); setPatientRecord(null); return; }
@@ -417,9 +409,9 @@ export default function RabiesRecoveryApp() {
       if (rawDoses.length === 0) { setVaccineSchedule([]); setNextDoseNotif(null); return; }
 
       const vaccineType = serviceCopy(data.service).short;
-      const todayISO = new Date().toISOString().slice(0, 10);
+      const todayISO = clinicToday();
       setVaccineSchedule(rawDoses.map((d, i) => {
-        const rawStatus = d.status || d.s || 'pending';
+        const state = doseState(d, todayISO);
         const rawDate: string | null = d.date || null;
         return {
           id: d.key || `d${i + 1}`,
@@ -427,25 +419,26 @@ export default function RabiesRecoveryApp() {
           label: d.n || d.label || `Dose ${i + 1}`,
           date: formatDoseDate(d.date),
           rawDate,
-          done: rawStatus === 'done',
-          missed: rawStatus === 'miss' || (rawStatus !== 'done' && !!rawDate && rawDate < todayISO),
+          done: state === 'done',
+          missed: state === 'missed',
+          ...(() => { const st = doseStatus(d, todayISO); return { status: st.status, statusLabel: st.label }; })(),
           vaccineType,
         };
       }));
 
-      const next = rawDoses.find(d => (d.status || d.s) !== 'done');
+      const next = rawDoses.find(d => doseState(d, todayISO) !== 'done');
       setNextDoseNotif(next ? {
         id: next.key || 'next',
         doseLabel: next.n || next.label || 'Next Dose',
         doseDate: formatDoseDate(next.date),
         message: `Scheduled visit for ${next.n || next.label || 'your next dose'} at K&A Main Clinic.`,
-        sentAt: formatDoseDate(new Date().toISOString().slice(0, 10)),
+        sentAt: formatDoseDate(todayISO),
       } : {
         id: 'complete',
         doseLabel: 'All Doses Completed',
         doseDate: 'Completed',
         message: 'You have completed your full vaccination protocol.',
-        sentAt: formatDoseDate(new Date().toISOString().slice(0, 10)),
+        sentAt: formatDoseDate(todayISO),
       });
     }, (err) => {
       console.error('Vaccination listener error:', err);
@@ -455,7 +448,7 @@ export default function RabiesRecoveryApp() {
   // Clinic-sent follow-ups (manual "Send Follow-up" from the dashboard, and
   // the automatic due-dose sweep). Delivered as push when the app is closed;
   // this listener is what surfaces them in the in-app notification centre and
-  // carries the id the "I received this" button acknowledges.
+  // carries the id the "Got it" button acknowledges.
   useEffect(() => {
     if (!mrn) { setClinicNotifs([]); return; }
     const q = query(
@@ -603,7 +596,8 @@ export default function RabiesRecoveryApp() {
     AsyncStorage.setItem(dismissedNotifsKey, JSON.stringify(next)).catch(() => {});
   };
 
-  if (authLoading) return <View style={s.loader}><ActivityIndicator size="large" color={C.red} /></View>;
+  // Usually follows the launch loader, so the logo is already drawn.
+  if (authLoading) return <BrandLoader label="Loading…" intro={false} />;
 
   const completedDoses = vaccineSchedule.filter(d => d.done).length;
   const progress = vaccineSchedule.length > 0 ? (completedDoses / vaccineSchedule.length) * 100 : 0;
@@ -617,30 +611,40 @@ export default function RabiesRecoveryApp() {
   const displayedNotifications = notifFilter === 'unread' ? notifications.filter(n => n.unread) : notifications;
 
   // Real patient-record fields for the Vaccination Card — mirrors the exact
-  // field names ka-clinic-admin/src/patients.jsx writes to `vaccinations/{mrn}`.
+  // field names ka-clinic-admin/src/features/patients/PatientsPage.jsx writes to `vaccinations/{mrn}`.
   // Guests have no clinic record at all, so the card shows blanks rather than
   // the sample-data placeholders used while a real patient's record is loading.
   const pr = patientRecord || {};
   // Guests have no clinical record — show a dash instead of the sample-data
   // placeholder a loading real patient record would otherwise fall back to.
-  const blank = (val: any, sample: string) => val || (isGuest ? '—' : sample);
-  const catValue = String(pr.cat || '').replace(/Category\s*/i, '').trim().toUpperCase();
+  // Every field is the clinic's recorded value or "—" — never a sample value.
+  const blank = (val: any) => val || EMPTY;
+  const catValue = exposureCategory(pr.cat, pr.animal || pr.sourceOfExposure);
+  // Exposure details (date, type, animal, category) exist only on PEP records;
+  // other services hide them instead of showing dashes. Guests see the PEP
+  // card shape.
+  const showExposure = isGuest ? !pr.service : isPepService(pr.service);
+  // Rabies courses (PEP, PrEP) keep the anti-rabies card title; other services
+  // get a plain vaccination record title.
+  const svcKey = serviceCopy(pr.service).short;
+  const cardTitle = (isGuest && !pr.service) || svcKey === 'PEP' || svcKey === 'PrEP'
+    ? 'ANTI-RABIES VACCINATION RECORD CARD' : 'VACCINATION RECORD CARD';
 
-  const fullName = pr.name || (isGuest ? '' : user?.displayName || 'Dela Cruz, Juan Manuel');
-  const isCommaFormat = fullName.includes(',');
-  const nameParts = isCommaFormat ? fullName.split(',').map((str: string) => str.trim()) : fullName.trim().split(' ');
-
-  const lastNameVal = pr.lastName || (isGuest ? '—' : (isCommaFormat ? nameParts[0] : (nameParts.length > 1 ? nameParts[nameParts.length - 1] : 'Dela Cruz')));
-  const firstNameVal = pr.firstName || (isGuest ? '—' : (isCommaFormat ? nameParts[1] : nameParts[0]) || 'Juan');
-  const middleNameVal = pr.middleName || (isGuest ? '' : (nameParts.length > 2 ? nameParts[2] : 'Manuel'));
-  const miVal = middleNameVal ? middleNameVal.charAt(0).toUpperCase() + '.' : (isGuest ? '—' : 'M.');
-  const dobVal = pr.dob || (isGuest ? '—' : '04/12/1995');
-  const mrnVal = mrn ? `MRN-${mrn}` : (pr.id ? `MRN-${pr.id}` : (isGuest ? 'No MRN (Guest)' : 'MRN-2026-8842'));
-  const purposeVal = pr.service ? serviceCopy(pr.service).long : (isGuest ? '—' : '—');
-  const catVal = pr.cat ? `Category ${pr.cat}` : (catValue ? `Category ${catValue}` : (isGuest ? '—' : 'Category II (Moderate Risk)'));
-  const doseList = (Array.isArray(pr.doses) && pr.doses.length > 0)
+  const nameSplit = splitName(pr.name || (isGuest ? '' : user?.displayName || ''));
+  const lastNameVal = pr.lastName || nameSplit.last || EMPTY;
+  const firstNameVal = pr.firstName || nameSplit.first || EMPTY;
+  const middleNameVal = pr.middleName || nameSplit.middle;
+  const miVal = middleNameVal ? middleNameVal.charAt(0).toUpperCase() + '.' : EMPTY;
+  const dobVal = pr.dob ? formatDoseDate(pr.dob) : EMPTY;
+  const mrnVal = isGuest && !mrn ? 'No Patient ID (Guest)' : displayPatientId(mrn, pr);
+  const purposeVal = pr.service ? serviceCopy(pr.service).long : EMPTY;
+  const catVal = catValue ? `Category ${catValue}` : EMPTY;
+  // A real patient with no doses yet sees one empty row, never demo doses.
+  const NO_DOSES_ROW = [{ id: 'none', label: 'No doses recorded yet', blankRow: true }];
+  const doseList: any[] = (Array.isArray(pr.doses) && pr.doses.length > 0)
     ? pr.doses
-    : (vaccineSchedule.length > 0 ? vaccineSchedule : (isGuest ? GUEST_PLACEHOLDER_DOSES : DEFAULT_RECORD_DOSES));
+    : (isGuest ? GUEST_PLACEHOLDER_DOSES : NO_DOSES_ROW);
+  const today = clinicToday();
 
   // Progress tracker shows the same placeholder rows for guests, all unchecked.
   const trackerDoses: any[] = vaccineSchedule.length > 0
@@ -657,7 +661,7 @@ export default function RabiesRecoveryApp() {
         <View style={s.topMeshSection}>
           <LinearGradient
             colors={['#1E3A8A', '#0F172A']}
-            style={StyleSheet.absoluteFillObject}
+            style={StyleSheet.absoluteFill}
             start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
           />
 
@@ -733,7 +737,7 @@ export default function RabiesRecoveryApp() {
                         <Image source={require('../../assets/logo-white-nobg.png')} style={s.knAClinicLogoHeader} resizeMode="contain" />
                         <View style={{ justifyContent: 'center', alignItems: 'center' }}>
                           <Text style={s.cdcClinicHeaderTitle}>K&A ANIMAL BITE CENTER & CLINIC</Text>
-                          <Text style={s.cdcCardTitle}>ANTI-RABIES VACCINATION RECORD CARD</Text>
+                          <Text style={s.cdcCardTitle}>{cardTitle}</Text>
                           <Text style={s.cdcCardSubtext}>Official Prophylaxis & Immunization Record</Text>
                         </View>
                       </View>
@@ -773,10 +777,12 @@ export default function RabiesRecoveryApp() {
                         <Text style={s.cdcFieldLabel}>Vaccination Purpose</Text>
                         <Text style={s.cdcFieldValue}>{purposeVal}</Text>
                       </View>
-                      <View style={[s.cdcFieldBox, { flex: 1.5 }]}>
-                        <Text style={s.cdcFieldLabel}>Exposure Category</Text>
-                        <Text style={[s.cdcFieldValue, { color: MEDICAL_RED }]}>{catVal}</Text>
-                      </View>
+                      {showExposure && (
+                        <View style={[s.cdcFieldBox, { flex: 1.5 }]}>
+                          <Text style={s.cdcFieldLabel}>Exposure Category</Text>
+                          <Text style={[s.cdcFieldValue, { color: MEDICAL_RED }]}>{catVal}</Text>
+                        </View>
+                      )}
                     </View>
 
                     {/* Official Vaccination Schedule Table (3 Columns: Dose, Vaccine/Dosage, Date) */}
@@ -788,14 +794,14 @@ export default function RabiesRecoveryApp() {
                       </View>
 
                       {doseList.map((d: any, idx: number) => {
-                        const brandStr = d.vaccineBrand || d.b || pr.vaccineBrand || 'Speeda ARV';
-                        const dosageStr = d.dosage || pr.route || '0.5 mL';
-                        const lotStr = d.lot || 'Lot #2026-08A';
-                        // Guest placeholder rows carry a label but no clinical data.
-                        const vaccineCell = d.blankRow ? '—' : `${brandStr} (${dosageStr}) · ${lotStr}`;
-                        const dateCell = d.blankRow
-                          ? '—'
-                          : (d.date ? formatDoseDate(d.date) : (pr.date ? formatDoseDate(pr.date) : '08/04/26'));
+                        // Placeholder rows carry a label but no clinical data. A
+                        // real row shows only what the clinic recorded: the brand
+                        // given for that dose, plus route and lot when present.
+                        const state = doseState(d, today);
+                        const brandStr = doseBrand(d, pr, state);
+                        const extras = [d.dosage || pr.route, d.lot].filter(Boolean).join(' · ');
+                        const vaccineCell = d.blankRow || brandStr === EMPTY ? EMPTY : (extras ? `${brandStr} (${extras})` : brandStr);
+                        const dateCell = d.blankRow ? EMPTY : (d.date ? formatDoseDate(d.date) : EMPTY);
                         return (
                           <View key={d.id || d.key || idx} style={[s.cdcTableRow, idx % 2 === 1 && s.cdcTableRowAlt]}>
                             <Text style={[s.cdcTableCell, { flex: 1.1, fontWeight: '700', color: '#0F172A' }]} numberOfLines={1}>
@@ -831,45 +837,49 @@ export default function RabiesRecoveryApp() {
 
                     <View style={s.cdcRuleDivider} />
 
-                    {/* Incident & Exposure Profile Fields */}
+                    {/* Incident & Exposure Profile Fields (PEP only) */}
+                    {showExposure && (
+                    <>
                     <View style={s.cdcFieldsRow}>
                       <View style={[s.cdcFieldBox, { flex: 1 }]}>
                         <Text style={s.cdcFieldLabel}>Exposure Date</Text>
-                        <Text style={s.cdcFieldValue}>{pr.date ? formatDoseDate(pr.date) : (isGuest ? '—' : formatDoseDate(pr.date))}</Text>
+                        <Text style={s.cdcFieldValue}>{pr.date ? formatDoseDate(pr.date) : EMPTY}</Text>
                       </View>
                       <View style={[s.cdcFieldBox, { flex: 1 }]}>
                         <Text style={s.cdcFieldLabel}>Exposure Type</Text>
-                        <Text style={[s.cdcFieldValue, { color: MEDICAL_RED }]}>{blank(pr.typeOfExposure, 'Bite / Scratch')}</Text>
+                        <Text style={[s.cdcFieldValue, { color: MEDICAL_RED }]}>{blank(pr.typeOfExposure)}</Text>
                       </View>
                       <View style={[s.cdcFieldBox, { flex: 1.2 }]}>
                         <Text style={s.cdcFieldLabel}>Source Animal</Text>
-                        <Text style={s.cdcFieldValue}>{blank(pr.sourceOfExposure || pr.animal, 'Stray animal')}</Text>
+                        <Text style={s.cdcFieldValue}>{blank(pr.sourceOfExposure || pr.animal)}</Text>
                       </View>
                     </View>
                     <View style={s.cdcFieldsRow}>
                       <View style={[s.cdcFieldBox, { flex: 1 }]}>
                         <Text style={s.cdcFieldLabel}>Exposure Category</Text>
-                        <Text style={[s.cdcFieldValue, { color: MEDICAL_RED }]}>{blank(pr.category, 'Category II')}</Text>
+                        <Text style={[s.cdcFieldValue, { color: MEDICAL_RED }]}>{catVal}</Text>
                       </View>
                     </View>
+                    </>
+                    )}
 
                     {/* Patient Clinical Profile Fields */}
                     <View style={s.cdcFieldsRow}>
                       <View style={[s.cdcFieldBox, { flex: 1 }]}>
                         <Text style={s.cdcFieldLabel}>Age / Sex</Text>
-                        <Text style={s.cdcFieldValue}>{pr.age ? `${pr.age} yrs • ${pr.sex}` : (isGuest ? '—' : '21 yrs • Female')}</Text>
+                        <Text style={s.cdcFieldValue}>{pr.age ? `${pr.age} yrs • ${pr.sex || EMPTY}` : EMPTY}</Text>
                       </View>
                       <View style={[s.cdcFieldBox, { flex: 1.2 }]}>
                         <Text style={s.cdcFieldLabel}>Tetanus History</Text>
-                        <Text style={s.cdcFieldValue}>{blank(pr.lastTetanus || pr.tetanusStatus, 'Unknown')}</Text>
+                        <Text style={s.cdcFieldValue}>{blank(pr.lastTetanus || pr.tetanusStatus)}</Text>
                       </View>
                       <View style={[s.cdcFieldBox, { flex: 1.2 }]}>
                         <Text style={s.cdcFieldLabel}>Known Allergies</Text>
-                        <Text style={s.cdcFieldValue}>{blank(pr.allergies, 'None')}</Text>
+                        <Text style={s.cdcFieldValue}>{blank(pr.allergies)}</Text>
                       </View>
                       <View style={[s.cdcFieldBox, { flex: 1 }]}>
                         <Text style={s.cdcFieldLabel}>Contact Number</Text>
-                        <Text style={s.cdcFieldValue}>{blank(pr.contact, '+639074452442')}</Text>
+                        <Text style={s.cdcFieldValue}>{blank(pr.contact)}</Text>
                       </View>
                     </View>
 
@@ -877,7 +887,7 @@ export default function RabiesRecoveryApp() {
                     <View style={s.attendingNotesBox}>
                       <Text style={s.cdcFieldLabel}>Attending Physician / Clinical Protocol Notes</Text>
                       <Text style={s.attendingNotesTxt}>
-                        {blank(pr.notes || pr.clinicalNotes, `Patient started on ${vaccineCopy.short} protocol.`)}
+                        {blank(pr.notes || pr.clinicalNotes)}
                       </Text>
                     </View>
                     </ViewShot>
@@ -912,10 +922,12 @@ export default function RabiesRecoveryApp() {
                     <Text style={[s.recordsTableHeaderCell, { flex: 1.8 }]}>DETAILS</Text>
                   </View>
 
+                  {showExposure && (
+                  <>
                   <View style={s.recordsTableRow}>
                     <Text style={[s.recordsTableCellLabel, { flex: 1.2 }]}>Exposure Date</Text>
                     <Text style={[s.recordsTableCellValue, { flex: 1.8 }]}>
-                      {pr.date || pr.exposureDate ? formatDoseDate(pr.date || pr.exposureDate) : (isGuest ? '—' : '08/04/26')}
+                      {pr.date || pr.exposureDate ? formatDoseDate(pr.date || pr.exposureDate) : EMPTY}
                     </Text>
                   </View>
                   <View style={[s.recordsTableRow, s.recordsTableRowAlt]}>
@@ -924,11 +936,13 @@ export default function RabiesRecoveryApp() {
                   </View>
                   <View style={s.recordsTableRow}>
                     <Text style={[s.recordsTableCellLabel, { flex: 1.2 }]}>Biting Animal</Text>
-                    <Text style={[s.recordsTableCellValue, { flex: 1.8 }]}>{pr.animal || pr.sourceOfExposure || (isGuest ? '—' : 'Dog / Cat')}</Text>
+                    <Text style={[s.recordsTableCellValue, { flex: 1.8 }]}>{pr.animal || pr.sourceOfExposure || EMPTY}</Text>
                   </View>
+                  </>
+                  )}
                   <View style={[s.recordsTableRow, s.recordsTableRowAlt]}>
                     <Text style={[s.recordsTableCellLabel, { flex: 1.2 }]}>Known Allergies</Text>
-                    <Text style={[s.recordsTableCellValue, { flex: 1.8 }]}>{pr.allergies || (isGuest ? '—' : 'None Reported')}</Text>
+                    <Text style={[s.recordsTableCellValue, { flex: 1.8 }]}>{pr.allergies || EMPTY}</Text>
                   </View>
                   <View style={[s.recordsTableRow, { borderBottomWidth: 0 }]}>
                     <Text style={[s.recordsTableCellLabel, { flex: 1.2 }]}>Attending ABTC</Text>
@@ -955,10 +969,11 @@ export default function RabiesRecoveryApp() {
                   </View>
 
                   {doseList.map((d: any, idx: number) => {
-                    const isDone = d.done || (d.status || d.s) === 'done';
-                    const vaccineName = d.vaccineBrand || d.b || pr.vaccineBrand || (idx === 4 ? 'ERIG' : 'Speeda ARV');
-                    const dosageVal = d.dosage || pr.route || (idx === 4 ? '20 IU/kg' : '0.5 mL (IM)');
-                    const dateVal = d.date ? formatDoseDate(d.date) : (isGuest ? '—' : 'Scheduled');
+                    const state = doseState(d, today);
+                    const st = doseStatus(d, today);
+                    const vaccineName = d.blankRow ? EMPTY : doseBrand(d, pr, state);
+                    const dosageVal = d.blankRow ? EMPTY : (d.dosage || pr.route || EMPTY);
+                    const dateVal = d.date ? formatDoseDate(d.date) : EMPTY;
                     const isAlt = idx % 2 === 1;
                     const isLast = idx === doseList.length - 1;
 
@@ -977,9 +992,9 @@ export default function RabiesRecoveryApp() {
                           {dateVal}
                         </Text>
                         <View style={{ flex: 0.9, alignItems: 'center', justifyContent: 'center' }}>
-                          <View style={[s.recordsMiniBadge, isDone ? s.recordsMiniBadgeDone : s.recordsMiniBadgePending]}>
-                            <Text style={[s.recordsMiniBadgeTxt, isDone ? s.recordsMiniBadgeTxtDone : s.recordsMiniBadgeTxtPending]}>
-                              {isDone ? 'DONE' : 'PENDING'}
+                          <View style={[s.recordsMiniBadge, st.status === 'given' ? s.recordsMiniBadgeDone : st.status === 'overdue' ? s.recordsMiniBadgeMissed : st.status === 'due_today' ? s.recordsMiniBadgeToday : s.recordsMiniBadgePending]}>
+                            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={[s.recordsMiniBadgeTxt, st.status === 'given' ? s.recordsMiniBadgeTxtDone : st.status === 'overdue' ? s.recordsMiniBadgeTxtMissed : st.status === 'due_today' ? s.recordsMiniBadgeTxtToday : s.recordsMiniBadgeTxtPending]}>
+                              {d.blankRow ? EMPTY : st.label}
                             </Text>
                           </View>
                         </View>
@@ -1067,13 +1082,13 @@ export default function RabiesRecoveryApp() {
 
                     <View style={[
                       s.doseLaneBadge,
-                      d.done ? s.doseStatusBadgeDone : isNext ? s.doseStatusBadgeNext : isMissed ? s.doseStatusBadgeMissed : s.doseStatusBadgeUpcoming,
+                      d.done ? s.doseStatusBadgeDone : isMissed ? s.doseStatusBadgeMissed : d.status === 'due_today' ? s.doseStatusBadgeToday : isNext ? s.doseStatusBadgeNext : s.doseStatusBadgeUpcoming,
                     ]}>
                       <Text style={[
                         s.doseStatusText,
-                        d.done ? s.doseStatusTextDone : isNext ? s.doseStatusTextNext : isMissed ? s.doseStatusTextMissed : s.doseStatusTextUpcoming,
+                        d.done ? s.doseStatusTextDone : isMissed ? s.doseStatusTextMissed : d.status === 'due_today' ? s.doseStatusTextToday : isNext ? s.doseStatusTextNext : s.doseStatusTextUpcoming,
                       ]}>
-                        {d.done ? 'Completed' : isNext ? 'Next Up' : isMissed ? 'Overdue' : 'Upcoming'}
+                        {d.blankRow ? EMPTY : (d.statusLabel || 'Upcoming')}
                       </Text>
                     </View>
                   </View>
@@ -1180,7 +1195,7 @@ export default function RabiesRecoveryApp() {
                           n.acknowledged ? (
                             <View style={s.ackConfirmedRow}>
                               <Ionicons name="checkmark-circle" size={14} color="#059669" />
-                              <Text style={s.ackConfirmedText}>Receipt confirmed</Text>
+                              <Text style={s.ackConfirmedText}>Acknowledged</Text>
                             </View>
                           ) : (
                             <TouchableOpacity
@@ -1189,7 +1204,7 @@ export default function RabiesRecoveryApp() {
                               onPress={() => confirmReceipt(n.notificationId)}
                             >
                               <Ionicons name="checkmark" size={14} color="#FFFFFF" />
-                              <Text style={s.ackBtnText}>I received this</Text>
+                              <Text style={s.ackBtnText}>Got it</Text>
                             </TouchableOpacity>
                           )
                         )}
@@ -1243,44 +1258,48 @@ export default function RabiesRecoveryApp() {
 
                     {/* Incident & Exposure Profile Fields */}
                     <View style={{ gap: scale(3), marginTop: verticalScale(-4) }}>
+                      {showExposure && (
+                      <>
                       <View style={s.cdcFieldsRowPopup}>
                         <View style={[s.cdcFieldBox, { flex: 1 }]}>
                           <Text style={s.cdcFieldLabelPopup}>Exposure Date</Text>
-                          <Text style={s.cdcFieldValuePopup}>{pr.date ? formatDoseDate(pr.date) : (isGuest ? '—' : formatDoseDate(pr.date))}</Text>
+                          <Text style={s.cdcFieldValuePopup}>{pr.date ? formatDoseDate(pr.date) : EMPTY}</Text>
                         </View>
                         <View style={[s.cdcFieldBox, { flex: 1 }]}>
                           <Text style={s.cdcFieldLabelPopup}>Exposure Type</Text>
-                          <Text style={[s.cdcFieldValuePopup, { color: MEDICAL_RED }]}>{blank(pr.typeOfExposure, 'Bite / Scratch')}</Text>
+                          <Text style={[s.cdcFieldValuePopup, { color: MEDICAL_RED }]}>{blank(pr.typeOfExposure)}</Text>
                         </View>
                         <View style={[s.cdcFieldBox, { flex: 1.2 }]}>
                           <Text style={s.cdcFieldLabelPopup}>Source Animal</Text>
-                          <Text style={s.cdcFieldValuePopup}>{blank(pr.sourceOfExposure || pr.animal, 'Stray animal')}</Text>
+                          <Text style={s.cdcFieldValuePopup}>{blank(pr.sourceOfExposure || pr.animal)}</Text>
                         </View>
                       </View>
                       <View style={s.cdcFieldsRowPopup}>
                         <View style={[s.cdcFieldBox, { flex: 1 }]}>
                           <Text style={s.cdcFieldLabelPopup}>Exposure Category</Text>
-                          <Text style={[s.cdcFieldValuePopup, { color: MEDICAL_RED }]}>{blank(pr.category, 'Category II')}</Text>
+                          <Text style={[s.cdcFieldValuePopup, { color: MEDICAL_RED }]}>{catVal}</Text>
                         </View>
                       </View>
+                      </>
+                      )}
 
                       {/* Patient Clinical Profile Fields */}
                       <View style={s.cdcFieldsRowPopup}>
                         <View style={[s.cdcFieldBox, { flex: 1 }]}>
                           <Text style={s.cdcFieldLabelPopup}>Age / Sex</Text>
-                          <Text style={s.cdcFieldValuePopup}>{pr.age ? `${pr.age} yrs • ${pr.sex}` : (isGuest ? '—' : '21 yrs • Female')}</Text>
+                          <Text style={s.cdcFieldValuePopup}>{pr.age ? `${pr.age} yrs • ${pr.sex || EMPTY}` : EMPTY}</Text>
                         </View>
                         <View style={[s.cdcFieldBox, { flex: 1.2 }]}>
                           <Text style={s.cdcFieldLabelPopup}>Tetanus History</Text>
-                          <Text style={s.cdcFieldValuePopup}>{blank(pr.lastTetanus || pr.tetanusStatus, 'Unknown')}</Text>
+                          <Text style={s.cdcFieldValuePopup}>{blank(pr.lastTetanus || pr.tetanusStatus)}</Text>
                         </View>
                         <View style={[s.cdcFieldBox, { flex: 1.2 }]}>
                           <Text style={s.cdcFieldLabelPopup}>Known Allergies</Text>
-                          <Text style={s.cdcFieldValuePopup}>{blank(pr.allergies, 'None')}</Text>
+                          <Text style={s.cdcFieldValuePopup}>{blank(pr.allergies)}</Text>
                         </View>
                         <View style={[s.cdcFieldBox, { flex: 1 }]}>
                           <Text style={s.cdcFieldLabelPopup}>Contact Number</Text>
-                          <Text style={s.cdcFieldValuePopup}>{blank(pr.contact, '+639074452442')}</Text>
+                          <Text style={s.cdcFieldValuePopup}>{blank(pr.contact)}</Text>
                         </View>
                       </View>
                     </View>
@@ -1289,7 +1308,7 @@ export default function RabiesRecoveryApp() {
                     <View style={s.attendingNotesBox}>
                       <Text style={s.cdcFieldLabelPopup}>Attending Physician / Clinical Protocol Notes</Text>
                       <Text style={s.attendingNotesTxtPopup}>
-                        {blank(pr.notes || pr.clinicalNotes, `Patient started on ${vaccineCopy.short} protocol.`)}
+                        {blank(pr.notes || pr.clinicalNotes)}
                       </Text>
                     </View>
                   </ViewShot>
@@ -1301,7 +1320,7 @@ export default function RabiesRecoveryApp() {
                         <Image source={require('../../assets/logo-white-nobg.png')} style={s.knAClinicLogoHeaderPopup} resizeMode="contain" />
                         <View style={{ justifyContent: 'center', alignItems: 'center' }}>
                           <Text style={s.cdcClinicHeaderTitlePopup}>K&A ANIMAL BITE CENTER & CLINIC</Text>
-                          <Text style={s.cdcCardTitlePopup}>ANTI-RABIES VACCINATION RECORD CARD</Text>
+                          <Text style={s.cdcCardTitlePopup}>{cardTitle}</Text>
                           <Text style={s.cdcCardSubtextPopup}>Official Prophylaxis & Immunization Record</Text>
                         </View>
                       </View>
@@ -1336,10 +1355,12 @@ export default function RabiesRecoveryApp() {
                         <Text style={s.cdcFieldLabelPopup}>Vaccination Purpose</Text>
                         <Text style={s.cdcFieldValuePopup}>{purposeVal}</Text>
                       </View>
-                      <View style={[s.cdcFieldBox, { flex: 1.5 }]}>
-                        <Text style={s.cdcFieldLabelPopup}>Exposure Category</Text>
-                        <Text style={[s.cdcFieldValuePopup, { color: MEDICAL_RED }]}>{catVal}</Text>
-                      </View>
+                      {showExposure && (
+                        <View style={[s.cdcFieldBox, { flex: 1.5 }]}>
+                          <Text style={s.cdcFieldLabelPopup}>Exposure Category</Text>
+                          <Text style={[s.cdcFieldValuePopup, { color: MEDICAL_RED }]}>{catVal}</Text>
+                        </View>
+                      )}
                     </View>
                     <View style={s.cdcTableContainerPopup}>
                       <View style={s.cdcTableHeaderRow}>
@@ -1348,14 +1369,14 @@ export default function RabiesRecoveryApp() {
                         <Text style={[s.cdcTableCellHeaderPopup, { flex: 1.1, borderRightWidth: 0 }]}>Date</Text>
                       </View>
                       {doseList.map((d: any, idx: number) => {
-                        const brandStr = d.vaccineBrand || d.b || pr.vaccineBrand || 'Speeda ARV';
-                        const dosageStr = d.dosage || pr.route || '0.5 mL';
-                        const lotStr = d.lot || 'Lot #2026-08A';
-                        // Guest placeholder rows carry a label but no clinical data.
-                        const vaccineCell = d.blankRow ? '—' : `${brandStr} (${dosageStr}) · ${lotStr}`;
-                        const dateCell = d.blankRow
-                          ? '—'
-                          : (d.date ? formatDoseDate(d.date) : (pr.date ? formatDoseDate(pr.date) : '08/04/26'));
+                        // Placeholder rows carry a label but no clinical data. A
+                        // real row shows only what the clinic recorded: the brand
+                        // given for that dose, plus route and lot when present.
+                        const state = doseState(d, today);
+                        const brandStr = doseBrand(d, pr, state);
+                        const extras = [d.dosage || pr.route, d.lot].filter(Boolean).join(' · ');
+                        const vaccineCell = d.blankRow || brandStr === EMPTY ? EMPTY : (extras ? `${brandStr} (${extras})` : brandStr);
+                        const dateCell = d.blankRow ? EMPTY : (d.date ? formatDoseDate(d.date) : EMPTY);
                         return (
                           <View key={d.id || d.key || idx} style={[s.cdcTableRow, idx % 2 === 1 && s.cdcTableRowAlt]}>
                             <Text style={[s.cdcTableCellPopup, { flex: 1.1, fontWeight: '700', color: '#0F172A' }]} numberOfLines={1}>
@@ -2371,6 +2392,10 @@ const s = StyleSheet.create({
     backgroundColor: '#FEF2F2',
     borderColor: '#FCA5A5',
   },
+  doseStatusBadgeToday: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
+  },
   doseStatusBadgeUpcoming: {
     backgroundColor: '#F8FAFC',
     borderColor: '#E2E8F0',
@@ -2387,6 +2412,9 @@ const s = StyleSheet.create({
   },
   doseStatusTextMissed: {
     color: '#B91C1C',
+  },
+  doseStatusTextToday: {
+    color: '#B45309',
   },
   doseStatusTextUpcoming: {
     color: '#64748B',
@@ -3399,5 +3427,17 @@ const s = StyleSheet.create({
   },
   recordsMiniBadgeTxtPending: {
     color: '#3B50DF',
+  },
+  recordsMiniBadgeToday: {
+    backgroundColor: '#FFFBEB',
+  },
+  recordsMiniBadgeTxtToday: {
+    color: '#B45309',
+  },
+  recordsMiniBadgeMissed: {
+    backgroundColor: '#FEF2F2',
+  },
+  recordsMiniBadgeTxtMissed: {
+    color: '#DC2626',
   },
 });

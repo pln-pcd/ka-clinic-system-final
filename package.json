@@ -2,8 +2,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "create-manager": "node --env-file=.env scripts/create-manager.js",
-    "check-smtp": "node --env-file=.env scripts/check-smtp-usage.mjs"
+    "create-manager": "node --env-file=.env scripts/admin-tools.mjs create-manager",
+    "check-smtp": "node --env-file=.env scripts/admin-tools.mjs check-smtp",
+    "emulators": "firebase emulators:start --project demo-ka-clinic --only auth,firestore",
+    "seed:demo": "node scripts/demo/demo-data.mjs seed --emulator --project demo-ka-clinic",
+    "seed:demo:clear": "node scripts/demo/demo-data.mjs clear --emulator --project demo-ka-clinic",
+    "test:archive-clock": "node scripts/demo/test-archive-clock.mjs --emulator --project demo-ka-clinic",
+    "sweep:doses:emulator": "node scripts/run-dose-sweep.mjs --emulator --seed",
+    "sweep:doses:dry": "node --env-file=.env scripts/run-dose-sweep.mjs --dry-run"
   },
   "dependencies": {
     "firebase-admin": "^13.10.0",

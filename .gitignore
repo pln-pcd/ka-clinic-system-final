@@ -55,3 +55,14 @@ service-account*.json
 
 # Android release signing key (back it up; never commit)
 /patient-app/keystore/
+
+# Emulator switch for the dashboard (no secrets), needed by npm run dev:emulator
+!ka-clinic-admin/.env.emulator
+
+# Firebase Emulator logs
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# Local JSON backups of sample data (scripts/sample-data-reset.mjs)
+backups/

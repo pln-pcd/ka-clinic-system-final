@@ -11,8 +11,7 @@ import {
   Roboto_900Black,
 } from '@expo-google-fonts/roboto';
 import { PatientAuthProvider } from '../context/PatientAuthContext';
-import DesktopApp from '../desktop/DesktopApp';
-import MobileApp from '../mobile/MobileApp';
+import { DesktopApp, MobileApp } from '../components/AppShells';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -130,3 +129,6 @@ const webStyles: Record<string, any> = {
     boxShadow: '0 30px 70px rgba(0, 0, 0, 0.55)',
   },
 };
+
+// A crash shows a full-screen "Something went wrong" with Try again.
+export { default as ErrorBoundary } from '../components/ErrorScreen';

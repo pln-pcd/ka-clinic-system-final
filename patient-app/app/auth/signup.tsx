@@ -25,9 +25,11 @@ import {
   sendEmailOTP,
   signInAsGuest,
   verifyEmailOTP,
-} from '../../config/firebase';
+} from '../../config/backend';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { moderateScale, scale, verticalScale } from '../../constants/scale';
+import { moderateScale, scale, verticalScale } from '../../utils/scale';
+import { passwordPolicyError } from '../../utils/passwordPolicy';
+import PasswordChecklist, { PasswordMatch } from '../../components/PasswordChecklist';
 
 const { height } = Dimensions.get('window');
 const NAVY_BLUE = '#1E3A8A';
@@ -139,8 +141,9 @@ export default function PatientSignupScreen() {
       setError('Please enter a password.');
       return;
     }
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters long.');
+    const policyError = passwordPolicyError(password);
+    if (policyError) {
+      setError(policyError);
       return;
     }
     if (password !== confirmPassword) {
@@ -474,6 +477,7 @@ export default function PatientSignupScreen() {
                     <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#94A3B8" />
                   </TouchableOpacity>
                 </View>
+                <PasswordChecklist password={password} />
               </View>
 
               <View style={styles.inputWrapper}>
@@ -494,6 +498,7 @@ export default function PatientSignupScreen() {
                     <Ionicons name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#94A3B8" />
                   </TouchableOpacity>
                 </View>
+                <PasswordMatch password={password} confirm={confirmPassword} />
               </View>
 
               <TouchableOpacity
@@ -524,8 +529,8 @@ export default function PatientSignupScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
-  background: { ...StyleSheet.absoluteFillObject },
-  patternOverlay: { ...StyleSheet.absoluteFillObject, opacity: 0.5 },
+  background: { ...StyleSheet.absoluteFill },
+  patternOverlay: { ...StyleSheet.absoluteFill, opacity: 0.5 },
   bgIcon1: { position: 'absolute', top: verticalScale(30), left: -scale(25), transform: [{ rotate: '15deg' }] },
   bgIcon2: { position: 'absolute', top: height * 0.45, right: -scale(30), transform: [{ rotate: '-15deg' }] },
   bgIcon3: { position: 'absolute', bottom: verticalScale(30), left: scale(10), transform: [{ rotate: '10deg' }] },

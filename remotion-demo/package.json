@@ -1,0 +1,28 @@
+{
+  "name": "kna-remotion-demo",
+  "version": "1.0.0",
+  "description": "K&A Anti-Rabies Clinic — Remotion demo video (Part 1: Admin Web Dashboard)",
+  "remotion": {
+    "entryPoint": "./src/index.ts"
+  },
+  "scripts": {
+    "preview": "npx remotion studio src/index.ts",
+    "render:part1": "npx remotion render src/index.ts KnADemo-Part1 --output out/KnADemo_Part1.mp4 --codec h264",
+    "render:login": "npx remotion render src/index.ts Scene-AdminLoginFlow --output out/Scene_AdminLoginFlow.mp4 --codec h264",
+    "render:dashboard": "npx remotion render src/index.ts Scene-AdminHomeDashboard --output out/Scene_AdminHomeDashboard.mp4 --codec h264"
+  },
+  "dependencies": {
+    "remotion": "4.0.290",
+    "@remotion/cli": "4.0.290",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.0",
+    "typescript": "^5.4.5"
+  },
+  "allowScripts": {
+    "esbuild@0.25.0": true
+  }
+}

@@ -25,10 +25,10 @@ import {
 } from 'react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { auth, sendLoginOTP, signOut, verifyLoginOTP } from '../../config/firebase';
+import { auth, sendLoginOTP, signOut, verifyLoginOTP } from '../../config/backend';
 import { setKeepSignedIn } from '../../config/appPrefs';
 import { usePatientAuth } from '../../context/PatientAuthContext';
-import { moderateScale, scale, verticalScale } from '../../constants/scale';
+import { moderateScale, scale, verticalScale } from '../../utils/scale';
 
 const { height } = Dimensions.get('window');
 const NAVY_BLUE = '#1E3A8A';
@@ -246,14 +246,15 @@ export default function VerifyLoginOtp() {
               </Text>
             </TouchableOpacity>
 
-            <View style={styles.rememberNote}>
-              <Ionicons name={rememberDevice ? 'phone-portrait-outline' : 'lock-closed-outline'} size={14} color="#475569" />
-              <Text style={styles.rememberNoteText}>
-                {rememberDevice
-                  ? 'This device will be remembered for 30 days so you can skip this step next time.'
-                  : 'You will be asked for a code each time you sign in on this device. Tick "Keep me signed in" at login to remember it.'}
-              </Text>
-            </View>
+            {/* Only when "Keep me signed in" was ticked at login. */}
+            {rememberDevice && (
+              <View style={styles.rememberNote}>
+                <Ionicons name="phone-portrait-outline" size={14} color="#475569" />
+                <Text style={styles.rememberNoteText}>
+                  Remember this device for 30 days: you can skip this step next time.
+                </Text>
+              </View>
+            )}
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -263,8 +264,8 @@ export default function VerifyLoginOtp() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
-  background: { ...StyleSheet.absoluteFillObject },
-  patternOverlay: { ...StyleSheet.absoluteFillObject, opacity: 0.5 },
+  background: { ...StyleSheet.absoluteFill },
+  patternOverlay: { ...StyleSheet.absoluteFill, opacity: 0.5 },
   bgIcon1: { position: 'absolute', top: verticalScale(30), left: -scale(25), transform: [{ rotate: '15deg' }] },
   bgIcon2: { position: 'absolute', top: height * 0.45, right: -scale(30), transform: [{ rotate: '-15deg' }] },
   bgIcon3: { position: 'absolute', bottom: verticalScale(30), left: scale(10), transform: [{ rotate: '10deg' }] },

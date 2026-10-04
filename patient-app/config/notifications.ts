@@ -1,25 +1,34 @@
 // config/notifications.ts
 //
 // Push notification and local notification services for K&A Clinic Patient App.
-import * as Notifications from 'expo-notifications';
+import type * as NotificationsModule from 'expo-notifications';
+import { isRunningInExpoGo } from 'expo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Linking, Platform } from 'react-native';
 import Constants from 'expo-constants';
-import { API_BASE_URL } from './apiBase';
-import { auth } from './firebase';
+import { API_BASE_URL, auth } from './backend';
 
 export const ANDROID_CHANNEL_ID = 'clinic_notifications_v2';
 export const EAS_PROJECT_ID = '62297c13-8ceb-4918-9d9e-a9113cbf5acf';
 
+// Expo Go (SDK 53+) has no remote push on Android. Since SDK 57, merely
+// importing expo-notifications there throws (the library registers a push
+// token listener at load), which took down every screen that imported it.
+// So the module is loaded lazily and is null in Expo Go on Android; push and
+// local notifications work as before in development and store builds.
+const IN_EXPO_GO = Constants.executionEnvironment === 'storeClient' || isRunningInExpoGo();
+export const Notifications: typeof NotificationsModule | null =
+  Platform.OS === 'android' && IN_EXPO_GO ? null : require('expo-notifications');
+
 // Foreground notifications handler: ensures banners and sound trigger when app is open or backgrounded.
-Notifications.setNotificationHandler({
+Notifications?.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
     shouldShowBanner: true,
     shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
-    priority: Notifications.AndroidNotificationPriority.MAX,
+    priority: Notifications!.AndroidNotificationPriority.MAX,
   }),
 });
 
@@ -28,7 +37,7 @@ Notifications.setNotificationHandler({
  * Safe to call repeatedly; Android updates existing channel attributes if compatible.
  */
 export async function setupNotificationChannelAsync(): Promise<void> {
-  if (Platform.OS !== 'android') return;
+  if (Platform.OS !== 'android' || !Notifications) return;
   try {
     // Delete legacy channel if present so everything routes through v2
     await Notifications.deleteNotificationChannelAsync('appointments').catch(() => {});
@@ -56,7 +65,7 @@ export async function setupNotificationChannelAsync(): Promise<void> {
  */
 export async function ensureNotificationPermission(force = false): Promise<boolean> {
   try {
-    if (Platform.OS === 'web') return false;
+    if (Platform.OS === 'web' || !Notifications) return false;
 
     await setupNotificationChannelAsync();
 
@@ -92,7 +101,7 @@ export async function setPushEnabledByUser(uid: string, enabled: boolean): Promi
 
 /** OS-level permission only — never shows a prompt. */
 export async function hasNotificationPermission(): Promise<boolean> {
-  if (Platform.OS === 'web') return false;
+  if (Platform.OS === 'web' || !Notifications) return false;
   try {
     return (await Notifications.getPermissionsAsync()).status === 'granted';
   } catch {
@@ -105,7 +114,7 @@ export async function hasNotificationPermission(): Promise<boolean> {
  * "Don't allow" and Android/iOS stopped asking). Only Settings can fix it then.
  */
 export async function isNotificationPermissionBlocked(): Promise<boolean> {
-  if (Platform.OS === 'web') return false;
+  if (Platform.OS === 'web' || !Notifications) return false;
   try {
     const p = await Notifications.getPermissionsAsync();
     return p.status !== 'granted' && p.canAskAgain === false;
@@ -128,7 +137,7 @@ export async function presentLocalNotification(
   body: string,
   data: Record<string, unknown> = {},
 ): Promise<void> {
-  if (!(await hasNotificationPermission())) return;
+  if (!Notifications || !(await hasNotificationPermission())) return;
   if (auth.currentUser && !(await isPushEnabledByUser())) return;
   try {
     await Notifications.scheduleNotificationAsync({
@@ -153,7 +162,7 @@ export async function presentLocalNotification(
  */
 export async function scheduleDoseReminder(doseLabel: string, dueDateStr: string): Promise<void> {
   const granted = await ensureNotificationPermission();
-  if (!granted || !dueDateStr) return;
+  if (!granted || !dueDateStr || !Notifications) return;
   try {
     const doseDate = new Date(`${dueDateStr}T08:00:00`);
     if (doseDate.getTime() > Date.now()) {
@@ -195,7 +204,7 @@ export async function registerForPushNotifications(
 
   registrationInProgress = (async () => {
     try {
-      if (Platform.OS === 'web') return null;
+      if (Platform.OS === 'web' || IN_EXPO_GO) return null;
       // Switched off in Profile: don't hand the clinic a token to push to.
       if (!force && !(await isPushEnabledByUser())) return null;
       if (!API_BASE_URL) {
@@ -250,6 +259,7 @@ export async function registerForPushNotifications(
 }
 
 async function getDevicePushToken(projectId?: string): Promise<string | null> {
+  if (!Notifications) return null;
   const id =
     projectId ??
     Constants.expoConfig?.extra?.eas?.projectId ??
@@ -267,7 +277,7 @@ async function getDevicePushToken(projectId?: string): Promise<string | null> {
 export async function unregisterPushNotifications(): Promise<void> {
   cachedRegistration = null;
   try {
-    if (Platform.OS === 'web' || !API_BASE_URL) return;
+    if (Platform.OS === 'web' || IN_EXPO_GO || !API_BASE_URL) return;
     const idToken = await auth.currentUser?.getIdToken();
     if (!idToken) return;
     // getExpoPushTokenAsync needs the permission; without it this phone could

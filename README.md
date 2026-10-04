@@ -48,3 +48,65 @@ Join our community of developers creating universal apps.
 
 - [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
 - [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+
+## Demo data (local Firebase Emulator)
+
+Demo data lets you test and present the whole system without real patient data. It runs against the local Firebase Emulator only, never the live project.
+
+### Requirements
+
+Java 21 or newer and the Firebase CLI (`npx firebase` works).
+
+### Start and seed
+
+```bash
+npm run emulators            # terminal 1: Auth and Firestore emulators, UI at http://127.0.0.1:4000
+npm run seed:demo            # terminal 2: writes the demo data (safe to run again, no duplicates)
+npm run test:archive-clock   # optional: checks the restore clock, login lock and 30 day conversation deletion
+```
+
+Then run the apps against the emulator:
+
+```bash
+cd ka-clinic-admin && npm run dev:emulator    # dashboard and its local /api
+```
+
+For the patient app, set these in `patient-app/.env` and start Expo as usual:
+
+```
+EXPO_PUBLIC_USE_FIREBASE_EMULATOR=true
+EXPO_PUBLIC_FIREBASE_EMULATOR_HOST=<your computer's LAN IP>   # 10.0.2.2 on the Android emulator
+EXPO_PUBLIC_API_BASE_URL=http://<your computer's LAN IP>:5173
+```
+
+Emulator data is kept in memory and is gone when the emulators stop. Seed again after each start.
+
+### Demo logins
+
+Password for every demo account: `DemoPass2026`
+
+| Where | Sign in with | Notes |
+| --- | --- | --- |
+| Patient app | MRN printed by the seed (Mara L. Villaflor) | Full dose history |
+| Patient app | MRN printed by the seed (Noel Dizon) | No doses yet, several empty fields |
+| Dashboard | demo.manager@example.com | Manager role |
+| Dashboard | demo.staff@example.com | Staff role |
+
+Sign-in codes are not emailed under the emulator. The server log shows `[mailer:emulator] not sent`, and the code itself is in the Emulator UI:
+
+- Patient app: Firestore > `patientLoginOtps` > the patient's uid > `otp`
+- Dashboard: Firestore > `otps` > the admin's uid > `code`
+
+### What the seed writes
+
+35 fictional patients (archived, restored, completed, ongoing, missed dose, newly registered), matching patient app accounts, incident map pins, inventory whose stock matches the doses given, appointments, and conversations. Every document has `isDemo: true` and `demoBatch`. Every demo account uid starts with `demo-`.
+
+### Remove it
+
+```bash
+npm run seed:demo:clear
+```
+
+It lists everything it will delete and asks you to type DELETE. It removes only documents marked `isDemo`, messages in demo conversations, sign-in records of demo accounts, and Auth users whose uid starts with `demo-`.
+
+The scripts refuse to run without an explicit `--project`, require a `demo-` project id with `--emulator`, and refuse the live `ka-clinic-system` project unless `--allow-production` is passed.

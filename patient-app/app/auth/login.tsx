@@ -19,10 +19,10 @@ import {
 } from 'react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { checkLoginTrust, getAuthErrorMessage, sendLoginOTP, signInAsGuest, signInWithMRN } from '../../config/firebase';
+import { auth, checkLoginTrust, getAuthErrorMessage, sendLoginOTP, signInAsGuest, signInWithMRN, signOut } from '../../config/backend';
 import { markOnboardingSeen, setKeepSignedIn } from '../../config/appPrefs';
 import { usePatientAuth } from '../../context/PatientAuthContext';
-import { moderateScale, scale, verticalScale } from '../../constants/scale';
+import { moderateScale, scale, verticalScale } from '../../utils/scale';
 
 const { height } = Dimensions.get('window');
 const NAVY_BLUE = '#1E3A8A';
@@ -79,6 +79,12 @@ export default function LoginScreen() {
         params: { maskedEmail, remember: keepSignedIn ? '1' : '0' },
       });
     } catch (e: any) {
+      // The password step may have succeeded before the server refused the
+      // second factor (for example an archived record). Drop that pending
+      // session so the patient is fully signed out, not stuck half-in.
+      if (auth.currentUser && !auth.currentUser.isAnonymous) {
+        await signOut(auth).catch(() => {});
+      }
       setError(getAuthErrorMessage(e));
     } finally {
       setLoading(false);
@@ -299,8 +305,8 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
-  background: { ...StyleSheet.absoluteFillObject },
-  patternOverlay: { ...StyleSheet.absoluteFillObject, opacity: 0.5 },
+  background: { ...StyleSheet.absoluteFill },
+  patternOverlay: { ...StyleSheet.absoluteFill, opacity: 0.5 },
   bgIcon1: { position: 'absolute', top: verticalScale(30), left: -scale(25), transform: [{ rotate: '15deg' }] },
   bgIcon2: { position: 'absolute', top: height * 0.45, right: -scale(30), transform: [{ rotate: '-15deg' }] },
   bgIcon3: { position: 'absolute', bottom: verticalScale(30), left: scale(10), transform: [{ rotate: '10deg' }] },

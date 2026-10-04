@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { addDoc, collection, doc, onSnapshot } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
+import { addDoc, collection, doc } from 'firebase/firestore';
+import { db, listen } from '../../lib/firebase';
 import { Lock, AlertTriangle, CheckCircle2, ShieldCheck, X } from 'lucide-react';
 
 export default function BookingModal({ onClose, currentUser = null, selectedDate = null }) {
@@ -9,7 +9,8 @@ export default function BookingModal({ onClose, currentUser = null, selectedDate
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
 
-  const [maintenanceMode, setMaintenanceMode] = useState(false);
+  // Maintenance mode was removed from Settings; booking is never paused here.
+  const maintenanceMode = false;
   const [openTime, setOpenTime] = useState('08:00');
   const [closeTime, setCloseTime] = useState('17:00');
 
@@ -39,12 +40,9 @@ export default function BookingModal({ onClose, currentUser = null, selectedDate
 
   // ── Listen to /settings/config in real time ──
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, 'settings', 'config'), snap => {
+    const unsub = listen(doc(db, 'settings', 'config'), snap => {
       if (snap.exists()) {
         const d = snap.data();
-        if (d.system?.maintenanceMode !== undefined) {
-          setMaintenanceMode(d.system.maintenanceMode);
-        }
         if (d.clinic?.openTime) setOpenTime(d.clinic.openTime);
         if (d.clinic?.closeTime) setCloseTime(d.clinic.closeTime);
       }

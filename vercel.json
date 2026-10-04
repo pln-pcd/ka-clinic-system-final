@@ -5,24 +5,64 @@
   "framework": null,
   "rewrites": [
     {
-      "source": "/api/admin-forgot-password",
-      "destination": "/api/admin-password?op=forgot"
-    },
-    {
-      "source": "/api/admin-reset-password",
-      "destination": "/api/admin-password?op=reset"
+      "source": "/api/admin-login",
+      "destination": "/api/admin-auth?route=admin-login"
     },
     {
       "source": "/api/send-admin-otp",
-      "destination": "/api/admin-otp?op=send"
+      "destination": "/api/admin-auth?route=send-admin-otp"
     },
     {
       "source": "/api/verify-admin-otp",
-      "destination": "/api/admin-otp?op=verify"
+      "destination": "/api/admin-auth?route=verify-admin-otp"
+    },
+    {
+      "source": "/api/admin-otp",
+      "destination": "/api/admin-auth?route=admin-otp"
+    },
+    {
+      "source": "/api/admin-forgot-password",
+      "destination": "/api/admin-auth?route=admin-forgot-password"
+    },
+    {
+      "source": "/api/admin-reset-password",
+      "destination": "/api/admin-auth?route=admin-reset-password"
+    },
+    {
+      "source": "/api/admin-password",
+      "destination": "/api/admin-auth?route=admin-password"
+    },
+    {
+      "source": "/api/devices",
+      "destination": "/api/admin-auth?route=devices"
+    },
+    {
+      "source": "/api/admin-invites",
+      "destination": "/api/admin-accounts?route=admin-invites"
+    },
+    {
+      "source": "/api/accept-invite",
+      "destination": "/api/admin-accounts?route=accept-invite"
+    },
+    {
+      "source": "/api/send-otp",
+      "destination": "/api/patient-auth?route=send-otp"
+    },
+    {
+      "source": "/api/verify-otp",
+      "destination": "/api/patient-auth?route=verify-otp"
+    },
+    {
+      "source": "/api/send-patient-report",
+      "destination": "/api/notifications?route=send-patient-report"
     },
     {
       "source": "/api/send-report",
-      "destination": "/api/send-patient-report"
+      "destination": "/api/notifications?route=send-report"
+    },
+    {
+      "source": "/api/archive-read-conversations",
+      "destination": "/api/notifications?route=archive-read-conversations"
     },
     {
       "source": "/((?!api/)(?!@)(?!src/)(?!node_modules/)(?!.*\\.).*)",
@@ -31,7 +71,7 @@
   ],
   "crons": [
     {
-      "path": "/api/archive-read-conversations",
+      "path": "/api/notifications?route=archive-read-conversations",
       "schedule": "0 16 * * *"
     },
     {
@@ -41,9 +81,22 @@
     {
       "path": "/api/notifications?action=backup-cron",
       "schedule": "0 18 * * *"
+    },
+    {
+      "path": "/api/notifications?action=patient-archive-sweep",
+      "schedule": "30 16 * * *"
     }
   ],
   "headers": [
+    {
+      "source": "/assets/:path*.(js|css)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
     {
       "source": "/assets/:path*.(png|jpg|jpeg|svg|webp|mp4)",
       "headers": [

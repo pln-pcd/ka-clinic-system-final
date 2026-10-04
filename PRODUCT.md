@@ -29,7 +29,7 @@ Specialized anti-rabies and animal bite clinic ecosystem combining high-complian
 - **Admin Dashboard:** Patient management, dose tracking & completion badges, appointment scheduling, bite incident reports, inventory tracking (vials, doses, syringes), direct patient messaging, analytics, and clinic settings.
 - **Patient Mobile App:** Dose schedule timeline/reminders, appointment booking & status, bite incident submission, direct chat/consultation, and educational rabies care resources.
 - **Landing Page:** Public clinic services overview, location/contact info, online appointment request, and animal bite first-aid protocols.
-- **Technical Constraints:** Multi-app workspace (`ka-clinic-admin` React/Vite, `landing` React/Vite, `patient-app` React Native/Expo). Firebase/Firestore integration.
+- **Technical Constraints:** Multi-app workspace (`ka-clinic-admin` React/Vite, `patient-app` React Native/Expo). Firebase/Firestore integration.
 
 ## Brand Commitments
 
@@ -39,8 +39,7 @@ Specialized anti-rabies and animal bite clinic ecosystem combining high-complian
 
 ## Evidence on Hand
 
-- `ka-clinic-admin`: Fully featured React/Vite admin app with Firestore integration, component modules (`patients.jsx`, `vaccination.jsx`, `incidents.jsx`, `inventory.jsx`, `messages.jsx`, `appts.jsx`, `settings.jsx`).
-- `landing`: Public React/Vite landing page (`LandingPage.jsx`).
+- `ka-clinic-admin`: Fully featured React/Vite admin app with Firestore integration, feature folders under `src/features/` (`patients`, `vaccination`, `incidents`, `inventory`, `messages`, `appointments`, `settings`, ...).
 - `patient-app`: Expo/React Native mobile app for patients (`app/`, `components/`, `sharedData.js`).
 - Logos and branding assets (`logo-white-nobg.png`).
 

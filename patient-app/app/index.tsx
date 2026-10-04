@@ -14,7 +14,7 @@ import Animated, {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import { moderateScale, scale, verticalScale } from '../constants/scale';
+import { moderateScale, scale, verticalScale } from '../utils/scale';
 import { hasSeenOnboarding } from '../config/appPrefs';
 import { usePatientAuth } from '../context/PatientAuthContext';
 
@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   floatingContainer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'center',
     alignItems: 'center',
   },

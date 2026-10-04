@@ -20,10 +20,9 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { auth, db, forgetTrustedDevice, signOut } from '../../config/firebase';
-import { API_BASE_URL } from '../../config/apiBase';
+import { auth, db, forgetTrustedDevice, signOut, API_BASE_URL } from '../../config/backend';
 import { setKeepSignedIn } from '../../config/appPrefs';
-import { formatDoseDate } from '../../config/dates';
+import { exposureCategory, formatDoseDate, isPepService } from '../../utils/patientRecord';
 import {
   clearThisDeviceSession,
   revokeAllOtherSessions,
@@ -32,7 +31,7 @@ import {
   type DeviceSession,
 } from '../../config/deviceSessions';
 import { usePatientAuth } from '../../context/PatientAuthContext';
-import { moderateScale, scale, verticalScale } from '../../constants/scale';
+import { moderateScale, scale, verticalScale } from '../../utils/scale';
 import CustomAlertModal, { CustomAlertConfig } from '../../components/CustomAlertModal';
 import {
   ensureNotificationPermission,
@@ -136,7 +135,7 @@ export default function ProfileScreen() {
   };
 
   // Admin Dashboard's vaccinations/{mrn} doc is the source of truth for this
-  // patient's demographic + PEP record — see ka-clinic-admin/src/patients.jsx vaxDoc.
+  // patient's demographic + PEP record — see ka-clinic-admin/src/features/patients/PatientsPage.jsx vaxDoc.
   const [patientRecord, setPatientRecord] = useState<any | null>(null);
   const [recordError, setRecordError] = useState('');
 
@@ -309,7 +308,9 @@ export default function ProfileScreen() {
   const patientDoses: any[] = Array.isArray(patientRecord?.doses) ? patientRecord.doses : [];
   const doneDoseCount = patientDoses.filter(d => (d.status || d.s) === 'done').length;
   const nextPendingDose = patientDoses.find(d => (d.status || d.s) !== 'done');
-  const categoryLabel = patientRecord?.cat ? `Cat. ${patientRecord.cat}` : '—';
+  // Category II/III on PEP records only (a bat exposure is always III).
+  const catCode = isPepService(patientRecord?.service) ? exposureCategory(patientRecord?.cat, patientRecord?.animal || patientRecord?.sourceOfExposure) : '';
+  const categoryLabel = catCode ? `Cat. ${catCode}` : '—';
   const dosesLabel = patientDoses.length > 0 ? `${doneDoseCount}/${patientDoses.length}` : '—';
   const nextDoseLabel = nextPendingDose ? formatDoseDate(nextPendingDose.date) : (patientDoses.length > 0 ? 'Done' : '—');
 
@@ -436,21 +437,56 @@ export default function ProfileScreen() {
       });
       return;
     }
+    // No photo yet: open the photo picker straight away. With a photo, offer
+    // Change photo / Remove photo (same as the admin app).
+    if (!profileImage) {
+      pickImage(false);
+      return;
+    }
     showAlert({
       type: 'info',
-      title: 'Update Profile Picture',
-      message: 'Choose an option to change your profile photo:',
-      primaryButtonText: 'Take Photo',
+      title: 'Profile photo',
+      message: 'Change your profile photo or remove it.',
+      primaryButtonText: 'Change photo',
       onPrimaryPress: () => {
-        hideAlert();
-        pickImage(true);
-      },
-      secondaryButtonText: 'Choose from Gallery',
-      onSecondaryPress: () => {
         hideAlert();
         pickImage(false);
       },
+      secondaryButtonText: 'Remove photo',
+      secondaryDestructive: true,
+      onSecondaryPress: () => {
+        hideAlert();
+        removePhoto();
+      },
     });
+  };
+
+  // Clears the photo on this phone and on the clinic record, back to the
+  // person icon.
+  const removePhoto = async () => {
+    const uid = user?.uid || 'guest';
+    let serverError = '';
+    if (mrn && !isGuest && !user?.isAnonymous) {
+      try {
+        const idToken = await auth.currentUser?.getIdToken();
+        const resp = await fetch(`${API_BASE_URL}/api/notifications`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+          body: JSON.stringify({ action: 'remove-avatar', mrn }),
+        });
+        const json = await resp.json().catch(() => null);
+        if (!json?.success) serverError = json?.error || 'Could not remove the photo from your clinic record.';
+      } catch {
+        serverError = 'Could not remove the photo from your clinic record.';
+      }
+    }
+    if (serverError) {
+      showAlert({ type: 'error', title: 'Photo not removed', message: serverError, primaryButtonText: 'OK', onPrimaryPress: hideAlert });
+      return;
+    }
+    setProfileImage(null);
+    await AsyncStorage.removeItem(`kna:avatar:${uid}`).catch(() => {});
+    await AsyncStorage.removeItem('kna:avatar:global').catch(() => {});
   };
 
   const pickImage = async (useCamera = false) => {
@@ -894,7 +930,7 @@ export default function ProfileScreen() {
               <View style={s.card}>
                 {[
                   { title: 'Personal Demographics', body: 'We collect your full name, age, date of birth, sex, address, and contact details to establish your official medical record.' },
-                  { title: 'Clinical Incident Data', body: 'Bite incident location, exposure category (Category I, II, or III), biting animal status, and anatomical wound site are recorded to determine your PEP vaccine regimen.' },
+                  { title: 'Clinical Incident Data', body: 'Bite incident location, exposure category (Category II or III), biting animal status, and anatomical wound site are recorded to determine your PEP vaccine regimen.' },
                   { title: 'Immunization Records', body: 'All vaccine brand names, lot numbers, administration dates, and dosages are stored to ensure complete rabies prophylaxis tracking.' },
                 ].map((p, i, arr) => (
                   <View key={i} style={[s.policyBlock, i === arr.length - 1 && { borderBottomWidth: 0 }]}>
@@ -924,7 +960,7 @@ export default function ProfileScreen() {
               <View style={s.card}>
                 {[
                   { title: 'Right to Access & Rectification', body: 'You have the right to view your full immunization history and update your contact information or request corrections at any time.' },
-                  { title: 'Right to Erasure / Blocking', body: 'You may request account deletion, subject to mandatory Department of Health (DOH) medical record retention regulations.' },
+                  { title: 'Right to Erasure / Blocking', body: 'You may ask the clinic to close your app account. Your clinic vaccination record itself is kept permanently so your dose history stays available.' },
                 ].map((p, i, arr) => (
                   <View key={i} style={[s.policyBlock, i === arr.length - 1 && { borderBottomWidth: 0 }]}>
                     <Text style={s.policyTitle}>{p.title}</Text>
@@ -975,8 +1011,8 @@ export default function ProfileScreen() {
                   <Ionicons name="camera" size={12} color={C.white} />
                 </View>
               </TouchableOpacity>
-              <Text style={s.userName}>{personalData.fullName || user?.displayName || 'Patient User'}</Text>
-              <Text style={s.userEmail}>{user?.email || 'patient@email.com'}</Text>
+              <Text style={s.userName}>{personalData.fullName || user?.displayName || '—'}</Text>
+              {user?.email ? <Text style={s.userEmail}>{user.email}</Text> : null}
 
               <View style={s.statsRow}>
                 <View style={s.statItem}>

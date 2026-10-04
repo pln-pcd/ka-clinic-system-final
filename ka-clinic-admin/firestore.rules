@@ -137,9 +137,15 @@ service cloud.firestore {
     // patient-writable field used to be `woundLog` (the self-service recovery
     // monitoring feature), which has been removed from the app entirely — so
     // there is no longer any patient write path into this document at all.
+    // Archiving is automatic only: the nightly patient-archive-sweep (Admin
+    // SDK, bypasses rules) sets isArchived. Admins may restore (true -> false)
+    // but no client can create an archived record or archive one.
     match /vaccinations/{docId} {
       allow read: if isAdmin() || ownsVaccinationDoc();
-      allow update, create, delete: if isAdmin();
+      allow create: if isAdmin() && request.resource.data.get('isArchived', false) != true;
+      allow update: if isAdmin()
+        && !(request.resource.data.get('isArchived', false) == true && resource.data.get('isArchived', false) != true);
+      allow delete: if isAdmin();
     }
 
     match /inventory/{docId} {
@@ -185,6 +191,19 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Admin profile photos, one doc per admin uid: { dataUrl, updatedAt }.
+    // Every active admin can see them; each admin can set or remove only
+    // their own. The data URL is capped (~600 KB image) and must be an image.
+    match /adminAvatars/{uid} {
+      allow read: if isAdmin();
+      allow create, update: if isAdmin() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['dataUrl', 'updatedAt'])
+        && request.resource.data.dataUrl is string
+        && request.resource.data.dataUrl.size() < 830000
+        && request.resource.data.dataUrl.matches('^data:image/(jpeg|png|webp);base64,.*');
+      allow delete: if isAdmin() && request.auth.uid == uid;
+    }
+
     match /patientNotifications/{docId} {
       allow read: if isAdmin() || ownsPatientNotification();
       allow write: if isAdmin();
@@ -194,8 +213,12 @@ service cloud.firestore {
     // the patient-facing incident map has been removed, and bite locations,
     // exposure category and treatment status are public-safety/patient-privacy
     // data that must not be world-readable.
+    // New pins come only from a patient record (Patients → Pin Incident Map),
+    // which writes source 'patient_record' together with the patient's
+    // incidentIds link. The map itself can no longer create pins.
     match /incidents/{docId} {
-      allow read, write: if isAdmin();
+      allow read, update, delete: if isAdmin();
+      allow create: if isAdmin() && request.resource.data.source == 'patient_record';
     }
 
     // One chat thread per escalation (see patient-app/app/(tabs)/chat.tsx

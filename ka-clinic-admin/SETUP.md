@@ -46,7 +46,8 @@ You should see output like:
 ```
 ka-clinic-admin/
 ├── src/
-│   ├── AdminDashboard.jsx  (Main dashboard component)
+│   ├── features/           (One folder per area: dashboard, patients, inventory, ...)
+│   ├── lib/                (Shared helpers)
 │   ├── App.jsx             (App wrapper)
 │   ├── main.jsx            (Entry point)
 │   └── index.css           (Global styles)
@@ -104,7 +105,7 @@ npm install -D tailwindcss@latest
 ## Customization
 
 ### Change Colors
-Edit the `Colors` object in `src/AdminDashboard.jsx`:
+Edit the `Colors` object in `src/features/dashboard/AdminDashboard.jsx`:
 ```javascript
 const Colors = {
   red: '#E31837',      // Medical red

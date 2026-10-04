@@ -12,7 +12,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { markOnboardingSeen } from '../config/appPrefs';
-import { moderateScale, scale, verticalScale } from '../constants/scale';
+import { moderateScale, scale, verticalScale } from '../utils/scale';
 
 const { width } = Dimensions.get('window');
 const NAVY_BLUE = '#1E3A8A';

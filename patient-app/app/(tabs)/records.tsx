@@ -19,12 +19,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import ViewShot from 'react-native-view-shot';
-import { saveImageToGallery } from '../../config/saveImage';
-import { formatDoseDate } from '../../config/dates';
-import { db } from '../../config/firebase';
+import { saveImageToGallery } from '../../utils/saveImage';
+import { formatDoseDate, serviceCopy, EMPTY, doseStatus, isPepService, clinicToday, displayPatientId, doseBrand, doseState, exposureCategory, splitName } from '../../utils/patientRecord';
+import { db } from '../../config/backend';
 import { usePatientAuth } from '../../context/PatientAuthContext';
-import { moderateScale, scale, verticalScale } from '../../constants/scale';
-import { serviceCopy } from '../../constants/vaccineTypes';
+import { moderateScale, scale, verticalScale } from '../../utils/scale';
 import CustomAlertModal, { CustomAlertConfig } from '../../components/CustomAlertModal';
 
 const { width } = Dimensions.get('window');
@@ -44,13 +43,6 @@ const C = {
   bg: SOFT_GRAY_BG,
 };
 
-const DEFAULT_RECORD_DOSES = [
-  { id: 'd1', label: '1st Dose (Day 0)', vaccineBrand: 'Speeda ARV (Lot #2026-08A)', dosage: '0.5 mL (IM)', date: '08/04/26', provider: 'K&A Main Clinic / RN S. Santos', done: true },
-  { id: 'd2', label: '2nd Dose (Day 3)', vaccineBrand: 'Speeda ARV (Lot #2026-08A)', dosage: '0.5 mL (IM)', date: '08/07/26', provider: 'K&A Main Clinic / RN S. Santos', done: true },
-  { id: 'd3', label: '3rd Dose (Day 7)', vaccineBrand: 'Speeda ARV (Lot #2026-08A)', dosage: '0.5 mL (IM)', date: '08/11/26', provider: 'K&A Main Clinic / RN S. Santos', done: true },
-  { id: 'd4', label: '4th Dose (Day 14)', vaccineBrand: 'Speeda ARV (Lot #2026-08A)', dosage: '0.5 mL (IM)', date: '08/18/26', provider: 'K&A Main Clinic / RN', done: false },
-  { id: 'd5', label: 'RIG (Immunoglobulin)', vaccineBrand: 'ERIG (Equine Rabies)', dosage: '20 IU/kg (Infiltration)', date: '08/04/26', provider: 'K&A Emergency Unit', done: true },
-];
 
 export default function RecordsScreen() {
   const router = useRouter();
@@ -77,8 +69,8 @@ export default function RecordsScreen() {
   // 3D Flip Card State
   const flipAnim = useSharedValue(0);
   const [isFlippedState, setIsFlippedState] = useState(false);
-  const cardFrontShotRef = useRef<ViewShot>(null);
-  const cardBackShotRef = useRef<ViewShot>(null);
+  const cardFrontShotRef = useRef<React.ComponentRef<typeof ViewShot>>(null);
+  const cardBackShotRef = useRef<React.ComponentRef<typeof ViewShot>>(null);
   const [exportingCard, setExportingCard] = useState(false);
 
   const toggleCardFlip = () => {
@@ -158,20 +150,25 @@ export default function RecordsScreen() {
     });
   }, [mrn]);
 
+  // Everything below comes from the clinic's record. Nothing is filled in
+  // with sample values — a field the clinic hasn't recorded shows "—", and
+  // a patient with no doses yet sees an empty schedule, not demo doses.
   const pr = patientRecord || {};
-  const fullName = pr.name || user?.displayName || 'Dela Cruz, Paulina C.';
-  const isCommaFormat = fullName.includes(',');
-  const nameParts = isCommaFormat ? fullName.split(',').map((s: string) => s.trim()) : fullName.trim().split(' ');
-  const lastNameVal = pr.lastName || (isCommaFormat ? nameParts[0] : (nameParts.length > 1 ? nameParts[nameParts.length - 1] : 'Cruz'));
-  const firstNameVal = pr.firstName || (isCommaFormat ? nameParts[1] : nameParts[0]) || 'Paulina';
-  const middleNameVal = pr.middleName || (nameParts.length > 2 ? nameParts[2] : 'C.');
-  const miVal = middleNameVal ? middleNameVal.charAt(0).toUpperCase() + '.' : 'C.';
-  const dobVal = pr.dob || '04/12/1995';
-  const mrnVal = mrn ? `MRN-${mrn}` : (pr.id ? `MRN-${pr.id}` : 'MRN-2026-004');
+  const nameSplit = splitName(pr.name || user?.displayName || '');
+  const lastNameVal = pr.lastName || nameSplit.last || EMPTY;
+  const firstNameVal = pr.firstName || nameSplit.first || EMPTY;
+  const middleNameVal = pr.middleName || nameSplit.middle;
+  const miVal = middleNameVal ? middleNameVal.charAt(0).toUpperCase() + '.' : EMPTY;
+  const dobVal = pr.dob ? formatDoseDate(pr.dob) : EMPTY;
+  const mrnVal = displayPatientId(mrn, pr);
   const vaccineCopy = serviceCopy(pr.service);
-  const purposeVal = pr.service ? vaccineCopy.long : '—';
-  const catVal = pr.cat ? `Category ${pr.cat}` : 'Category II (Moderate Risk)';
-  const doseList = Array.isArray(pr.doses) && pr.doses.length > 0 ? pr.doses : DEFAULT_RECORD_DOSES;
+  const purposeVal = pr.service ? vaccineCopy.long : EMPTY;
+  const catCode = exposureCategory(pr.cat, pr.animal || pr.sourceOfExposure);
+  const catVal = catCode ? `Category ${catCode}` : EMPTY;
+  // Exposure details exist only on PEP records; other services hide them.
+  const showExposure = isPepService(pr.service);
+  const doseList: any[] = Array.isArray(pr.doses) ? pr.doses : [];
+  const today = clinicToday();
 
   return (
     <View style={s.root}>
@@ -207,6 +204,8 @@ export default function RecordsScreen() {
               <Text style={[s.tableHeaderCell, { flex: 1.8 }]}>DETAILS</Text>
             </View>
 
+            {showExposure && (
+            <>
             <View style={s.recordTableRow}>
               <Text style={[s.recordTableCellLabel, { flex: 1.2 }]}>Exposure Date</Text>
               <Text style={[s.recordTableCellValue, { flex: 1.8 }]}>{formatDoseDate(pr.date || pr.exposureDate)}</Text>
@@ -217,11 +216,13 @@ export default function RecordsScreen() {
             </View>
             <View style={s.recordTableRow}>
               <Text style={[s.recordTableCellLabel, { flex: 1.2 }]}>Biting Animal</Text>
-              <Text style={[s.recordTableCellValue, { flex: 1.8 }]}>{pr.animal || pr.sourceOfExposure || 'Dog / Cat'}</Text>
+              <Text style={[s.recordTableCellValue, { flex: 1.8 }]}>{pr.animal || pr.sourceOfExposure || EMPTY}</Text>
             </View>
+            </>
+            )}
             <View style={[s.recordTableRow, s.recordTableRowAlt]}>
               <Text style={[s.recordTableCellLabel, { flex: 1.2 }]}>Known Allergies</Text>
-              <Text style={[s.recordTableCellValue, { flex: 1.8 }]}>{pr.allergies || 'None Reported'}</Text>
+              <Text style={[s.recordTableCellValue, { flex: 1.8 }]}>{pr.allergies || EMPTY}</Text>
             </View>
             <View style={[s.recordTableRow, { borderBottomWidth: 0 }]}>
               <Text style={[s.recordTableCellLabel, { flex: 1.2 }]}>Attending ABTC</Text>
@@ -247,11 +248,17 @@ export default function RecordsScreen() {
               <Text style={[s.tableHeaderCell, { flex: 0.9, textAlign: 'center' }]}>STATUS</Text>
             </View>
 
+            {doseList.length === 0 && (
+              <View style={[s.recordTableRow, { borderBottomWidth: 0 }]}>
+                <Text style={[s.recordTableCellLabel, { flex: 1 }]}>No doses recorded yet.</Text>
+              </View>
+            )}
             {doseList.map((d: any, idx: number) => {
-              const isDone = d.done || (d.status || d.s) === 'done';
-              const vaccineName = d.vaccineBrand || d.b || pr.vaccineBrand || (idx === 4 ? 'ERIG' : 'Speeda ARV');
-              const dosageVal = d.dosage || pr.route || (idx === 4 ? '20 IU/kg' : '0.5 mL (IM)');
-              const dateVal = d.date ? formatDoseDate(d.date) : 'Scheduled';
+              const state = doseState(d, today);
+              const st = doseStatus(d, today);
+              const vaccineName = doseBrand(d, pr, state);
+              const dosageVal = d.dosage || pr.route || EMPTY;
+              const dateVal = d.date ? formatDoseDate(d.date) : 'Not scheduled';
               const isAlt = idx % 2 === 1;
               const isLast = idx === doseList.length - 1;
 
@@ -270,9 +277,9 @@ export default function RecordsScreen() {
                     {dateVal}
                   </Text>
                   <View style={{ flex: 0.9, alignItems: 'center', justifyContent: 'center' }}>
-                    <View style={[s.miniBadge, isDone ? s.miniBadgeDone : s.miniBadgePending]}>
-                      <Text style={[s.miniBadgeTxt, isDone ? s.miniBadgeTxtDone : s.miniBadgeTxtPending]}>
-                        {isDone ? 'DONE' : 'PENDING'}
+                    <View style={[s.miniBadge, st.status === 'given' ? s.miniBadgeDone : st.status === 'overdue' ? s.miniBadgeMissed : st.status === 'due_today' ? s.miniBadgeToday : s.miniBadgePending]}>
+                      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={[s.miniBadgeTxt, st.status === 'given' ? s.miniBadgeTxtDone : st.status === 'overdue' ? s.miniBadgeTxtMissed : st.status === 'due_today' ? s.miniBadgeTxtToday : s.miniBadgeTxtPending]}>
+                        {st.label}
                       </Text>
                     </View>
                   </View>
@@ -469,6 +476,14 @@ const s = StyleSheet.create({
     color: '#059669',
   },
   miniBadgeTxtPending: {
+    color: '#3B50DF',
+  },
+  miniBadgeToday: { backgroundColor: '#FFFBEB' },
+  miniBadgeTxtToday: { color: '#B45309' },
+  miniBadgeMissed: {
+    backgroundColor: '#FEF2F2',
+  },
+  miniBadgeTxtMissed: {
     color: MEDICAL_RED,
   },
 

@@ -2,15 +2,25 @@
 // patient's "I received this" acknowledgement, consolidated behind a single
 // serverless function.
 //
+// This function also serves two older URLs (vercel.json rewrites them here
+// with ?route=<old name>; each keeps its own method check and auth):
+//   /api/send-patient-report, /api/send-report -> sendPatientReport (admin only)
+//   /api/archive-read-conversations            -> archiveReadConversations
+//                                                 (nightly cron, CRON_SECRET:
+//                                                 deletes chats archived 30+ days ago)
+// Its own URL, /api/notifications?action=..., is unchanged: the patient app,
+// the crons and the acknowledgement links in sent emails all call it.
+//
 // Why one function with an `action` field rather than three files: Vercel's
 // Hobby plan caps a deployment at 12 serverless functions and api/ was already
-// at 11. Same routing pattern as api/devices.js.
+// at 11. Same routing pattern as the devices handler in api/admin-auth.js.
 //
 // Actions and their auth models differ deliberately:
 //   register-token  — called by the Patient App with its Firebase ID token.
 //   unregister-token — same; on sign-out or when the patient turns push off.
 //   set-avatar      — same; patient saves their profile photo to their record
 //                     so the admin portal shows it too.
+//   remove-avatar   — same; patient removes their profile photo.
 //   update-profile  — same; patient edits the self-service fields of their
 //                     record (contact, address, emergency contact, ...).
 //   backup          — admin-only when pressed from Settings ("Run Backup Now");
@@ -18,6 +28,8 @@
 //                     settings/config.system.backupFrequency.
 //   send-followup   — admin-only (requireAuthenticatedAdmin). Manual "Send
 //                     Follow-up" button, and the automatic due-dose sweep.
+//   patient-archive-sweep — daily cron (CRON_SECRET). Archives patient
+//                     records a full year after their dose series completed.
 //   ack             — deliberately UNAUTHENTICATED. It is reached by tapping a
 //                     link in an email client, where no session exists. The
 //                     unguessable notification id is the only credential, it
@@ -25,17 +37,15 @@
 //                     and it returns no patient data. Same trade-off as a
 //                     one-click unsubscribe link.
 import { gzipSync } from 'node:zlib';
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { auth, db, storageBucket } from './_lib/firebaseAdmin.js';
-import { requireAuthenticatedAdmin } from './_lib/adminAuth.js';
-import { sendMail } from './_lib/mailer.js';
-import { buildFollowUpEmailHtml } from './_lib/emailTemplate.js';
+import { requireAuthenticatedAdmin } from './_lib/auth.js';
+import { isValidEmail, sendMail } from './_lib/mail/mailer.js';
+import { buildFollowUpEmailHtml } from './_lib/mail/templates.js';
+import { getArchiveDueDate, isSeriesCompleted, lastDoseDate, manilaToday } from './_lib/patientCompletion.js';
+import { routeName } from './_lib/router.js';
 
 const EXPO_PUSH_ENDPOINT = 'https://exp.host/--/api/v2/push/send';
-
-function isValidEmail(email) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
 
 // Expo tokens look like ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx].
 function isExpoPushToken(token) {
@@ -273,6 +283,19 @@ async function setAvatar(req, res) {
   res.status(200).json({ success: true });
 }
 
+// ── Patient App removes its profile photo ───────────────────────────────────
+// Deletes patientAvatars/{mrn} (patients cannot delete it themselves under
+// firestore.rules). Same ownership check as update-profile.
+async function removeAvatar(req, res) {
+  const owned = await resolveOwnedPatientRef(req, res);
+  if (!owned) return;
+  await db.collection('patientAvatars').doc(owned.ref.id).delete();
+  if (owned.data.avatarUrl) {
+    await owned.ref.update({ avatarUrl: FieldValue.delete(), avatarUpdatedAt: FieldValue.delete() }).catch(() => {});
+  }
+  res.status(200).json({ success: true });
+}
+
 // Fire-and-report Expo push. A failed push never fails the whole send — the
 // email and the in-app notification doc are independent delivery channels.
 async function sendExpoPush(tokens, { title, body, data }) {
@@ -371,7 +394,7 @@ async function sendFollowUp(req, res, caller) {
   let emailed = false;
   let emailError = null;
   if (email && isValidEmail(email)) {
-    const { error } = await sendMail({
+    const { error, skipped } = await sendMail({
       to: email,
       subject: `K&A Clinic — ${title}`,
       html: buildFollowUpEmailHtml({
@@ -383,7 +406,9 @@ async function sendFollowUp(req, res, caller) {
       }),
       role: 'reminders',
     });
-    if (error) {
+    if (skipped) {
+      emailError = 'Not emailed: test address.';
+    } else if (error) {
       console.error('send-followup mail error:', error);
       emailError = 'Email delivery failed.';
     } else {
@@ -490,20 +515,22 @@ function ackPage(ok) {
 //
 // Overdue doses are deliberately not chased here; that stays a clinical
 // judgement made through the tracker's Send Follow-up button.
+//
+// The cron runs at 21:00 UTC, which is 05:00 the next morning in Manila, so
+// the "pre" reminder arrives early on the day before the dose (not exactly
+// 24 hours before) and the "due" reminder early on the day itself.
+//
+// Testing: ?dryRun=1 lists who would be reminded without writing or sending
+// anything, and ?today=YYYY-MM-DD runs the sweep as if it were that Manila
+// date. Both still need the CRON_SECRET bearer token. See
+// scripts/run-dose-sweep.mjs for a local runner.
 
-const CLINIC_TZ = 'Asia/Manila';
-
-// The clinic's civil date, not the server's UTC date — a sweep running at
-// 16:00 UTC is already tomorrow in Manila, which is the exact off-by-one this
+// The clinic's civil date (Asia/Manila), not the server's UTC date — at
+// 21:00 UTC it is already the next day in Manila, the exact off-by-one this
 // guards against.
-function clinicDateString(offsetDays = 0) {
-  const local = new Date(new Date().toLocaleString('en-US', { timeZone: CLINIC_TZ }));
-  local.setDate(local.getDate() + offsetDays);
-  return [
-    local.getFullYear(),
-    String(local.getMonth() + 1).padStart(2, '0'),
-    String(local.getDate()).padStart(2, '0'),
-  ].join('-');
+function addDaysIso(dStr, days) {
+  const [y, m, d] = String(dStr).slice(0, 10).split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days, 12)).toISOString().slice(0, 10);
 }
 
 function longDate(dStr) {
@@ -520,8 +547,11 @@ const doseIsDone = (dose) => {
 };
 
 async function doseSweep(req, res) {
-  const today = clinicDateString(0);
-  const tomorrow = clinicDateString(1);
+  const flag = v => ['1', 'true', 'yes'].includes(String(v || '').toLowerCase());
+  const dryRun = flag(req.query?.dryRun) || flag(req.body?.dryRun);
+  const todayParam = String(req.query?.today || req.body?.today || '');
+  const today = /^\d{4}-\d{2}-\d{2}$/.test(todayParam) ? todayParam : manilaToday();
+  const tomorrow = addDaysIso(today, 1);
 
   const snap = await db.collection('vaccinations').get();
   const jobs = [];
@@ -541,14 +571,39 @@ async function doseSweep(req, res) {
       const when = date === tomorrow ? 'pre' : date === today ? 'due' : null;
       if (!when) continue;
 
-      const marker = `${dose.key || dose.n || dose.label || 'dose'}:${when}`;
-      if (notified.includes(marker)) continue;
+      // The marker carries the dose date, so a dose moved to a new date is
+      // reminded again for that date. Markers written before the date was
+      // included ("d2:pre") still count, so nothing already sent repeats.
+      const doseId = dose.key || dose.n || dose.label || 'dose';
+      const marker = `${doseId}@${date}:${when}`;
+      if (notified.includes(marker) || notified.includes(`${doseId}:${when}`)) continue;
 
       jobs.push({ ref: docSnap.ref, patient, dose, when, marker, date });
     }
   }
 
+  if (dryRun) {
+    const wouldSend = jobs.map(({ ref, patient, dose, when, marker, date }) => {
+      const email = (patient.email || '').trim();
+      return {
+        patientId: ref.id,
+        name: patient.name || '',
+        dose: dose.n || dose.label || dose.key || 'dose',
+        date,
+        when,
+        marker,
+        email: email && isValidEmail(email) ? email : null,
+        pushTokens: (patient.pushTokens || []).filter(isExpoPushToken).length,
+      };
+    });
+    console.log(`[dose-sweep] DRY RUN (today=${today}, tomorrow=${tomorrow}): ${wouldSend.length} reminder(s) would be sent`);
+    wouldSend.forEach(w => console.log(`  ${w.when.padEnd(3)} ${w.date} ${w.patientId} ${w.name} — ${w.dose} — email: ${w.email || 'none'}, push devices: ${w.pushTokens}`));
+    res.status(200).json({ success: true, dryRun: true, today, tomorrow, count: wouldSend.length, wouldSend });
+    return;
+  }
+
   let sent = 0;
+  let emailFailures = 0;
   const failed = [];
 
   for (const { ref, patient, dose, when, marker, date } of jobs) {
@@ -578,24 +633,48 @@ async function doseSweep(req, res) {
         read: false,
       });
 
-      await sendExpoPush(patient.pushTokens || [], {
+      // A patient with no push token or no email simply skips that channel.
+      const push = await sendExpoPush(patient.pushTokens || [], {
         title,
         body: message,
         data: { notificationId: notifRef.id, type: 'dose-reminder' },
       });
 
       const email = (patient.email || '').trim();
+      let emailed = false;
+      let emailError = null;
       if (email && isValidEmail(email)) {
-        await sendMail({
+        const ackUrl = `${siteOrigin(req)}/api/notifications?action=ack&id=${notifRef.id}`;
+        const { error, skipped } = await sendMail({
           to: email,
           subject: `K&A Clinic — ${title}`,
-          html: buildFollowUpEmailHtml({ patientName: name, message, doseLabel, dueDate }),
+          html: buildFollowUpEmailHtml({ patientName: name, message, doseLabel, dueDate, ackUrl: ackUrl.startsWith('http') ? ackUrl : '' }),
           role: 'reminders',
         });
+        if (skipped) {
+          emailError = 'Not emailed: test address.';
+        } else if (error) {
+          emailError = String(error?.message || error);
+          emailFailures++;
+          console.error(`[dose-sweep] ${ref.id} ${marker} email to ${email} failed:`, emailError);
+        } else {
+          emailed = true;
+        }
+      } else if (email) {
+        emailError = 'Invalid email address on the patient record.';
       }
 
-      // Marked only after a successful send, so a mid-sweep failure retries on
-      // the next run rather than skipping that patient permanently.
+      // What happened on each channel is kept on the notification, the same
+      // fields a manual follow-up records, so a failed email is visible.
+      await notifRef.update({
+        pushSent: push.sent,
+        pushError: push.error,
+        emailed,
+        emailError,
+      });
+
+      // Marked once the notification is recorded, so the same reminder is
+      // never sent twice; a crash before this point retries on the next run.
       await ref.update({ notifiedDoses: FieldValue.arrayUnion(marker) });
       sent++;
     } catch (err) {
@@ -604,8 +683,8 @@ async function doseSweep(req, res) {
     }
   }
 
-  console.log(`[dose-sweep] ${sent} sent, ${failed.length} failed (today=${today}, tomorrow=${tomorrow})`);
-  res.status(200).json({ success: true, sent, failed: failed.length, today, tomorrow });
+  console.log(`[dose-sweep] ${sent} sent, ${failed.length} failed, ${emailFailures} email failure(s) (today=${today}, tomorrow=${tomorrow})`);
+  res.status(200).json({ success: true, sent, failed: failed.length, emailFailures, today, tomorrow });
 }
 
 // ── Database backup: gzip JSON snapshot of every clinical collection ─────────
@@ -782,18 +861,298 @@ async function backupCron(req, res) {
   res.status(result.status === 'ok' ? 200 : 500).json({ success: result.status === 'ok', result });
 }
 
+// ── Patient archive sweep: completed records leave the Patients list a year on ─
+// A completed patient stays on the main list, showing its completion date,
+// for ARCHIVE_AFTER_DAYS counted from the later of its completion date and
+// its latest restore; this archives it once that has passed. A record
+// restored from the Archive page therefore gets a full new year. Same shape
+// as archiveReadConversations below: server-side, so the archive happens
+// whether or not anyone opens the dashboard.
+//
+// The same pass also keeps two derived fields honest, so the dashboard never
+// has to repair them itself:
+//   completedAt — backfilled from the final dose's date for records completed
+//                 before the field existed (the dashboard shows the same
+//                 fallback, so nothing visibly changes when it lands).
+//   incident pins — any pin linked to a completed patient is hidden from the
+//                 map. The dashboard does this the moment the last dose is
+//                 recorded; this catches a failed or offline write.
+const SWEEP_BATCH_LIMIT = 450;
+
+// `today` is injectable so the restore clock can be tested against a future
+// date without waiting a year; the cron route always uses the real date.
+export async function runPatientArchiveSweep(today = manilaToday()) {
+  const snap = await db.collection('vaccinations').get();
+
+  const writes = [];
+  let archived = 0;
+  let backfilled = 0;
+  const incidentIdsToHide = new Set();
+
+  for (const docSnap of snap.docs) {
+    const p = docSnap.data();
+    if (!isSeriesCompleted(p)) continue;
+    (Array.isArray(p.incidentIds) ? p.incidentIds : []).forEach(id => incidentIdsToHide.add(id));
+    if (p.isArchived) continue;
+
+    const patch = {};
+    if (!p.completedAt) {
+      patch.completedAt = lastDoseDate(p);
+      backfilled++;
+    }
+    const merged = { ...p, ...patch };
+    const due = getArchiveDueDate(merged);
+    if (due && today >= due) {
+      Object.assign(patch, {
+        status: 'completed',
+        isArchived: true,
+        // Exactly 365 days after the clock started (completion, or the latest
+        // restore), even if the sweep runs late: Manila midnight + 30 min.
+        archivedAt: Timestamp.fromDate(new Date(`${due}T00:30:00+08:00`)),
+        archivedBy: 'auto-365',
+      });
+      archived++;
+    }
+    if (Object.keys(patch).length) writes.push({ ref: docSnap.ref, patch });
+  }
+
+  for (const id of incidentIdsToHide) {
+    const ref = db.collection('incidents').doc(id);
+    const inc = await ref.get();
+    if (inc.exists && inc.data().mapHidden !== true) {
+      writes.push({ ref, patch: { mapHidden: true, mapHiddenReason: 'patient-completed' } });
+    }
+  }
+
+  for (let i = 0; i < writes.length; i += SWEEP_BATCH_LIMIT) {
+    const batch = db.batch();
+    writes.slice(i, i + SWEEP_BATCH_LIMIT).forEach(({ ref, patch }) => batch.update(ref, patch));
+    await batch.commit();
+  }
+
+  console.log(`[patient-archive-sweep] archived ${archived}, backfilled ${backfilled}, ${writes.length} write(s) (today=${today})`);
+  return { archived, backfilled, today };
+}
+
+// ── Cancelled / declined appointment cleanup ────────────────────────────────
+// Runs with the daily patient-archive-sweep cron (no extra cron needed).
+// Cancelled and declined visits are request history, not medical records:
+// each is deleted 90 days after its visit date (Manila), along with its slot
+// hold when no other active appointment uses that hour. The nightly backup
+// still keeps older copies.
+const CANCELLED_RETENTION_DAYS = 90;
+
+async function purgeOldCancelledAppointments(today = manilaToday()) {
+  const [y, m, d] = today.split('-').map(Number);
+  const cutoff = new Date(Date.UTC(y, m - 1, d - CANCELLED_RETENTION_DAYS, 12)).toISOString().slice(0, 10);
+  const snap = await db.collection('appointments').where('status', 'in', ['cancelled', 'declined']).get();
+  const old = snap.docs.filter(doc => {
+    const date = String(doc.data().date || '').slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(date) && date < cutoff;
+  });
+  let slots = 0;
+  for (let i = 0; i < old.length; i += SWEEP_BATCH_LIMIT) {
+    const batch = db.batch();
+    for (const doc of old.slice(i, i + SWEEP_BATCH_LIMIT)) {
+      const { date, time } = doc.data();
+      batch.delete(doc.ref);
+      if (date && time) {
+        const sameHour = await db.collection('appointments').where('date', '==', date).where('time', '==', time).get();
+        const stillHeld = sameHour.docs.some(o => o.id !== doc.id && !['cancelled', 'declined'].includes(o.data().status));
+        if (!stillHeld) {
+          batch.delete(db.collection('appointmentSlots').doc(`${date}_${String(time).replace(/[\s:]/g, '')}`));
+          slots++;
+        }
+      }
+    }
+    await batch.commit();
+  }
+  console.log(`[cancelled-cleanup] deleted ${old.length} appointment(s) older than ${cutoff}, ${slots} slot hold(s)`);
+  return { cancelledDeleted: old.length, cutoff };
+}
+
+async function patientArchiveSweep(req, res) {
+  const result = await runPatientArchiveSweep();
+  let cleanup = {};
+  try {
+    cleanup = await purgeOldCancelledAppointments(result.today);
+  } catch (err) {
+    // Housekeeping must never fail the archive sweep itself.
+    console.error('[cancelled-cleanup] failed:', err);
+  }
+  res.status(200).json({ success: true, ...result, ...cleanup });
+}
+
 const ADMIN_ACTIONS = { 'send-followup': sendFollowUp, backup: backupNow };
-const OPEN_ACTIONS = { 'register-token': registerToken, 'unregister-token': unregisterToken, 'set-avatar': setAvatar, 'update-profile': updateProfile, ack: acknowledge };
+const OPEN_ACTIONS = { 'register-token': registerToken, 'unregister-token': unregisterToken, 'set-avatar': setAvatar, 'remove-avatar': removeAvatar, 'update-profile': updateProfile, ack: acknowledge };
 // Runs unattended on a schedule, so it authenticates with CRON_SECRET rather
 // than an admin's ID token.
-const CRON_ACTIONS = { 'dose-sweep': doseSweep, 'backup-cron': backupCron };
+const CRON_ACTIONS = { 'dose-sweep': doseSweep, 'backup-cron': backupCron, 'patient-archive-sweep': patientArchiveSweep };
+
+// ══════════════════════════════════════════════════════════════════════════
+// Patient / clinic report email (admin only): /api/send-patient-report, /api/send-report
+// ══════════════════════════════════════════════════════════════════════════
+// Emails a patient/clinic report — either as HTML body (bulk reports) or
+// with a real PDF attachment (single-patient records, generated client-side
+// via jsPDF and passed here as base64), sent through the same Gmail SMTP
+// transport as OTP/invite emails. Auth-gated so only a signed-in admin can
+// trigger a send.
+
+async function sendPatientReport(req, res) {
+  if (req.method !== 'POST') {
+    res.status(405).json({ success: false, error: 'Method not allowed.' });
+    return;
+  }
+
+  try {
+    const caller = await requireAuthenticatedAdmin(req);
+    if (caller.error) {
+      res.status(caller.status).json({ success: false, error: caller.error });
+      return;
+    }
+
+    const to = (req.body?.to || '').trim();
+    const subject = (req.body?.subject || 'K&A Clinic Report').trim();
+    const html = req.body?.html || '';
+    const attachmentBase64 = req.body?.attachmentBase64 || '';
+    const attachmentFilename = (req.body?.attachmentFilename || 'report.pdf').trim();
+
+    if (!to || !isValidEmail(to)) {
+      res.status(400).json({ success: false, error: 'Enter a valid recipient email address.' });
+      return;
+    }
+    if (!html && !attachmentBase64) {
+      res.status(400).json({ success: false, error: 'Missing report content.' });
+      return;
+    }
+
+    console.log(`[report-mailer] Sending report to ${to}, subject: "${subject}", hasAttachment: ${Boolean(attachmentBase64)}`);
+
+    const attachments = attachmentBase64
+      ? [{ filename: attachmentFilename, content: attachmentBase64, encoding: 'base64' }]
+      : undefined;
+
+    const { error: sendError, messageId, sender } = await sendMail({
+      to,
+      subject,
+      html: html || '<p>Please find your official K&amp;A Clinic report attached.</p>',
+      attachments,
+      role: 'appointments',
+    });
+    if (sendError) {
+      console.error('send-patient-report mail error:', sendError);
+      res.status(502).json({ success: false, error: 'Failed to send the email: ' + (sendError.message || 'SMTP transport failure') });
+      return;
+    }
+
+    console.log(`[report-mailer] Successfully delivered via ${sender}: ${messageId}`);
+    res.status(200).json({ success: true, messageId });
+  } catch (err) {
+    console.error('send-patient-report error:', err);
+    res.status(500).json({ success: false, error: 'Something went wrong sending the report: ' + (err?.message || 'Server error') });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Nightly conversation cleanup (cron): /api/archive-read-conversations
+// ══════════════════════════════════════════════════════════════════════════
+// Runs at 00:00 Asia/Manila via the `crons` entry in vercel.json, which calls
+// /api/notifications?route=archive-read-conversations directly (this file is
+// the real function; /api/archive-read-conversations is only a rewrite kept
+// for manual calls). It only permanently deletes conversations that have
+// been archived for more than 30 days. It never archives anything: closed
+// conversations stay in Messages until staff file them away with the Archive
+// button. (The route and function name date from when this job also
+// auto-archived.)
+
+// Firestore caps a batch at 500 writes; stay under it so a large backlog
+// does not fail the whole sweep.
+const BATCH_LIMIT = 450;
+
+// Archived conversations are kept for 30 days, then deleted for good along
+// with their messages. Staff can delete one sooner from the Archive page.
+// There is no restore for conversations: open -> archived -> deleted.
+export const ARCHIVED_CONVERSATION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+async function deleteInBatches(refs) {
+  for (let i = 0; i < refs.length; i += BATCH_LIMIT) {
+    const batch = db.batch();
+    refs.slice(i, i + BATCH_LIMIT).forEach(ref => batch.delete(ref));
+    await batch.commit();
+  }
+}
+
+// Deletes every conversation archived more than 30 days before `now`, and
+// each one's chatMessages. `now` is injectable for testing.
+export async function deleteExpiredArchivedConversations(now = Date.now()) {
+  const cutoff = now - ARCHIVED_CONVERSATION_TTL_MS;
+  const snap = await db.collection('chatThreads').where('archived', '==', true).get();
+  const expired = snap.docs.filter(d => {
+    const at = Number(d.data().archivedAt) || 0;
+    return at > 0 && at <= cutoff;
+  });
+  let messages = 0;
+  for (const thread of expired) {
+    const msgs = await db.collection('chatMessages').where('threadId', '==', thread.id).get();
+    messages += msgs.size;
+    await deleteInBatches(msgs.docs.map(m => m.ref));
+  }
+  await deleteInBatches(expired.map(d => d.ref));
+  return { deleted: expired.length, messages };
+}
+
+// Vercel signs cron invocations with CRON_SECRET as a bearer token. Without
+// this check the endpoint is a public "delete old archived chats" button.
+function isAuthorizedCron(req) {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return false;
+  const header = req.headers.authorization || '';
+  return header === `Bearer ${secret}`;
+}
+
+async function archiveReadConversations(req, res) {
+  if (req.method !== 'POST' && req.method !== 'GET') {
+    res.status(405).json({ success: false, error: 'Method not allowed.' });
+    return;
+  }
+
+  if (!isAuthorizedCron(req)) {
+    // Deliberately vague: an unauthenticated caller learns nothing about
+    // whether CRON_SECRET is configured or merely mismatched.
+    res.status(401).json({ success: false, error: 'Not authorized.' });
+    return;
+  }
+
+  try {
+    // Archiving is manual (Messages -> Archive), so this job only deletes.
+    const purge = await deleteExpiredArchivedConversations(Date.now());
+
+    console.log(`[archive-read-conversations] deleted ${purge.deleted} expired conversation(s) and ${purge.messages} message(s).`);
+    // `archived` stays in the reply, always 0, so the response shape is unchanged.
+    res.status(200).json({ success: true, archived: 0, deleted: purge.deleted });
+  } catch (err) {
+    console.error('archive-read-conversations error:', err);
+    res.status(500).json({ success: false, error: 'Auto-archive sweep failed.' });
+  }
+}
+
+const MERGED_ROUTES = {
+  'send-patient-report': sendPatientReport,
+  'send-report': sendPatientReport,
+  'archive-read-conversations': archiveReadConversations,
+};
 
 export default async function handler(req, res) {
+  const route = routeName(req);
+  if (Object.prototype.hasOwnProperty.call(MERGED_ROUTES, route)) {
+    return MERGED_ROUTES[route](req, res);
+  }
+
   const action = (req.query?.action || req.body?.action || '').trim();
 
   // The email acknowledgement link and the cron sweep are GETs; everything
   // else is POST.
-  const getAllowed = action === 'ack' || action === 'dose-sweep' || action === 'backup-cron';
+  const getAllowed = action === 'ack' || Object.prototype.hasOwnProperty.call(CRON_ACTIONS, action);
   if (req.method !== 'POST' && !(req.method === 'GET' && getAllowed)) {
     res.status(405).json({ success: false, error: 'Method not allowed.' });
     return;
@@ -801,8 +1160,9 @@ export default async function handler(req, res) {
 
   try {
     if (Object.prototype.hasOwnProperty.call(CRON_ACTIONS, action)) {
-      const secret = process.env.CRON_SECRET;
-      if (secret && (req.headers.authorization || '') !== `Bearer ${secret}`) {
+      // Fails closed: with CRON_SECRET unset these jobs (reminders, backups,
+      // archiving) must not be runnable by anyone who knows the URL.
+      if (!isAuthorizedCron(req)) {
         res.status(401).json({ success: false, error: 'Unauthorized.' });
         return;
       }

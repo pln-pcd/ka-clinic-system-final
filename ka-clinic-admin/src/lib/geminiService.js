@@ -3,7 +3,7 @@
 // Thin client for the shared chatbot engine (api/chatbot.js) — the system
 // prompt, Gemini call, and keyword fallback all now live server-side so the
 // Gemini API key never ships in this bundle. Also used by the patient app
-// (patient-app/app/services/chatbot.ts) so both entry points give identical,
+// (patient-app/services/chatbot.ts) so both entry points give identical,
 // guardrailed answers.
 export async function askGemini(prompt, history = []) {
   try {

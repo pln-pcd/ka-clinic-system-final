@@ -20,8 +20,8 @@ import {
 } from 'react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { AccountNotRegisteredError, getAuthErrorMessage, maskEmail, requestPasswordReset } from '../../config/firebase';
-import { moderateScale, scale, verticalScale } from '../../constants/scale';
+import { AccountNotRegisteredError, getAuthErrorMessage, maskEmail, requestPasswordReset } from '../../config/backend';
+import { moderateScale, scale, verticalScale } from '../../utils/scale';
 
 const { height } = Dimensions.get('window');
 const NAVY_BLUE = '#1E3A8A';
@@ -247,8 +247,8 @@ export default function ForgotPasswordScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
-  background: { ...StyleSheet.absoluteFillObject },
-  patternOverlay: { ...StyleSheet.absoluteFillObject, opacity: 0.5 },
+  background: { ...StyleSheet.absoluteFill },
+  patternOverlay: { ...StyleSheet.absoluteFill, opacity: 0.5 },
   bgIcon1: { position: 'absolute', top: verticalScale(30), left: -scale(25), transform: [{ rotate: '15deg' }] },
   bgIcon2: { position: 'absolute', top: height * 0.45, right: -scale(30), transform: [{ rotate: '-15deg' }] },
   bgIcon3: { position: 'absolute', bottom: verticalScale(30), left: scale(10), transform: [{ rotate: '10deg' }] },

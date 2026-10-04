@@ -8,8 +8,8 @@
 // the existing settings/{docId} admin-write rule already covers.
 //
 // When the toggle is off nothing is written and nothing is queued.
-import { doc, increment, onSnapshot, setDoc } from 'firebase/firestore';
-import { db } from './firebase';
+import { doc, increment, setDoc } from 'firebase/firestore';
+import { db, listen } from './firebase';
 
 let enabled = false;
 let listening = false;
@@ -17,7 +17,7 @@ let listening = false;
 function ensureListener() {
   if (listening) return;
   listening = true;
-  onSnapshot(doc(db, 'settings', 'config'), snap => {
+  listen(doc(db, 'settings', 'config'), snap => {
     enabled = !!snap.data()?.system?.analyticsEnabled;
   }, () => { enabled = false; });
 }
@@ -33,13 +33,10 @@ export function trackEvent(name) {
   ensureListener();
   if (!enabled || !name) return;
   const key = String(name).replace(/[^a-zA-Z0-9_-]/g, '_');
-  setDoc(doc(db, 'settings', 'analytics'), {
-    days: { [todayKey()]: { [key]: increment(1) } },
-    updatedAt: Date.now(),
-  }, { merge: true }).catch(() => {});
-}
-
-// Call once at app start so the enabled flag is live before the first event.
-export function initAnalytics() {
-  ensureListener();
+  try {
+    setDoc(doc(db, 'settings', 'analytics'), {
+      days: { [todayKey()]: { [key]: increment(1) } },
+      updatedAt: Date.now(),
+    }, { merge: true }).catch(() => {});
+  } catch { /* a failed Firestore client throws synchronously */ }
 }

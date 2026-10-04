@@ -12,7 +12,7 @@
 // guarantee. For a lost phone, the clinic must reset the password.
 import { Platform } from 'react-native';
 import { deleteDoc, doc, getDocs, onSnapshot, collection, query, setDoc, where } from 'firebase/firestore';
-import { db } from './firebase';
+import { db } from './backend';
 import { getDeviceId } from './appPrefs';
 
 export type DeviceSession = {
