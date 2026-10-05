@@ -12,6 +12,9 @@
 
    If only `msg` is given, a default title for the type is used
    and `msg` becomes the description line.
+
+   type="loading" shows a spinner; `progress` (0–100) adds a thin bar
+   along the bottom. `offset` lifts a toast above the ones below it.
 ───────────────────────────────────────────── */
 
 const VARIANTS = {
@@ -42,6 +45,13 @@ const VARIANTS = {
       </>
     ),
   },
+  loading: {
+    accent: '#3B50DF',
+    title: 'Working…',
+    icon: (
+      <path d="M21 12a9 9 0 1 1-6.22-8.56" style={{ transformOrigin: '12px 12px', animation: 'toastSpin .9s linear infinite' }} />
+    ),
+  },
   info: {
     accent: '#1476C6',
     title: 'Did you know?',
@@ -54,7 +64,7 @@ const VARIANTS = {
   },
 };
 
-export default function Toast({ msg, message, title, type = 'info', onClose }) {
+export default function Toast({ msg, message, title, type = 'info', onClose, progress, offset = 0 }) {
   const text = msg ?? message;
   if (!text) return null;
 
@@ -67,7 +77,7 @@ export default function Toast({ msg, message, title, type = 'info', onClose }) {
       aria-live="polite"
       style={{
         position: 'fixed',
-        bottom: 28,
+        bottom: 28 + offset,
         right: 28,
         zIndex: 20000,
         display: 'flex',
@@ -81,6 +91,7 @@ export default function Toast({ msg, message, title, type = 'info', onClose }) {
         boxShadow: '0 10px 26px rgba(15, 23, 42, 0.15), 0 2px 6px rgba(15, 23, 42, 0.07)',
         animation: 'toastIn .22s cubic-bezier(.16,1,.3,1)',
         overflow: 'hidden',
+        transition: 'bottom .2s ease',
       }}
     >
       {/* accent bar */}
@@ -149,6 +160,12 @@ export default function Toast({ msg, message, title, type = 'info', onClose }) {
         </div>
       </div>
 
+      {typeof progress === 'number' && (
+        <div aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, background: '#EEF2FF' }}>
+          <div style={{ width: `${Math.max(4, Math.min(100, progress))}%`, height: '100%', background: v.accent, transition: 'width .25s ease' }} />
+        </div>
+      )}
+
       {/* dismiss */}
       {onClose && (
         <button
@@ -174,6 +191,7 @@ export default function Toast({ msg, message, title, type = 'info', onClose }) {
       )}
 
       <style>{`
+        @keyframes toastSpin { to { transform: rotate(360deg); } }
         @keyframes toastIn {
           from { opacity: 0; transform: translateY(14px) scale(.98); }
           to   { opacity: 1; transform: translateY(0) scale(1); }
