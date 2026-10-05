@@ -1025,11 +1025,10 @@ const CRON_ACTIONS = { 'dose-sweep': doseSweep, 'backup-cron': backupCron, 'pati
 // ══════════════════════════════════════════════════════════════════════════
 // Patient / clinic report email (admin only): /api/send-patient-report, /api/send-report
 // ══════════════════════════════════════════════════════════════════════════
-// Emails a patient/clinic report — either as HTML body (bulk reports) or
-// with a real PDF attachment (single-patient records, generated client-side
-// via jsPDF and passed here as base64), sent through the same Gmail SMTP
-// transport as OTP/invite emails. Auth-gated so only a signed-in admin can
-// trigger a send.
+// Emails a patient/clinic report: a short HTML note with the PDF the export
+// dialog generated (jsPDF, client-side) attached, sent through the same Gmail
+// SMTP transport as OTP/invite emails. Auth-gated so only a signed-in admin
+// can trigger a send.
 
 async function sendPatientReport(req, res) {
   if (req.method !== 'POST') {
