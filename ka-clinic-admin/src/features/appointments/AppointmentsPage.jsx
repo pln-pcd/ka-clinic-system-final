@@ -32,6 +32,7 @@ import Toast from '../../components/Toast';
 import { authedPostJson } from '../../lib/adminSession';
 import { getTodayDateString, formatDateLong, formatDateMedium, formatServiceType } from '../../lib/formatters';
 import Modal from '../../components/Modal';
+import useDiscardGuard from '../../components/useDiscardGuard';
 import Select from '../../components/Select';
 import IconButton from '../../components/IconButton';
 import ConfirmDialog from '../../components/ConfirmDialog';
@@ -999,6 +1000,8 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
   const [editingApt, setEditingApt] = useState(null);
 
   const [addForm, setAddForm] = useState(EMPTY_ADD_FORM);
+  // Ask before closing Add Appointment with something typed in it.
+  const [requestCloseAdd, addDiscardDialog] = useDiscardGuard(addForm, () => setAddModalOpen(false), { resetKey: addModalOpen, enabled: addModalOpen });
   const addV = useFieldErrors(ADD_APPT_RULES, addForm, 'appt');
 
 
@@ -1685,7 +1688,8 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
 
       {/* Add Appointment Modal */}
       {addModalOpen && (
-        <Modal onClose={() => setAddModalOpen(false)}>
+        <Modal onClose={requestCloseAdd}>
+          {addDiscardDialog}
           <div
             className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200 my-auto flex flex-col"
             style={{ maxHeight: 'calc(100vh - 130px)', transition: 'all 0.4s cubic-bezier(0.22,1,0.36,1)' }}
@@ -1697,7 +1701,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                 <h3 className="text-sm font-bold text-slate-900">Add Appointment</h3>
                 <p className="text-[11px] text-slate-400 font-normal mt-0.5">Fill in the details for the new appointment</p>
               </div>
-              <IconButton icon={X} label="Close" size={36} iconSize={16} onClick={() => setAddModalOpen(false)} />
+              <IconButton icon={X} label="Close" size={36} iconSize={16} onClick={requestCloseAdd} />
             </div>
 
             {/* Scrollable Form Body */}
@@ -1797,7 +1801,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
               <button
                 type="button"
                 className={BTN.outline}
-                onClick={() => setAddModalOpen(false)}
+                onClick={requestCloseAdd}
               >
                 Cancel
               </button>

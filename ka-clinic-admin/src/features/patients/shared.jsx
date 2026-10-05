@@ -1,6 +1,24 @@
 // Pieces the Patients feature files share: page CSS, the live status rule,
 // service types and badge, the close icon, and the lazily loaded export dialog.
-import { Dog, ShieldCheck, Syringe, Wind } from 'lucide-react';
+import { ShieldCheck, Stethoscope, Syringe } from 'lucide-react';
+
+// lucide's "shield-plus", which the installed lucide-react (0.263) predates.
+// Same 24px grid, stroke and props as the library icons beside it.
+export function ShieldPlus({ size = 24, strokeWidth = 2, color = 'currentColor', ...rest }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" {...rest}>
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
+      <path d="M9 12h6" />
+      <path d="M12 9v6" />
+    </svg>
+  );
+}
+
+// One look for every service icon: the same line icons, stroke and tinted
+// square, so no service stands out by colour.
+export const SERVICE_ICON_TINT = 'bg-indigo-50 text-[#3B50DF]';
+export const SERVICE_ICON_STROKE = 1.75;
 import { lazyModal } from '../../components/LazyModal';
 
 
@@ -269,33 +287,33 @@ export const derivePatientStatus = (patient) => {
 };
 
 /* ─────────────────────────── SERVICE CONFIG ─────────────────────────── */
-// icon: Lucide component; tint: the icon circle; when / schedule: shown on
+// icon: line icon component; tint: the icon square (the same for all); when / schedule: shown on
 // the Register wizard's service cards.
 export const SERVICE_TYPES = [
   {
     key: 'PEP', label: 'PEP', desc: 'Post-Exposure Prophylaxis', sub: 'After animal bite',
-    icon: Dog, tint: 'bg-rose-50 text-rose-600',
-    when: 'After a bite, scratch or saliva exposure from an animal.',
+    icon: ShieldPlus, tint: SERVICE_ICON_TINT,
+    when: 'After a bite or scratch from an animal.',
     schedule: '4 sessions · Day 0, 3, 7, 28',
     pillClass: 'service-pep', selClass: 'sel-pep'
   },
   {
     key: 'PrEP', label: 'PrEP', desc: 'Pre-Exposure Prophylaxis', sub: 'Before exposure',
-    icon: ShieldCheck, tint: 'bg-indigo-50 text-[#3B50DF]',
+    icon: ShieldCheck, tint: SERVICE_ICON_TINT,
     when: 'Before any exposure, for people at high risk (vets, animal handlers).',
     schedule: '2 doses · Day 0, 7',
     pillClass: 'service-prep', selClass: 'sel-prep'
   },
   {
     key: 'Tetanus', label: 'Anti-Tetanus', desc: 'Tetanus Toxoid (TT)', sub: 'Wound / injury',
-    icon: Syringe, tint: 'bg-amber-50 text-amber-600',
+    icon: Syringe, tint: SERVICE_ICON_TINT,
     when: 'For wounds and injuries, or to complete a tetanus series.',
     schedule: '3 doses · 0, 1 mo, 6 mo',
     pillClass: 'service-tetanus', selClass: 'sel-tetanus'
   },
   {
     key: 'Pneumonia', label: 'Pneumonia', desc: 'Pneumococcal Vaccine', sub: 'PCV / PPSV23',
-    icon: Wind, tint: 'bg-sky-50 text-sky-600',
+    icon: Stethoscope, tint: SERVICE_ICON_TINT,
     when: 'Pneumococcal protection for older and high-risk adults.',
     schedule: 'Single dose · adults',
     pillClass: 'service-pneumonia', selClass: 'sel-pneumonia'

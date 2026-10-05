@@ -11,7 +11,8 @@ import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
 import autoTable from "jspdf-autotable";
 import { CLINIC_LOGO_BASE64 } from "../../assets/clinicLogoBase64";
-import { clinicLogoBase64Cache, drawReportHeader, getClinicLogoBase64, pdfToBase64 } from "../../lib/pdfReport";
+import { clinicLogoBase64Cache, drawReportHeader, getClinicLogoBase64 } from "../../lib/pdfReport";
+import { pdfToBytes, sendReportInBackground, warmReportMailer } from "../../lib/reportMailer";
 import { Printer, Download, Mail, Loader2 } from "lucide-react";
 import { X, derivePatientStatus } from "./shared";
 import PreviewViewer from "../../components/PreviewViewer";
@@ -94,12 +95,14 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
   // ── Email delivery — shared by both bulk and single-patient modes ──────
   const [showEmailInput, setShowEmailInput] = useState(false);
   const [emailTo, setEmailTo] = useState('');
-  const [sending, setSending] = useState(false);
   // The toast renders under the modal's portal, so a send needs its own
   // confirmation inside the card.
   const [sentTo, setSentTo] = useState('');
+  const [queuedTo, setQueuedTo] = useState('');
 
-  async function sendReportEmail(to, subject, html, attachment) {
+  // The send runs in the background (lib/reportMailer.js) with its own
+  // progress toast, so the dialog is free again at once and can be closed.
+  function sendReportEmail(to, subject, html, attachment) {
     const trimmed = to.trim();
     if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
       onToast('Enter a valid recipient email address.', 'error');
@@ -109,34 +112,14 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
       onToast('You must be signed in as an administrator to send reports.', 'error');
       return;
     }
-    setSending(true);
-    try {
-      const idToken = await auth.currentUser.getIdToken(true);
-      const res = await fetch('/api/send-patient-report', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({
-          to: trimmed, subject, html,
-          ...(attachment ? { attachmentBase64: attachment.base64, attachmentFilename: attachment.filename } : {}),
-        }),
+    setQueuedTo(trimmed);
+    setSentTo('');
+    setEmailTo('');
+    sendReportInBackground({ to: trimmed, subject, html, pdf: attachment.pdf, filename: attachment.filename })
+      .then(ok => {
+        setQueuedTo(q => (q === trimmed ? '' : q));
+        if (ok) setSentTo(trimmed);
       });
-      const data = await res.json().catch(() => null);
-      if (res.ok && data?.success) {
-        onToast(`Report emailed to ${trimmed}`, 'success');
-        setSentTo(trimmed);
-        setEmailTo('');
-      } else {
-        onToast(data?.error || `Failed to send email (${res.status} ${res.statusText})`, 'error');
-      }
-    } catch (err) {
-      console.error('sendReportEmail error:', err);
-      onToast(err?.message || 'Network error while sending the email.', 'error');
-    } finally {
-      setSending(false);
-    }
   }
 
   function getFilteredPatients() {
@@ -712,7 +695,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
   // same header/footer furniture — so the downloaded file matches the preview
   // page for page instead of reflowing to its own rhythm.
   function buildBulkPdf(rows, logoDataUrl = CLINIC_LOGO_BASE64) {
-    const doc = new jsPDF({ orientation: 'landscape', format: 'a4', unit: 'mm' });
+    const doc = new jsPDF({ orientation: 'landscape', format: 'a4', unit: 'mm', compress: true });
     const pageWidth = doc.internal.pageSize.getWidth(); // 297mm
     const pageHeight = doc.internal.pageSize.getHeight(); // 210mm
     const dateGeneratedStr = new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -1339,7 +1322,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
   function buildDocumentPdf(p, type = 'record', audience = 'clinic', logoDataUrl = clinicLogoBase64Cache || CLINIC_LOGO_BASE64) {
     let doc;
     for (let i = 0; i < PDF_DENSITIES.length; i++) {
-      doc = new jsPDF();
+      doc = new jsPDF({ compress: true });
       drawMedicalRecordPdf(doc, p, audience, logoDataUrl, PDF_DENSITIES[i]);
       if (doc.internal.getNumberOfPages() === 1) return doc;
     }
@@ -1385,8 +1368,8 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
         return;
       }
       const logo = (await getClinicLogoBase64()) || logoDataUrl || CLINIC_LOGO_BASE64;
-      const base64 = pdfToBase64(buildBulkPdf(rows, logo));
-      if (!base64) {
+      const pdf = pdfToBytes(buildBulkPdf(rows, logo));
+      if (!pdf?.byteLength) {
         onToast('Could not generate the PDF report. Please try again.', 'error');
         return;
       }
@@ -1397,7 +1380,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
         `<p>Attached is the K&amp;A Animal Bite Center health monitoring report for <strong>${periodLabel()}</strong>.</p>`
           + `<p>Service: ${serviceFilterLabel()} &bull; Status: ${statusFilterLabel()} &bull; ${rows.length} patient record${rows.length !== 1 ? 's' : ''}.</p>`
           + `<p>&mdash; K&amp;A Animal Bite Center</p>`,
-        { base64, filename: `health-monitoring-report-${period}${statusSlug}-${getTodayDateString()}.pdf` }
+        { pdf, filename: `health-monitoring-report-${period}${statusSlug}-${getTodayDateString()}.pdf` }
       );
     } catch (err) {
       console.error('emailBulkReportPdf error:', err);
@@ -1409,8 +1392,8 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     if (!p) return;
     try {
       const logo = (await getClinicLogoBase64()) || logoDataUrl || CLINIC_LOGO_BASE64;
-      const base64 = pdfToBase64(buildDocumentPdf(p, docType, 'patient', logo));
-      if (!base64) {
+      const pdf = pdfToBytes(buildDocumentPdf(p, docType, 'patient', logo));
+      if (!pdf?.byteLength) {
         onToast('Could not generate the PDF attachment. Please try again.', 'error');
         return;
       }
@@ -1418,7 +1401,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
         to,
         `K&A Clinic — Medical Report for ${formatTitleCase(p.name)}`,
         `<p>Dear ${formatTitleCase(p.name)},</p><p>Please find your official patient medical report from K&amp;A Animal Bite Center attached as a PDF.</p><p>&mdash; K&amp;A Animal Bite Center</p>`,
-        { base64, filename: `medical-report-${p.id || p.mrn || p.firestoreId || 'patient'}.pdf` }
+        { pdf, filename: `medical-report-${p.id || p.mrn || p.firestoreId || 'patient'}.pdf` }
       );
     } catch (err) {
       console.error('emailSinglePatientPdf error:', err);
@@ -1731,6 +1714,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
                 onClick={() => {
                   setShowEmailInput(v => !v);
                   setSentTo('');
+                  warmReportMailer();
                   if (mode === 'single' && selectedPatient && !emailTo) {
                     setEmailTo(selectedPatient.email || '');
                   }
@@ -1752,6 +1736,14 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
 
               {showEmailInput && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px', background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 8, marginTop: 2 }}>
+                  {queuedTo && (
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', background: '#EEF2FF', border: '1px solid #C7D2FE', borderRadius: 8 }}>
+                      <Loader2 size={13} style={{ color: '#3B50DF', marginTop: 1, flexShrink: 0, animation: 'spin 1s linear infinite' }} />
+                      <div style={{ fontSize: '.71875rem', color: '#3730A3', lineHeight: 1.45 }}>
+                        <strong>Sending…</strong> to <strong>{queuedTo}</strong>. You can close this window; a message appears when it's done.
+                      </div>
+                    </div>
+                  )}
                   {sentTo && (
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 8 }}>
                       <span style={{ color: '#047857', fontWeight: 800, lineHeight: 1.2 }}>✓</span>
@@ -1769,15 +1761,15 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
                   />
                   <button
                     type="button"
-                    disabled={sending || !emailTo.trim()}
+                    disabled={!emailTo.trim()}
                     onClick={() =>
                       mode === 'bulk'
                         ? emailBulkReportPdf(emailTo)
                         : emailSinglePatientPdf(selectedPatient, emailTo)
                     }
-                    style={{ width: '100%', height: 38, background: '#3B50DF', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: '.8125rem', cursor: 'pointer', opacity: (sending || !emailTo.trim()) ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                    style={{ width: '100%', height: 38, background: '#3B50DF', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: '.8125rem', cursor: 'pointer', opacity: !emailTo.trim() ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
                   >
-                    {sending ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />Sending… this can take a few seconds</> : 'Send via Email'}
+                    Send via Email
                   </button>
                 </div>
               )}

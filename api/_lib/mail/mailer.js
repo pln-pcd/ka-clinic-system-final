@@ -80,6 +80,40 @@ async function getTransporterForRole(roleKey) {
   };
 }
 
+// A role whose Gmail login was rejected (wrong or revoked app password) is
+// skipped for 15 minutes. Without this every report send first spent ~1 s on a
+// TLS handshake and a failed AUTH with that account before falling back.
+const AUTH_FAILURE_SKIP_MS = 15 * 60 * 1000;
+const authFailedAt = new Map();
+function isAuthFailure(err) {
+  return err?.code === 'EAUTH' || err?.responseCode === 535 || err?.responseCode === 534;
+}
+function roleRecentlyRejected(roleKey) {
+  const at = authFailedAt.get(roleKey);
+  return Boolean(at && Date.now() - at < AUTH_FAILURE_SKIP_MS);
+}
+
+// Opens (and authenticates) the pooled connection for a role ahead of a send,
+// following the same fallback chain as sendMail. Used when an admin opens the
+// "Email report" box, so the click on Send does not pay for the handshake.
+export async function warmMailer(role = 'auth') {
+  if (process.env.FIRESTORE_EMULATOR_HOST) return { warmed: false, role: null };
+  const initialRole = ROLES[role] ? role : 'auth';
+  for (const r of [initialRole, ...(ROLES[initialRole]?.fallbackRoles || [])]) {
+    if (roleRecentlyRejected(r)) continue;
+    const config = await getTransporterForRole(r);
+    if (!config) continue;
+    try {
+      await config.transporter.verify();
+      return { warmed: true, role: r };
+    } catch (err) {
+      if (isAuthFailure(err)) authFailedAt.set(r, Date.now());
+      forgetTransporter(r);
+    }
+  }
+  return { warmed: false, role: null };
+}
+
 function forgetTransporter(roleKey) {
   const roleConfig = ROLES[roleKey] || ROLES.auth;
   const cacheKey = `${roleConfig.name}:${roleConfig.getUser()}`;
@@ -137,6 +171,7 @@ export async function sendMail({ to, subject, html, text, attachments, headers, 
 
   let lastError = null;
   for (const r of roleChain) {
+    if (roleRecentlyRejected(r) && r !== roleChain[roleChain.length - 1]) continue;
     const config = await getTransporterForRole(r);
     if (!config) continue;
 
@@ -154,12 +189,14 @@ export async function sendMail({ to, subject, html, text, attachments, headers, 
         },
         ...(attachments ? { attachments } : {}),
       });
+      authFailedAt.delete(r);
       return { error: null, messageId: info?.messageId, sender: config.user, role: r };
     } catch (err) {
       console.warn(`[mailer] Send via ${r} (${config.user}) failed, attempting fallback:`, err.message);
       // Drop the pooled transport so the next send looks the address up again
       // and opens a fresh connection (e.g. after a network change).
       forgetTransporter(r);
+      if (isAuthFailure(err)) authFailedAt.set(r, Date.now());
       lastError = err;
     }
   }

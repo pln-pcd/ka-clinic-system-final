@@ -61,7 +61,7 @@ function readBody(req) {
   return new Promise((resolvePromise, rejectPromise) => {
     const chunks = [];
     req.on('data', c => chunks.push(c));
-    req.on('end', () => resolvePromise(Buffer.concat(chunks).toString('utf8')));
+    req.on('end', () => resolvePromise(Buffer.concat(chunks)));
     req.on('error', rejectPromise);
   });
 }
@@ -137,9 +137,14 @@ export function devApiPlugin() {
             throw new Error(`api/${route}.js has no default export function`);
           }
 
-          const raw = await readBody(req);
+          // Like Vercel: application/octet-stream stays a Buffer, anything
+          // else is parsed as JSON when it can be.
+          const rawBuffer = await readBody(req);
           let body = {};
-          if (raw) {
+          if (String(req.headers['content-type'] || '').startsWith('application/octet-stream')) {
+            body = rawBuffer;
+          } else if (rawBuffer.length) {
+            const raw = rawBuffer.toString('utf8');
             try { body = JSON.parse(raw); } catch { body = raw; }
           }
 

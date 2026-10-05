@@ -5,7 +5,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { db } from "../../lib/firebase";
 import { peekLiveCollection, useLiveCollection } from '../../lib/liveStore';
 import { buildDoses, buildInitialDoses } from "../../lib/doseSchedules";
-import { getCompletionDate, getCompletionYear, getRegistrationYear } from "../../lib/patientArchive";
+import { getArchiveDueDate, getCompletionDate, getCompletionYear, getRegistrationYear } from "../../lib/patientArchive";
 import Toast from "../../components/Toast";
 import IconButton from "../../components/IconButton";
 import { useTableReserve } from "../../components/Pager";
@@ -483,16 +483,20 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
   }, []);
 
   // Before the early return below, so the hook order never changes.
-  const [tableAreaRef, tableReserve] = useTableReserve(56);
+  const [tableAreaRef, tableReserve] = useTableReserve(60);
 
   // Memoized (declared above the `if (selected)` early return, like every hook): recomputed only when the records, filters, search or sort change.
+  const todayIso = getTodayDateString();
   const processedPatients = useMemo(() => patients
     .filter(p => {
-      const liveStatus = derivePatientStatus(p);
       // Completed records stay here until the nightly sweep archives them a
       // year after completion (or after their latest restore). Archived
-      // records live only on the Archive page.
-      return !p.isArchived;
+      // records live only on the Archive page. A record already past its
+      // archive date is left out too, even if the sweep has not written
+      // isArchived yet (the catch-up run on load archives it).
+      if (p.isArchived) return false;
+      const due = getArchiveDueDate(p);
+      return !(due && due <= todayIso);
     })
     .filter(p => {
       if (!yearFilter) return true;
@@ -541,7 +545,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
       if (sortBy === 'name_asc') return (a.name || '').localeCompare(b.name || '');
       if (sortBy === 'mrn_asc') return (a.id || '').localeCompare(b.id || '');
       return 0;
-    }), [patients, yearFilter, filter, debouncedSearch, sortBy]);
+    }), [patients, yearFilter, filter, debouncedSearch, sortBy, todayIso]);
 
   if (selected) {
     const livePatient = patients.find(p => p.firestoreId === selected.firestoreId) || selected;
@@ -906,13 +910,14 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
                     // real dose-schedule logic to flag rows that need attention.
                     const isOverdue = liveStatus !== 'completed' && (liveStatus === 'overdue' || p.status === 'overdue' || buildDoses(p).some(d => d.status === 'miss'));
                     const formattedName = formatTitleCase(p.name);
+                    const archiveDue = liveStatus === 'completed' ? getArchiveDueDate(p) : '';
 
                     return (
                       <tr
                         key={rowId}
                         onClick={() => setSelected(p)}
                         style={{
-                          height: 56,
+                          height: 60,
                           borderBottom: '1px solid #F1F5F9',
                           background: isSelectedRow ? '#FEF2F2' : '#FFFFFF',
                           transition: 'background .12s ease',
@@ -933,17 +938,29 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
                         <td style={{ padding: '14px 16px' }}>
                           <ServiceBadge service={p.service} />
                         </td>
-                        <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
-                          <span style={{
-                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                            padding: '4px 10px', borderRadius: '9999px', fontSize: '.6875rem', fontWeight: 600,
-                            whiteSpace: 'nowrap',
-                            background: liveStatus === 'completed' ? '#ECFDF5' : isOverdue ? '#FEF2F2' : '#EFF6FF',
-                            color: liveStatus === 'completed' ? '#059669' : isOverdue ? '#DC2626' : '#1D4ED8',
-                            border: liveStatus === 'completed' ? '1px solid #A7F3D0' : isOverdue ? '1px solid #FCA5A5' : '1px solid #BFDBFE'
-                          }}>
-                            {liveStatus === 'completed' ? 'Completed' : isOverdue ? 'Overdue' : 'Ongoing'}
-                          </span>
+                        <td
+                          style={{ padding: '8px 16px', whiteSpace: 'nowrap' }}
+                          title={archiveDue ? `Auto-archived 1 year after completion${p.restoredAt ? ' (or after the latest restore)' : ''}. Moves to the Archive on ${formatDateMedium(archiveDue)}.` : undefined}
+                        >
+                          {/* Fixed-height box: every row keeps the same height whether or
+                              not it shows the archive line, and the badge stays centered. */}
+                          <div style={{ height: 40, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'flex-start', gap: 3 }}>
+                            <span style={{
+                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                              padding: '4px 10px', borderRadius: '9999px', fontSize: '.6875rem', fontWeight: 600,
+                              whiteSpace: 'nowrap',
+                              background: liveStatus === 'completed' ? '#ECFDF5' : isOverdue ? '#FEF2F2' : '#EFF6FF',
+                              color: liveStatus === 'completed' ? '#059669' : isOverdue ? '#DC2626' : '#1D4ED8',
+                              border: liveStatus === 'completed' ? '1px solid #A7F3D0' : isOverdue ? '1px solid #FCA5A5' : '1px solid #BFDBFE'
+                            }}>
+                              {liveStatus === 'completed' ? 'Completed' : isOverdue ? 'Overdue' : 'Ongoing'}
+                            </span>
+                            {archiveDue && (
+                              <span style={{ fontSize: '.6875rem', lineHeight: 1.2, color: '#94A3B8', fontWeight: 500, paddingLeft: 2 }}>
+                                Archives on {formatDateMedium(archiveDue)}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td style={{ padding: '14px 16px', color: '#64748B', fontWeight: 400, fontSize: '.8125rem', whiteSpace: 'nowrap' }}>
                           {formatDateMedium(p.date)}

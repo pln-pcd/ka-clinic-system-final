@@ -38,9 +38,15 @@ const isDoneDose = d => {
   return st === 'done' || st === 'completed' || d?.done === true;
 };
 
+// YYYY-MM-DD from a date string, Timestamp, Date or millis; '' if unreadable.
+// A non-ISO string ("June 26, 2025") is parsed rather than sliced.
 const toDateOnly = raw => {
   if (!raw) return '';
-  if (typeof raw === 'string') return raw.slice(0, 10);
+  if (typeof raw === 'string') {
+    if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+    const t = Date.parse(raw);
+    return Number.isNaN(t) ? '' : getTodayDateString(new Date(t));
+  }
   if (typeof raw?.toDate === 'function') return getTodayDateString(raw.toDate());
   if (typeof raw === 'number' || raw instanceof Date) return getTodayDateString(new Date(raw));
   return '';
@@ -62,7 +68,8 @@ export function isSeriesCompleted(p) {
  */
 export function getCompletionDate(p) {
   if (!isSeriesCompleted(p)) return '';
-  if (p.completedAt) return toDateOnly(p.completedAt);
+  const stamped = p.completedAt ? toDateOnly(p.completedAt) : '';
+  if (stamped) return stamped;
   const dates = (p.doses || []).map(d => toDateOnly(d.date)).filter(Boolean).sort();
   return dates[dates.length - 1] || toDateOnly(p.date);
 }

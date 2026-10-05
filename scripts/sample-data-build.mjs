@@ -47,7 +47,6 @@ export function buildSampleData(today = getTodayDateString()) {
     pcv20:    { id: 'n4OyoUEA3Vcgz8jWKk6o', name: 'Prevnar 20 (PCV20)',            category: 'Vaccine', unit: 'Vials',   minStock: 10, final: 22, expiry: day(260) },
     ppsv23:   { id: '44P4yaAbUrHXFdqtvyMg', name: 'Pneumovax 23 (PPSV23)',         category: 'Vaccine', unit: 'Vials',   minStock: 10, final: 18, expiry: day(21) },   // expiring soon
     erig:     { id: '5NtMP41ErZVVWjcwSU9P', name: 'Equirab (ERIG - Equine Rabies Immunoglobulin)', category: 'Rig', unit: 'Vials', minStock: 15, final: 32, expiry: day(330) },
-    hrig:     { id: 'NVHAcZ4oQYcVoeRRkwEO', name: 'Berirab (HRIG - Human Rabies Immunoglobulin)',  category: 'Rig', unit: 'Vials', minStock: 5, final: 0, expiry: day(200) }, // critical
     ats:      { id: 'CORzv67RYyrXxW2wb4Hc', name: 'Anti-Tetanus Serum (ATS 1500 IU)', category: 'Vaccine', unit: 'Ampules', minStock: 15, final: 40, expiry: day(310) },
     tig:      { id: 'PtVodvNDcKnwLyF9kDfl', name: 'Tetanus Immunoglobulin (TIG 250 IU)', category: 'Vaccine', unit: 'Vials', minStock: 10, final: 26, expiry: day(280) },
   };

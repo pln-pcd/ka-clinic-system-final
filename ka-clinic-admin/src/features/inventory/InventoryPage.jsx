@@ -1,5 +1,6 @@
 import { addDoc, collection, doc, updateDoc } from 'firebase/firestore';
 import Modal from '../../components/Modal';
+import useDiscardGuard from '../../components/useDiscardGuard';
 import Select from '../../components/Select';
 import { AlertCircle, Check, Download, Edit3, Minus, Package, Plus, X, XCircle } from 'lucide-react';
 import IconButton from '../../components/IconButton';
@@ -165,6 +166,17 @@ export default function VaccineInventoryPage() {
   // Use stock modal state
   const [showUseStockModal, setShowUseStockModal] = useState(false);
   const [useStockQty, setUseStockQty] = useState(1);
+
+  // Closing an add/edit/use-stock popup with unsaved entries asks first.
+  const [requestCloseAdd, addDiscardDialog] = useDiscardGuard(formData,
+    () => { setShowAddModal(false); setFormData(EMPTY_ITEM()); },
+    { resetKey: showAddModal, enabled: showAddModal });
+  const [requestCloseEdit, editDiscardDialog] = useDiscardGuard(editFormData,
+    () => { setShowEditModal(false); setSelectedItem(null); },
+    { resetKey: showEditModal && selectedItem?.id, enabled: showEditModal });
+  const [requestCloseUse, stockUseDiscardDialog] = useDiscardGuard(useStockQty,
+    () => { setShowUseStockModal(false); setSelectedItem(null); },
+    { resetKey: showUseStockModal && selectedItem?.id, enabled: showUseStockModal });
 
   // Shared live inventory (lib/liveStore.js).
   const invLive = useLiveCollection('inventory');
@@ -442,7 +454,8 @@ export default function VaccineInventoryPage() {
 
       {/* ── Add Item Modal (Comfortable 580px card + refined typography, Portaled to body) ── */}
       {showAddModal && (
-        <Modal onClose={() => { setShowAddModal(false); setFormData(EMPTY_ITEM()); }}>
+        <Modal onClose={requestCloseAdd}>
+          {addDiscardDialog}
           <div className="bg-white rounded-3xl w-full max-w-[580px] overflow-hidden shadow-2xl border border-slate-200" onClick={e => e.stopPropagation()}>
             {/* Card head */}
             <div className="px-7 py-5 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
@@ -450,7 +463,7 @@ export default function VaccineInventoryPage() {
                 <h3 className="text-[17px] font-bold text-slate-900">Add Inventory Item</h3>
                 <p className="text-[13px] text-slate-500 font-normal mt-0.5">Fill in the details for the new vaccine or supply item</p>
               </div>
-              <IconButton icon={X} label="Close" size={36} iconSize={18} onClick={() => { setShowAddModal(false); setFormData(EMPTY_ITEM()); }} />
+              <IconButton icon={X} label="Close" size={36} iconSize={18} onClick={requestCloseAdd} />
             </div>
 
             {/* Form Body */}
@@ -544,7 +557,7 @@ export default function VaccineInventoryPage() {
             {/* Footer */}
             <div className="kna-form-footer bg-white flex items-center gap-3 border-t border-slate-100">
               <button
-                onClick={() => { setShowAddModal(false); setFormData(EMPTY_ITEM()); }}
+                onClick={requestCloseAdd}
                 disabled={saving}
                 className={`${BTN.outline} flex-1`}
               >
@@ -564,7 +577,8 @@ export default function VaccineInventoryPage() {
 
       {/* ── Edit Item Modal (Comfortable 580px card + refined typography, Portaled to body) ── */}
       {showEditModal && selectedItem && (
-        <Modal onClose={() => { setShowEditModal(false); setSelectedItem(null); }}>
+        <Modal onClose={requestCloseEdit}>
+          {editDiscardDialog}
           <div className="bg-white rounded-3xl w-full max-w-[580px] overflow-hidden shadow-2xl border border-slate-200" onClick={e => e.stopPropagation()}>
             {/* Card head */}
             <div className="px-7 py-5 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
@@ -573,7 +587,7 @@ export default function VaccineInventoryPage() {
                 <p className="text-[13px] text-slate-500 font-normal mt-0.5">Update details for <span className="font-bold text-slate-700">{selectedItem.name}</span></p>
               </div>
               
-              <IconButton icon={X} label="Close" size={36} iconSize={18} onClick={() => { setShowEditModal(false); setSelectedItem(null); }} />
+              <IconButton icon={X} label="Close" size={36} iconSize={18} onClick={requestCloseEdit} />
             </div>
 
             {/* Form Body */}
@@ -648,7 +662,7 @@ export default function VaccineInventoryPage() {
             {/* Footer */}
             <div className="kna-form-footer bg-white flex items-center gap-3 border-t border-slate-100">
               <button
-                onClick={() => { setShowEditModal(false); setSelectedItem(null); }}
+                onClick={requestCloseEdit}
                 className={`${BTN.outline} flex-1`}
               >
                 Cancel
@@ -667,7 +681,8 @@ export default function VaccineInventoryPage() {
 
       {/* ── Use Stock Modal (Portaled to body) ── */}
       {showUseStockModal && selectedItem && (
-        <Modal onClose={() => { setShowUseStockModal(false); setSelectedItem(null); }}>
+        <Modal onClose={requestCloseUse}>
+          {stockUseDiscardDialog}
           <div className="bg-white rounded-2xl w-full max-w-xs overflow-hidden shadow-xl" onClick={e => e.stopPropagation()}>
             <div className="p-6">
               <div className="text-center mb-4">
@@ -698,7 +713,7 @@ export default function VaccineInventoryPage() {
               </div>
               <div className="flex gap-2">
                 <button
-                  onClick={() => { setShowUseStockModal(false); setSelectedItem(null); }}
+                  onClick={requestCloseUse}
                   className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-lg font-bold text-xs hover:bg-gray-50 transition-all"
                 >
                   Cancel

@@ -114,7 +114,7 @@ export const SERVICES = [
     tag: 'Emergency Care',
     title: 'Post-Exposure Prophylaxis (PEP)',
     desc: 'WHO-standard 5-dose active immunization protocol for animal bite and scratch victims.',
-    target: 'Anyone bitten, scratched, or exposed to saliva of dogs, cats, bats, or rabies-suspect animals.',
+    target: 'Anyone bitten or scratched by dogs, cats, bats, or rabies-suspect animals.',
     whenNeeded: 'Immediately after exposure (Day 0). Do not delay seeking medical care.',
     schedule: ['Day 0 (Initial dose)', 'Day 3 (2nd dose)', 'Day 7 (3rd dose)', 'Day 14 (4th dose)', 'Day 28 (5th dose)'],
     specs: 'WHO/DOH purified Vero-cell rabies vaccine (PVRV). Intramuscular administration with strict cold-chain assurance.',
@@ -141,7 +141,7 @@ export const SERVICES = [
     target: 'Patients with Category III exposures (deep transdermal bites, multiple wounds, bites on head/neck/hands).',
     whenNeeded: 'Administered on Day 0 alongside the first dose of PEP.',
     schedule: ['Single Day 0 infiltration around wound margins', 'Remaining volume injected IM'],
-    specs: 'Equine Rabies Immunoglobulin (ERIG) or Human Rabies Immunoglobulin (HRIG). Weight-adjusted dosage providing instant antibodies before vaccine response matures.',
+    specs: 'Equine Rabies Immunoglobulin (ERIG). Weight-adjusted dosage providing instant antibodies before vaccine response matures.',
     highlights: ['Immediate Neutralizing Antibodies', 'Direct Wound Margin Infiltration', 'Weight-Calculated Dosing']
   },
   {

@@ -1,6 +1,6 @@
 // Shared pieces of the PDF reports built by the Patients and Inventory export
-// dialogs: the clinic logo, the report header, and the base64 conversion used
-// when a report is emailed.
+// dialogs: the clinic logo and the report header. Emailing lives in
+// reportMailer.js.
 import { CLINIC_LOGO_BASE64 } from '../assets/clinicLogoBase64';
 
 // Starts as the bundled logo, so the fetch below only runs if that constant is
@@ -26,15 +26,6 @@ export async function getClinicLogoBase64() {
     clinicLogoBase64Cache = CLINIC_LOGO_BASE64;
     return CLINIC_LOGO_BASE64;
   }
-}
-
-// jsPDF 4.x has no 'base64' output type — it returns null, which is how the
-// report used to arrive as an email with no attachment at all. The data URI
-// carries the same bytes with a prefix to strip.
-export function pdfToBase64(doc) {
-  const uri = doc.output('datauristring');
-  const comma = uri.indexOf(',');
-  return comma === -1 ? '' : uri.slice(comma + 1);
 }
 
 // The header band at the top of every landscape report page: logo, LGU line,

@@ -12,12 +12,24 @@
 // `searchable` (on by default for lists longer than 10), keyboard use
 // (arrows, Home/End, Enter, Escape, type-ahead) and closing on an outside
 // click or Escape.
+//
+// Placeholder: an empty-value option ("Select type", "— Select brand —") is
+// only the grey text of the closed field and is never listed as a choice.
+// The one exception is an empty value that is a real choice, written as
+// "All …" (e.g. "All years" in a filter), which stays in the list.
+//
+// Searchable lists are a combobox: the field itself is the search box. Typing
+// filters the open list below it, arrows and Enter pick, and the chevron
+// opens the full list.
 import { Children, Fragment, isValidElement, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, ChevronDown, Search } from 'lucide-react';
+import { Check, ChevronDown } from 'lucide-react';
 
 // "— Select brand —" → "Select brand"
 const cleanPlaceholder = (t) => String(t || '').replace(/^[\s—–-]+|[\s—–-]+$/g, '');
+
+// An empty-value option is a placeholder unless it reads "All …".
+const isPlaceholderRow = (r) => r.kind === 'option' && r.value === '' && !/^all\b/i.test(String(r.text || '').trim());
 
 const DEFAULT_TRIGGER = 'w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] focus:ring-2 focus:ring-[#3B50DF]/15 bg-white font-medium text-slate-800 text-xs';
 const MENU_MAX = 288;
@@ -78,13 +90,15 @@ export default function Select({
         : { kind: 'option', value: String(o), label: String(o), text: String(o), disabled: false, key: `o:${o}:${i}` }))
       : collect(children)
   ), [options, children]);
-  const optionRows = rows.filter(r => r.kind === 'option');
+  // The placeholder row is taken out of the list itself (see the header).
+  const emptyRow = rows.find(isPlaceholderRow);
+  const listRows = useMemo(() => rows.filter(r => !isPlaceholderRow(r)), [rows]);
+  const optionRows = listRows.filter(r => r.kind === 'option');
   const current = value == null ? '' : String(value);
-  // An empty value is never shown as a choice: the field shows a grey
-  // placeholder (the prop, else the empty option's text without dashes).
-  const emptyRow = optionRows.find(o => o.value === '');
+  // An empty value shows a grey placeholder in the closed field (the prop,
+  // else the empty option's text without dashes).
   const placeholderText = placeholder || (emptyRow ? cleanPlaceholder(emptyRow.text) : '') || 'Select…';
-  const selected = current === '' ? null : optionRows.find(o => o.value === current);
+  const selected = optionRows.find(o => o.value === current) || null;
   const canSearch = searchable ?? optionRows.length > 10;
 
   const [open, setOpen] = useState(false);
@@ -99,11 +113,13 @@ export default function Select({
   const listId = useId();
 
   const visible = useMemo(() => {
-    if (!canSearch || !query.trim()) return rows;
+    if (!canSearch || !query.trim()) return listRows;
     const q = query.trim().toLowerCase();
-    const hits = rows.filter(r => r.kind === 'option' && r.text.toLowerCase().includes(q));
-    return hits;
-  }, [rows, query, canSearch]);
+    // Matches at the start of the text (or of a word) come first.
+    const hits = listRows.filter(r => r.kind === 'option' && r.text.toLowerCase().includes(q));
+    const starts = r => r.text.toLowerCase().startsWith(q) || r.text.toLowerCase().includes(` ${q}`);
+    return [...hits.filter(starts), ...hits.filter(r => !starts(r))];
+  }, [listRows, query, canSearch]);
   const visibleOptions = visible.filter(r => r.kind === 'option');
 
   const place = useCallback(() => {
@@ -172,10 +188,10 @@ export default function Select({
     return () => document.removeEventListener('mousedown', onDown);
   }, [open, close]);
 
-  // Focus the search box, or the list, when opening.
+  // A plain list takes focus when it opens; the combobox keeps it in the field.
   useEffect(() => {
-    if (!open) return;
-    requestAnimationFrame(() => (canSearch ? searchRef.current : listRef.current)?.focus({ preventScroll: true }));
+    if (!open || canSearch) return;
+    requestAnimationFrame(() => listRef.current?.focus({ preventScroll: true }));
   }, [open, canSearch]);
 
   // Keep the highlighted row in view.
@@ -249,9 +265,107 @@ export default function Select({
 
   const triggerCls = `${className || DEFAULT_TRIGGER} kna-select${disabled ? ' opacity-60 cursor-not-allowed' : ' cursor-pointer'}`;
 
+  // Combobox keys, on the text field itself.
+  const onComboKey = (e) => {
+    if (disabled) return;
+    if (!open) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        openMenu();
+      }
+      return;
+    }
+    if (e.key === 'ArrowDown') { e.preventDefault(); move(1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
+    else if (e.key === 'Enter') { e.preventDefault(); choose(visibleOptions[active]); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
+    else if (e.key === 'Tab') { close(false); }
+  };
+
+  const hiddenRequired = required && (
+    // Lets the browser's form validation treat this like a required field.
+    <input
+      tabIndex={-1}
+      aria-hidden="true"
+      required
+      name={name}
+      value={current}
+      onChange={() => {}}
+      onFocus={() => (canSearch ? searchRef : triggerRef).current?.focus()}
+      style={{ position: 'absolute', opacity: 0, width: 1, height: 1, pointerEvents: 'none' }}
+    />
+  );
+
+  const combo = canSearch && (
+    <div
+      ref={triggerRef}
+      className={`${triggerCls} kna-select-combo`}
+      data-invalid={ariaInvalid ? 'true' : undefined}
+      style={{ display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', ...style }}
+      onMouseDown={e => {
+        // A click on the field's padding focuses the text box, like a click on it.
+        if (disabled || e.target === searchRef.current) return;
+        e.preventDefault();
+        searchRef.current?.focus();
+        if (!open) openMenu();
+      }}
+    >
+      <input
+        ref={searchRef}
+        id={id}
+        title={title}
+        type="text"
+        role="combobox"
+        autoComplete="off"
+        spellCheck={false}
+        disabled={disabled}
+        // Open: the text is the search. Closed: the chosen option.
+        value={open ? query : (selected ? selected.text : '')}
+        placeholder={open ? (selected ? selected.text : 'Type to search…') : placeholderText}
+        onChange={e => {
+          if (!open) openMenu();
+          setQuery(e.target.value);
+        }}
+        onClick={() => { if (!open) openMenu(); }}
+        onKeyDown={onComboKey}
+        onBlur={e => {
+          // Focus moving into the list (its scrollbar) is not leaving the field.
+          if (menuRef.current?.contains(e.relatedTarget)) return;
+          if (open) close(false);
+          onBlur?.(e);
+        }}
+        aria-expanded={open}
+        aria-controls={open ? listId : undefined}
+        aria-autocomplete="list"
+        aria-activedescendant={open && active >= 0 && visibleOptions[active] ? `${listId}-${active}` : undefined}
+        aria-label={ariaLabel}
+        aria-labelledby={ariaLabelledBy}
+        aria-invalid={ariaInvalid}
+        aria-describedby={ariaDescribedBy}
+        className={`kna-select-input flex-1 min-w-0 w-full truncate placeholder:text-slate-400 ${disabled ? 'cursor-not-allowed' : 'cursor-text'}`}
+      />
+      <button
+        type="button"
+        tabIndex={-1}
+        disabled={disabled}
+        aria-label={open ? 'Close list' : 'Show all options'}
+        onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}
+        onClick={() => {
+          if (open) { close(false); return; }
+          searchRef.current?.focus({ preventScroll: true });
+          openMenu();
+        }}
+        className="shrink-0 -mr-1 p-0.5 rounded text-slate-400 hover:text-slate-600 bg-transparent border-0 cursor-pointer"
+        style={{ lineHeight: 0 }}
+      >
+        <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
+      </button>
+    </div>
+  );
+
   return (
     <>
-      <button
+      {combo || <button
         ref={triggerRef}
         type="button"
         id={id}
@@ -274,43 +388,16 @@ export default function Select({
           {selected ? selected.label : placeholderText}
         </span>
         <ChevronDown size={14} className={`shrink-0 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
-      </button>
-      {required && (
-        // Lets the browser's form validation treat this like a required field.
-        <input
-          tabIndex={-1}
-          aria-hidden="true"
-          required
-          name={name}
-          value={current}
-          onChange={() => {}}
-          onFocus={() => triggerRef.current?.focus()}
-          style={{ position: 'absolute', opacity: 0, width: 1, height: 1, pointerEvents: 'none' }}
-        />
-      )}
+      </button>}
+      {hiddenRequired}
       {open && pos && createPortal(
         <div
           ref={menuRef}
           data-kna-select-menu=""
           className="bg-white border border-slate-200 rounded-xl shadow-[0_12px_32px_rgba(15,23,42,0.16)] overflow-hidden flex flex-col"
           style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, maxHeight: pos.maxHeight, zIndex: 30000, animation: 'kna-modal-fade .1s ease both' }}
-          onKeyDown={onMenuKey}
+          onKeyDown={canSearch ? undefined : onMenuKey}
         >
-          {canSearch && (
-            <div className="p-2 border-b border-slate-100 shrink-0">
-              <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 focus-within:border-[#3B50DF] focus-within:bg-white">
-                <Search size={13} className="text-slate-400 shrink-0" />
-                <input
-                  ref={searchRef}
-                  value={query}
-                  onChange={e => setQuery(e.target.value)}
-                  placeholder="Search…"
-                  className="w-full bg-transparent outline-none text-xs text-slate-800 placeholder:text-slate-400"
-                  aria-label="Search options"
-                />
-              </div>
-            </div>
-          )}
           <div
             ref={listRef}
             id={listId}
@@ -346,7 +433,7 @@ export default function Select({
                       : `cursor-pointer ${isActive ? 'bg-indigo-50 text-[#0a1d47]' : 'text-slate-700'} ${isSel ? 'font-semibold' : 'font-medium'}`
                   }`}
                 >
-                  <span className={`flex-1 min-w-0 truncate ${row.value === '' ? 'text-slate-400' : ''}`}>{row.value === '' ? cleanPlaceholder(row.text) : row.label}</span>
+                  <span className="flex-1 min-w-0 truncate">{row.label}</span>
                   {row.badge && (
                     <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${row.badgeTone === 'red' ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
                       {row.badge}

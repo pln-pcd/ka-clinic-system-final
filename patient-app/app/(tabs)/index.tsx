@@ -33,7 +33,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { formatDoseDate, protocolLabel as buildProtocolLabel, serviceCopy, EMPTY, doseStatus, isPepService, clinicToday, displayPatientId, doseBrand, doseState, exposureCategory, splitName } from '../../utils/patientRecord';
+import { formatDoseDate, protocolLabel as buildProtocolLabel, serviceCopy, EMPTY, doseStatus, isPepService, clinicToday, displayPatientId, doseBrand, doseState, exposureCategory, exposureTypeLabel, splitName } from '../../utils/patientRecord';
 import Animated, {
   Easing,
   interpolate,
@@ -847,7 +847,7 @@ export default function RabiesRecoveryApp() {
                       </View>
                       <View style={[s.cdcFieldBox, { flex: 1 }]}>
                         <Text style={s.cdcFieldLabel}>Exposure Type</Text>
-                        <Text style={[s.cdcFieldValue, { color: MEDICAL_RED }]}>{blank(pr.typeOfExposure)}</Text>
+                        <Text style={[s.cdcFieldValue, { color: MEDICAL_RED }]}>{exposureTypeLabel(pr.typeOfExposure)}</Text>
                       </View>
                       <View style={[s.cdcFieldBox, { flex: 1.2 }]}>
                         <Text style={s.cdcFieldLabel}>Source Animal</Text>
@@ -1267,7 +1267,7 @@ export default function RabiesRecoveryApp() {
                         </View>
                         <View style={[s.cdcFieldBox, { flex: 1 }]}>
                           <Text style={s.cdcFieldLabelPopup}>Exposure Type</Text>
-                          <Text style={[s.cdcFieldValuePopup, { color: MEDICAL_RED }]}>{blank(pr.typeOfExposure)}</Text>
+                          <Text style={[s.cdcFieldValuePopup, { color: MEDICAL_RED }]}>{exposureTypeLabel(pr.typeOfExposure)}</Text>
                         </View>
                         <View style={[s.cdcFieldBox, { flex: 1.2 }]}>
                           <Text style={s.cdcFieldLabelPopup}>Source Animal</Text>

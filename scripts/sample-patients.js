@@ -157,7 +157,7 @@ const SUFFIXES = ['', '', '', '', '', '', '', '', 'Jr.', 'Sr.', 'III'];
 // Patient wizard's own <select> lists in patients.jsx — nothing invented.
 
 const TYPE_OF_EXPOSURE = weighted([
-  ['Bite', 72], ['Scratch', 20], ['Saliva Contact', 5], ['Non-bite Exposure', 3],
+  ['Bite', 78], ['Scratch', 22],
 ]);
 const ANIMALS = weighted([
   ['Dog', 74], ['Cat', 20], ['Monkey', 2], ['Bat', 2], ['Rat', 1], ['Other', 1],
@@ -379,7 +379,7 @@ function generatePatient(mrn, todayIso, usedEmails) {
       typeOfExposure,
       sourceOfExposure: pick(SOURCE_OF_EXPOSURE),
       woundWashed: chance(0.86) ? 'Yes' : 'No',
-      rigGiven: category === 'Category III' ? (chance(0.78) ? 'Yes' : 'No') : 'No',
+      rigGiven: category === 'Category III' ? 'Yes (ERIG)' : 'No',
       vaxGiven: dosesDone > 0 ? 'Yes' : 'No',
       genericName: pick(GENERIC_NAMES),
       route: pick(ROUTES),

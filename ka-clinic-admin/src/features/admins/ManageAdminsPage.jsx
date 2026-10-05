@@ -4,6 +4,7 @@
 // against admins/{uid} regardless of what the client does.
 
 import Modal from '../../components/Modal';
+import useDiscardGuard from '../../components/useDiscardGuard';
 import {
   AlertTriangle,
   Link2,
@@ -67,6 +68,7 @@ export default function ManageAdmins() {
   const inviteV = useFieldErrors(INVITE_RULES, { email: inviteEmail }, 'invite-admin');
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteSending, setInviteSending] = useState(false);
+  const [requestCloseInvite, inviteDiscardDialog] = useDiscardGuard(inviteEmail, () => setInviteOpen(false), { resetKey: inviteOpen, enabled: inviteOpen });
   const [toast, setToast] = useState(null);
   const [busyUid, setBusyUid] = useState(null);
   const [confirmRevoke, setConfirmRevoke] = useState(null);
@@ -423,7 +425,8 @@ export default function ManageAdmins() {
 
       {/* ── Invite Admin Modal Card (Portaled to body to blur sidebar + header) ── */}
       {inviteOpen && (
-        <Modal onClose={() => setInviteOpen(false)}>
+        <Modal onClose={requestCloseInvite}>
+          {inviteDiscardDialog}
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden border border-slate-200" onClick={e => e.stopPropagation()}>
             
             {/* Header Banner */}
@@ -437,7 +440,7 @@ export default function ManageAdmins() {
                   <p className="text-xs text-slate-400 font-normal mt-0.5">Send portal invitation link to clinic staff</p>
                 </div>
               </div>
-              <IconButton icon={X} label="Close" size={36} iconSize={18} onClick={() => setInviteOpen(false)} />
+              <IconButton icon={X} label="Close" size={36} iconSize={18} onClick={requestCloseInvite} />
             </div>
 
             <form onSubmit={handleInvite} noValidate>
@@ -468,7 +471,7 @@ export default function ManageAdmins() {
               <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3">
                 <button
                   type="button"
-                  onClick={() => setInviteOpen(false)}
+                  onClick={requestCloseInvite}
                   className={BTN.outline}
                 >
                   Cancel
