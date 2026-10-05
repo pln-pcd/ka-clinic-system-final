@@ -1012,7 +1012,7 @@ async function patientArchiveSweep(req, res) {
 // Called when an admin opens the "Email report" box: wakes this function and
 // opens the SMTP connection the report will be sent on.
 async function warmReportMailer(req, res) {
-  const result = await warmMailer('appointments');
+  const result = await warmMailer('auth');
   res.status(200).json({ success: true, ...result });
 }
 
@@ -1085,7 +1085,7 @@ async function sendPatientReport(req, res) {
       subject,
       html: html || '<p>Please find your official K&amp;A Clinic report attached.</p>',
       attachments,
-      role: 'appointments',
+      role: 'auth',
     });
     if (sendError) {
       console.error('send-patient-report mail error:', sendError);

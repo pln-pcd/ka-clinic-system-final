@@ -1,28 +1,23 @@
 import { lookup } from 'node:dns/promises';
 import nodemailer from 'nodemailer';
 
-// Dedicated 3-Role SMTP configuration
+// Two Gmail accounts: the clinic's own address (sign-in codes, invites,
+// report emails) and a reminders account (dose reminders). Each falls back
+// to the other.
 const ROLES = {
   auth: {
     name: 'auth',
     getUser: () => (process.env.GMAIL_AUTH_USER || process.env.GMAIL_USER || 'contact.knaclinic@gmail.com').trim(),
     getPass: () => (process.env.GMAIL_AUTH_PASSWORD || process.env.GMAIL_APP_PASSWORD || '').trim().replace(/\s+/g, ''),
     displayName: 'K&A Animal Bite Center',
-    fallbackRoles: ['appointments', 'reminders'],
-  },
-  appointments: {
-    name: 'appointments',
-    getUser: () => (process.env.GMAIL_APPT_USER || 'pcdelacruz04@gmail.com').trim(),
-    getPass: () => (process.env.GMAIL_APPT_PASSWORD || '').trim().replace(/\s+/g, ''),
-    displayName: 'K&A Animal Bite Center',
-    fallbackRoles: ['reminders', 'auth'],
+    fallbackRoles: ['reminders'],
   },
   reminders: {
     name: 'reminders',
     getUser: () => (process.env.GMAIL_REMINDER_USER || 'delacruzpc15@gmail.com').trim(),
     getPass: () => (process.env.GMAIL_REMINDER_PASSWORD || '').trim().replace(/\s+/g, ''),
     displayName: 'K&A Animal Bite Center',
-    fallbackRoles: ['appointments', 'auth'],
+    fallbackRoles: ['auth'],
   },
 };
 
