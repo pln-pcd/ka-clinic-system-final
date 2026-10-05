@@ -8,6 +8,7 @@
     "seed:demo": "node scripts/demo/demo-data.mjs seed --emulator --project demo-ka-clinic",
     "seed:demo:clear": "node scripts/demo/demo-data.mjs clear --emulator --project demo-ka-clinic",
     "test:archive-clock": "node scripts/demo/test-archive-clock.mjs --emulator --project demo-ka-clinic",
+    "archive:overdue:emulator": "node scripts/archive-overdue.mjs --emulator",
     "sweep:doses:emulator": "node scripts/run-dose-sweep.mjs --emulator --seed",
     "sweep:doses:dry": "node --env-file=.env scripts/run-dose-sweep.mjs --dry-run"
   },

@@ -12,10 +12,14 @@ export function manilaToday(d = new Date()) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
 }
 
+// '' for anything that is not a YYYY-MM-DD date. A single malformed
+// completedAt used to throw "Invalid time value" here and stop the whole
+// nightly sweep, so no record was archived that night.
 function addDays(dStr, days) {
-  const [y, m, d] = String(dStr).slice(0, 10).split('-').map(Number);
-  const utc = new Date(Date.UTC(y, m - 1, d + days, 12));
-  return utc.toISOString().slice(0, 10);
+  const m0 = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dStr || ''));
+  if (!m0) return '';
+  const utc = new Date(Date.UTC(Number(m0[1]), Number(m0[2]) - 1, Number(m0[3]) + days, 12));
+  return Number.isNaN(utc.getTime()) ? '' : utc.toISOString().slice(0, 10);
 }
 
 const isDoneDose = d => {
@@ -23,9 +27,15 @@ const isDoneDose = d => {
   return st === 'done' || st === 'completed' || d?.done === true;
 };
 
+// YYYY-MM-DD from a date string, Timestamp, Date or millis; '' if unreadable.
+// A non-ISO string ("June 26, 2025") is parsed rather than sliced.
 const toDateOnly = raw => {
   if (!raw) return '';
-  if (typeof raw === 'string') return raw.slice(0, 10);
+  if (typeof raw === 'string') {
+    if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+    const t = Date.parse(raw);
+    return Number.isNaN(t) ? '' : manilaToday(new Date(t));
+  }
   if (typeof raw?.toDate === 'function') return manilaToday(raw.toDate());
   if (typeof raw === 'number' || raw instanceof Date) return manilaToday(new Date(raw));
   return '';
@@ -46,7 +56,7 @@ export function lastDoseDate(p) {
 
 export function getCompletionDate(p) {
   if (!isSeriesCompleted(p)) return '';
-  return p.completedAt ? toDateOnly(p.completedAt) : lastDoseDate(p);
+  return (p.completedAt && toDateOnly(p.completedAt)) || lastDoseDate(p);
 }
 
 /** The one-year clock starts at completion, or at the latest restore if later. */

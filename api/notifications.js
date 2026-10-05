@@ -40,9 +40,9 @@ import { gzipSync } from 'node:zlib';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { auth, db, storageBucket } from './_lib/firebaseAdmin.js';
 import { requireAuthenticatedAdmin } from './_lib/auth.js';
-import { isValidEmail, sendMail } from './_lib/mail/mailer.js';
+import { isValidEmail, sendMail, warmMailer } from './_lib/mail/mailer.js';
 import { buildFollowUpEmailHtml } from './_lib/mail/templates.js';
-import { getArchiveDueDate, isSeriesCompleted, lastDoseDate, manilaToday } from './_lib/patientCompletion.js';
+import { getArchiveDueDate, getCompletionDate, isSeriesCompleted, lastDoseDate, manilaToday } from './_lib/patientCompletion.js';
 import { routeName } from './_lib/router.js';
 
 const EXPO_PUSH_ENDPOINT = 'https://exp.host/--/api/v2/push/send';
@@ -881,12 +881,14 @@ const SWEEP_BATCH_LIMIT = 450;
 
 // `today` is injectable so the restore clock can be tested against a future
 // date without waiting a year; the cron route always uses the real date.
-export async function runPatientArchiveSweep(today = manilaToday()) {
+// dryRun lists what would change without writing (scripts/archive-overdue.mjs).
+export async function runPatientArchiveSweep(today = manilaToday(), { dryRun = false } = {}) {
   const snap = await db.collection('vaccinations').get();
 
   const writes = [];
   let archived = 0;
   let backfilled = 0;
+  const archivedRecords = [];
   const incidentIdsToHide = new Set();
 
   for (const docSnap of snap.docs) {
@@ -912,6 +914,7 @@ export async function runPatientArchiveSweep(today = manilaToday()) {
         archivedBy: 'auto-365',
       });
       archived++;
+      archivedRecords.push({ id: docSnap.id, name: p.name || '', completedAt: getCompletionDate(merged), restoredAt: String(p.restoredAt || '').slice(0, 10), archiveDue: due });
     }
     if (Object.keys(patch).length) writes.push({ ref: docSnap.ref, patch });
   }
@@ -924,14 +927,37 @@ export async function runPatientArchiveSweep(today = manilaToday()) {
     }
   }
 
+  const pinsHidden = writes.filter(w => w.ref.parent.id === 'incidents').length;
+  if (dryRun) return { archived, backfilled, pinsHidden, today, archivedRecords, dryRun: true };
+
   for (let i = 0; i < writes.length; i += SWEEP_BATCH_LIMIT) {
     const batch = db.batch();
     writes.slice(i, i + SWEEP_BATCH_LIMIT).forEach(({ ref, patch }) => batch.update(ref, patch));
     await batch.commit();
   }
+  await db.collection('settings').doc('maintenance').set(
+    { patientArchiveSweep: { date: today, at: FieldValue.serverTimestamp(), archived } },
+    { merge: true },
+  );
 
   console.log(`[patient-archive-sweep] archived ${archived}, backfilled ${backfilled}, ${writes.length} write(s) (today=${today})`);
-  return { archived, backfilled, today };
+  return { archived, backfilled, pinsHidden, today, archivedRecords };
+}
+
+// Safety net for a missed night: the cron only runs on the Vercel production
+// deployment (never under the emulator or `npm run dev`, and not at all when
+// CRON_SECRET is missing). The dashboard calls this once when an admin opens
+// it; the sweep runs only if it has not already run today (Manila).
+async function archiveSweepIfDue(req, res) {
+  const today = manilaToday();
+  const snap = await db.collection('settings').doc('maintenance').get();
+  const last = snap.exists ? snap.data()?.patientArchiveSweep?.date : '';
+  if (last && last >= today) {
+    res.status(200).json({ success: true, ran: false, lastRun: last });
+    return;
+  }
+  const result = await runPatientArchiveSweep(today);
+  res.status(200).json({ success: true, ran: true, lastRun: last || null, archived: result.archived });
 }
 
 // ── Cancelled / declined appointment cleanup ────────────────────────────────
@@ -983,7 +1009,14 @@ async function patientArchiveSweep(req, res) {
   res.status(200).json({ success: true, ...result, ...cleanup });
 }
 
-const ADMIN_ACTIONS = { 'send-followup': sendFollowUp, backup: backupNow };
+// Called when an admin opens the "Email report" box: wakes this function and
+// opens the SMTP connection the report will be sent on.
+async function warmReportMailer(req, res) {
+  const result = await warmMailer('appointments');
+  res.status(200).json({ success: true, ...result });
+}
+
+const ADMIN_ACTIONS = { 'send-followup': sendFollowUp, backup: backupNow, 'warm-mailer': warmReportMailer, 'archive-sweep-if-due': archiveSweepIfDue };
 const OPEN_ACTIONS = { 'register-token': registerToken, 'unregister-token': unregisterToken, 'set-avatar': setAvatar, 'remove-avatar': removeAvatar, 'update-profile': updateProfile, ack: acknowledge };
 // Runs unattended on a schedule, so it authenticates with CRON_SECRET rather
 // than an admin's ID token.
@@ -1011,25 +1044,41 @@ async function sendPatientReport(req, res) {
       return;
     }
 
-    const to = (req.body?.to || '').trim();
-    const subject = (req.body?.subject || 'K&A Clinic Report').trim();
-    const html = req.body?.html || '';
-    const attachmentBase64 = req.body?.attachmentBase64 || '';
-    const attachmentFilename = (req.body?.attachmentFilename || 'report.pdf').trim();
+    // Current dashboard: the PDF is the raw request body
+    // (application/octet-stream) and the rest travels in the X-Report-Meta
+    // header as URI-encoded JSON, so a report is not inflated by base64 JSON.
+    // The older JSON body with attachmentBase64 is still accepted.
+    let meta = req.body && !Buffer.isBuffer(req.body) && typeof req.body === 'object' ? req.body : {};
+    let attachmentContent = null;
+    if (Buffer.isBuffer(req.body) || req.body instanceof Uint8Array) {
+      try {
+        meta = JSON.parse(decodeURIComponent(String(req.headers['x-report-meta'] || '')));
+      } catch {
+        res.status(400).json({ success: false, error: 'Missing report details.' });
+        return;
+      }
+      attachmentContent = Buffer.from(req.body);
+    } else if (meta.attachmentBase64) {
+      attachmentContent = Buffer.from(String(meta.attachmentBase64), 'base64');
+    }
+
+    const to = String(meta.to || '').trim();
+    const subject = String(meta.subject || 'K&A Clinic Report').trim();
+    const html = String(meta.html || '');
+    const attachmentFilename = String(meta.filename || meta.attachmentFilename || 'report.pdf').trim().replace(/[\\/\r\n"]/g, '_');
 
     if (!to || !isValidEmail(to)) {
       res.status(400).json({ success: false, error: 'Enter a valid recipient email address.' });
       return;
     }
-    if (!html && !attachmentBase64) {
+    if (!html && !attachmentContent?.length) {
       res.status(400).json({ success: false, error: 'Missing report content.' });
       return;
     }
 
-    console.log(`[report-mailer] Sending report to ${to}, subject: "${subject}", hasAttachment: ${Boolean(attachmentBase64)}`);
-
-    const attachments = attachmentBase64
-      ? [{ filename: attachmentFilename, content: attachmentBase64, encoding: 'base64' }]
+    const started = Date.now();
+    const attachments = attachmentContent?.length
+      ? [{ filename: attachmentFilename, content: attachmentContent, contentType: 'application/pdf' }]
       : undefined;
 
     const { error: sendError, messageId, sender } = await sendMail({
@@ -1045,7 +1094,7 @@ async function sendPatientReport(req, res) {
       return;
     }
 
-    console.log(`[report-mailer] Successfully delivered via ${sender}: ${messageId}`);
+    console.log(`[report-mailer] sent ${Math.round((attachmentContent?.length || 0) / 1024)} KB via ${sender} in ${Date.now() - started} ms: ${messageId}`);
     res.status(200).json({ success: true, messageId });
   } catch (err) {
     console.error('send-patient-report error:', err);

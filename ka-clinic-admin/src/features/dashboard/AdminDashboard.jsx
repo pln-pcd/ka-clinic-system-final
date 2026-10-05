@@ -30,7 +30,7 @@ import {
 import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { auth, db, listen } from '../../lib/firebase';
 import { useIncidents } from '../incidents/useIncidents';
-import { useAuth } from '../../lib/adminSession';
+import { authedPostJson, useAuth } from '../../lib/adminSession';
 import Avatar from '../../components/Avatar';
 import { useAdminAvatar } from '../../lib/adminAvatars';
 import { buildDoses } from '../../lib/doseSchedules';
@@ -38,6 +38,7 @@ import { addDaysToDateString, formatDateShort as fmtDate, formatServiceType, get
 import StatusBadge from '../../components/StatusBadge';
 import { useLiveCollection } from '../../lib/liveStore';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import ReportSendToasts from '../../components/ReportSendToasts';
 import { NotFoundPage, PageErrorBoundary } from '../../components/ErrorPages';
 
 import { PageSkeleton } from '../../components/Skeleton';
@@ -305,6 +306,20 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
       signOut(auth).finally(() => { if (onLogout) onLogout(); });
     }
   }, [adminStatus]);
+
+  // Catch-up for the nightly patient-archive-sweep: if it has not run today
+  // (missed cron, emulator or local dev, CRON_SECRET unset) the server runs it
+  // now. Once per browser session; the server skips it if already done today.
+  useEffect(() => {
+    try {
+      const key = `kna.archiveSweepCheck.${getTodayDateString()}`;
+      if (sessionStorage.getItem(key)) return;
+      sessionStorage.setItem(key, '1');
+    } catch { /* storage blocked: the server-side date check still applies */ }
+    authedPostJson('/api/notifications', { action: 'archive-sweep-if-due' })
+      .then(r => { if (r?.ran && r.archived) console.info(`[archive] catch-up sweep archived ${r.archived} record(s)`); })
+      .catch(() => {});
+  }, []);
 
   // Anonymous page-view telemetry (only writes when the Settings toggle is on).
   useEffect(() => { trackEvent(`page_${activePage}`); }, [activePage]);
@@ -994,19 +1009,20 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
 
   return (
     <div className="min-h-screen flex font-sans bg-[#F0F4FA] text-gray-900">
+      <ReportSendToasts />
       {/* ── LOGOUT CONFIRM MODAL ── */}
       {showLogoutConfirm && (
         <ConfirmDialog
           variant="danger"
+          size="compact"
           icon={LogOut}
-          title="Sign out of the admin panel?"
-          subtitle="K&A Clinic admin portal"
-          message={<>You'll return to the <strong>sign-in page</strong>.</>}
-          details={[
-            ['Account', adminProfile.name],
-            ['Email', auth?.currentUser?.email],
-            ['Role', role ? role.charAt(0).toUpperCase() + role.slice(1) : ''],
-          ]}
+          title="Sign out?"
+          message={(() => {
+            const firstName = (adminProfile.name || '').trim().replace(/^(dr|mr|mrs|ms|rn|rph)\.?\s+/i, '').split(/\s+/)[0];
+            return firstName && firstName !== 'Admin'
+              ? <>You'll be signed out, {firstName}, and need to sign in again.</>
+              : <>You'll be signed out and need to sign in again.</>;
+          })()}
           confirmLabel="Sign out"
           onConfirm={confirmLogout}
           onCancel={() => setShowLogoutConfirm(false)}
