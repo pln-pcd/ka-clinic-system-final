@@ -2,6 +2,7 @@
 // view) and the follow-up notification modal.
 import { authedPostJson } from "../../lib/adminSession";
 import Modal from '../../components/Modal';
+import useDiscardGuard from '../../components/useDiscardGuard';
 import IconButton from '../../components/IconButton';
 import Select from '../../components/Select';
 import StatusBadge from '../../components/StatusBadge';
@@ -461,8 +462,9 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
           })()}
         </div>
 
-        {/* Appointments: tabs when there are some; a compact empty state if not */}
-        <div className={`lg:col-span-6 ${card} flex flex-col overflow-hidden`} style={{ minHeight: 200, maxHeight: 460 }}>
+        {/* Appointments: tabs when there are some; an empty state if not. Sized to
+            show about six visits before the list scrolls. */}
+        <div className={`lg:col-span-6 ${card} flex flex-col overflow-hidden`} style={{ minHeight: 320, maxHeight: 560 }}>
           <div className="px-5 pt-5 flex items-start justify-between gap-2 flex-wrap shrink-0">
             <SectionTitle title="Appointments" subtitle={`Booked for ${patient.name}`} />
             {patientApts.length > 0 && (
@@ -486,9 +488,9 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
             {aptsLoading ? (
               <div className="py-8 text-center text-xs text-slate-500">Loading appointments…</div>
             ) : patientApts.length === 0 ? (
-              <EmptyState icon={CalendarDays} title="No appointments yet" text="Visits booked for this patient appear here." minHeight={110} className="!py-4" />
+              <EmptyState icon={CalendarDays} title="No appointments yet" text="Visits booked for this patient appear here." minHeight={200} className="!py-6" />
             ) : filteredApts.length === 0 ? (
-              <EmptyState icon={CalendarDays} title={aptTab === 'upcoming' ? 'No upcoming appointments' : 'No completed appointments'} minHeight={100} className="!py-4" />
+              <EmptyState icon={CalendarDays} title={aptTab === 'upcoming' ? 'No upcoming appointments' : 'No completed appointments'} minHeight={180} className="!py-6" />
             ) : (
               <table className="kna-table w-full text-left border-collapse">
                 <thead>
@@ -499,14 +501,14 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
                     <th className="px-6 py-3 bg-slate-50">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
+                <tbody className="divide-y divide-slate-100 text-[13px] text-slate-700">
                   {filteredApts.map((apt) => {
                     return (
                       <tr key={apt.id}>
-                        <td className="px-6 py-3 font-medium text-slate-900 whitespace-nowrap">{apt.date ? formatDateMedium(apt.date) : '—'}</td>
-                        <td className="px-4 py-3 truncate max-w-[180px]">{formatServiceType(apt.type || apt.purpose, '—')}</td>
-                        <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{apt.time || '—'}</td>
-                        <td className="px-6 py-3">
+                        <td className="px-6 py-3.5 font-medium text-slate-900 whitespace-nowrap">{apt.date ? formatDateMedium(apt.date) : '—'}</td>
+                        <td className="px-4 py-3.5 truncate max-w-[180px]">{formatServiceType(apt.type || apt.purpose, '—')}</td>
+                        <td className="px-4 py-3.5 text-slate-600 whitespace-nowrap">{apt.time || '—'}</td>
+                        <td className="px-6 py-3.5">
                           <StatusBadge status={apt.status || 'pending'} />
                         </td>
                       </tr>
@@ -867,6 +869,8 @@ function AddReportModal({ patient, doses = [], existingReports = [], onClose, on
   // entry for the confirm card, which owns the actual save.
   const [pending, setPending] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [requestClose, discardDialog] = useDiscardGuard(
+    { reportType, bp, pulse, temp, weight, woundCondition, injectionSite, injectionSiteOther, adverseEvent, author, notes }, onClose);
 
   // Inline checks (FormValidation): message under the field, focus the first.
   const reportForm = { reportType, injectionSite, injectionSiteOther, author };
@@ -909,7 +913,8 @@ function AddReportModal({ patient, doses = [], existingReports = [], onClose, on
 
   return (
     <>
-    <Modal onClose={onClose}>
+    <Modal onClose={requestClose}>
+      {discardDialog}
       <div
         className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden border border-slate-200 m-auto flex flex-col"
         style={{ maxHeight: 'calc(100vh - 128px)', transition: 'all 0.4s cubic-bezier(0.22,1,0.36,1)' }}
@@ -920,7 +925,7 @@ function AddReportModal({ patient, doses = [], existingReports = [], onClose, on
             <h3 className="text-sm font-bold text-slate-900">Add Clinical Report / Dose Vitals</h3>
             <p className="text-[11px] text-slate-400 font-normal mt-0.5">Log vitals, injection route, and clinical observations for {patient.name}</p>
           </div>
-          <IconButton icon={X} label="Close" size={36} iconSize={16} onClick={onClose} />
+          <IconButton icon={X} label="Close" size={36} iconSize={16} onClick={requestClose} />
         </div>
 
         <form onSubmit={handleSubmit} noValidate className="kna-form-body text-xs font-semibold text-slate-700 overflow-y-auto flex-1">
@@ -1052,7 +1057,7 @@ function AddReportModal({ patient, doses = [], existingReports = [], onClose, on
 
           {v.count(reportFields) > 0 && <FormErrorNote count={v.count(reportFields)} className="self-end" />}
           <div className="pt-3 flex gap-3">
-            <button type="button" onClick={onClose} className={`${BTN.outline} flex-1`}>Cancel</button>
+            <button type="button" onClick={requestClose} className={`${BTN.outline} flex-1`}>Cancel</button>
             <button type="submit" className={`${BTN.primary} flex-1`}>Review &amp; Save</button>
           </div>
         </form>
@@ -1135,6 +1140,8 @@ export function FollowUpModal({ patient, onClose, onToast }) {
   // confirmation inside the card.
   const [sentTo, setSentTo] = useState('');
   const [sentSuccess, setSentSuccess] = useState(null);
+  // Only an edited, unsent message is worth asking about.
+  const [requestClose, discardDialog] = useDiscardGuard({ preset, message }, onClose, { enabled: !sentSuccess && !sending });
 
   const pickPreset = (key) => {
     setPreset(key);
@@ -1184,7 +1191,8 @@ export function FollowUpModal({ patient, onClose, onToast }) {
   }
 
   return (
-    <Modal onClose={onClose}>
+    <Modal onClose={requestClose}>
+      {discardDialog}
       <div className="w-full max-w-[560px] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
         <div style={{ background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)', padding: '18px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
@@ -1193,7 +1201,7 @@ export function FollowUpModal({ patient, onClose, onToast }) {
               Notifies {formatTitleCase(patient.name)} in the app and by email
             </p>
           </div>
-          <IconButton icon={X} label="Close" size={36} iconSize={16} onClick={onClose} />
+          <IconButton icon={X} label="Close" size={36} iconSize={16} onClick={requestClose} />
         </div>
 
         {sentSuccess ? (
@@ -1259,7 +1267,7 @@ export function FollowUpModal({ patient, onClose, onToast }) {
             </div>
 
             <div className="modal-footer" style={{ marginTop: 18, justifyContent: 'space-between' }}>
-              <button className={BTN.outline} onClick={onClose} disabled={sending}>Cancel</button>
+              <button className={BTN.outline} onClick={requestClose} disabled={sending}>Cancel</button>
               <button className={BTN.primary} onClick={send} disabled={sending}>
                 {sending ? 'Sending…' : 'Send Follow-up'}
               </button>
