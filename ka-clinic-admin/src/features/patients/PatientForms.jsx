@@ -2,6 +2,7 @@
 // checks, the duplicate-patient warning, and the pin-to-map confirmation.
 import { formatTitleCase, formatDateMedium, serviceLabel, today } from "../../lib/formatters";
 import Modal from '../../components/Modal';
+import useDiscardGuard from '../../components/useDiscardGuard';
 import IconButton from '../../components/IconButton';
 import Select from '../../components/Select';
 import { useState } from "react";
@@ -14,7 +15,7 @@ import { LIBON_BARANGAYS } from '../../lib/libonGeo';
 import { weekdayName } from '../../lib/clinicDays';
 import DatePicker from '../../components/DatePicker';
 import { FieldError, FormErrorNote, useFieldErrors } from '../../components/FormValidation';
-import { SERVICE_TYPES, X } from "./shared";
+import { SERVICE_ICON_STROKE, SERVICE_TYPES, X } from "./shared";
 
 /* ─────────────────────────── LIBON GEODATA DICTIONARY ─────────────────────────── */
 // Standard option lists for the patient intake form. Free-text fields were
@@ -97,8 +98,8 @@ function ServiceSelector({ value, onChange }) {
             <span aria-hidden="true" className={`absolute top-3 right-3 w-5 h-5 rounded-full inline-flex items-center justify-center transition-colors ${on ? 'bg-[#3B50DF] text-white' : 'border border-slate-300 bg-white text-transparent'}`}>
               <Check size={12} strokeWidth={3} />
             </span>
-            <span className={`w-11 h-11 rounded-full inline-flex items-center justify-center ${s.tint}`}>
-              <Icon size={22} aria-hidden="true" />
+            <span className={`w-11 h-11 rounded-xl inline-flex items-center justify-center ${s.tint}`}>
+              <Icon size={22} strokeWidth={SERVICE_ICON_STROKE} aria-hidden="true" />
             </span>
             <span className="mt-3 text-[15px] font-semibold text-slate-900">{s.label}</span>
             <span className="text-xs text-slate-500">{s.desc}</span>
@@ -200,9 +201,10 @@ function FormGroup({ title, hint, children }) {
 const Req = () => <span className="apw-req" aria-hidden="true">*</span>;
 const Opt = ({ children = 'optional' }) => <span className="apw-opt">({children})</span>;
 
-// Whole years between a birth date and today (clinic time).
+// Whole years between a birth date and today (clinic time); '' for no date,
+// a malformed one or a future one.
 function ageFromDob(dob) {
-  if (!dob) return '';
+  if (!dob || !/^\d{4}-\d{2}-\d{2}$/.test(dob) || dob > today()) return '';
   const [by, bm, bd] = dob.split('-').map(Number);
   const [ty, tm, td] = today().split('-').map(Number);
   if (!by) return '';
@@ -210,15 +212,51 @@ function ageFromDob(dob) {
   return age >= 0 ? String(age) : '';
 }
 
+// With a date of birth the age is calculated and the Age field is locked;
+// without one the age is typed in. Picking or clearing the date keeps the two
+// in step (clearing leaves the calculated age in place to edit).
+const withDob = (f, dob) => ({ ...f, dob, age: ageFromDob(dob) || f.age });
+
+// The inline age/DOB mismatch (only possible on older records saved before
+// the age was locked), with a one-click fix.
+function AgeDobMismatch({ form, setForm, className = '' }) {
+  const calc = ageFromDob(form.dob);
+  if (!calc || !String(form.age).trim() || String(form.age) === calc) return null;
+  return (
+    <span className={`flex items-center gap-1.5 text-[11.5px] font-semibold text-[#C8151A] ${className}`} role="alert">
+      Age {form.age} doesn't match the date of birth ({calc} years).
+      <button type="button" onClick={() => setForm(f => ({ ...f, age: calc }))}
+        className="underline underline-offset-2 text-[#3B50DF] font-bold cursor-pointer bg-transparent border-0 p-0">Use {calc}</button>
+    </span>
+  );
+}
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// PEP intake choices. Saved values are kept as they were ("Yes (ERIG)") so
+// older records, reports and the data checks read the same; only the label
+// changed. HRIG is not stocked, so it is no longer a choice.
+export const EXPOSURE_TYPES = ['Bite', 'Scratch'];
+export const RIG_OPTIONS = [
+  { value: 'No', label: 'No' },
+  { value: 'Yes (ERIG)', label: 'Yes – ERIG' },
+];
+export const rigLabel = (v) => RIG_OPTIONS.find(o => o.value === v)?.label || v || '—';
 
 // Field checks for the wizard, one message each (shown under the field).
 const REGISTER_RULES = {
   fname: f => (f.fname.trim() ? '' : 'Enter the first name'),
   lname: f => (f.lname.trim() ? '' : 'Enter the last name'),
-  dob: f => (f.dob && f.dob > today() ? 'Date of birth can’t be in the future' : ''),
-  age: f => (!String(f.age).trim() ? 'Enter the age, or a date of birth'
-    : Number(f.age) < 1 || Number(f.age) > 120 ? 'Enter an age from 1 to 120' : ''),
+  dob: f => (!f.dob ? ''
+    : f.dob > today() ? 'Date of birth can’t be in the future'
+    : f.dob < '1900-01-01' ? 'Enter a real date of birth' : ''),
+  age: f => {
+    const age = String(f.age).trim();
+    if (!age) return 'Enter the age, or a date of birth';
+    if (Number(age) < 1 || Number(age) > 120) return 'Enter an age from 1 to 120';
+    const calc = ageFromDob(f.dob);
+    return calc && calc !== age ? `Age doesn't match the date of birth (${calc} years)` : '';
+  },
   email: f => (!f.email.trim() ? 'Enter an email; the patient signs in to the app with it'
     : !EMAIL_RE.test(f.email.trim()) ? 'Enter a valid email, e.g. name@gmail.com' : ''),
   contact: f => (f.contact && !isValidPHPhone(f.contact) ? 'Enter a PH mobile number, e.g. 0917 123 4567' : ''),
@@ -271,6 +309,7 @@ export function AddPatientModal({ onClose, onAdd }) {
 
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const [requestClose, discardDialog] = useDiscardGuard(form, onClose);
   const v = useFieldErrors(REGISTER_RULES, form, 'reg');
 
   const isPep = form.service === 'PEP';
@@ -355,7 +394,8 @@ export function AddPatientModal({ onClose, onAdd }) {
   );
 
   return (
-    <Modal onClose={onClose}>
+    <Modal onClose={requestClose}>
+      {discardDialog}
       <div className="apw bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden m-auto flex flex-col" style={{
         // Most of the screen: header + stepper pinned on top, footer pinned
         // at the bottom, only the step body scrolls.
@@ -372,7 +412,7 @@ export function AddPatientModal({ onClose, onAdd }) {
             <h3 className="text-sm font-semibold text-slate-900">Register New Patient</h3>
             <p className="text-[11px] text-slate-500 mt-0.5">Fill out patient registration details step-by-step</p>
           </div>
-          <IconButton icon={X} label="Close" size={36} iconSize={16} onClick={onClose} />
+          <IconButton icon={X} label="Close" size={36} iconSize={16} onClick={requestClose} />
         </div>
 
         {/* ── Persistent Step Indicator Bar ── */}
@@ -456,13 +496,17 @@ export function AddPatientModal({ onClose, onAdd }) {
                   </div>
                   <div className="form-field"><label htmlFor="reg-dob">Date of birth <Opt /></label>
                     <DatePicker {...v.field('dob')} value={form.dob || ''} max={today()} clearable
-                      onChange={e => { const d = e.target.value; setForm(f => ({ ...f, dob: d, age: d ? (ageFromDob(d) || f.age) : f.age })); }} />
+                      onChange={e => setForm(f => withDob(f, e.target.value))} />
                     <FieldError v={v} name="dob" />
                   </div>
                   <div className="form-field"><label htmlFor="reg-age">Age <Req /></label>
-                    <input type="text" inputMode="numeric" {...v.field('age')} value={form.age} onChange={e => set('age', e.target.value.replace(/\D/g, '').slice(0, 3))} placeholder="e.g. 25" />
+                    <input type="text" inputMode="numeric" {...v.field('age')} value={form.age}
+                      readOnly={Boolean(ageFromBirth)} aria-readonly={Boolean(ageFromBirth)}
+                      style={ageFromBirth ? { background: '#F1F5F9', color: '#475569', cursor: 'default' } : undefined}
+                      onChange={e => { if (!ageFromBirth) set('age', e.target.value.replace(/\D/g, '').slice(0, 3)); }}
+                      placeholder="e.g. 25" />
                     {v.error('age') ? <FieldError v={v} name="age" />
-                      : <span className="apw-help">{form.dob && ageFromBirth && ageFromBirth === String(form.age) ? 'Calculated from date of birth' : 'Years. Fills in from the date of birth.'}</span>}
+                      : <span className="apw-help">{ageFromBirth ? 'Calculated from date of birth' : 'Years. Fills in from the date of birth.'}</span>}
                   </div>
                 </FormGroup>
 
@@ -546,7 +590,7 @@ export function AddPatientModal({ onClose, onAdd }) {
                   <div className="form-field"><label htmlFor="reg-typeOfExposure">Type of exposure <Req /></label>
                     <Select {...v.field('typeOfExposure', { withBlur: false })} value={form.typeOfExposure || ''} onChange={e => set('typeOfExposure', e.target.value)}>
                       <option value="">Select type</option>
-                      <option>Bite</option><option>Scratch</option><option>Saliva Contact</option><option>Non-bite Exposure</option>
+                      {EXPOSURE_TYPES.map(t => <option key={t}>{t}</option>)}
                     </Select>
                     <FieldError v={v} name="typeOfExposure" />
                   </div>
@@ -608,19 +652,19 @@ export function AddPatientModal({ onClose, onAdd }) {
                     <p className="span-3 apw-note">
                       <AlertTriangle size={14} aria-hidden="true" />
                       <span>
-                        {form.animal === 'Bat' ? 'Bat exposure is always Category III (WHO). Give' : 'Category III: give'}
-                        {' '}rabies immunoglobulin (RIG) with the first vaccine dose.
-                        {(form.rigGiven === 'No' || !form.rigGiven) && ' Record it under Treatment once given.'}
+                        {form.animal === 'Bat' ? 'Bat exposure is always Category III (WHO), which requires' : 'Category III requires'}
+                        {' '}ERIG (equine rabies immunoglobulin) with the first vaccine dose.
+                        {form.rigGiven !== 'Yes (ERIG)' && ' Record it under Treatment once given.'}
                       </span>
                     </p>
                   )}
                 </FormGroup>
 
                 <FormGroup title="Treatment" hint="Care already given at this visit.">
-                  <div className="form-field"><label htmlFor="reg-rigGiven">RIG given? <Req /></label>
+                  <div className="form-field"><label htmlFor="reg-rigGiven">Rabies immunoglobulin (RIG) given? <Req /></label>
                     <Select {...v.field('rigGiven', { withBlur: false })} value={form.rigGiven || ''} onChange={e => set('rigGiven', e.target.value)}>
                       <option value="">Select RIG given</option>
-                      <option>No</option><option>Yes (ERIG)</option><option>Yes (HRIG)</option>
+                      {RIG_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </Select>
                     <FieldError v={v} name="rigGiven" />
                   </div>
@@ -801,7 +845,7 @@ export function AddPatientModal({ onClose, onAdd }) {
                     ['Source / place', [form.sourceOfExposure, form.placeOfExposure].filter(Boolean).join(' · ')],
                     ['Category', form.cat],
                     ['Wound', `${form.woundLocation || 'Location not set'} · ${form.woundDepth} · ${form.numberOfBites} bite(s) · washed: ${form.woundWashed}`],
-                    ['Treatment', `RIG: ${form.rigGiven} · vaccine: ${form.vaxGiven} · ${form.route || 'IM'}`],
+                    ['Treatment', `RIG: ${rigLabel(form.rigGiven)} · vaccine: ${form.vaxGiven} · ${form.route || 'IM'}`],
                   ]} />
                 )}
                 <SummaryCard title="Schedule" stepId="schedule">
@@ -818,7 +862,7 @@ export function AddPatientModal({ onClose, onAdd }) {
         <div className="px-6 py-4 border-t border-slate-100 bg-white flex items-center justify-between gap-3" style={{ flexShrink: 0 }}>
           <button
             type="button"
-            onClick={safeStepIndex === 0 ? onClose : handleBack}
+            onClick={safeStepIndex === 0 ? requestClose : handleBack}
             className={BTN.outline}
           >
             {safeStepIndex === 0 ? 'Cancel' : '← Back'}
@@ -885,6 +929,8 @@ export function EditPatientModal({ patient, onClose, onSave, inventoryItems = []
     pneumoVaccine: patient.pneumoVaccine || '', riskCondition: patient.riskCondition || '', priorPneumo: patient.priorPneumo || '',
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const editDobAge = ageFromDob(form.dob);
+  const [requestClose, discardDialog] = useDiscardGuard(form, onClose);
   const isPep = form.service === 'PEP';
   // Only brands for the chosen service; none until a service is chosen.
   const eligibleVaccines = form.service ? getEligibleVaccinesForService(form.service, inventoryItems) : [];
@@ -905,7 +951,8 @@ export function EditPatientModal({ patient, onClose, onSave, inventoryItems = []
   }
 
   return (
-    <Modal onClose={onClose}>
+    <Modal onClose={requestClose}>
+      {discardDialog}
       <div
         className="bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200 m-auto flex flex-col"
         style={{
@@ -922,7 +969,7 @@ export function EditPatientModal({ patient, onClose, onSave, inventoryItems = []
             <h3 className="text-sm font-bold text-slate-900">Edit Patient Record</h3>
             <p className="text-[11px] text-slate-400 font-normal mt-0.5">{formatTitleCase(patient.name)} · ID: {patient.mrn || patient.id || 'N/A'}</p>
           </div>
-          <IconButton icon={X} label="Close" size={36} iconSize={16} onClick={onClose} />
+          <IconButton icon={X} label="Close" size={36} iconSize={16} onClick={requestClose} />
         </div>
 
         {/* Scrollable Landscape Form Body */}
@@ -958,11 +1005,16 @@ export function EditPatientModal({ patient, onClose, onSave, inventoryItems = []
                     inputMode="numeric"
                     {...v.field('age')}
                     value={form.age}
-                    onChange={e => set('age', e.target.value.replace(/\D/g, '').slice(0, 3))}
+                    readOnly={Boolean(editDobAge)}
+                    aria-readonly={Boolean(editDobAge)}
+                    onChange={e => { if (!editDobAge) set('age', e.target.value.replace(/\D/g, '').slice(0, 3)); }}
                     placeholder="e.g. 25"
-                    className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                    className={`w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] font-medium ${editDobAge ? 'bg-slate-100 text-slate-600 cursor-default' : 'bg-white text-slate-800'}`}
                   />
-                  <FieldError v={v} name="age" />
+                  {editDobAge && String(form.age) !== editDobAge
+                    ? <AgeDobMismatch form={form} setForm={setForm} className="mt-1" />
+                    : v.error('age') ? <FieldError v={v} name="age" />
+                    : editDobAge ? <span className="block mt-1 text-[11px] text-slate-400">Calculated from date of birth</span> : null}
                 </div>
                 <div>
                   <label className="block mb-1.5 text-slate-500">Sex</label>
@@ -983,7 +1035,7 @@ export function EditPatientModal({ patient, onClose, onSave, inventoryItems = []
                     value={form.dob || ''}
                     max={today()}
                     clearable
-                    onChange={e => { const d = e.target.value; setForm(f => ({ ...f, dob: d, age: d ? (ageFromDob(d) || f.age) : f.age })); }}
+                    onChange={e => setForm(f => withDob(f, e.target.value))}
                     className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
                   />
                   <FieldError v={v} name="dob" />
@@ -1320,7 +1372,7 @@ export function EditPatientModal({ patient, onClose, onSave, inventoryItems = []
         <div className="px-6 py-3.5 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3 flex-shrink-0">
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             className={BTN.outline}
           >
             Cancel

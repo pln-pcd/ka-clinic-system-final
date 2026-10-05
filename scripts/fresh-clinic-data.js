@@ -326,7 +326,7 @@ const VACCINE_BRANDS_BY_SERVICE = {
 };
 
 const ANIMALS = ['Dog', 'Dog', 'Dog', 'Cat', 'Cat', 'Monkey', 'Bat'];
-const TYPE_OF_EXPOSURE = ['Bite', 'Bite', 'Bite', 'Scratch', 'Saliva Contact'];
+const TYPE_OF_EXPOSURE = ['Bite', 'Bite', 'Bite', 'Scratch'];
 const CATEGORIES = ['Category II', 'Category II', 'Category III']; // Category I is no longer used
 const WOUND_DEPTH = ['Superficial', 'Deep / Penetrating', 'Multiple'];
 const WOUND_TYPE = ['Laceration', 'Puncture', 'Abrasion'];
@@ -540,7 +540,7 @@ function createPatientRecord(mrn, mode, todayIso, regDate, timeStr, usedEmails) 
       typeOfExposure,
       sourceOfExposure: service === 'PEP' ? (chance(0.6) ? 'Stray animal' : 'Domestic pet') : 'N/A',
       woundWashed: service === 'PEP' ? (chance(0.85) ? 'Yes' : 'No') : 'No',
-      rigGiven: category === 'Category III' ? (chance(0.75) ? 'Yes' : 'No') : 'No',
+      rigGiven: category === 'Category III' ? 'Yes (ERIG)' : 'No',
       vaxGiven: 'Yes',
       genericName: service === 'PEP' ? 'Purified Vero Cell Rabies Vaccine' : service === 'Tetanus' ? 'Tetanus Toxoid' : vaccineBrand,
       route: 'IM',
@@ -747,18 +747,6 @@ const INVENTORY_ITEMS = [
     unit: 'Vials',
     expiry: '2027-04-12',
     expiryDate: '2027-04-12',
-    status: 'in-stock',
-    createdAt: Date.now(),
-    isSeedData: true,
-  },
-  {
-    name: 'Berirab (HRIG - Human Rabies Immunoglobulin)',
-    category: 'Rig',
-    stock: 90,
-    minStock: 15,
-    unit: 'Vials',
-    expiry: '2027-05-18',
-    expiryDate: '2027-05-18',
     status: 'in-stock',
     createdAt: Date.now(),
     isSeedData: true,

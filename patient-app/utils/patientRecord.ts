@@ -210,3 +210,15 @@ export function exposureCategory(raw: unknown, animal?: unknown): ExposureCatego
   const v = String(raw ?? '').replace(/Category\s*/i, '').trim().toUpperCase();
   return v === 'II' || v === 'III' ? v : '';
 }
+
+// Type of exposure as the clinic records it now: Bite or Scratch. Older
+// records may still hold a removed type ("Saliva Contact", "Non-bite
+// Exposure"); those show as not recorded instead of a type that no longer exists.
+export const EXPOSURE_TYPES = ['Bite', 'Scratch'] as const;
+export function exposureTypeLabel(raw: unknown): string {
+  const t = String(raw ?? '').trim().toLowerCase();
+  if (t.includes('non-bite') || t.includes('saliva')) return EMPTY;
+  if (t.includes('scratch')) return 'Scratch';
+  if (t.includes('bite')) return 'Bite';
+  return EMPTY;
+}

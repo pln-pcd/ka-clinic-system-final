@@ -5,7 +5,8 @@
 //   ... --json <file>   also writes the expected screen numbers to <file>
 //
 // 1. Integrity rules on the data itself (pins, archive dates, dose strings,
-//    Category I / DTaP / infants / future completions, stock vs doses).
+//    Category I / DTaP / infants / future completions, stock vs doses,
+//    exposure types, RIG values).
 // 2. The numbers each screen should show, computed with the app's own dose
 //    logic (buildDoses) and the same filters the screens use. The browser
 //    check compares these with what the screens actually display.
@@ -73,6 +74,11 @@ check('PEP records are Category II or III; bat = III; every Category III has ERI
   if (/bat/i.test(p.animal || '') && p.cat !== 'III') out.push(`${p._id}: bat exposure is Category ${p.cat}, must be III`);
   return out;
 }));
+check('Type of exposure is Bite or Scratch; RIG is No or ERIG; no HRIG stock', [
+  ...vax.filter(p => p.service === 'PEP' && !['Bite', 'Scratch'].includes(p.typeOfExposure)).map(p => `${p._id}: exposure "${p.typeOfExposure || ''}"`),
+  ...vax.filter(p => p.rigGiven && !['No', 'Yes (ERIG)'].includes(p.rigGiven)).map(p => `${p._id}: RIG "${p.rigGiven}"`),
+  ...inventory.filter(i => /hrig|human rabies immunoglobulin/i.test(i.name || '')).map(i => `inventory ${i._id}: ${i.name}`),
+]);
 check('No DTaP service, no infants (under 1 year)', vax.flatMap(p => {
   const out = [];
   if (/dtap/i.test(p.service || '')) out.push(`${p._id}: DTaP`);
