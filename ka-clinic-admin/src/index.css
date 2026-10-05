@@ -407,3 +407,34 @@ button.kna-select[aria-invalid="true"]:focus {
   .kna-bl-disc { animation: kna-bl-fade 2.4s ease-in-out infinite; }
 }
 @keyframes kna-bl-fade { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+
+/* Searchable dropdown (components/Select.jsx): the field is a combobox, a
+   text box inside the bordered box. The box carries the border, focus ring
+   and invalid state; the text box inside is bare whatever the form's own
+   input styles say. */
+div.kna-select-combo:focus-within {
+  border-color: #3B50DF !important;
+  box-shadow: 0 0 0 3px rgba(59, 80, 223, 0.12);
+}
+div.kna-select-combo[data-invalid="true"] {
+  border-color: #F43F5E !important;
+  background-color: #FFF7F8 !important;
+}
+div.kna-select-combo[data-invalid="true"]:focus-within {
+  box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.14) !important;
+}
+div.kna-select-combo input.kna-select-input,
+div.kna-select-combo input.kna-select-input:focus,
+div.kna-select-combo input.kna-select-input[aria-invalid="true"] {
+  border: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+  font: inherit;
+  color: inherit;
+}
