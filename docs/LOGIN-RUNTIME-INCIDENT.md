@@ -31,6 +31,8 @@ Verification:
 - `node scripts/security/live.mjs`: includes deployed admin precheck and
   unauthenticated admin, patient and account guards, requiring expected JSON
   statuses rather than accepting a rendered static page as backend evidence.
+  All 7/7 checks passed after production deployment
+  `dpl_AAnZZRidXQfghrNhbqrcUGFB3YSp` was aliased to the public website.
 
 The patient APK calls these server functions; this server dependency fix does
 not require a replacement APK or another Firestore deployment.
