@@ -1,5 +1,5 @@
 {
-  "date": "2026-10-08T02:05:21.706Z",
+  "date": "2026-10-08T02:08:24.703Z",
   "baseline": "working tree",
   "results": [
     {
@@ -567,6 +567,24 @@
       "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
       "expected": "Secure HttpOnly cookie; SHA-256 hash; trusted shortcut accepts current account",
       "actual": "Secure HttpOnly cookie; SHA-256 hash; trusted shortcut accepts current account",
+      "status": "PASS"
+    },
+    {
+      "id": "API-064",
+      "area": 2,
+      "description": "Legacy mixed-case admin email permits correct login through verified Auth UID",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "200 custom token; correct account UID",
+      "actual": "200 custom token; correct account UID",
+      "status": "PASS"
+    },
+    {
+      "id": "API-065",
+      "area": 1,
+      "description": "Auth UID fallback refuses an admin record for a different email",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "No admin identity resolved",
+      "actual": "No admin identity resolved",
       "status": "PASS"
     }
   ]

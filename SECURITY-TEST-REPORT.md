@@ -1,10 +1,10 @@
 # K&A Clinic Technical Security Verification
 
-Date: 2026-10-08T00:50:07.188Z. Release: patient app 1.0.3 / Android versionCode 4.
+Date: 2026-10-08T02:08:42.101Z. Release: patient app 1.0.3 / Android versionCode 4.
 
 ## Scope and safety
 
-All destructive, guessing, replay and simulated-record tests used loopback Firebase Auth/Firestore emulators under the fixed project ID `demo-ka-security`. No real account or production record was mutated by tests. Manager, staff, patient A, patient B, archived patient and revoked admin fixtures use `example.test` email addresses and fictional records. Real SMTP delivery was suppressed for emulator/test recipients. Production checks were read-only headers, browser navigation and Rules API source retrieval. Rules deployment was separately authorized by the user.
+All destructive, guessing, replay and simulated-record tests used loopback Firebase Auth/Firestore emulators under the fixed project ID `demo-ka-security`. No real account or production record was mutated by tests. Manager, staff, patient A, patient B, archived patient and revoked admin fixtures use `example.test` email addresses and fictional records. Real SMTP delivery was suppressed for emulator/test recipients. Production checks used headers, browser navigation, Rules API source retrieval and non-mutating authentication API precheck/missing-token requests. No production passwords were tested. Rules deployment was separately authorized by the user.
 
 The new free Firebase project `ka-clinic-security-test` contains the published rules and an empty Firestore database. The Rules API confirms byte-for-byte equality; attack/CRUD execution used the emulator, not that cloud database. Firebase CLI created the test database in nam5.
 
@@ -15,15 +15,16 @@ Before API evidence uses Git HEAD `392b9a2`; pre-existing uncommitted user chang
 | Evidence | Total | PASS | FAIL |
 | --- | ---: | ---: | ---: |
 | Before remediation | 665 | 618 | 47 |
-| After remediation | 778 | 775 | 3 |
-| api-after.json | 63 | 63 | 0 |
+| After remediation | 785 | 782 | 3 |
+| api-after.json | 65 | 65 | 0 |
 | apk-after.json | 6 | 6 | 0 |
 | cloud-rules-ka-clinic-security-test.json | 1 | 1 | 0 |
 | cloud-rules-ka-clinic-system.json | 1 | 1 | 0 |
 | dependencies-after.json | 3 | 1 | 2 |
 | headers-after.json | 9 | 9 | 0 |
-| live-after.json | 3 | 3 | 0 |
+| live-after.json | 7 | 7 | 0 |
 | rules-after.json | 682 | 682 | 0 |
+| runtime-after.json | 1 | 1 | 0 |
 | secrets-after.json | 4 | 3 | 1 |
 | ui-after.json | 6 | 6 | 0 |
 
@@ -41,6 +42,10 @@ See [initial file:line audit](docs/SECURITY-AUDIT-GAPS.md) for original location
 6. Added CSP, HSTS, nosniff, anti-framing, referrer/permissions policy, and API no-store. Android cleartext traffic is disabled with a persisted Expo config plugin; production API URLs require HTTPS. SMTP transport uses port 465 with TLS and Gmail hostname validation.
 7. Replaced raw map tooltip HTML with a DOM node whose textContent is populated. Existing map popup escaping, React text rendering and chatbot escaping were reviewed. Browser name-injection test confirms literal markup and no execution.
 8. Upgraded vulnerable dependencies including firebase-admin, nodemailer, grpc-js, maintained SheetJS 0.20.3 and transitive packages. Server dependency audit is clean. Remaining upstream advisories are listed below.
+
+## Vercel authentication runtime follow-up
+
+The initial release checks covered the static login page but missed a deployed function initialization crash: `jwks-rsa` required the ESM-only `jose` package in a loader without native `require(esm)` support. A scoped `jose@5.10.0` override preserves Firebase Admin 14.5/JWKS 4.1 with a CommonJS-compatible export. The runtime regression disables `require(esm)` and verifies generated RSA keys and rejection of tampered data. The live browser suite now checks admin precheck and three missing-token API guards as well as page rendering. See [incident and remediation](docs/LOGIN-RUNTIME-INCIDENT.md). This server-only correction does not change the APK or security rules.
 
 ## User-facing changes
 
@@ -94,7 +99,8 @@ In terminal 3, from repository root, run serially because rules tests clear emul
 
 ```powershell
 node scripts/security/rules.mjs
-node scripts/security/api.mjs
+node --no-experimental-require-module scripts/security/api.mjs
+node scripts/security/runtime.mjs
 node scripts/security/ui.mjs
 npm run build --prefix ka-clinic-admin
 Push-Location patient-app
@@ -148,6 +154,7 @@ Android release builds should use a short path without spaces, Expo prebuild wit
 | API-020 | Active staff allowed report email | Direct handler request with real Firebase emulator token; simulated documents only. | 200 | 200 | FAIL | PASS | Shared authenticated role/session guards and input ownership validation. |
 | API-021 | Patient cannot request admin OTP | Direct handler request with real Firebase emulator token; simulated documents only. | 403 | 403 | PASS | PASS | Regression check passed. |
 | API-059 | Revoked/disabled admin cannot sign in | Direct handler request with real Firebase emulator token; simulated documents only. | Auth emulator rejects password | Auth emulator rejects password | PASS | PASS | Regression check passed. |
+| API-065 | Auth UID fallback refuses an admin record for a different email | Direct handler request with real Firebase emulator token; simulated documents only. | No admin identity resolved | No admin identity resolved | Not in baseline | PASS | Additional verification after remediation. |
 | UI-STAFF | Staff UI hides manager roster | Headless Chrome against local Vite and Firebase emulators. Browser clock advanced for idle checks. | Patient Records visible; Manage Admins absent | Patient Records visible; Manage Admins absent | Not in baseline | PASS | Additional verification after remediation. |
 | UI-MANAGER | Manager UI includes manager roster | Headless Chrome against local Vite and Firebase emulators. Browser clock advanced for idle checks. | Manage Admins visible | Manage Admins visible | Not in baseline | PASS | Additional verification after remediation. |
 
@@ -163,6 +170,7 @@ Android release builds should use a short path without spaces, Expo prebuild wit
 | API-040 | Patient password failures rate limited server-side | Direct handler request with real Firebase emulator token; simulated documents only. | Five 401 then 429, including correct password | Five 401 then 429, including correct password | FAIL | PASS | Server password gateway, persistent attempt buckets and generic errors. |
 | API-041 | Recovery does not enumerate admin emails | Direct handler request with real Firebase emulator token; simulated documents only. | Identical generic response | Identical generic response | FAIL | PASS | Server password gateway, persistent attempt buckets and generic errors. |
 | API-042 | Signup does not enumerate MRNs | Direct handler request with real Firebase emulator token; simulated documents only. | Identical generic response | Identical generic response | FAIL | PASS | Server password gateway, persistent attempt buckets and generic errors. |
+| API-064 | Legacy mixed-case admin email permits correct login through verified Auth UID | Direct handler request with real Firebase emulator token; simulated documents only. | 200 custom token; correct account UID | 200 custom token; correct account UID | Not in baseline | PASS | Additional verification after remediation. |
 
 ### 3. OTP expiration and abuse
 
@@ -913,6 +921,10 @@ Android release builds should use a short path without spaces, Expo prebuild wit
 | LIVE-LOGIN | Live login page renders | Read-only Chrome navigation; no login or record mutations | Login visible; no browser runtime errors | 0 runtime errors | Not in baseline | PASS | Additional verification after remediation. |
 | LIVE-MIXED-CONTENT | No mixed-content requests on live login page | Capture browser network requests without signing in | Zero HTTP subresource requests | 0 HTTP requests | Not in baseline | PASS | Additional verification after remediation. |
 | LIVE-CSP | CSP permits required login resources | Inspect browser console for CSP blocking | Zero CSP violations | 0 CSP violations | Not in baseline | PASS | Additional verification after remediation. |
+| LIVE-ADMIN-PRECHECK | Deployed authentication function initializes and returns expected JSON | POST /api/admin-login; fictional precheck or missing token; no production account/data mutation | 200 JSON with success=true | 200, JSON, success=true | Not in baseline | PASS | Additional verification after remediation. |
+| LIVE-ADMIN-GUARD | Deployed authentication function initializes and returns expected JSON | POST /api/devices; fictional precheck or missing token; no production account/data mutation | 401 JSON with success=false | 401, JSON, success=false | Not in baseline | PASS | Additional verification after remediation. |
+| LIVE-PATIENT-GUARD | Deployed authentication function initializes and returns expected JSON | POST /api/send-otp; fictional precheck or missing token; no production account/data mutation | 401 JSON with success=false | 401, JSON, success=false | Not in baseline | PASS | Additional verification after remediation. |
+| LIVE-ACCOUNTS-GUARD | Deployed authentication function initializes and returns expected JSON | POST /api/admin-invites; fictional precheck or missing token; no production account/data mutation | 401 JSON with success=false | 401, JSON, success=false | Not in baseline | PASS | Additional verification after remediation. |
 
 ### 8. API keys, secrets and dependencies
 
@@ -932,6 +944,7 @@ Android release builds should use a short path without spaces, Expo prebuild wit
 | DEPENDENCIES-server | server dependency audit | npm audit --json in . | Zero published advisories | 0 affected package entries; 0 root advisories | Not in baseline | PASS | Additional verification after remediation. |
 | DEPENDENCIES-admin | admin dependency audit | npm audit --json in ka-clinic-admin | Zero published advisories | 5 affected package entries; 1 root advisories | Not in baseline | FAIL | Upstream braces/node-forge advisory remains; see limitations. |
 | DEPENDENCIES-patient | patient dependency audit | npm audit --json in patient-app | Zero published advisories | 14 affected package entries; 2 root advisories | Not in baseline | FAIL | Upstream braces/node-forge advisory remains; see limitations. |
+| RUNTIME-CJS-JWKS | Firebase Auth/App Check load and RSA JWKS verification without require(esm) | Child Node process disables require(esm); generated test key only; no environment files, credentials or network requests. | SDK imports succeed; valid RSA signature accepted; tampered payload rejected | Imports and signature checks passed | Not in baseline | PASS | Additional verification after remediation. |
 | SECRET-HISTORY | No server secrets in Git history | Gitleaks redacted scan and exact-value search of built client files | Zero server-secret findings | 1 findings requiring review; values redacted | Not in baseline | FAIL | Rotate the historic Gemini key; history remains unchanged. |
 | SECRET-SOURCE | No server secrets in current tracked and pending source | Gitleaks redacted scan and exact-value search of built client files | Zero server-secret findings | 0 findings requiring review; values redacted | Not in baseline | PASS | Additional verification after remediation. |
 | SECRET-BUNDLE-ADMIN | Server-only values absent from client bundle | Gitleaks redacted scan and exact-value search of built client files | Zero matches | 62 files; 19 locally configured secret representations; 0 matches | Not in baseline | PASS | Additional verification after remediation. |

@@ -1,5 +1,5 @@
 {
-  "date": "2026-10-08T00:48:49.067Z",
+  "date": "2026-10-08T02:08:30.548Z",
   "url": "https://ka-clinic-system-final.vercel.app",
   "insecure": [],
   "violations": [],
@@ -30,6 +30,42 @@
       "steps": "Inspect browser console for CSP blocking",
       "expected": "Zero CSP violations",
       "actual": "0 CSP violations",
+      "status": "PASS"
+    },
+    {
+      "id": "LIVE-ADMIN-PRECHECK",
+      "area": 7,
+      "description": "Deployed authentication function initializes and returns expected JSON",
+      "steps": "POST /api/admin-login; fictional precheck or missing token; no production account/data mutation",
+      "expected": "200 JSON with success=true",
+      "actual": "200, JSON, success=true",
+      "status": "PASS"
+    },
+    {
+      "id": "LIVE-ADMIN-GUARD",
+      "area": 7,
+      "description": "Deployed authentication function initializes and returns expected JSON",
+      "steps": "POST /api/devices; fictional precheck or missing token; no production account/data mutation",
+      "expected": "401 JSON with success=false",
+      "actual": "401, JSON, success=false",
+      "status": "PASS"
+    },
+    {
+      "id": "LIVE-PATIENT-GUARD",
+      "area": 7,
+      "description": "Deployed authentication function initializes and returns expected JSON",
+      "steps": "POST /api/send-otp; fictional precheck or missing token; no production account/data mutation",
+      "expected": "401 JSON with success=false",
+      "actual": "401, JSON, success=false",
+      "status": "PASS"
+    },
+    {
+      "id": "LIVE-ACCOUNTS-GUARD",
+      "area": 7,
+      "description": "Deployed authentication function initializes and returns expected JSON",
+      "steps": "POST /api/admin-invites; fictional precheck or missing token; no production account/data mutation",
+      "expected": "401 JSON with success=false",
+      "actual": "401, JSON, success=false",
       "status": "PASS"
     }
   ]

@@ -57,9 +57,19 @@ export async function requireActiveManager(req) {
 // that only has an email (pre-authentication: lockout precheck/failure)
 // needs this query.
 export async function findAdminByEmail(email) {
-  const snap = await db.collection('admins').where('email', '==', email).limit(1).get();
-  if (snap.empty) return null;
-  const docSnap = snap.docs[0];
+  const normalizedEmail = email.trim().toLowerCase();
+  const snap = await db.collection('admins').where('email', '==', normalizedEmail).limit(1).get();
+  let docSnap = snap.docs[0];
+  if (!docSnap) {
+    // Older manager records preserve email capitalization/whitespace. Resolve
+    // their Auth UID rather than scanning the directory or trusting client UID.
+    let user;
+    try { user = await auth.getUserByEmail(normalizedEmail); }
+    catch (error) { if (error.code === 'auth/user-not-found') return null; throw error; }
+    docSnap = await db.collection('admins').doc(user.uid).get();
+    const storedEmail = docSnap.data()?.email;
+    if (!docSnap.exists || typeof storedEmail !== 'string' || storedEmail.trim().toLowerCase() !== normalizedEmail) return null;
+  }
   return { uid: docSnap.id, ref: docSnap.ref, data: docSnap.data() };
 }
 

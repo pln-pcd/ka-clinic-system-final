@@ -20,7 +20,7 @@ try {
     ['LIVE-ADMIN-PRECHECK', '/api/admin-login', { action: 'precheck', email: 'probe@example.test' }, 200],
     ['LIVE-ADMIN-GUARD', '/api/devices', { action: 'check-session' }, 401],
     ['LIVE-PATIENT-GUARD', '/api/send-otp', { action: 'login-check' }, 401],
-    ['LIVE-ACCOUNTS-GUARD', '/api/admin-invites', { action: 'list' }, 401],
+    ['LIVE-ACCOUNTS-GUARD', '/api/admin-invites', { action: 'invite' }, 401],
   ]) {
     const response = await page.request.post(`${url}${path}`, { data: body });
     let payload;

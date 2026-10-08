@@ -257,6 +257,26 @@ if (!process.argv.includes('--before')) {
     assert.equal(shortcut.payload.trusted, true);
   });
 }
+if (!process.argv.includes('--before')) {
+  await test(2, 'Legacy mixed-case admin email permits correct login through verified Auth UID', '200 custom token; correct account UID', async () => {
+    const actor = actors.staff, ref = db.collection('admins').doc(actor.uid);
+    await ref.update({ email: ` ${actor.email.toUpperCase()} `, failedLoginAttempts: 0, lockedUntil: null });
+    await db.collection('loginAttempts').doc(security.secretHash(actor.email, 'admin')).delete();
+    try {
+      const result = await call(admin, 'admin-login', { action: 'login', email: actor.email, password });
+      assert.equal(result.status, 200);
+      const signed = await rest('signInWithCustomToken', { token: result.payload.customToken, returnSecureToken: true });
+      assert.equal(signed.status, 200);
+      assert.equal((await auth.verifyIdToken(signed.data.idToken)).uid, actor.uid);
+    } finally { await ref.update({ email: actor.email }); }
+  });
+  await test(1, 'Auth UID fallback refuses an admin record for a different email', 'No admin identity resolved', async () => {
+    const actor = actors.staff, ref = db.collection('admins').doc(actor.uid);
+    await ref.update({ email: 'different@example.test' });
+    try { assert.equal(await helpers.findAdminByEmail(actor.email), null); }
+    finally { await ref.update({ email: actor.email }); }
+  });
+}
 mkdirSync('docs/security-results', { recursive: true });
 const file = process.argv.includes('--before') ? 'api-before.json' : 'api-after.json';
 writeFileSync(`docs/security-results/${file}`, JSON.stringify({ date: new Date().toISOString(), baseline: process.argv.includes('--before') ? 'Git HEAD 392b9a2; pre-existing worktree changes excluded' : 'working tree', results }, null, 2));

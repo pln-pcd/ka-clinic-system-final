@@ -35,6 +35,11 @@ for (const suite of before) {
   md += `\n### ${suite.file}\n\n| ID | Expected | Actual |\n| --- | --- | --- |\n`;
   for (const row of suite.results.filter(r => r.status === 'FAIL')) md += `| ${row.id} | ${String(row.expected).replaceAll('|', '\\|')} | ${String(row.actual).replaceAll('|', '\\|').replaceAll('\n', ' ')} |\n`;
 }
+if (existsSync(`${dir}/runtime-after.json`)) {
+  md = md.replace('Production checks were read-only headers, browser navigation and Rules API source retrieval.', 'Production checks used headers, browser navigation, Rules API source retrieval and non-mutating authentication API precheck/missing-token requests. No production passwords were tested.');
+  md = md.replace('## User-facing changes', '## Vercel authentication runtime follow-up\n\nThe initial release checks covered the static login page but missed a deployed function initialization crash: `jwks-rsa` required the ESM-only `jose` package in a loader without native `require(esm)` support. A scoped `jose@5.10.0` override preserves Firebase Admin 14.5/JWKS 4.1 with a CommonJS-compatible export. The runtime regression disables `require(esm)` and verifies generated RSA keys and rejection of tampered data. The live browser suite now checks admin precheck and three missing-token API guards as well as page rendering. See [incident and remediation](docs/LOGIN-RUNTIME-INCIDENT.md). This server-only correction does not change the APK or security rules.\n\n## User-facing changes');
+  md = md.replace('node scripts/security/api.mjs\n', 'node --no-experimental-require-module scripts/security/api.mjs\nnode scripts/security/runtime.mjs\n');
+}
 md = md.replace('native runtime behavior is not claimed as tested.', 'onboarding launch was tested on an isolated Android emulator with fresh private data. Signed-in physical-device behavior remains untested.');
 md = md.replace('Stored before JSON files are historical evidence;', 'Run APK artifact checks with `python scripts/security/apk.py <release.apk> <compiled.bundle>`. The optional --emulator switch only inspects the isolated emulator-5580; it does not install or alter accounts. Stored before JSON files are historical evidence;');
 md = md.replace("$env:GITLEAKS_PATH='C:/tools/gitleaks.exe'", "vercel env pull .tmp/security/production.env --environment=production --yes\n$env:GITLEAKS_PATH='C:/tools/gitleaks.exe'");
