@@ -1,0 +1,20 @@
+{
+  "date": "2026-10-08T00:48:40.656Z",
+  "project": "ka-clinic-system",
+  "release": "projects/ka-clinic-system/releases/cloud.firestore",
+  "ruleset": "projects/ka-clinic-system/rulesets/dfdd0415-12e2-4b6c-856a-4fa6dd9d526c",
+  "repositorySha256": "0bd3b0c4512fe19c123cdb4abd7b940f8b7094420dd7edc674bd9b575befaa47",
+  "deployedSha256": "0bd3b0c4512fe19c123cdb4abd7b940f8b7094420dd7edc674bd9b575befaa47",
+  "byteEqual": true,
+  "results": [
+    {
+      "id": "CLOUD-RULES-ka-clinic-system",
+      "area": 6,
+      "description": "Deployed rules equal repository source",
+      "steps": "Read Firebase Rules release and referenced ruleset; compare content and SHA-256",
+      "expected": "Byte-for-byte equality",
+      "actual": "Byte-for-byte equal",
+      "status": "PASS"
+    }
+  ]
+}

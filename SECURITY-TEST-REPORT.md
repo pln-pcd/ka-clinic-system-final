@@ -1,6 +1,6 @@
 # K&A Clinic Technical Security Verification
 
-Date: 2026-10-08T00:44:20.397Z. Release: patient app 1.0.3 / Android versionCode 4.
+Date: 2026-10-08T00:50:07.188Z. Release: patient app 1.0.3 / Android versionCode 4.
 
 ## Scope and safety
 
@@ -15,11 +15,14 @@ Before API evidence uses Git HEAD `392b9a2`; pre-existing uncommitted user chang
 | Evidence | Total | PASS | FAIL |
 | --- | ---: | ---: | ---: |
 | Before remediation | 665 | 618 | 47 |
-| After remediation | 765 | 762 | 3 |
+| After remediation | 778 | 775 | 3 |
 | api-after.json | 63 | 63 | 0 |
 | apk-after.json | 6 | 6 | 0 |
 | cloud-rules-ka-clinic-security-test.json | 1 | 1 | 0 |
+| cloud-rules-ka-clinic-system.json | 1 | 1 | 0 |
 | dependencies-after.json | 3 | 1 | 2 |
+| headers-after.json | 9 | 9 | 0 |
+| live-after.json | 3 | 3 | 0 |
 | rules-after.json | 682 | 682 | 0 |
 | secrets-after.json | 4 | 3 | 1 |
 | ui-after.json | 6 | 6 | 0 |
@@ -102,6 +105,7 @@ node scripts/security/live.mjs
 node scripts/security/cloud-rules.mjs ka-clinic-security-test
 node scripts/security/cloud-rules.mjs ka-clinic-system
 node scripts/security/dependencies.mjs
+vercel env pull .tmp/security/production.env --environment=production --yes
 $env:GITLEAKS_PATH='C:/tools/gitleaks.exe'
 node scripts/security/secrets.mjs 'C:/short-build/android/app/build/generated/assets/react/release/index.android.bundle'
 node scripts/security/report.mjs
@@ -208,6 +212,7 @@ Android release builds should use a short path without spaces, Expo prebuild wit
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | API-027 | Patient cannot update clinical profile fields | Direct handler request with real Firebase emulator token; simulated documents only. | No write to clinical field | No write to clinical field | PASS | PASS | Regression check passed. |
 | CLOUD-RULES-ka-clinic-security-test | Deployed rules equal repository source | Read Firebase Rules release and referenced ruleset; compare content and SHA-256 | Byte-for-byte equality | Byte-for-byte equal | Not in baseline | PASS | Additional verification after remediation. |
+| CLOUD-RULES-ka-clinic-system | Deployed rules equal repository source | Read Firebase Rules release and referenced ruleset; compare content and SHA-256 | Byte-for-byte equality | Byte-for-byte equal | Not in baseline | PASS | Additional verification after remediation. |
 | RULE-vaccinations-anonymous-read | anonymous: read vaccinations | Seed fictional fixture; direct Firebase SDK request with role token. | PERMISSION_DENIED | permission-denied | PASS | PASS | Regression check passed. |
 | RULE-vaccinations-anonymous-create | anonymous: create vaccinations | Seed fictional fixture; direct Firebase SDK request with role token. | PERMISSION_DENIED | permission-denied | PASS | PASS | Regression check passed. |
 | RULE-vaccinations-anonymous-update | anonymous: update vaccinations | Seed fictional fixture; direct Firebase SDK request with role token. | PERMISSION_DENIED | permission-denied | PASS | PASS | Regression check passed. |
@@ -896,6 +901,18 @@ Android release builds should use a short path without spaces, Expo prebuild wit
 | ID | Description | Steps | Expected | Actual | Before | PASS/FAIL | Fix |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | APK-TRANSPORT | Compiled manifest disables cleartext traffic and app backup | Inspect the signed release APK; optional read-only isolated emulator inspection | Both false | Both false | Not in baseline | PASS | Additional verification after remediation. |
+| HTTPS-001 | HTTP redirects to HTTPS | Read-only request to https://ka-clinic-system-final.vercel.app | 301/302/307/308 with HTTPS location | 308 https://ka-clinic-system-final.vercel.app/ | PASS | PASS | Regression check passed. |
+| HTTPS-002 | HTTPS available | Read-only request to https://ka-clinic-system-final.vercel.app | 200 | 200 | PASS | PASS | Regression check passed. |
+| HEADER-strict-transport-security | strict-transport-security | Read-only request to https://ka-clinic-system-final.vercel.app | Present | max-age=31536000; includeSubDomains | PASS | PASS | Regression check passed. |
+| HEADER-content-security-policy | content-security-policy | Read-only request to https://ka-clinic-system-final.vercel.app | Present | default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebaseapp.com https://*.cloudfunctions.net https://unpkg.com https://server.arcgisonline.com; frame-src https://*.firebaseapp.com https://maps.google.com https://www.google.com; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests | FAIL | PASS | Global HTTPS security headers in vercel.json. |
+| HEADER-x-content-type-options | x-content-type-options | Read-only request to https://ka-clinic-system-final.vercel.app | Present | nosniff | FAIL | PASS | Global HTTPS security headers in vercel.json. |
+| HEADER-x-frame-options | x-frame-options | Read-only request to https://ka-clinic-system-final.vercel.app | Present | DENY | FAIL | PASS | Global HTTPS security headers in vercel.json. |
+| HEADER-referrer-policy | referrer-policy | Read-only request to https://ka-clinic-system-final.vercel.app | Present | strict-origin-when-cross-origin | FAIL | PASS | Global HTTPS security headers in vercel.json. |
+| HEADER-permissions-policy | permissions-policy | Read-only request to https://ka-clinic-system-final.vercel.app | Present | camera=(), microphone=(), geolocation=() | FAIL | PASS | Global HTTPS security headers in vercel.json. |
+| TLS-001 | Trusted and unexpired TLS certificate | Read-only request to https://ka-clinic-system-final.vercel.app | Trusted certificate, validity in future | Google Trust Services; expires Nov 27 19:48:08 2026 GMT | PASS | PASS | Regression check passed. |
+| LIVE-LOGIN | Live login page renders | Read-only Chrome navigation; no login or record mutations | Login visible; no browser runtime errors | 0 runtime errors | Not in baseline | PASS | Additional verification after remediation. |
+| LIVE-MIXED-CONTENT | No mixed-content requests on live login page | Capture browser network requests without signing in | Zero HTTP subresource requests | 0 HTTP requests | Not in baseline | PASS | Additional verification after remediation. |
+| LIVE-CSP | CSP permits required login resources | Inspect browser console for CSP blocking | Zero CSP violations | 0 CSP violations | Not in baseline | PASS | Additional verification after remediation. |
 
 ### 8. API keys, secrets and dependencies
 

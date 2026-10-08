@@ -1,0 +1,36 @@
+{
+  "date": "2026-10-08T00:48:49.067Z",
+  "url": "https://ka-clinic-system-final.vercel.app",
+  "insecure": [],
+  "violations": [],
+  "pageErrors": [],
+  "results": [
+    {
+      "id": "LIVE-LOGIN",
+      "area": 7,
+      "description": "Live login page renders",
+      "steps": "Read-only Chrome navigation; no login or record mutations",
+      "expected": "Login visible; no browser runtime errors",
+      "actual": "0 runtime errors",
+      "status": "PASS"
+    },
+    {
+      "id": "LIVE-MIXED-CONTENT",
+      "area": 7,
+      "description": "No mixed-content requests on live login page",
+      "steps": "Capture browser network requests without signing in",
+      "expected": "Zero HTTP subresource requests",
+      "actual": "0 HTTP requests",
+      "status": "PASS"
+    },
+    {
+      "id": "LIVE-CSP",
+      "area": 7,
+      "description": "CSP permits required login resources",
+      "steps": "Inspect browser console for CSP blocking",
+      "expected": "Zero CSP violations",
+      "actual": "0 CSP violations",
+      "status": "PASS"
+    }
+  ]
+}

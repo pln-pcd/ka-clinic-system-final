@@ -37,6 +37,7 @@ for (const suite of before) {
 }
 md = md.replace('native runtime behavior is not claimed as tested.', 'onboarding launch was tested on an isolated Android emulator with fresh private data. Signed-in physical-device behavior remains untested.');
 md = md.replace('Stored before JSON files are historical evidence;', 'Run APK artifact checks with `python scripts/security/apk.py <release.apk> <compiled.bundle>`. The optional --emulator switch only inspects the isolated emulator-5580; it does not install or alter accounts. Stored before JSON files are historical evidence;');
+md = md.replace("$env:GITLEAKS_PATH='C:/tools/gitleaks.exe'", "vercel env pull .tmp/security/production.env --environment=production --yes\n$env:GITLEAKS_PATH='C:/tools/gitleaks.exe'");
 md = md.replace('## Manual evaluation checklist (not executed; not counted as PASS)', '## Manual evaluation checklist (not executed; not counted as PASS)\n\nIdentity/data tests below must use a test-configured APK/API and the separate Firebase test project or loopback emulators. The production APK was used only for installation, upgrade and public onboarding smoke checks, without account sign-in.');
 md = md.replace('Add edge/IP abuse controls and monitoring;', 'Remote patient-device revocation now removes both server sessions and the hashed trust token. The client also resets its second-factor UI flag on sign-out. Add edge/IP abuse controls and monitoring;');
 if (existsSync(`${dir}/apk-after.json`)) {
