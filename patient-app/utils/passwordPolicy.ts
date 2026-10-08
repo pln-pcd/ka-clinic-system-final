@@ -1,14 +1,15 @@
 // Password rules for NEW passwords. Same rules as the API
 // (api/_lib/passwordPolicy.js) and the admin app. Existing passwords keep
 // working: the rules apply only when a password is set or changed.
-export type PasswordRule = { key: string; label: string; test: (p: string) => boolean };
+export type PasswordRule = { key: string; label: string; hint: string; test: (p: string) => boolean };
 
+// `hint` is the one-line nudge shown while that rule is the next one missing.
 export const PASSWORD_RULES: PasswordRule[] = [
-  { key: 'length', label: 'At least 8 characters', test: p => p.length >= 8 },
-  { key: 'upper', label: 'One uppercase letter (A–Z)', test: p => /[A-Z]/.test(p) },
-  { key: 'lower', label: 'One lowercase letter (a–z)', test: p => /[a-z]/.test(p) },
-  { key: 'number', label: 'One number (0–9)', test: p => /\d/.test(p) },
-  { key: 'symbol', label: 'One symbol (e.g. ! @ # $)', test: p => /[^A-Za-z0-9\s]/.test(p) },
+  { key: 'length', label: 'At least 8 characters', hint: 'Use at least 8 characters', test: p => p.length >= 8 },
+  { key: 'upper', label: 'One uppercase letter (A–Z)', hint: 'Add an uppercase letter (A–Z)', test: p => /[A-Z]/.test(p) },
+  { key: 'lower', label: 'One lowercase letter (a–z)', hint: 'Add a lowercase letter (a–z)', test: p => /[a-z]/.test(p) },
+  { key: 'number', label: 'One number (0–9)', hint: 'Add a number (0–9)', test: p => /\d/.test(p) },
+  { key: 'symbol', label: 'One symbol (e.g. ! @ # $)', hint: 'Add a symbol like ! @ #', test: p => /[^A-Za-z0-9\s]/.test(p) },
 ];
 
 export const meetsPasswordPolicy = (p: string) => PASSWORD_RULES.every(r => r.test(p));

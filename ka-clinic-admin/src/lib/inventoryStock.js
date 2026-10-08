@@ -128,7 +128,7 @@ export async function recordDoseChange(fs, db, {
       ...(give ? { vaccineBrand: brand } : {}),
     });
     if (item && after !== before) {
-      tx.update(invRef, { stock: after, status: stockStatus(after, item.minStock) });
+      tx.update(invRef, { stock: after, status: stockStatus(after, item.minStock), updatedAt: Date.now() });
       tx.set(doc(collection(db, 'stockMovements')), {
         patientId,
         doseKey,
@@ -144,6 +144,76 @@ export async function recordDoseChange(fs, db, {
       });
     }
     return { before, after, itemName: item?.name || '', allDone, wasDone, moved: after !== before };
+  });
+}
+
+/**
+ * Records ERIG given (or removes it) together with its inventory change, in
+ * one transaction, like recordDoseChange.
+ *   giving   takes `vials` from the selected ERIG item. Refused when the item
+ *            is out of stock or holds fewer vials than that.
+ *   removing puts the vials back on the item they came from, only if they
+ *            were really taken (stockDeducted).
+ * Also keeps the older `rigGiven` answer in step ("Yes (ERIG)" / "No").
+ */
+export async function recordErigChange(fs, db, {
+  patientId, give, vials = 1, date = '', stockItemId = null, byUid = null, byName = '',
+}) {
+  const { runTransaction, doc, collection, deleteField } = fs;
+  const vaxRef = doc(db, 'vaccinations', patientId);
+
+  return runTransaction(db, async (tx) => {
+    const vSnap = await tx.get(vaxRef);
+    if (!vSnap.exists()) throw new DoseStockError('missing', 'Patient record not found.');
+    const saved = vSnap.data();
+    const savedErig = saved.erig && saved.erig.given ? saved.erig : null;
+    const savedGiven = Boolean(savedErig) || /ERIG/i.test(String(saved.rigGiven || ''));
+    if (give === savedGiven) throw new DoseStockError('stale', 'ERIG was already updated.');
+
+    // Giving uses the chosen item; removing returns to the item it came from.
+    const itemId = give ? stockItemId : (savedErig?.stockDeducted ? savedErig.stockItemId : null);
+    const invRef = itemId ? doc(db, 'inventory', itemId) : null;
+    const iSnap = invRef ? await tx.get(invRef) : null;
+    const item = iSnap && iSnap.exists() ? iSnap.data() : null;
+    const qty = give ? Math.max(1, parseInt(vials, 10) || 1) : (parseInt(savedErig?.vials, 10) || 0);
+
+    const before = item ? (parseInt(item.stock, 10) || 0) : null;
+    let after = before;
+    if (item && give) {
+      if (before <= 0) throw new DoseStockError('out-of-stock', `${item.name || 'ERIG'} is out of stock in Inventory.`);
+      if (before < qty) throw new DoseStockError('out-of-stock', `${item.name || 'ERIG'} has only ${before} vial${before === 1 ? '' : 's'} left in Inventory.`);
+      after = before - qty;
+    } else if (item && !give && qty > 0) {
+      after = before + qty;
+    }
+
+    tx.update(vaxRef, give
+      ? {
+          erig: {
+            given: true, vials: qty, date, stockItemId: item ? itemId : '', itemName: item?.name || '',
+            stockDeducted: Boolean(item), recordedAt: Date.now(), recordedBy: byUid || '', recordedByName: byName || '',
+          },
+          rigGiven: 'Yes (ERIG)',
+        }
+      : { erig: deleteField(), rigGiven: 'No' });
+    if (item && after !== before) {
+      tx.update(invRef, { stock: after, status: stockStatus(after, item.minStock), updatedAt: Date.now() });
+      tx.set(doc(collection(db, 'stockMovements')), {
+        patientId,
+        doseKey: 'erig',
+        doseLabel: 'ERIG',
+        direction: give ? 'deduct' : 'restore',
+        itemId,
+        itemName: item.name || '',
+        qty,
+        stockBefore: before,
+        stockAfter: after,
+        byUid,
+        at: Date.now(),
+      });
+    }
+    const min = parseInt(item?.minStock, 10) || 10;
+    return { before, after, qty, itemName: item?.name || '', moved: after !== before, low: item ? after <= min : false };
   });
 }
 

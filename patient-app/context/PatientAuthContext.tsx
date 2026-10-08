@@ -20,6 +20,7 @@ import React, { createContext, useContext, useEffect, useRef, useState } from 'r
 import { auth, checkLoginTrust, onAuthStateChanged, resolveMRNForUser, signOut } from '../config/backend';
 import { getKeepSignedIn } from '../config/appPrefs';
 import { clearThisDeviceSession, registerThisDevice, watchOwnSession } from '../config/deviceSessions';
+import { cacheKeys, clearCache, peekCache, primeCache, writeCache } from '../utils/localCache';
 
 type PatientAuthState = {
   user: User | null;
@@ -60,8 +61,20 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
   // never against a session the patient just created by signing in.
   const launchHandled = useRef(false);
 
+  // Launch: the restored session is resolved with the native splash screen
+  // still up (components/AppShells.tsx hides it when `loading` turns false).
+  // The server trust check is the one network call that has to finish first:
+  // it is the second factor for a restored session. Everything else the first
+  // screen needs (the MRN for this uid, the last-known vaccination record) is
+  // read from the on-disk cache at the same time, so Home renders with data
+  // the moment the check passes and Firestore refreshes it in the background.
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (fbUser: User | null) => {
+      // Signed out (or nobody signed in): drop the previous patient's cache.
+      if (!fbUser) {
+        clearCache();
+        setVerifiedUid(null);
+      }
       // Firebase always persists to AsyncStorage on React Native, so opting out
       // of "keep me signed in" cannot be a persistence mode — it is enforced
       // here, by discarding a restored session before the app renders.
@@ -79,8 +92,9 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
           // "Keep me signed in" was ticked, but that alone is not enough: the
           // server must confirm THIS install still holds a valid trust token.
           // Anything short of an explicit yes (no token, expired, revoked,
-          // reinstall, offline) signs the restored session out.
-          const trusted = await checkLoginTrust();
+          // reinstall, offline) signs the restored session out. The cache is
+          // read in parallel with it.
+          const [trusted] = await Promise.all([checkLoginTrust(), primeLaunchCache(fbUser.uid)]);
           if (!trusted) {
             try { await clearThisDeviceSession(fbUser.uid); } catch {}
             await signOut(auth);
@@ -88,6 +102,8 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
             setLoading(false);
             return;
           }
+          const cachedMrn = peekCache<string>(cacheKeys.mrnForUid(fbUser.uid));
+          if (cachedMrn) setMrn(cachedMrn);
           setVerifiedUid(fbUser.uid);
         }
       }
@@ -114,10 +130,19 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
       return;
     }
     let cancelled = false;
-    setMrnLoading(true);
+    // A cached MRN (set at launch) is shown straight away; the lookup below
+    // confirms or corrects it in the background.
+    const cached = peekCache<string>(cacheKeys.mrnForUid(user.uid));
+    if (cached) setMrn(cached);
+    else setMrnLoading(true);
     resolveMRNForUser(user.uid, user.email)
-      .then(record => { if (!cancelled) setMrn(record?.mrn ?? null); })
-      .catch(() => { if (!cancelled) setMrn(null); })
+      .then(record => {
+        if (cancelled) return;
+        const next = record?.mrn ?? null;
+        setMrn(next);
+        writeCache(cacheKeys.mrnForUid(user.uid), next);
+      })
+      .catch(() => { if (!cancelled && !cached) setMrn(null); })
       .finally(() => { if (!cancelled) setMrnLoading(false); });
     return () => { cancelled = true; };
   }, [user?.uid]);
@@ -153,3 +178,11 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
 }
 
 export const usePatientAuth = () => useContext(PatientAuthContext);
+
+// Loads this uid's cached MRN, then that MRN's cached vaccination record, into
+// memory so Home's first render already has them.
+async function primeLaunchCache(uid: string): Promise<void> {
+  await primeCache([cacheKeys.mrnForUid(uid)]);
+  const mrn = peekCache<string>(cacheKeys.mrnForUid(uid));
+  if (mrn) await primeCache([cacheKeys.vaccination(mrn)]);
+}

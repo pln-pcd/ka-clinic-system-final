@@ -24,5 +24,5 @@ export async function askGemini(prompt, history = []) {
   } catch (err) {
     console.warn('Chatbot request failed:', err);
   }
-  return "I'm having trouble connecting right now. Please call K&A Clinic directly or try again shortly.";
+  return "I'm having trouble connecting right now. Please contact K&A Clinic at +63 912 345 6789, or try again shortly.";
 }

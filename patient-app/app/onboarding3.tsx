@@ -2,7 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useEffect } from 'react';
-import { Dimensions, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, Platform, StyleSheet, Text, View } from 'react-native';
+import Tap from '../components/Tap';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -61,13 +62,13 @@ export default function Onboarding3() {
         
         {/* TOP NAVIGATION HEADER */}
         <View style={[styles.header, { paddingTop: topPadding }]}>
-          <TouchableOpacity 
+          <Tap
             style={styles.backButton} 
             onPress={handleBack}
             activeOpacity={0.7}
           >
             <Ionicons name="chevron-back" size={22} color="#1E293B" />
-          </TouchableOpacity>
+          </Tap>
 
           <View style={styles.headerBrand}>
             <Text style={styles.headerBrandText}>
@@ -106,7 +107,7 @@ export default function Onboarding3() {
             </Text>
           </View>
 
-          <TouchableOpacity 
+          <Tap
             onPress={() => router.push('/onboarding4')} 
             activeOpacity={0.85}
             style={styles.buttonShadow}
@@ -120,7 +121,7 @@ export default function Onboarding3() {
               <Text style={styles.buttonText}>Next</Text>
               <Ionicons name="arrow-forward" size={18} color="#FFF" style={{ marginLeft: 8 }} />
             </LinearGradient>
-          </TouchableOpacity>
+          </Tap>
         </Animated.View>
       </LinearGradient>
     </View>

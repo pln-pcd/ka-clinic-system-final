@@ -1,0 +1,4773 @@
+{
+  "date": "2026-10-07T23:44:24.774Z",
+  "results": [
+    {
+      "id": "RULE-vaccinations-anonymous-read",
+      "description": "anonymous: read vaccinations",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-vaccinations-anonymous-create",
+      "description": "anonymous: create vaccinations",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-vaccinations-anonymous-update",
+      "description": "anonymous: update vaccinations",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-vaccinations-anonymous-delete",
+      "description": "anonymous: delete vaccinations",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-vaccinations-patient-own-read",
+      "description": "patient-own: read vaccinations",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-vaccinations-patient-own-create",
+      "description": "patient-own: create vaccinations",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-vaccinations-patient-own-update",
+      "description": "patient-own: update vaccinations",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-vaccinations-patient-own-delete",
+      "description": "patient-own: delete vaccinations",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-vaccinations-patient-other-read",
+      "description": "patient-other: read vaccinations",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-vaccinations-patient-other-create",
+      "description": "patient-other: create vaccinations",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-vaccinations-patient-other-update",
+      "description": "patient-other: update vaccinations",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-vaccinations-patient-other-delete",
+      "description": "patient-other: delete vaccinations",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-vaccinations-staff-read",
+      "description": "staff: read vaccinations",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-vaccinations-staff-create",
+      "description": "staff: create vaccinations",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-vaccinations-staff-update",
+      "description": "staff: update vaccinations",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-vaccinations-staff-delete",
+      "description": "staff: delete vaccinations",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-vaccinations-manager-read",
+      "description": "manager: read vaccinations",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-vaccinations-manager-create",
+      "description": "manager: create vaccinations",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-vaccinations-manager-update",
+      "description": "manager: update vaccinations",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-vaccinations-manager-delete",
+      "description": "manager: delete vaccinations",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-vaccinations-revoked-read",
+      "description": "revoked: read vaccinations",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-vaccinations-revoked-create",
+      "description": "revoked: create vaccinations",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-vaccinations-revoked-update",
+      "description": "revoked: update vaccinations",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-vaccinations-revoked-delete",
+      "description": "revoked: delete vaccinations",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-vaccinations-pending-read",
+      "description": "pending: read vaccinations",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-vaccinations-pending-create",
+      "description": "pending: create vaccinations",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-vaccinations-pending-update",
+      "description": "pending: update vaccinations",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-vaccinations-pending-delete",
+      "description": "pending: delete vaccinations",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-authorizedPatients-anonymous-read",
+      "description": "anonymous: read authorizedPatients",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "Allowed",
+      "status": "FAIL"
+    },
+    {
+      "id": "RULE-authorizedPatients-anonymous-create",
+      "description": "anonymous: create authorizedPatients",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-authorizedPatients-anonymous-update",
+      "description": "anonymous: update authorizedPatients",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-authorizedPatients-anonymous-delete",
+      "description": "anonymous: delete authorizedPatients",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-authorizedPatients-patient-own-read",
+      "description": "patient-own: read authorizedPatients",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-authorizedPatients-patient-own-create",
+      "description": "patient-own: create authorizedPatients",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-authorizedPatients-patient-own-update",
+      "description": "patient-own: update authorizedPatients",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "Allowed",
+      "status": "FAIL"
+    },
+    {
+      "id": "RULE-authorizedPatients-patient-own-delete",
+      "description": "patient-own: delete authorizedPatients",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-authorizedPatients-patient-other-read",
+      "description": "patient-other: read authorizedPatients",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "Allowed",
+      "status": "FAIL"
+    },
+    {
+      "id": "RULE-authorizedPatients-patient-other-create",
+      "description": "patient-other: create authorizedPatients",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-authorizedPatients-patient-other-update",
+      "description": "patient-other: update authorizedPatients",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-authorizedPatients-patient-other-delete",
+      "description": "patient-other: delete authorizedPatients",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-authorizedPatients-staff-read",
+      "description": "staff: read authorizedPatients",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-authorizedPatients-staff-create",
+      "description": "staff: create authorizedPatients",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-authorizedPatients-staff-update",
+      "description": "staff: update authorizedPatients",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-authorizedPatients-staff-delete",
+      "description": "staff: delete authorizedPatients",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-authorizedPatients-manager-read",
+      "description": "manager: read authorizedPatients",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-authorizedPatients-manager-create",
+      "description": "manager: create authorizedPatients",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-authorizedPatients-manager-update",
+      "description": "manager: update authorizedPatients",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-authorizedPatients-manager-delete",
+      "description": "manager: delete authorizedPatients",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-authorizedPatients-revoked-read",
+      "description": "revoked: read authorizedPatients",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "Allowed",
+      "status": "FAIL"
+    },
+    {
+      "id": "RULE-authorizedPatients-revoked-create",
+      "description": "revoked: create authorizedPatients",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-authorizedPatients-revoked-update",
+      "description": "revoked: update authorizedPatients",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-authorizedPatients-revoked-delete",
+      "description": "revoked: delete authorizedPatients",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-authorizedPatients-pending-read",
+      "description": "pending: read authorizedPatients",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "Allowed",
+      "status": "FAIL"
+    },
+    {
+      "id": "RULE-authorizedPatients-pending-create",
+      "description": "pending: create authorizedPatients",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-authorizedPatients-pending-update",
+      "description": "pending: update authorizedPatients",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-authorizedPatients-pending-delete",
+      "description": "pending: delete authorizedPatients",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-appointments-anonymous-read",
+      "description": "anonymous: read appointments",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-appointments-anonymous-create",
+      "description": "anonymous: create appointments",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-appointments-anonymous-update",
+      "description": "anonymous: update appointments",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-appointments-anonymous-delete",
+      "description": "anonymous: delete appointments",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-appointments-patient-own-read",
+      "description": "patient-own: read appointments",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-appointments-patient-own-create",
+      "description": "patient-own: create appointments",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-appointments-patient-own-update",
+      "description": "patient-own: update appointments",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-appointments-patient-own-delete",
+      "description": "patient-own: delete appointments",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-appointments-patient-other-read",
+      "description": "patient-other: read appointments",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-appointments-patient-other-create",
+      "description": "patient-other: create appointments",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-appointments-patient-other-update",
+      "description": "patient-other: update appointments",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-appointments-patient-other-delete",
+      "description": "patient-other: delete appointments",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-appointments-staff-read",
+      "description": "staff: read appointments",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-appointments-staff-create",
+      "description": "staff: create appointments",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-appointments-staff-update",
+      "description": "staff: update appointments",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-appointments-staff-delete",
+      "description": "staff: delete appointments",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-appointments-manager-read",
+      "description": "manager: read appointments",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-appointments-manager-create",
+      "description": "manager: create appointments",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-appointments-manager-update",
+      "description": "manager: update appointments",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-appointments-manager-delete",
+      "description": "manager: delete appointments",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-appointments-revoked-read",
+      "description": "revoked: read appointments",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-appointments-revoked-create",
+      "description": "revoked: create appointments",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-appointments-revoked-update",
+      "description": "revoked: update appointments",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-appointments-revoked-delete",
+      "description": "revoked: delete appointments",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-appointments-pending-read",
+      "description": "pending: read appointments",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-appointments-pending-create",
+      "description": "pending: create appointments",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-appointments-pending-update",
+      "description": "pending: update appointments",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-appointments-pending-delete",
+      "description": "pending: delete appointments",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-inventory-anonymous-read",
+      "description": "anonymous: read inventory",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-inventory-anonymous-create",
+      "description": "anonymous: create inventory",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-inventory-anonymous-update",
+      "description": "anonymous: update inventory",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-inventory-anonymous-delete",
+      "description": "anonymous: delete inventory",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-inventory-patient-own-read",
+      "description": "patient-own: read inventory",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-inventory-patient-own-create",
+      "description": "patient-own: create inventory",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-inventory-patient-own-update",
+      "description": "patient-own: update inventory",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-inventory-patient-own-delete",
+      "description": "patient-own: delete inventory",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-inventory-patient-other-read",
+      "description": "patient-other: read inventory",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-inventory-patient-other-create",
+      "description": "patient-other: create inventory",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-inventory-patient-other-update",
+      "description": "patient-other: update inventory",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-inventory-patient-other-delete",
+      "description": "patient-other: delete inventory",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-inventory-staff-read",
+      "description": "staff: read inventory",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-inventory-staff-create",
+      "description": "staff: create inventory",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-inventory-staff-update",
+      "description": "staff: update inventory",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-inventory-staff-delete",
+      "description": "staff: delete inventory",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-inventory-manager-read",
+      "description": "manager: read inventory",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-inventory-manager-create",
+      "description": "manager: create inventory",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-inventory-manager-update",
+      "description": "manager: update inventory",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-inventory-manager-delete",
+      "description": "manager: delete inventory",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-inventory-revoked-read",
+      "description": "revoked: read inventory",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-inventory-revoked-create",
+      "description": "revoked: create inventory",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-inventory-revoked-update",
+      "description": "revoked: update inventory",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-inventory-revoked-delete",
+      "description": "revoked: delete inventory",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-inventory-pending-read",
+      "description": "pending: read inventory",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-inventory-pending-create",
+      "description": "pending: create inventory",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-inventory-pending-update",
+      "description": "pending: update inventory",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-inventory-pending-delete",
+      "description": "pending: delete inventory",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-incidents-anonymous-read",
+      "description": "anonymous: read incidents",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-incidents-anonymous-create",
+      "description": "anonymous: create incidents",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-incidents-anonymous-update",
+      "description": "anonymous: update incidents",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-incidents-anonymous-delete",
+      "description": "anonymous: delete incidents",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-incidents-patient-own-read",
+      "description": "patient-own: read incidents",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-incidents-patient-own-create",
+      "description": "patient-own: create incidents",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-incidents-patient-own-update",
+      "description": "patient-own: update incidents",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-incidents-patient-own-delete",
+      "description": "patient-own: delete incidents",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-incidents-patient-other-read",
+      "description": "patient-other: read incidents",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-incidents-patient-other-create",
+      "description": "patient-other: create incidents",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-incidents-patient-other-update",
+      "description": "patient-other: update incidents",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-incidents-patient-other-delete",
+      "description": "patient-other: delete incidents",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-incidents-staff-read",
+      "description": "staff: read incidents",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-incidents-staff-create",
+      "description": "staff: create incidents",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-incidents-staff-update",
+      "description": "staff: update incidents",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-incidents-staff-delete",
+      "description": "staff: delete incidents",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-incidents-manager-read",
+      "description": "manager: read incidents",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-incidents-manager-create",
+      "description": "manager: create incidents",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-incidents-manager-update",
+      "description": "manager: update incidents",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-incidents-manager-delete",
+      "description": "manager: delete incidents",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-incidents-revoked-read",
+      "description": "revoked: read incidents",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-incidents-revoked-create",
+      "description": "revoked: create incidents",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-incidents-revoked-update",
+      "description": "revoked: update incidents",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-incidents-revoked-delete",
+      "description": "revoked: delete incidents",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-incidents-pending-read",
+      "description": "pending: read incidents",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-incidents-pending-create",
+      "description": "pending: create incidents",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-incidents-pending-update",
+      "description": "pending: update incidents",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-incidents-pending-delete",
+      "description": "pending: delete incidents",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatThreads-anonymous-read",
+      "description": "anonymous: read chatThreads",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatThreads-anonymous-create",
+      "description": "anonymous: create chatThreads",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatThreads-anonymous-update",
+      "description": "anonymous: update chatThreads",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatThreads-anonymous-delete",
+      "description": "anonymous: delete chatThreads",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatThreads-patient-own-read",
+      "description": "patient-own: read chatThreads",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatThreads-patient-own-create",
+      "description": "patient-own: create chatThreads",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatThreads-patient-own-update",
+      "description": "patient-own: update chatThreads",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatThreads-patient-own-delete",
+      "description": "patient-own: delete chatThreads",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatThreads-patient-other-read",
+      "description": "patient-other: read chatThreads",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatThreads-patient-other-create",
+      "description": "patient-other: create chatThreads",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatThreads-patient-other-update",
+      "description": "patient-other: update chatThreads",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatThreads-patient-other-delete",
+      "description": "patient-other: delete chatThreads",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatThreads-staff-read",
+      "description": "staff: read chatThreads",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatThreads-staff-create",
+      "description": "staff: create chatThreads",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatThreads-staff-update",
+      "description": "staff: update chatThreads",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatThreads-staff-delete",
+      "description": "staff: delete chatThreads",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatThreads-manager-read",
+      "description": "manager: read chatThreads",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatThreads-manager-create",
+      "description": "manager: create chatThreads",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatThreads-manager-update",
+      "description": "manager: update chatThreads",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatThreads-manager-delete",
+      "description": "manager: delete chatThreads",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatThreads-revoked-read",
+      "description": "revoked: read chatThreads",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatThreads-revoked-create",
+      "description": "revoked: create chatThreads",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatThreads-revoked-update",
+      "description": "revoked: update chatThreads",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatThreads-revoked-delete",
+      "description": "revoked: delete chatThreads",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatThreads-pending-read",
+      "description": "pending: read chatThreads",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatThreads-pending-create",
+      "description": "pending: create chatThreads",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatThreads-pending-update",
+      "description": "pending: update chatThreads",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatThreads-pending-delete",
+      "description": "pending: delete chatThreads",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatMessages-anonymous-read",
+      "description": "anonymous: read chatMessages",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatMessages-anonymous-create",
+      "description": "anonymous: create chatMessages",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatMessages-anonymous-update",
+      "description": "anonymous: update chatMessages",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatMessages-anonymous-delete",
+      "description": "anonymous: delete chatMessages",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatMessages-patient-own-read",
+      "description": "patient-own: read chatMessages",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatMessages-patient-own-create",
+      "description": "patient-own: create chatMessages",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatMessages-patient-own-update",
+      "description": "patient-own: update chatMessages",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatMessages-patient-own-delete",
+      "description": "patient-own: delete chatMessages",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatMessages-patient-other-read",
+      "description": "patient-other: read chatMessages",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatMessages-patient-other-create",
+      "description": "patient-other: create chatMessages",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatMessages-patient-other-update",
+      "description": "patient-other: update chatMessages",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatMessages-patient-other-delete",
+      "description": "patient-other: delete chatMessages",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatMessages-staff-read",
+      "description": "staff: read chatMessages",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatMessages-staff-create",
+      "description": "staff: create chatMessages",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatMessages-staff-update",
+      "description": "staff: update chatMessages",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatMessages-staff-delete",
+      "description": "staff: delete chatMessages",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatMessages-manager-read",
+      "description": "manager: read chatMessages",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatMessages-manager-create",
+      "description": "manager: create chatMessages",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatMessages-manager-update",
+      "description": "manager: update chatMessages",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatMessages-manager-delete",
+      "description": "manager: delete chatMessages",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatMessages-revoked-read",
+      "description": "revoked: read chatMessages",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatMessages-revoked-create",
+      "description": "revoked: create chatMessages",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatMessages-revoked-update",
+      "description": "revoked: update chatMessages",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatMessages-revoked-delete",
+      "description": "revoked: delete chatMessages",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatMessages-pending-read",
+      "description": "pending: read chatMessages",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatMessages-pending-create",
+      "description": "pending: create chatMessages",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatMessages-pending-update",
+      "description": "pending: update chatMessages",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chatMessages-pending-delete",
+      "description": "pending: delete chatMessages",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientNotifications-anonymous-read",
+      "description": "anonymous: read patientNotifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientNotifications-anonymous-create",
+      "description": "anonymous: create patientNotifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientNotifications-anonymous-update",
+      "description": "anonymous: update patientNotifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientNotifications-anonymous-delete",
+      "description": "anonymous: delete patientNotifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientNotifications-patient-own-read",
+      "description": "patient-own: read patientNotifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientNotifications-patient-own-create",
+      "description": "patient-own: create patientNotifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientNotifications-patient-own-update",
+      "description": "patient-own: update patientNotifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientNotifications-patient-own-delete",
+      "description": "patient-own: delete patientNotifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientNotifications-patient-other-read",
+      "description": "patient-other: read patientNotifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientNotifications-patient-other-create",
+      "description": "patient-other: create patientNotifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientNotifications-patient-other-update",
+      "description": "patient-other: update patientNotifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientNotifications-patient-other-delete",
+      "description": "patient-other: delete patientNotifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientNotifications-staff-read",
+      "description": "staff: read patientNotifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientNotifications-staff-create",
+      "description": "staff: create patientNotifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientNotifications-staff-update",
+      "description": "staff: update patientNotifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientNotifications-staff-delete",
+      "description": "staff: delete patientNotifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientNotifications-manager-read",
+      "description": "manager: read patientNotifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientNotifications-manager-create",
+      "description": "manager: create patientNotifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientNotifications-manager-update",
+      "description": "manager: update patientNotifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientNotifications-manager-delete",
+      "description": "manager: delete patientNotifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientNotifications-revoked-read",
+      "description": "revoked: read patientNotifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientNotifications-revoked-create",
+      "description": "revoked: create patientNotifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientNotifications-revoked-update",
+      "description": "revoked: update patientNotifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientNotifications-revoked-delete",
+      "description": "revoked: delete patientNotifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientNotifications-pending-read",
+      "description": "pending: read patientNotifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientNotifications-pending-create",
+      "description": "pending: create patientNotifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientNotifications-pending-update",
+      "description": "pending: update patientNotifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientNotifications-pending-delete",
+      "description": "pending: delete patientNotifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-admins-anonymous-read",
+      "description": "anonymous: read admins",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-admins-anonymous-create",
+      "description": "anonymous: create admins",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-admins-anonymous-update",
+      "description": "anonymous: update admins",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-admins-anonymous-delete",
+      "description": "anonymous: delete admins",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-admins-patient-own-read",
+      "description": "patient-own: read admins",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-admins-patient-own-create",
+      "description": "patient-own: create admins",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-admins-patient-own-update",
+      "description": "patient-own: update admins",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-admins-patient-own-delete",
+      "description": "patient-own: delete admins",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-admins-patient-other-read",
+      "description": "patient-other: read admins",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-admins-patient-other-create",
+      "description": "patient-other: create admins",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-admins-patient-other-update",
+      "description": "patient-other: update admins",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-admins-patient-other-delete",
+      "description": "patient-other: delete admins",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-admins-staff-read",
+      "description": "staff: read admins",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-admins-staff-create",
+      "description": "staff: create admins",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-admins-staff-update",
+      "description": "staff: update admins",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-admins-staff-delete",
+      "description": "staff: delete admins",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-admins-manager-read",
+      "description": "manager: read admins",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-admins-manager-create",
+      "description": "manager: create admins",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-admins-manager-update",
+      "description": "manager: update admins",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "Allowed",
+      "status": "FAIL"
+    },
+    {
+      "id": "RULE-admins-manager-delete",
+      "description": "manager: delete admins",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "Allowed",
+      "status": "FAIL"
+    },
+    {
+      "id": "RULE-admins-revoked-read",
+      "description": "revoked: read admins",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "Allowed",
+      "status": "FAIL"
+    },
+    {
+      "id": "RULE-admins-revoked-create",
+      "description": "revoked: create admins",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "Allowed",
+      "status": "FAIL"
+    },
+    {
+      "id": "RULE-admins-revoked-update",
+      "description": "revoked: update admins",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "Allowed",
+      "status": "FAIL"
+    },
+    {
+      "id": "RULE-admins-revoked-delete",
+      "description": "revoked: delete admins",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "Allowed",
+      "status": "FAIL"
+    },
+    {
+      "id": "RULE-admins-pending-read",
+      "description": "pending: read admins",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-admins-pending-create",
+      "description": "pending: create admins",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-admins-pending-update",
+      "description": "pending: update admins",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-admins-pending-delete",
+      "description": "pending: delete admins",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientTrustedDevices-anonymous-read",
+      "description": "anonymous: read patientTrustedDevices",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientTrustedDevices-anonymous-create",
+      "description": "anonymous: create patientTrustedDevices",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientTrustedDevices-anonymous-update",
+      "description": "anonymous: update patientTrustedDevices",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientTrustedDevices-anonymous-delete",
+      "description": "anonymous: delete patientTrustedDevices",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientTrustedDevices-patient-own-read",
+      "description": "patient-own: read patientTrustedDevices",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientTrustedDevices-patient-own-create",
+      "description": "patient-own: create patientTrustedDevices",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientTrustedDevices-patient-own-update",
+      "description": "patient-own: update patientTrustedDevices",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientTrustedDevices-patient-own-delete",
+      "description": "patient-own: delete patientTrustedDevices",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientTrustedDevices-patient-other-read",
+      "description": "patient-other: read patientTrustedDevices",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientTrustedDevices-patient-other-create",
+      "description": "patient-other: create patientTrustedDevices",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientTrustedDevices-patient-other-update",
+      "description": "patient-other: update patientTrustedDevices",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientTrustedDevices-patient-other-delete",
+      "description": "patient-other: delete patientTrustedDevices",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientTrustedDevices-staff-read",
+      "description": "staff: read patientTrustedDevices",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientTrustedDevices-staff-create",
+      "description": "staff: create patientTrustedDevices",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientTrustedDevices-staff-update",
+      "description": "staff: update patientTrustedDevices",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientTrustedDevices-staff-delete",
+      "description": "staff: delete patientTrustedDevices",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientTrustedDevices-manager-read",
+      "description": "manager: read patientTrustedDevices",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientTrustedDevices-manager-create",
+      "description": "manager: create patientTrustedDevices",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientTrustedDevices-manager-update",
+      "description": "manager: update patientTrustedDevices",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientTrustedDevices-manager-delete",
+      "description": "manager: delete patientTrustedDevices",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientTrustedDevices-revoked-read",
+      "description": "revoked: read patientTrustedDevices",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientTrustedDevices-revoked-create",
+      "description": "revoked: create patientTrustedDevices",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientTrustedDevices-revoked-update",
+      "description": "revoked: update patientTrustedDevices",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientTrustedDevices-revoked-delete",
+      "description": "revoked: delete patientTrustedDevices",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientTrustedDevices-pending-read",
+      "description": "pending: read patientTrustedDevices",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientTrustedDevices-pending-create",
+      "description": "pending: create patientTrustedDevices",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientTrustedDevices-pending-update",
+      "description": "pending: update patientTrustedDevices",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientTrustedDevices-pending-delete",
+      "description": "pending: delete patientTrustedDevices",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientAvatars-anonymous-read",
+      "description": "anonymous: read patientAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientAvatars-anonymous-create",
+      "description": "anonymous: create patientAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientAvatars-anonymous-update",
+      "description": "anonymous: update patientAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientAvatars-anonymous-delete",
+      "description": "anonymous: delete patientAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientAvatars-patient-own-read",
+      "description": "patient-own: read patientAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientAvatars-patient-own-create",
+      "description": "patient-own: create patientAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientAvatars-patient-own-update",
+      "description": "patient-own: update patientAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientAvatars-patient-own-delete",
+      "description": "patient-own: delete patientAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientAvatars-patient-other-read",
+      "description": "patient-other: read patientAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientAvatars-patient-other-create",
+      "description": "patient-other: create patientAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientAvatars-patient-other-update",
+      "description": "patient-other: update patientAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientAvatars-patient-other-delete",
+      "description": "patient-other: delete patientAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientAvatars-staff-read",
+      "description": "staff: read patientAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientAvatars-staff-create",
+      "description": "staff: create patientAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientAvatars-staff-update",
+      "description": "staff: update patientAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientAvatars-staff-delete",
+      "description": "staff: delete patientAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientAvatars-manager-read",
+      "description": "manager: read patientAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientAvatars-manager-create",
+      "description": "manager: create patientAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientAvatars-manager-update",
+      "description": "manager: update patientAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientAvatars-manager-delete",
+      "description": "manager: delete patientAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientAvatars-revoked-read",
+      "description": "revoked: read patientAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientAvatars-revoked-create",
+      "description": "revoked: create patientAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientAvatars-revoked-update",
+      "description": "revoked: update patientAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientAvatars-revoked-delete",
+      "description": "revoked: delete patientAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientAvatars-pending-read",
+      "description": "pending: read patientAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientAvatars-pending-create",
+      "description": "pending: create patientAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientAvatars-pending-update",
+      "description": "pending: update patientAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientAvatars-pending-delete",
+      "description": "pending: delete patientAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-adminAvatars-anonymous-read",
+      "description": "anonymous: read adminAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-adminAvatars-anonymous-create",
+      "description": "anonymous: create adminAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-adminAvatars-anonymous-update",
+      "description": "anonymous: update adminAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-adminAvatars-anonymous-delete",
+      "description": "anonymous: delete adminAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-adminAvatars-patient-own-read",
+      "description": "patient-own: read adminAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-adminAvatars-patient-own-create",
+      "description": "patient-own: create adminAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-adminAvatars-patient-own-update",
+      "description": "patient-own: update adminAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-adminAvatars-patient-own-delete",
+      "description": "patient-own: delete adminAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-adminAvatars-patient-other-read",
+      "description": "patient-other: read adminAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-adminAvatars-patient-other-create",
+      "description": "patient-other: create adminAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-adminAvatars-patient-other-update",
+      "description": "patient-other: update adminAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-adminAvatars-patient-other-delete",
+      "description": "patient-other: delete adminAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-adminAvatars-staff-read",
+      "description": "staff: read adminAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-adminAvatars-staff-create",
+      "description": "staff: create adminAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-adminAvatars-staff-update",
+      "description": "staff: update adminAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-adminAvatars-staff-delete",
+      "description": "staff: delete adminAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-adminAvatars-manager-read",
+      "description": "manager: read adminAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-adminAvatars-manager-create",
+      "description": "manager: create adminAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-adminAvatars-manager-update",
+      "description": "manager: update adminAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-adminAvatars-manager-delete",
+      "description": "manager: delete adminAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-adminAvatars-revoked-read",
+      "description": "revoked: read adminAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-adminAvatars-revoked-create",
+      "description": "revoked: create adminAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-adminAvatars-revoked-update",
+      "description": "revoked: update adminAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-adminAvatars-revoked-delete",
+      "description": "revoked: delete adminAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-adminAvatars-pending-read",
+      "description": "pending: read adminAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-adminAvatars-pending-create",
+      "description": "pending: create adminAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-adminAvatars-pending-update",
+      "description": "pending: update adminAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-adminAvatars-pending-delete",
+      "description": "pending: delete adminAvatars",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-settings-anonymous-read",
+      "description": "anonymous: read settings",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "Allowed",
+      "status": "FAIL"
+    },
+    {
+      "id": "RULE-settings-anonymous-create",
+      "description": "anonymous: create settings",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-settings-anonymous-update",
+      "description": "anonymous: update settings",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-settings-anonymous-delete",
+      "description": "anonymous: delete settings",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-settings-patient-own-read",
+      "description": "patient-own: read settings",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "Allowed",
+      "status": "FAIL"
+    },
+    {
+      "id": "RULE-settings-patient-own-create",
+      "description": "patient-own: create settings",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-settings-patient-own-update",
+      "description": "patient-own: update settings",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-settings-patient-own-delete",
+      "description": "patient-own: delete settings",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-settings-patient-other-read",
+      "description": "patient-other: read settings",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "Allowed",
+      "status": "FAIL"
+    },
+    {
+      "id": "RULE-settings-patient-other-create",
+      "description": "patient-other: create settings",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-settings-patient-other-update",
+      "description": "patient-other: update settings",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-settings-patient-other-delete",
+      "description": "patient-other: delete settings",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-settings-staff-read",
+      "description": "staff: read settings",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-settings-staff-create",
+      "description": "staff: create settings",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-settings-staff-update",
+      "description": "staff: update settings",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-settings-staff-delete",
+      "description": "staff: delete settings",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-settings-manager-read",
+      "description": "manager: read settings",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-settings-manager-create",
+      "description": "manager: create settings",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-settings-manager-update",
+      "description": "manager: update settings",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-settings-manager-delete",
+      "description": "manager: delete settings",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-settings-revoked-read",
+      "description": "revoked: read settings",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "Allowed",
+      "status": "FAIL"
+    },
+    {
+      "id": "RULE-settings-revoked-create",
+      "description": "revoked: create settings",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-settings-revoked-update",
+      "description": "revoked: update settings",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-settings-revoked-delete",
+      "description": "revoked: delete settings",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-settings-pending-read",
+      "description": "pending: read settings",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "Allowed",
+      "status": "FAIL"
+    },
+    {
+      "id": "RULE-settings-pending-create",
+      "description": "pending: create settings",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-settings-pending-update",
+      "description": "pending: update settings",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-settings-pending-delete",
+      "description": "pending: delete settings",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientSessions-anonymous-read",
+      "description": "anonymous: read patientSessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientSessions-anonymous-create",
+      "description": "anonymous: create patientSessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientSessions-anonymous-update",
+      "description": "anonymous: update patientSessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientSessions-anonymous-delete",
+      "description": "anonymous: delete patientSessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientSessions-patient-own-read",
+      "description": "patient-own: read patientSessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientSessions-patient-own-create",
+      "description": "patient-own: create patientSessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientSessions-patient-own-update",
+      "description": "patient-own: update patientSessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientSessions-patient-own-delete",
+      "description": "patient-own: delete patientSessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientSessions-patient-other-read",
+      "description": "patient-other: read patientSessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientSessions-patient-other-create",
+      "description": "patient-other: create patientSessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientSessions-patient-other-update",
+      "description": "patient-other: update patientSessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientSessions-patient-other-delete",
+      "description": "patient-other: delete patientSessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientSessions-staff-read",
+      "description": "staff: read patientSessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientSessions-staff-create",
+      "description": "staff: create patientSessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientSessions-staff-update",
+      "description": "staff: update patientSessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientSessions-staff-delete",
+      "description": "staff: delete patientSessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientSessions-manager-read",
+      "description": "manager: read patientSessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientSessions-manager-create",
+      "description": "manager: create patientSessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientSessions-manager-update",
+      "description": "manager: update patientSessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientSessions-manager-delete",
+      "description": "manager: delete patientSessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientSessions-revoked-read",
+      "description": "revoked: read patientSessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientSessions-revoked-create",
+      "description": "revoked: create patientSessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientSessions-revoked-update",
+      "description": "revoked: update patientSessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientSessions-revoked-delete",
+      "description": "revoked: delete patientSessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientSessions-pending-read",
+      "description": "pending: read patientSessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientSessions-pending-create",
+      "description": "pending: create patientSessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientSessions-pending-update",
+      "description": "pending: update patientSessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientSessions-pending-delete",
+      "description": "pending: delete patientSessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-stockMovements-anonymous-read",
+      "description": "anonymous: read stockMovements",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-stockMovements-anonymous-create",
+      "description": "anonymous: create stockMovements",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-stockMovements-anonymous-update",
+      "description": "anonymous: update stockMovements",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-stockMovements-anonymous-delete",
+      "description": "anonymous: delete stockMovements",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-stockMovements-patient-own-read",
+      "description": "patient-own: read stockMovements",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-stockMovements-patient-own-create",
+      "description": "patient-own: create stockMovements",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-stockMovements-patient-own-update",
+      "description": "patient-own: update stockMovements",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-stockMovements-patient-own-delete",
+      "description": "patient-own: delete stockMovements",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-stockMovements-patient-other-read",
+      "description": "patient-other: read stockMovements",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-stockMovements-patient-other-create",
+      "description": "patient-other: create stockMovements",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-stockMovements-patient-other-update",
+      "description": "patient-other: update stockMovements",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-stockMovements-patient-other-delete",
+      "description": "patient-other: delete stockMovements",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-stockMovements-staff-read",
+      "description": "staff: read stockMovements",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-stockMovements-staff-create",
+      "description": "staff: create stockMovements",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-stockMovements-staff-update",
+      "description": "staff: update stockMovements",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-stockMovements-staff-delete",
+      "description": "staff: delete stockMovements",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-stockMovements-manager-read",
+      "description": "manager: read stockMovements",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-stockMovements-manager-create",
+      "description": "manager: create stockMovements",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-stockMovements-manager-update",
+      "description": "manager: update stockMovements",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-stockMovements-manager-delete",
+      "description": "manager: delete stockMovements",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-stockMovements-revoked-read",
+      "description": "revoked: read stockMovements",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-stockMovements-revoked-create",
+      "description": "revoked: create stockMovements",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-stockMovements-revoked-update",
+      "description": "revoked: update stockMovements",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-stockMovements-revoked-delete",
+      "description": "revoked: delete stockMovements",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-stockMovements-pending-read",
+      "description": "pending: read stockMovements",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-stockMovements-pending-create",
+      "description": "pending: create stockMovements",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-stockMovements-pending-update",
+      "description": "pending: update stockMovements",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-stockMovements-pending-delete",
+      "description": "pending: delete stockMovements",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-securitySessions-anonymous-read",
+      "description": "anonymous: read securitySessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-securitySessions-anonymous-create",
+      "description": "anonymous: create securitySessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-securitySessions-anonymous-update",
+      "description": "anonymous: update securitySessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-securitySessions-anonymous-delete",
+      "description": "anonymous: delete securitySessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-securitySessions-patient-own-read",
+      "description": "patient-own: read securitySessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-securitySessions-patient-own-create",
+      "description": "patient-own: create securitySessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-securitySessions-patient-own-update",
+      "description": "patient-own: update securitySessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-securitySessions-patient-own-delete",
+      "description": "patient-own: delete securitySessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-securitySessions-patient-other-read",
+      "description": "patient-other: read securitySessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-securitySessions-patient-other-create",
+      "description": "patient-other: create securitySessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-securitySessions-patient-other-update",
+      "description": "patient-other: update securitySessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-securitySessions-patient-other-delete",
+      "description": "patient-other: delete securitySessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-securitySessions-staff-read",
+      "description": "staff: read securitySessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-securitySessions-staff-create",
+      "description": "staff: create securitySessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-securitySessions-staff-update",
+      "description": "staff: update securitySessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-securitySessions-staff-delete",
+      "description": "staff: delete securitySessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-securitySessions-manager-read",
+      "description": "manager: read securitySessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-securitySessions-manager-create",
+      "description": "manager: create securitySessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-securitySessions-manager-update",
+      "description": "manager: update securitySessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-securitySessions-manager-delete",
+      "description": "manager: delete securitySessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-securitySessions-revoked-read",
+      "description": "revoked: read securitySessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-securitySessions-revoked-create",
+      "description": "revoked: create securitySessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-securitySessions-revoked-update",
+      "description": "revoked: update securitySessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-securitySessions-revoked-delete",
+      "description": "revoked: delete securitySessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-securitySessions-pending-read",
+      "description": "pending: read securitySessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-securitySessions-pending-create",
+      "description": "pending: create securitySessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-securitySessions-pending-update",
+      "description": "pending: update securitySessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-securitySessions-pending-delete",
+      "description": "pending: delete securitySessions",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otpVerifications-anonymous-read",
+      "description": "anonymous: read otpVerifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otpVerifications-anonymous-create",
+      "description": "anonymous: create otpVerifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otpVerifications-anonymous-update",
+      "description": "anonymous: update otpVerifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otpVerifications-anonymous-delete",
+      "description": "anonymous: delete otpVerifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otpVerifications-patient-own-read",
+      "description": "patient-own: read otpVerifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otpVerifications-patient-own-create",
+      "description": "patient-own: create otpVerifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otpVerifications-patient-own-update",
+      "description": "patient-own: update otpVerifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otpVerifications-patient-own-delete",
+      "description": "patient-own: delete otpVerifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otpVerifications-patient-other-read",
+      "description": "patient-other: read otpVerifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otpVerifications-patient-other-create",
+      "description": "patient-other: create otpVerifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otpVerifications-patient-other-update",
+      "description": "patient-other: update otpVerifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otpVerifications-patient-other-delete",
+      "description": "patient-other: delete otpVerifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otpVerifications-staff-read",
+      "description": "staff: read otpVerifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otpVerifications-staff-create",
+      "description": "staff: create otpVerifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otpVerifications-staff-update",
+      "description": "staff: update otpVerifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otpVerifications-staff-delete",
+      "description": "staff: delete otpVerifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otpVerifications-manager-read",
+      "description": "manager: read otpVerifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otpVerifications-manager-create",
+      "description": "manager: create otpVerifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otpVerifications-manager-update",
+      "description": "manager: update otpVerifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otpVerifications-manager-delete",
+      "description": "manager: delete otpVerifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otpVerifications-revoked-read",
+      "description": "revoked: read otpVerifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otpVerifications-revoked-create",
+      "description": "revoked: create otpVerifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otpVerifications-revoked-update",
+      "description": "revoked: update otpVerifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otpVerifications-revoked-delete",
+      "description": "revoked: delete otpVerifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otpVerifications-pending-read",
+      "description": "pending: read otpVerifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otpVerifications-pending-create",
+      "description": "pending: create otpVerifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otpVerifications-pending-update",
+      "description": "pending: update otpVerifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otpVerifications-pending-delete",
+      "description": "pending: delete otpVerifications",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientLoginOtps-anonymous-read",
+      "description": "anonymous: read patientLoginOtps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientLoginOtps-anonymous-create",
+      "description": "anonymous: create patientLoginOtps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientLoginOtps-anonymous-update",
+      "description": "anonymous: update patientLoginOtps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientLoginOtps-anonymous-delete",
+      "description": "anonymous: delete patientLoginOtps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientLoginOtps-patient-own-read",
+      "description": "patient-own: read patientLoginOtps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientLoginOtps-patient-own-create",
+      "description": "patient-own: create patientLoginOtps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientLoginOtps-patient-own-update",
+      "description": "patient-own: update patientLoginOtps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientLoginOtps-patient-own-delete",
+      "description": "patient-own: delete patientLoginOtps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientLoginOtps-patient-other-read",
+      "description": "patient-other: read patientLoginOtps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientLoginOtps-patient-other-create",
+      "description": "patient-other: create patientLoginOtps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientLoginOtps-patient-other-update",
+      "description": "patient-other: update patientLoginOtps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientLoginOtps-patient-other-delete",
+      "description": "patient-other: delete patientLoginOtps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientLoginOtps-staff-read",
+      "description": "staff: read patientLoginOtps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientLoginOtps-staff-create",
+      "description": "staff: create patientLoginOtps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientLoginOtps-staff-update",
+      "description": "staff: update patientLoginOtps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientLoginOtps-staff-delete",
+      "description": "staff: delete patientLoginOtps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientLoginOtps-manager-read",
+      "description": "manager: read patientLoginOtps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientLoginOtps-manager-create",
+      "description": "manager: create patientLoginOtps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientLoginOtps-manager-update",
+      "description": "manager: update patientLoginOtps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientLoginOtps-manager-delete",
+      "description": "manager: delete patientLoginOtps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientLoginOtps-revoked-read",
+      "description": "revoked: read patientLoginOtps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientLoginOtps-revoked-create",
+      "description": "revoked: create patientLoginOtps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientLoginOtps-revoked-update",
+      "description": "revoked: update patientLoginOtps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientLoginOtps-revoked-delete",
+      "description": "revoked: delete patientLoginOtps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientLoginOtps-pending-read",
+      "description": "pending: read patientLoginOtps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientLoginOtps-pending-create",
+      "description": "pending: create patientLoginOtps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientLoginOtps-pending-update",
+      "description": "pending: update patientLoginOtps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patientLoginOtps-pending-delete",
+      "description": "pending: delete patientLoginOtps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otps-anonymous-read",
+      "description": "anonymous: read otps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otps-anonymous-create",
+      "description": "anonymous: create otps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otps-anonymous-update",
+      "description": "anonymous: update otps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otps-anonymous-delete",
+      "description": "anonymous: delete otps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otps-patient-own-read",
+      "description": "patient-own: read otps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otps-patient-own-create",
+      "description": "patient-own: create otps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otps-patient-own-update",
+      "description": "patient-own: update otps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otps-patient-own-delete",
+      "description": "patient-own: delete otps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otps-patient-other-read",
+      "description": "patient-other: read otps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otps-patient-other-create",
+      "description": "patient-other: create otps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otps-patient-other-update",
+      "description": "patient-other: update otps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otps-patient-other-delete",
+      "description": "patient-other: delete otps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otps-staff-read",
+      "description": "staff: read otps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otps-staff-create",
+      "description": "staff: create otps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otps-staff-update",
+      "description": "staff: update otps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otps-staff-delete",
+      "description": "staff: delete otps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otps-manager-read",
+      "description": "manager: read otps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otps-manager-create",
+      "description": "manager: create otps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otps-manager-update",
+      "description": "manager: update otps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otps-manager-delete",
+      "description": "manager: delete otps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otps-revoked-read",
+      "description": "revoked: read otps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otps-revoked-create",
+      "description": "revoked: create otps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otps-revoked-update",
+      "description": "revoked: update otps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otps-revoked-delete",
+      "description": "revoked: delete otps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otps-pending-read",
+      "description": "pending: read otps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otps-pending-create",
+      "description": "pending: create otps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otps-pending-update",
+      "description": "pending: update otps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-otps-pending-delete",
+      "description": "pending: delete otps",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-passwordResets-anonymous-read",
+      "description": "anonymous: read passwordResets",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-passwordResets-anonymous-create",
+      "description": "anonymous: create passwordResets",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-passwordResets-anonymous-update",
+      "description": "anonymous: update passwordResets",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-passwordResets-anonymous-delete",
+      "description": "anonymous: delete passwordResets",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-passwordResets-patient-own-read",
+      "description": "patient-own: read passwordResets",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-passwordResets-patient-own-create",
+      "description": "patient-own: create passwordResets",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-passwordResets-patient-own-update",
+      "description": "patient-own: update passwordResets",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-passwordResets-patient-own-delete",
+      "description": "patient-own: delete passwordResets",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-passwordResets-patient-other-read",
+      "description": "patient-other: read passwordResets",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-passwordResets-patient-other-create",
+      "description": "patient-other: create passwordResets",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-passwordResets-patient-other-update",
+      "description": "patient-other: update passwordResets",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-passwordResets-patient-other-delete",
+      "description": "patient-other: delete passwordResets",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-passwordResets-staff-read",
+      "description": "staff: read passwordResets",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-passwordResets-staff-create",
+      "description": "staff: create passwordResets",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-passwordResets-staff-update",
+      "description": "staff: update passwordResets",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-passwordResets-staff-delete",
+      "description": "staff: delete passwordResets",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-passwordResets-manager-read",
+      "description": "manager: read passwordResets",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-passwordResets-manager-create",
+      "description": "manager: create passwordResets",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-passwordResets-manager-update",
+      "description": "manager: update passwordResets",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-passwordResets-manager-delete",
+      "description": "manager: delete passwordResets",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-passwordResets-revoked-read",
+      "description": "revoked: read passwordResets",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-passwordResets-revoked-create",
+      "description": "revoked: create passwordResets",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-passwordResets-revoked-update",
+      "description": "revoked: update passwordResets",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-passwordResets-revoked-delete",
+      "description": "revoked: delete passwordResets",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-passwordResets-pending-read",
+      "description": "pending: read passwordResets",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-passwordResets-pending-create",
+      "description": "pending: create passwordResets",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-passwordResets-pending-update",
+      "description": "pending: update passwordResets",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-passwordResets-pending-delete",
+      "description": "pending: delete passwordResets",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-loginAttempts-anonymous-read",
+      "description": "anonymous: read loginAttempts",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-loginAttempts-anonymous-create",
+      "description": "anonymous: create loginAttempts",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-loginAttempts-anonymous-update",
+      "description": "anonymous: update loginAttempts",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-loginAttempts-anonymous-delete",
+      "description": "anonymous: delete loginAttempts",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-loginAttempts-patient-own-read",
+      "description": "patient-own: read loginAttempts",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-loginAttempts-patient-own-create",
+      "description": "patient-own: create loginAttempts",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-loginAttempts-patient-own-update",
+      "description": "patient-own: update loginAttempts",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-loginAttempts-patient-own-delete",
+      "description": "patient-own: delete loginAttempts",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-loginAttempts-patient-other-read",
+      "description": "patient-other: read loginAttempts",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-loginAttempts-patient-other-create",
+      "description": "patient-other: create loginAttempts",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-loginAttempts-patient-other-update",
+      "description": "patient-other: update loginAttempts",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-loginAttempts-patient-other-delete",
+      "description": "patient-other: delete loginAttempts",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-loginAttempts-staff-read",
+      "description": "staff: read loginAttempts",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-loginAttempts-staff-create",
+      "description": "staff: create loginAttempts",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-loginAttempts-staff-update",
+      "description": "staff: update loginAttempts",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-loginAttempts-staff-delete",
+      "description": "staff: delete loginAttempts",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-loginAttempts-manager-read",
+      "description": "manager: read loginAttempts",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-loginAttempts-manager-create",
+      "description": "manager: create loginAttempts",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-loginAttempts-manager-update",
+      "description": "manager: update loginAttempts",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-loginAttempts-manager-delete",
+      "description": "manager: delete loginAttempts",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-loginAttempts-revoked-read",
+      "description": "revoked: read loginAttempts",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-loginAttempts-revoked-create",
+      "description": "revoked: create loginAttempts",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-loginAttempts-revoked-update",
+      "description": "revoked: update loginAttempts",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-loginAttempts-revoked-delete",
+      "description": "revoked: delete loginAttempts",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-loginAttempts-pending-read",
+      "description": "pending: read loginAttempts",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-loginAttempts-pending-create",
+      "description": "pending: create loginAttempts",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-loginAttempts-pending-update",
+      "description": "pending: update loginAttempts",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-loginAttempts-pending-delete",
+      "description": "pending: delete loginAttempts",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-attack-authorizedPatients-patient UID takeover",
+      "description": "patient UID takeover",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "Allowed",
+      "status": "FAIL"
+    },
+    {
+      "id": "RULE-attack-appointments-appointment ownership takeover",
+      "description": "appointment ownership takeover",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "Allowed",
+      "status": "FAIL"
+    },
+    {
+      "id": "RULE-attack-appointments-appointment clinical edit",
+      "description": "appointment clinical edit",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "Allowed",
+      "status": "FAIL"
+    },
+    {
+      "id": "RULE-attack-chatThreads-thread ownership takeover",
+      "description": "thread ownership takeover",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "Allowed",
+      "status": "FAIL"
+    },
+    {
+      "id": "RULE-attack-chatThreads-thread hidden from staff",
+      "description": "thread hidden from staff",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chat-staff-spoof",
+      "description": "Patient cannot impersonate staff",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-archived-read",
+      "description": "Archived patient cannot read clinical record",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "Allowed",
+      "status": "FAIL"
+    },
+    {
+      "id": "RULE-idle-expired",
+      "description": "Expired admin session cannot read clinical records",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "Allowed",
+      "status": "FAIL"
+    }
+  ]
+}

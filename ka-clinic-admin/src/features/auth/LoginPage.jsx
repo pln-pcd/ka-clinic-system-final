@@ -1,10 +1,9 @@
 import {
   browserLocalPersistence,
   browserSessionPersistence,
-  confirmPasswordReset,
   verifyPasswordResetCode,
   setPersistence,
-  signInWithEmailAndPassword,
+  signInWithCustomToken,
 } from 'firebase/auth';
 import BrandLoader from '../../components/BrandLoader';
 import { doc, getDoc } from 'firebase/firestore';
@@ -190,7 +189,7 @@ export default function AdminLogin({ onSuccess, onBack }) {
   function friendlyError(code) {
     switch (code) {
       case 'auth/invalid-email': return 'Invalid email address.';
-      case 'auth/user-not-found': return 'No account found with this email.';
+      case 'auth/user-not-found': return 'Invalid credentials or account unavailable.';
       case 'auth/wrong-password': return 'Incorrect password. Please try again.';
       case 'auth/invalid-credential': return 'Invalid credentials. Check your email and password.';
       case 'auth/too-many-requests': return 'Too many attempts. Please try again later.';
@@ -266,32 +265,10 @@ export default function AdminLogin({ onSuccess, onBack }) {
     setLoading(true);
 
     try {
-      const pre = await postJson('/api/admin-login', { action: 'precheck', email: trimmedEmail }).catch(() => null);
-      if (pre?.locked) {
-        setError(lockedMessage(pre.minutesRemaining));
-        return;
-      }
-
       await applyPersistence();
-
-      let cred;
-      try {
-        cred = await signInWithEmailAndPassword(auth, trimmedEmail, password);
-      } catch (err) {
-        if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-          const fail = await postJson('/api/admin-login', { action: 'failure', email: trimmedEmail }).catch(() => null);
-          if (fail?.locked) {
-            setError('Too many attempts. This account is locked for 15 minutes.');
-          } else if (fail?.attemptsRemaining != null) {
-            setError(`Incorrect password. ${fail.attemptsRemaining} attempt${fail.attemptsRemaining === 1 ? '' : 's'} remaining.`);
-          } else {
-            setError(friendlyError(err.code));
-          }
-        } else {
-          setError(friendlyError(err.code));
-        }
-        return;
-      }
+      const data = await postJson('/api/admin-login', { action: 'login', email: trimmedEmail, password });
+      if (!data?.success) { setError(data?.error || 'Invalid credentials or account unavailable.'); return; }
+      const cred = await signInWithCustomToken(auth, data.customToken);
 
       await verifyAdminAccess(cred.user.uid);
 
@@ -434,23 +411,6 @@ export default function AdminLogin({ onSuccess, onBack }) {
     setForgotSending(true);
 
     if (oobCode) {
-      let fbSuccess = false;
-      try {
-        await confirmPasswordReset(auth, oobCode, newPassword);
-        fbSuccess = true;
-      } catch (err) {
-        console.warn('Client confirmPasswordReset notice, falling back to backend:', err?.message);
-      }
-
-      if (fbSuccess) {
-        window.history.replaceState({}, document.title, window.location.pathname);
-        await postJson('/api/admin-reset-password', { email: trimmedEmail, action: 'unlock' }).catch(() => {});
-        setForgotStep('success');
-        setPassword(newPassword);
-        setForgotSending(false);
-        return;
-      }
-
       // Backend reset via custom token or Firebase Admin SDK
       try {
         const data = await postJson('/api/admin-reset-password', {

@@ -110,3 +110,24 @@ npm run seed:demo:clear
 It lists everything it will delete and asks you to type DELETE. It removes only documents marked `isDemo`, messages in demo conversations, sign-in records of demo accounts, and Auth users whose uid starts with `demo-`.
 
 The scripts refuse to run without an explicit `--project`, require a `demo-` project id with `--emulator`, and refuse the live `ka-clinic-system` project unless `--allow-production` is passed.
+
+## Study mode & ethics
+
+During the thesis study the system runs under the ethics rules in [docs/STUDY_MODE.md](docs/STUDY_MODE.md):
+
+- **Chatbot (KAI):** general clinic information, office hours, contact details, appointment procedures and app navigation only. No medical advice of any kind, and no patient's own schedule details (navigation replies instead). A disclaimer is always visible. Test prompts only, no real patients. Test: `node scripts/test-chatbot-scope.mjs`.
+- **Incident map:** simulated, non-identifiable records only (`isSimulated: true`), no addresses / barangays / coordinates, banner + "SIMULATED DATA" watermark, signed-in admins only. Seed: `node --env-file=.env scripts/seed-simulated-incidents.mjs`.
+- **Flags** (on unless set to `false`): `VITE_CHATBOT_STUDY_MODE`, `EXPO_PUBLIC_CHATBOT_STUDY_MODE` (test-environment notice in the chat), `VITE_MAP_STUDY_MODE` (hides "Pin Incident Map" on patient records).
+- Seed data only; reports contain no incident locations.
+# Security verification and release
+
+The complete pass/fail evidence, fixes, limitations and reproduction commands
+are in [SECURITY-TEST-REPORT.md](SECURITY-TEST-REPORT.md) and its PDF version.
+Security scripts live in `scripts/security/`; results are in
+`docs/security-results/`. Run destructive tests only against the fixed
+`demo-ka-security` loopback emulators. Rules tests clear the emulator database;
+run rules, API and browser suites serially. Never use production accounts.
+
+Patient release 1.0.3 requires the server password gateway and OTP session gate.
+Older APKs must be updated when the hardened production rules are released.
+See the report for idle logout, trusted-device, booking and signup behavior.

@@ -15,9 +15,9 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
+import Tap from '../../components/Tap';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AccountNotRegisteredError, getAuthErrorMessage, maskEmail, requestPasswordReset } from '../../config/backend';
@@ -78,9 +78,9 @@ export default function ForgotPasswordScreen() {
 
       {/* TOP NAVIGATION */}
       <View style={[styles.navHeader, { top: Math.max(insets.top + (Platform.OS === 'android' ? 12 : 8), verticalScale(42)) }]}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()} activeOpacity={0.7}>
+        <Tap style={styles.backButton} onPress={() => router.back()} activeOpacity={0.7}>
           <Ionicons name="chevron-back" size={22} color="#1E293B" />
-        </TouchableOpacity>
+        </Tap>
       </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
@@ -129,7 +129,7 @@ export default function ForgotPasswordScreen() {
                   </Text>
                 </View>
 
-                <TouchableOpacity
+                <Tap
                   style={styles.primaryButton}
                   onPress={() => router.replace('/auth/login')}
                   activeOpacity={0.85}
@@ -142,9 +142,9 @@ export default function ForgotPasswordScreen() {
                   >
                     <Text style={styles.primaryButtonText}>Back to Sign In</Text>
                   </LinearGradient>
-                </TouchableOpacity>
+                </Tap>
 
-                <TouchableOpacity
+                <Tap
                   style={styles.resendRow}
                   onPress={() => { setSentTo(null); setError(''); }}
                   activeOpacity={0.7}
@@ -152,7 +152,7 @@ export default function ForgotPasswordScreen() {
                   <Text style={styles.resendText}>
                     Didn&apos;t get it? <Text style={styles.linkBold}>Try again</Text>
                   </Text>
-                </TouchableOpacity>
+                </Tap>
               </>
             ) : (
               /* ── MRN ENTRY STATE ── */
@@ -171,7 +171,7 @@ export default function ForgotPasswordScreen() {
                 ) : null}
 
                 {needsSignup && (
-                  <TouchableOpacity
+                  <Tap
                     style={styles.signupInsteadBtn}
                     onPress={() => router.replace({
                       pathname: '/auth/signup',
@@ -182,7 +182,7 @@ export default function ForgotPasswordScreen() {
                     <Ionicons name="person-add-outline" size={scale(19)} color={NAVY_BLUE} />
                     <Text style={styles.signupInsteadText}>Sign Up Instead</Text>
                     <Ionicons name="arrow-forward" size={scale(17)} color={NAVY_BLUE} />
-                  </TouchableOpacity>
+                  </Tap>
                 )}
 
                 <View style={styles.inputWrapper}>
@@ -206,7 +206,7 @@ export default function ForgotPasswordScreen() {
                   </View>
                 </View>
 
-                <TouchableOpacity
+                <Tap
                   style={[styles.primaryButton, loading && styles.buttonDisabled]}
                   onPress={handleSendResetLink}
                   disabled={loading}
@@ -225,9 +225,9 @@ export default function ForgotPasswordScreen() {
                       <Ionicons name="paper-plane-outline" size={18} color="#FFF" style={{ marginLeft: scale(8) }} />
                     )}
                   </LinearGradient>
-                </TouchableOpacity>
+                </Tap>
 
-                <TouchableOpacity
+                <Tap
                   style={styles.secondaryLinkRow}
                   onPress={() => router.replace('/auth/login')}
                   activeOpacity={0.7}
@@ -235,7 +235,7 @@ export default function ForgotPasswordScreen() {
                   <Text style={styles.secondaryLinkText}>
                     Remembered it? <Text style={styles.linkBold}>Sign In</Text>
                   </Text>
-                </TouchableOpacity>
+                </Tap>
               </>
             )}
           </Animated.View>

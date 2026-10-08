@@ -5,7 +5,6 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { goBackOr, resetTo } from '../../utils/navigation';
 import { useRef, useState } from 'react';
 import {
-  Alert,
   Dimensions,
   Image,
   KeyboardAvoidingView,
@@ -14,22 +13,24 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
+import Tap from '../../components/Tap';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import {
   AuthorizedPatient,
   completeEmailSignup,
   getAuthErrorMessage,
   sendEmailOTP,
+  sendLoginOTP,
   signInAsGuest,
   verifyEmailOTP,
 } from '../../config/backend';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { moderateScale, scale, verticalScale } from '../../utils/scale';
-import { passwordPolicyError } from '../../utils/passwordPolicy';
-import PasswordChecklist, { PasswordMatch } from '../../components/PasswordChecklist';
+import CustomAlertModal from '../../components/CustomAlertModal';
+import { meetsPasswordPolicy, passwordPolicyError } from '../../utils/passwordPolicy';
+import PasswordStrength, { PasswordMatch } from '../../components/PasswordChecklist';
 
 const { height } = Dimensions.get('window');
 const NAVY_BLUE = '#1E3A8A';
@@ -74,6 +75,10 @@ export default function PatientSignupScreen() {
 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  // "Contact Us" opens the app's own popup, not the native alert.
+  const [showSupport, setShowSupport] = useState(false);
+  // Complete Registration is enabled only once both fields are valid.
+  const passwordReady = meetsPasswordPolicy(password) && password === confirmPassword;
 
   // ── STEP 1: Look up MRN, refuse if already registered, verify email uniqueness,
   // then send a real email OTP (via /api/send-otp → Gmail SMTP) to the email on file ──
@@ -159,7 +164,8 @@ export default function PatientSignupScreen() {
     setLoading(true);
     try {
       await completeEmailSignup(record, password);
-      resetTo(router, '/(tabs)');
+      const { maskedEmail } = await sendLoginOTP();
+      router.replace({ pathname: '/auth/verify-login-otp', params: { maskedEmail, remember: '0' } });
     } catch (e: any) {
       setError(getAuthErrorMessage(e));
     } finally {
@@ -238,7 +244,7 @@ export default function PatientSignupScreen() {
 
       {/* TOP NAVIGATION */}
       <View style={[styles.navHeader, { top: Math.max(insets.top + (Platform.OS === 'android' ? 12 : 8), verticalScale(42)) }]}>
-        <TouchableOpacity
+        <Tap
           style={styles.backButton}
           onPress={() => {
             if (step === 'password') setStep('otp');
@@ -248,7 +254,7 @@ export default function PatientSignupScreen() {
           activeOpacity={0.7}
         >
           <Ionicons name="chevron-back" size={22} color="#1E293B" />
-        </TouchableOpacity>
+        </Tap>
       </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
@@ -264,9 +270,11 @@ export default function PatientSignupScreen() {
         >
 
           {/* BRANDING HEADER */}
-          <Animated.View entering={FadeInUp.duration(800)} style={styles.header}>
-            <View style={styles.logoCircleBadge}>
-              <Image source={require('../../assets/logo-white-nobg.png')} style={styles.logo} resizeMode="contain" />
+          {/* The password step uses a smaller header so the whole form fits
+              on a normal phone without scrolling. */}
+          <Animated.View entering={FadeInUp.duration(800)} style={[styles.header, step === 'password' && styles.headerCompact]}>
+            <View style={[styles.logoCircleBadge, step === 'password' && styles.logoCircleBadgeCompact]}>
+              <Image source={require('../../assets/logo-white-nobg.png')} style={step === 'password' ? styles.logoCompact : styles.logo} resizeMode="contain" />
             </View>
             <Text style={styles.brandName}>
               <Text style={{ color: NAVY_BLUE }}>K&A</Text> CLINIC
@@ -307,7 +315,7 @@ export default function PatientSignupScreen() {
                 Enter your Medical Record Number (MRN) and a verification code will be sent to your registered email address!
               </Text>
 
-              <TouchableOpacity
+              <Tap
                 style={[styles.primaryButton, loading && styles.buttonDisabled]}
                 activeOpacity={0.85}
                 onPress={handleSendOTP}
@@ -324,13 +332,13 @@ export default function PatientSignupScreen() {
                   </Text>
                   <Ionicons name="paper-plane-outline" size={18} color="#FFF" style={{ marginLeft: scale(6) }} />
                 </LinearGradient>
-              </TouchableOpacity>
+              </Tap>
 
               <View style={styles.secondaryLinkRow}>
                 <Text style={styles.secondaryLinkText}>or you can Sign in if you have an existing account </Text>
-                <TouchableOpacity onPress={() => router.push('/auth/login')}>
+                <Tap onPress={() => router.push('/auth/login')}>
                   <Text style={styles.linkBold}>Sign In</Text>
-                </TouchableOpacity>
+                </Tap>
               </View>
 
               {/* DIVIDER & GUEST OPTION */}
@@ -340,7 +348,7 @@ export default function PatientSignupScreen() {
                 <View style={styles.line} />
               </View>
 
-              <TouchableOpacity
+              <Tap
                 style={[styles.guestButton, guestLoading && styles.buttonDisabled]}
                 activeOpacity={0.8}
                 onPress={handleGuestLogin}
@@ -348,16 +356,16 @@ export default function PatientSignupScreen() {
               >
                 <Text style={styles.guestButtonText}>{guestLoading ? 'Signing in...' : 'Continue as a Guest'}</Text>
                 {!guestLoading && <Ionicons name="arrow-forward" size={16} color={NAVY_BLUE} />}
-              </TouchableOpacity>
+              </Tap>
 
-              <TouchableOpacity 
-                onPress={() => Alert.alert('Support Helpline', 'Contact K&A Clinic Frontdesk at support@kaclinic.ph or call (02) 8888-5622.')}
+              <Tap
+                onPress={() => setShowSupport(true)}
                 style={styles.troubleLink}
               >
                 <Text style={styles.troubleText}>
                   Having trouble? <Text style={styles.troubleBold}>Contact Us</Text>
                 </Text>
-              </TouchableOpacity>
+              </Tap>
             </Animated.View>
           )}
 
@@ -407,7 +415,7 @@ export default function PatientSignupScreen() {
                 ))}
               </View>
 
-              <TouchableOpacity
+              <Tap
                 style={[styles.primaryButton, loading && styles.buttonDisabled]}
                 activeOpacity={0.85}
                 onPress={handleVerifyOTP}
@@ -423,9 +431,9 @@ export default function PatientSignupScreen() {
                     {loading ? 'Verifying OTP...' : 'Verify OTP'}
                   </Text>
                 </LinearGradient>
-              </TouchableOpacity>
+              </Tap>
 
-              <TouchableOpacity
+              <Tap
                 style={[styles.resendButton, resendCooldown > 0 && styles.resendDisabled]}
                 onPress={handleResendOTP}
                 disabled={resendCooldown > 0 || loading}
@@ -434,21 +442,15 @@ export default function PatientSignupScreen() {
                 <Text style={[styles.resendText, resendCooldown > 0 && styles.resendTextDisabled]}>
                   {resendCooldown > 0 ? `Resend OTP in ${resendCooldown}s` : 'Resend OTP'}
                 </Text>
-              </TouchableOpacity>
+              </Tap>
             </Animated.View>
           )}
 
           {/* ── STEP 3: Set Password ── */}
           {step === 'password' && (
-            <Animated.View entering={FadeInDown.delay(100).duration(700)} style={styles.formCard}>
-              <View style={styles.otpIconWrapper}>
-                <LinearGradient colors={['#DBEAFE', '#BFDBFE']} style={styles.otpIconBg}>
-                  <Ionicons name="lock-closed-outline" size={36} color={NAVY_BLUE} />
-                </LinearGradient>
-              </View>
-
+            <Animated.View entering={FadeInDown.delay(100).duration(700)} style={[styles.formCard, styles.formCardCompact]}>
               <Text style={styles.title}>Create Your Password</Text>
-              <Text style={styles.subtitle}>
+              <Text style={[styles.subtitle, styles.subtitleCompact]}>
                 Set a secure password for account <Text style={styles.phoneHighlight}>{record?.name}</Text>
               </Text>
 
@@ -459,9 +461,9 @@ export default function PatientSignupScreen() {
                 </View>
               ) : null}
 
-              <View style={styles.inputWrapper}>
+              <View style={styles.inputWrapperCompact}>
                 <Text style={styles.inputLabel}>Create Password</Text>
-                <View style={[styles.inputBox, focusedField === 'pass' && styles.inputBoxFocused]}>
+                <View style={[styles.inputBox, styles.inputBoxCompact, focusedField === 'pass' && styles.inputBoxFocused]}>
                   <Ionicons name="lock-closed-outline" size={20} color={focusedField === 'pass' ? NAVY_BLUE : '#94A3B8'} />
                   <TextInput
                     style={styles.textInput}
@@ -472,17 +474,22 @@ export default function PatientSignupScreen() {
                     onChangeText={setPassword}
                     onFocus={() => setFocusedField('pass')}
                     onBlur={() => setFocusedField(null)}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    textContentType="newPassword"
+                    autoComplete="new-password"
                   />
-                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={{ padding: scale(4) }}>
+                  <Tap onPress={() => setShowPassword(!showPassword)} style={{ padding: scale(4) }} hitSlop={8}
+                    accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}>
                     <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#94A3B8" />
-                  </TouchableOpacity>
+                  </Tap>
                 </View>
-                <PasswordChecklist password={password} />
+                <PasswordStrength password={password} />
               </View>
 
-              <View style={styles.inputWrapper}>
+              <View style={styles.inputWrapperCompact}>
                 <Text style={styles.inputLabel}>Confirm Password</Text>
-                <View style={[styles.inputBox, focusedField === 'cpass' && styles.inputBoxFocused]}>
+                <View style={[styles.inputBox, styles.inputBoxCompact, focusedField === 'cpass' && styles.inputBoxFocused]}>
                   <Ionicons name="shield-checkmark-outline" size={20} color={focusedField === 'cpass' ? NAVY_BLUE : '#94A3B8'} />
                   <TextInput
                     style={styles.textInput}
@@ -493,19 +500,26 @@ export default function PatientSignupScreen() {
                     onChangeText={setConfirmPassword}
                     onFocus={() => setFocusedField('cpass')}
                     onBlur={() => setFocusedField(null)}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    textContentType="newPassword"
+                    returnKeyType="done"
+                    onSubmitEditing={() => { if (passwordReady && !loading) handleCompleteRegistration(); }}
                   />
-                  <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={{ padding: scale(4) }}>
+                  <Tap onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={{ padding: scale(4) }} hitSlop={8}
+                    accessibilityLabel={showConfirmPassword ? 'Hide password' : 'Show password'}>
                     <Ionicons name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#94A3B8" />
-                  </TouchableOpacity>
+                  </Tap>
                 </View>
                 <PasswordMatch password={password} confirm={confirmPassword} />
               </View>
 
-              <TouchableOpacity
-                style={[styles.primaryButton, loading && styles.buttonDisabled]}
+              <Tap
+                style={[styles.primaryButton, (loading || !passwordReady) && styles.buttonDisabled]}
                 activeOpacity={0.85}
                 onPress={handleCompleteRegistration}
-                disabled={loading}
+                disabled={loading || !passwordReady}
+                accessibilityState={{ disabled: loading || !passwordReady }}
               >
                 <LinearGradient 
                   colors={[NAVY_BLUE, '#172554']} 
@@ -517,12 +531,24 @@ export default function PatientSignupScreen() {
                     {loading ? 'Creating Account...' : 'Complete Registration'}
                   </Text>
                 </LinearGradient>
-              </TouchableOpacity>
+              </Tap>
             </Animated.View>
           )}
 
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <CustomAlertModal
+        config={{
+          visible: showSupport,
+          type: 'info',
+          icon: 'call-outline',
+          title: 'Contact the clinic',
+          message: 'Contact the K&A Clinic front desk at support@kaclinic.ph or call (02) 8888-5622.',
+          primaryButtonText: 'OK',
+        }}
+        onClose={() => setShowSupport(false)}
+      />
     </View>
   );
 }
@@ -554,6 +580,13 @@ const styles = StyleSheet.create({
     paddingBottom: verticalScale(40),
   },
   header: { alignItems: 'center', marginBottom: verticalScale(24) },
+  headerCompact: { marginBottom: verticalScale(14) },
+  logoCircleBadgeCompact: { width: scale(72), height: scale(72), borderRadius: scale(36) },
+  logoCompact: { width: scale(56), height: scale(56) },
+  formCardCompact: { paddingHorizontal: scale(24), paddingTop: verticalScale(24), paddingBottom: verticalScale(24) },
+  subtitleCompact: { marginBottom: verticalScale(8) },
+  inputWrapperCompact: { marginTop: verticalScale(12) },
+  inputBoxCompact: { height: verticalScale(52) },
   logoCircleBadge: {
     width: scale(110),
     height: scale(110),

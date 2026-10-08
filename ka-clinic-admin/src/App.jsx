@@ -4,6 +4,7 @@ import { auth } from "./lib/firebase";
 import { authedPostJson } from "./lib/adminSession";
 import { PageErrorBoundary } from "./components/ErrorPages";
 import BrandLoader from "./components/BrandLoader";
+import IdleSessionGuard from './components/IdleSessionGuard';
 
 const isAcceptInvitePath = window.location.pathname === '/accept-invite';
 const urlParams = new URLSearchParams(window.location.search);
@@ -109,7 +110,9 @@ export default function App() {
       )}
 
       {view === 'dashboard' && (
-        <AdminDashboard onLogout={() => setView('login')} notFound={isUnknownPath} />
+        <IdleSessionGuard onLogout={() => setView('login')}>
+          <AdminDashboard onLogout={() => setView('login')} notFound={isUnknownPath} />
+        </IdleSessionGuard>
       )}
     </Suspense>
     </PageErrorBoundary>

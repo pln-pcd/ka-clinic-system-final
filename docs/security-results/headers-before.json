@@ -1,0 +1,87 @@
+{
+  "date": "2026-10-07T23:56:58.111Z",
+  "url": "https://ka-clinic-system-final.vercel.app",
+  "results": [
+    {
+      "id": "HTTPS-001",
+      "area": 7,
+      "description": "HTTP redirects to HTTPS",
+      "steps": "Read-only request to https://ka-clinic-system-final.vercel.app",
+      "expected": "301/302/307/308 with HTTPS location",
+      "actual": "308 https://ka-clinic-system-final.vercel.app/",
+      "status": "PASS"
+    },
+    {
+      "id": "HTTPS-002",
+      "area": 7,
+      "description": "HTTPS available",
+      "steps": "Read-only request to https://ka-clinic-system-final.vercel.app",
+      "expected": "200",
+      "actual": "200",
+      "status": "PASS"
+    },
+    {
+      "id": "HEADER-strict-transport-security",
+      "area": 7,
+      "description": "strict-transport-security",
+      "steps": "Read-only request to https://ka-clinic-system-final.vercel.app",
+      "expected": "Present",
+      "actual": "max-age=63072000; includeSubDomains; preload",
+      "status": "PASS"
+    },
+    {
+      "id": "HEADER-content-security-policy",
+      "area": 7,
+      "description": "content-security-policy",
+      "steps": "Read-only request to https://ka-clinic-system-final.vercel.app",
+      "expected": "Present",
+      "actual": "Missing",
+      "status": "FAIL"
+    },
+    {
+      "id": "HEADER-x-content-type-options",
+      "area": 7,
+      "description": "x-content-type-options",
+      "steps": "Read-only request to https://ka-clinic-system-final.vercel.app",
+      "expected": "Present",
+      "actual": "Missing",
+      "status": "FAIL"
+    },
+    {
+      "id": "HEADER-x-frame-options",
+      "area": 7,
+      "description": "x-frame-options",
+      "steps": "Read-only request to https://ka-clinic-system-final.vercel.app",
+      "expected": "Present",
+      "actual": "Missing",
+      "status": "FAIL"
+    },
+    {
+      "id": "HEADER-referrer-policy",
+      "area": 7,
+      "description": "referrer-policy",
+      "steps": "Read-only request to https://ka-clinic-system-final.vercel.app",
+      "expected": "Present",
+      "actual": "Missing",
+      "status": "FAIL"
+    },
+    {
+      "id": "HEADER-permissions-policy",
+      "area": 7,
+      "description": "permissions-policy",
+      "steps": "Read-only request to https://ka-clinic-system-final.vercel.app",
+      "expected": "Present",
+      "actual": "Missing",
+      "status": "FAIL"
+    },
+    {
+      "id": "TLS-001",
+      "area": 7,
+      "description": "Trusted and unexpired TLS certificate",
+      "steps": "Read-only request to https://ka-clinic-system-final.vercel.app",
+      "expected": "Trusted certificate, validity in future",
+      "actual": "Google Trust Services; expires Nov 27 19:48:08 2026 GMT",
+      "status": "PASS"
+    }
+  ]
+}

@@ -7,6 +7,7 @@
 import { cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { enforceDoseTimeline } from './seed-rules.mjs';
+import { buildSimulatedIncidents } from '../ka-clinic-admin/src/lib/simulatedIncidents.js';
 
 // ══════════════════════════════════════════════════════════════════════════
 // node --env-file=.env scripts/sample-patients.js seed — insert synthetic PEP patient records
@@ -510,38 +511,10 @@ async function main() {
     opsInBatch = 0;
   };
 
-  // At most 35 map pins, each nudged ~±120 m so none share coordinates.
-  const MAX_PINS = 35;
-  let pinned = 0;
   for (const rec of records) {
     batch.set(db.collection('vaccinations').doc(rec.mrn), rec.vax);
     batch.set(db.collection('authorizedPatients').doc(rec.mrn), rec.auth);
     opsInBatch += 2;
-
-    // Roughly two-thirds of cases get a public map pin. Same anonymized
-    // shape handlePinToMap() writes — no patient identifiers.
-    if (pinIncidents && pinned < MAX_PINS && chance(0.65)) {
-      pinned += 1;
-      const m = { ...rec._map, lat: +(rec._map.lat + (Math.random() - 0.5) * 0.0022).toFixed(6), lng: +(rec._map.lng + (Math.random() - 0.5) * 0.0022).toFixed(6) };
-      batch.set(db.collection('incidents').doc(), {
-        location: `${m.zone}, Brgy. ${m.barangay}, Libon`,
-        barangay: m.barangay,
-        zone: m.zone,
-        type: `${m.animal} Bite`,
-        category: m.category,
-        date: m.exposureDate,
-        lat: m.lat,
-        lng: m.lng,
-        latitude: m.lat,
-        longitude: m.lng,
-        source: 'patient_record',
-        status: chance(0.7) ? 'active' : 'resolved',
-        pinnedAt: Date.now(),
-        createdAt: Date.now(),
-        isSeedData: true,
-      });
-      opsInBatch += 1;
-    }
 
     written++;
     if (opsInBatch >= BATCH_LIMIT) {
@@ -552,6 +525,19 @@ async function main() {
     }
   }
 
+  // Incident Map pins are SIMULATED (lib/simulatedIncidents.js): random
+  // coordinates, no address/barangay/patient, not linked to any record.
+  let pinned = 0;
+  if (pinIncidents) {
+    const today = new Date().toISOString().slice(0, 10);
+    for (const pin of buildSimulatedIncidents({ count: 35, seed: 35, todayIso: today, extra: { isSeedData: true } })) {
+      batch.set(db.collection('incidents').doc(pin.id), pin.data);
+      opsInBatch += 1;
+      pinned += 1;
+      if (opsInBatch >= BATCH_LIMIT) await flush();
+    }
+  }
+
   await flush();
 
   const completed = records.filter(r => r.vax.status === 'completed').length;
@@ -559,6 +545,7 @@ async function main() {
   console.log(`  vaccinations/       ${written} docs`);
   console.log(`  authorizedPatients/ ${written} docs`);
   console.log(`  status: ${completed} completed, ${written - completed} ongoing`);
+  console.log(`  incidents/          ${pinned} simulated pins`);
   console.log(`\nAll seeded docs carry isSeedData: true.`);
   console.log(`Remove them later with: node --env-file=.env scripts/sample-patients.js remove`);
 }

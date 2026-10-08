@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { askGemini } from '../../lib/geminiService';
+import { CHATBOT_STUDY_MODE, KAI_DISCLAIMER, KAI_DISCLAIMER_SHORT, STUDY_NOTICE } from '../../lib/studyMode';
 
 /* Inject typing animation keyframes once */
 const CHATBOT_STYLE_ID = 'ka-chatbot-styles';
@@ -73,7 +74,7 @@ export default function Chatbot() {
       setBadge(false);
       setMessages(m => {
         if (m.length === 0) {
-          return [{ role: 'bot', text: "👋 Hello! I'm KAI, the K&A Clinic assistant. I can help with vaccine prices & packages, clinic hours, booking an appointment, how to reach us, and using the app. How can I help?", time: now() }];
+          return [{ role: 'bot', text: "👋 Hello! I'm KAI, the K&A Clinic assistant. I can help with office hours, booking an appointment, how to reach us, and using the app. I don't give medical advice. How can I help?", time: now() }];
         }
         return m;
       });
@@ -95,7 +96,7 @@ export default function Chatbot() {
       const replyText = await askGemini(text, history);
       addMsg('bot', replyText);
     } catch (err) {
-      addMsg('bot', "I'm having trouble connecting right now. Please call or visit K&A Clinic at San Juan St., Libon, Albay, or try again shortly.");
+      addMsg('bot', "I'm having trouble connecting right now. Please contact K&A Clinic at +63 912 345 6789, or try again shortly.");
     } finally {
       setTyping(false);
       sendingRef.current = false;
@@ -103,7 +104,6 @@ export default function Chatbot() {
   }, [input, addMsg]);
 
   const QUICK = [
-    ['💉 Vaccine Prices', 'How much are your vaccine prices and packages?'],
     ['🕒 Clinic Hours', 'What are your clinic hours and days?'],
     ['📅 Book an Appointment', 'How do I book an appointment?'],
     ['📍 Clinic Location', 'Where is K&A Clinic located?'],
@@ -235,6 +235,22 @@ export default function Chatbot() {
           </button>
         </div>
 
+        {/* ── Persistent disclaimer (and the study-mode notice) ── */}
+        <div role="note" style={{
+          padding: '9px 16px', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0',
+          fontSize: '0.6875rem', lineHeight: 1.5, color: '#334155', fontWeight: 500, flexShrink: 0,
+        }}>
+          {KAI_DISCLAIMER}
+        </div>
+        {CHATBOT_STUDY_MODE && (
+          <div role="note" style={{
+            padding: '6px 16px', background: '#FEF3C7', borderBottom: '1px solid #FDE68A',
+            fontSize: '0.6875rem', color: '#92400E', fontWeight: 700, flexShrink: 0,
+          }}>
+            {STUDY_NOTICE}
+          </div>
+        )}
+
         {/* ── Messages ── */}
         <div ref={msgsRef} className="cb-no-scrollbar" style={{
           flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden',
@@ -352,10 +368,8 @@ export default function Chatbot() {
         )}
 
         {/* ── Input Container ── */}
-        <div style={{
-          padding: 12, borderTop: '1px solid #F1F5F9', flexShrink: 0,
-          display: 'flex', alignItems: 'center', gap: 8, background: '#FFFFFF',
-        }}>
+        <div style={{ borderTop: '1px solid #F1F5F9', flexShrink: 0, background: '#FFFFFF', padding: '12px 12px 8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <input
             value={input}
             onChange={e => setInput(e.target.value)}
@@ -390,6 +404,8 @@ export default function Chatbot() {
               <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
             </svg>
           </button>
+        </div>
+        <div style={{ fontSize: '0.625rem', color: '#64748B', textAlign: 'center', marginTop: 6 }}>{KAI_DISCLAIMER_SHORT}</div>
         </div>
       </div>
     </>

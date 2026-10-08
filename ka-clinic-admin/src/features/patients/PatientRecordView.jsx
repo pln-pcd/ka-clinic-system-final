@@ -16,6 +16,8 @@ import { BTN } from "../../lib/buttons";
 import { db, listen } from "../../lib/firebase";
 import { buildDoses } from "../../lib/doseSchedules";
 import { getCompletionDate, getRestoreDate } from "../../lib/patientArchive";
+import { erigStatus, erigStatusLabel } from "../../lib/erig";
+import { MAP_STUDY_MODE } from "../../lib/studyMode";
 import { ExportReportModal, ServiceBadge, X, derivePatientStatus } from "./shared";
 import Avatar from "../../components/Avatar";
 
@@ -188,7 +190,6 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
   // never disagree about a patient.
   const completedOn = liveStatus === 'completed' ? getCompletionDate({ ...rec, ...patient }) : '';
   const restoredOn = getRestoreDate({ ...rec, ...patient });
-  const archivedOnRaw = patient.archivedAt?.toDate ? patient.archivedAt.toDate() : patient.archivedAt;
   const isOverdue = liveStatus !== 'completed' && (liveStatus === 'overdue' || buildDoses(rec).some(d => d.status === 'miss'));
   const statusKey = liveStatus === 'completed' ? 'completed' : isOverdue ? 'overdue' : 'ongoing';
 
@@ -213,7 +214,9 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
               would silently do nothing — offer it only while the case is open. */}
           {/* Pins are manual only: one per PEP record, while the case is open.
               A record that already has a pin, or is completed, can't pin again. */}
-          {!readOnly && isRabiesOrBiteIncident(patient) && (() => {
+          {/* Study mode (docs/STUDY_MODE.md): real patient records never
+              become map data, so the pin action is not offered at all. */}
+          {!readOnly && !MAP_STUDY_MODE && isRabiesOrBiteIncident(patient) && (() => {
             const pinned = Array.isArray(patient.incidentIds) && patient.incidentIds.length > 0;
             const blocked = pinned || isCompletedOrArchived;
             return (
@@ -252,41 +255,11 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
         </div>
       </div>
 
-      {patient.isArchived && (() => {
-        // Lifecycle: Registered → Completed → (Restored → ) Auto-archived.
-        // Archiving is automatic only: 365 days after completion, or after
-        // the latest restore when the record was restored before.
-        const created = patient.createdAt?.toDate ? getTodayDateString(patient.createdAt.toDate())
-          : typeof patient.createdAt === 'number' ? getTodayDateString(new Date(patient.createdAt)) : String(patient.date || '').slice(0, 10);
-        const history = Array.isArray(patient.restoreHistory) ? patient.restoreHistory : [];
-        const steps = [
-          { label: 'Registered', date: created },
-          { label: 'Completed', date: getCompletionDate({ ...rec, ...patient }), sub: 'Last dose given' },
-          ...history.map(h => ({ label: 'Restored', date: h.restoredAt, sub: h.restoredBy?.name ? `by ${h.restoredBy.name}` : '' })),
-          { label: 'Auto-archived', date: archivedOnRaw ? getTodayDateString(archivedOnRaw) : '', sub: history.length ? '365 days after restore' : '365 days after completion', final: true },
-        ];
-        return (
-          <div className="mb-4 rounded-2xl border border-slate-200 bg-white px-5 py-4">
-            <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
-              <p className="text-xs font-semibold text-slate-800">Record lifecycle</p>
-              <p className="text-[11px] text-slate-500">Read-only; patient app sign-in is off. Restore to bring it back to the Patients list.</p>
-            </div>
-            <ol className="flex items-start gap-0 overflow-x-auto" aria-label="Record lifecycle">
-              {steps.map((s, i) => (
-                <li key={i} className="flex items-start min-w-[150px] flex-1">
-                  <div className="flex flex-col items-center text-center flex-1">
-                    <span className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold border ${s.final ? 'bg-slate-700 border-slate-700 text-white' : s.label === 'Restored' ? 'bg-indigo-50 border-indigo-200 text-[#3B50DF]' : 'bg-emerald-50 border-emerald-200 text-emerald-700'}`}>{i + 1}</span>
-                    <span className="text-xs font-semibold text-slate-900 mt-1.5">{s.label}</span>
-                    <span className="text-[11px] text-slate-600">{s.date ? formatDateMedium(s.date) : '—'}</span>
-                    {s.sub && <span className="text-[10.5px] text-slate-400 mt-0.5">{s.sub}</span>}
-                  </div>
-                  {i < steps.length - 1 && <span aria-hidden="true" className="h-px bg-slate-300 flex-1 mt-3.5 min-w-[24px]" />}
-                </li>
-              ))}
-            </ol>
-          </div>
-        );
-      })()}
+      {patient.isArchived && (
+        <p className="mb-4 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[11px] text-slate-600">
+          Archived record: read-only, and patient app sign-in is off. Restore it to bring it back to the Patients list.
+        </p>
+      )}
 
       {/* ── IDENTITY HEADER: who this is, their status and IDs, in one line ── */}
       <div className={`${card} px-6 py-4 mb-4 flex items-center gap-4 flex-wrap`}>
@@ -342,6 +315,21 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
                   <InfoField label="Wound Location" value={rec.woundLocation || patient.woundLocation || patient.biteLocation} />
                   <InfoField label="Vaccine Brand" value={rec.vaccineBrand || patient.vaccineBrand} />
                   <InfoField label="Past Vaccines" value={rec.pastVaccines || patient.pastVaccines} />
+                  {(() => {
+                    // ERIG (recorded in the Vaccination Tracker) for PEP records.
+                    const merged = { ...patient, ...rec };
+                    if ((merged.service || 'PEP') !== 'PEP') return null;
+                    const s = erigStatus(merged);
+                    const missing = s.required && !s.given;
+                    return (
+                      <div className="col-span-3 min-w-0">
+                        <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wider block">ERIG</span>
+                        <span className={`text-xs font-medium mt-1 block break-words ${missing ? 'text-amber-700' : 'text-slate-900'}`}>
+                          {erigStatusLabel(merged, formatDateMedium)}
+                        </span>
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div className="pt-4 mt-4 border-t border-slate-100">
                   <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wider block mb-1.5">Doctor / Nurse Remarks</span>
@@ -390,12 +378,11 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
       </div>
 
       {/* ── MIDDLE ROW: DOSES & APPOINTMENTS ──
-          Side by side, aligned to the top, each sized to its content (long
-          lists scroll inside a capped height) so short ones leave no gaps. */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-4 items-start">
+          Side by side, stretched to equal height, sized comfortably for appointment table rows. */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-4 items-stretch">
 
         {/* Vaccination Doses: summary row + compact timeline */}
-        <div className={`lg:col-span-6 ${card} p-5 flex flex-col`} style={{ minHeight: 200, maxHeight: 460 }}>
+        <div className={`lg:col-span-6 ${card} p-5 flex flex-col`} style={{ minHeight: 400, maxHeight: 560 }}>
           <SectionTitle
             title="Vaccination Doses"
             subtitle={`${serviceLabel(rec.service || patient.service || 'PEP')} protocol · dose schedule`}
@@ -408,7 +395,7 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
               : [];
 
             if (dosesList.length === 0) {
-              return <EmptyState icon={Syringe} title="No doses recorded yet" text="Doses appear here once the vaccination schedule is recorded." minHeight={110} className="!py-4" />;
+              return <EmptyState icon={Syringe} title="No doses recorded yet" text="Doses appear here once the vaccination schedule is recorded." minHeight={180} className="!py-4" />;
             }
 
             const normalizedDoses = dosesList.map((d, i) => {
@@ -430,7 +417,7 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
                   <span className="text-slate-300">·</span>
                   <span>Next due <strong className={`font-semibold ${nextOpen?.isMiss ? 'text-rose-600' : 'text-slate-900'}`}>{nextOpen ? (nextOpen.date ? formatDateMedium(nextOpen.date) : 'Not scheduled') : 'Complete'}</strong></span>
                 </div>
-                <ol className="relative overflow-y-auto min-h-0 pr-1" aria-label="Dose timeline">
+                <ol className="relative overflow-y-auto min-h-0 pr-1 flex-1" aria-label="Dose timeline">
                   {normalizedDoses.map((d, i) => {
                     const isNext = i === nextDoseIndex;
                     const tone = d.isDone
@@ -464,7 +451,7 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
 
         {/* Appointments: tabs when there are some; an empty state if not. Sized to
             show about six visits before the list scrolls. */}
-        <div className={`lg:col-span-6 ${card} flex flex-col overflow-hidden`} style={{ minHeight: 320, maxHeight: 560 }}>
+        <div className={`lg:col-span-6 ${card} flex flex-col overflow-hidden`} style={{ minHeight: 400, maxHeight: 560 }}>
           <div className="px-5 pt-5 flex items-start justify-between gap-2 flex-wrap shrink-0">
             <SectionTitle title="Appointments" subtitle={`Booked for ${patient.name}`} />
             {patientApts.length > 0 && (
@@ -522,8 +509,8 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
       </div>
 
       {/* ── CLINICAL REPORTS ── */}
-      <div className={`${card} p-6`}>
-        <div className="flex items-start justify-between gap-2 flex-wrap">
+      <div className={`${card} p-6 flex flex-col`} style={{ minHeight: 240 }}>
+        <div className="flex items-start justify-between gap-2 flex-wrap mb-4">
           <SectionTitle title="Clinical Reports & Nurse Notes" subtitle="Logged vitals, wound assessments, and doctor/nurse notes" />
           {!readOnly && <button
             onClick={() => setShowAddReportModal(true)}
@@ -534,7 +521,7 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
         </div>
 
         {reportsList.length === 0 ? (
-          <div className="py-10 text-center rounded-xl border border-dashed border-slate-200">
+          <div className="flex-1 flex flex-col items-center justify-center py-12 text-center rounded-xl border border-dashed border-slate-200">
             <p className="text-sm font-medium text-slate-700">No clinical reports logged</p>
             <p className="text-xs text-slate-500 mt-0.5">Use + Add Report to log BP, vitals, injection route and observations.</p>
           </div>

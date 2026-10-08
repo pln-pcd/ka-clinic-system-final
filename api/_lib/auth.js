@@ -5,6 +5,7 @@
 import { auth, db } from './firebaseAdmin.js';
 import crypto from 'node:crypto';
 import { sendMail } from './mail/mailer.js';
+import { hasSecuritySession } from './security.js';
 
 // ══════════════════════════════════════════════════════════════════════════
 // Admin callers and login lockout
@@ -14,7 +15,7 @@ import { sendMail } from './mail/mailer.js';
 // server-side from a verified token) rather than a client-supplied
 // uid/email in the request body.
 
-export async function requireAuthenticatedAdmin(req) {
+export async function requireAuthenticatedAdmin(req, { allowPendingSecondFactor = false } = {}) {
   const authHeader = req.headers.authorization || '';
   const idToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
   if (!idToken) return { error: 'Not authenticated.', status: 401 };
@@ -29,12 +30,16 @@ export async function requireAuthenticatedAdmin(req) {
   } catch {
     return { error: 'Your session has expired. Please sign in again.', status: 401 };
   }
+  if (decoded.firebase?.sign_in_provider !== 'custom') return { error: 'Please sign in through the clinic application.', status: 401 };
 
   const ref = db.collection('admins').doc(decoded.uid);
   const snap = await ref.get();
   if (!snap.exists) return { error: 'Not authorized.', status: 403 };
-
-  return { uid: decoded.uid, ref, data: snap.data() };
+  const data = snap.data();
+  if (data.status !== 'active' || !['staff', 'manager'].includes(data.role)) return { error: 'Not authorized.', status: 403 };
+  if (lockStatus(data).locked) return { error: 'Account temporarily unavailable.', status: 423 };
+  if (!allowPendingSecondFactor && !await hasSecuritySession(decoded, 'admin')) return { error: 'Please complete sign-in again.', status: 401 };
+  return { uid: decoded.uid, ref, data, decoded };
 }
 
 // Batch 6 — shared by /invite-admin and /revoke-admin: both are
@@ -91,7 +96,7 @@ export function hashTrustToken(token) {
 // Verifies the caller's Firebase ID token and resolves their patient record.
 // Anonymous (guest) sessions are refused: they have no email to send to and
 // nothing to protect.
-export async function requireAuthenticatedPatient(req) {
+export async function requireAuthenticatedPatient(req, { allowPendingSecondFactor = false } = {}) {
   const authHeader = req.headers.authorization || '';
   const idToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
   if (!idToken) return { error: 'Not authenticated.', status: 401 };
@@ -105,6 +110,8 @@ export async function requireAuthenticatedPatient(req) {
   if (decoded.firebase?.sign_in_provider === 'anonymous') {
     return { error: 'Guest sessions cannot be verified.', status: 403 };
   }
+  if (decoded.firebase?.sign_in_provider !== 'custom') return { error: 'Please sign in through the clinic application.', status: 401 };
+  if ((await db.collection('admins').doc(decoded.uid).get()).exists) return { error: 'Not authorized.', status: 403 };
 
   let snap = await db.collection('authorizedPatients').where('uid', '==', decoded.uid).limit(1).get();
   if (snap.empty && decoded.email) {
@@ -113,10 +120,13 @@ export async function requireAuthenticatedPatient(req) {
   if (snap.empty) return { error: 'No patient record is linked to this account.', status: 403 };
 
   const data = snap.docs[0].data();
+  const mrn = data.mrn || snap.docs[0].id;
+  if (data.authorized === false || await isPatientRecordArchived(mrn)) return { error: 'Account unavailable. Please contact the clinic.', status: 403 };
+  if (!allowPendingSecondFactor && !await hasSecuritySession(decoded, 'patient')) return { error: 'Please complete sign-in again.', status: 401 };
   const email = (data.email || decoded.email || '').toLowerCase().trim();
   if (!email) return { error: 'No email on file for this patient record. Please contact the clinic.', status: 422 };
 
-  return { uid: decoded.uid, email, name: data.name || '', mrn: data.mrn || snap.docs[0].id };
+  return { uid: decoded.uid, email, name: data.name || '', mrn, decoded };
 }
 
 // Archived records lock the patient app. The nightly sweep archives a record
@@ -233,7 +243,7 @@ export async function findAuthorizedPatient(mrn) {
 // mechanics are factored out here, not the handlers themselves.
 
 export function generateOtp() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return crypto.randomInt(100000, 1000000).toString();
 }
 
 export function isInCooldown(record, cooldownMs) {
@@ -379,4 +389,3 @@ export function parseDeviceName(userAgent) {
 
   return `${browser} on ${os}`;
 }
-

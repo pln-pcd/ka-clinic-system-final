@@ -10,10 +10,22 @@
     "test:archive-clock": "node scripts/demo/test-archive-clock.mjs --emulator --project demo-ka-clinic",
     "archive:overdue:emulator": "node scripts/archive-overdue.mjs --emulator",
     "sweep:doses:emulator": "node scripts/run-dose-sweep.mjs --emulator --seed",
-    "sweep:doses:dry": "node --env-file=.env scripts/run-dose-sweep.mjs --dry-run"
+    "sweep:doses:dry": "node --env-file=.env scripts/run-dose-sweep.mjs --dry-run",
+    "test:security:rules": "node scripts/security/rules.mjs",
+    "test:security:api": "node scripts/security/api.mjs",
+    "test:security:headers": "node scripts/security/headers.mjs",
+    "test:security:ui": "node scripts/security/ui.mjs"
   },
   "dependencies": {
-    "firebase-admin": "^13.10.0",
-    "nodemailer": "^6.10.1"
+    "firebase-admin": "^14.5.0",
+    "nodemailer": "^10.0.16"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^6.0.0",
+    "firebase": "^13.0.0",
+    "playwright": "^1.64.0"
+  },
+  "overrides": {
+    "@grpc/grpc-js": "^1.14.5"
   }
 }

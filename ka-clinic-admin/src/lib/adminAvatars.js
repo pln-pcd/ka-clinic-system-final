@@ -32,38 +32,25 @@ export function useAdminAvatars() {
 const dataUrlBytes = (url) => Math.ceil(((url.split(',')[1] || '').length * 3) / 4);
 
 /**
- * Shrinks an image file in the browser to a square-ish JPEG under
- * ADMIN_AVATAR_MAX_BYTES (longest side 512px, lowering quality as needed).
+ * A cropped photo (square canvas from ImageCropModal) as a JPEG data URL
+ * under ADMIN_AVATAR_MAX_BYTES: lowers the quality first, then the size.
  */
-export function compressAvatar(file) {
-  return new Promise((resolve, reject) => {
-    if (!file || !/^image\//.test(file.type)) { reject(new Error('Choose an image file (JPG, PNG or WebP).')); return; }
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      let size = 512;
-      for (let attempt = 0; attempt < 6; attempt++) {
-        const scale = Math.min(1, size / Math.max(img.width, img.height));
-        const w = Math.max(1, Math.round(img.width * scale));
-        const h = Math.max(1, Math.round(img.height * scale));
-        const canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(0, 0, w, h);
-        ctx.drawImage(img, 0, 0, w, h);
-        for (const q of [0.86, 0.76, 0.66, 0.56]) {
-          const out = canvas.toDataURL('image/jpeg', q);
-          if (dataUrlBytes(out) <= ADMIN_AVATAR_MAX_BYTES) { resolve(out); return; }
-        }
-        size = Math.round(size * 0.75);
-      }
-      reject(new Error('That image is too large to use as a profile photo.'));
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('That file could not be read as an image.')); };
-    img.src = url;
-  });
+export function compressCanvas(source) {
+  let size = Math.min(512, source.width);
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const canvas = document.createElement('canvas');
+    canvas.width = size; canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, size, size);
+    ctx.drawImage(source, 0, 0, size, size);
+    for (const q of [0.86, 0.76, 0.66, 0.56]) {
+      const out = canvas.toDataURL('image/jpeg', q);
+      if (dataUrlBytes(out) <= ADMIN_AVATAR_MAX_BYTES) return out;
+    }
+    size = Math.round(size * 0.75);
+  }
+  throw new Error('That image is too large to use as a profile photo.');
 }
 
 export function saveAdminAvatar(uid, dataUrl) {

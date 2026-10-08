@@ -1,0 +1,573 @@
+{
+  "date": "2026-10-08T00:22:46.308Z",
+  "baseline": "working tree",
+  "results": [
+    {
+      "id": "API-001",
+      "area": 1,
+      "description": "staff cannot invite admins",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "403 or 401",
+      "actual": "403 or 401",
+      "status": "PASS"
+    },
+    {
+      "id": "API-002",
+      "area": 1,
+      "description": "staff cannot revoke admins",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "403 or 401",
+      "actual": "403 or 401",
+      "status": "PASS"
+    },
+    {
+      "id": "API-003",
+      "area": 1,
+      "description": "staff cannot delete admins",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "403 or 401",
+      "actual": "403 or 401",
+      "status": "PASS"
+    },
+    {
+      "id": "API-004",
+      "area": 1,
+      "description": "a cannot invite admins",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "403 or 401",
+      "actual": "403 or 401",
+      "status": "PASS"
+    },
+    {
+      "id": "API-005",
+      "area": 1,
+      "description": "a cannot revoke admins",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "403 or 401",
+      "actual": "403 or 401",
+      "status": "PASS"
+    },
+    {
+      "id": "API-006",
+      "area": 1,
+      "description": "a cannot delete admins",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "403 or 401",
+      "actual": "403 or 401",
+      "status": "PASS"
+    },
+    {
+      "id": "API-007",
+      "area": 1,
+      "description": "b cannot invite admins",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "403 or 401",
+      "actual": "403 or 401",
+      "status": "PASS"
+    },
+    {
+      "id": "API-008",
+      "area": 1,
+      "description": "b cannot revoke admins",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "403 or 401",
+      "actual": "403 or 401",
+      "status": "PASS"
+    },
+    {
+      "id": "API-009",
+      "area": 1,
+      "description": "b cannot delete admins",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "403 or 401",
+      "actual": "403 or 401",
+      "status": "PASS"
+    },
+    {
+      "id": "API-010",
+      "area": 1,
+      "description": "archived cannot invite admins",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "403 or 401",
+      "actual": "403 or 401",
+      "status": "PASS"
+    },
+    {
+      "id": "API-011",
+      "area": 1,
+      "description": "archived cannot revoke admins",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "403 or 401",
+      "actual": "403 or 401",
+      "status": "PASS"
+    },
+    {
+      "id": "API-012",
+      "area": 1,
+      "description": "archived cannot delete admins",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "403 or 401",
+      "actual": "403 or 401",
+      "status": "PASS"
+    },
+    {
+      "id": "API-013",
+      "area": 1,
+      "description": "revoked cannot invite admins",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "403 or 401",
+      "actual": "403 or 401",
+      "status": "PASS"
+    },
+    {
+      "id": "API-014",
+      "area": 1,
+      "description": "revoked cannot revoke admins",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "403 or 401",
+      "actual": "403 or 401",
+      "status": "PASS"
+    },
+    {
+      "id": "API-015",
+      "area": 1,
+      "description": "revoked cannot delete admins",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "403 or 401",
+      "actual": "403 or 401",
+      "status": "PASS"
+    },
+    {
+      "id": "API-016",
+      "area": 9,
+      "description": "Unauthorized report export/email",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "401 or 403",
+      "actual": "401 or 403",
+      "status": "PASS"
+    },
+    {
+      "id": "API-017",
+      "area": 9,
+      "description": "Unauthorized report export/email",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "401 or 403",
+      "actual": "401 or 403",
+      "status": "PASS"
+    },
+    {
+      "id": "API-018",
+      "area": 9,
+      "description": "Unauthorized report export/email",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "401 or 403",
+      "actual": "401 or 403",
+      "status": "PASS"
+    },
+    {
+      "id": "API-019",
+      "area": 9,
+      "description": "Unauthorized report export/email",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "401 or 403",
+      "actual": "401 or 403",
+      "status": "PASS"
+    },
+    {
+      "id": "API-020",
+      "area": 1,
+      "description": "Active staff allowed report email",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "200",
+      "actual": "200",
+      "status": "PASS"
+    },
+    {
+      "id": "API-021",
+      "area": 1,
+      "description": "Patient cannot request admin OTP",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "403",
+      "actual": "403",
+      "status": "PASS"
+    },
+    {
+      "id": "API-022",
+      "area": 5,
+      "description": "Admin cannot enter patient trust/login flow",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "403",
+      "actual": "403",
+      "status": "PASS"
+    },
+    {
+      "id": "API-023",
+      "area": 5,
+      "description": "Archived patient cannot complete login",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "403",
+      "actual": "403",
+      "status": "PASS"
+    },
+    {
+      "id": "API-024",
+      "area": 5,
+      "description": "Patient A cannot claim B through push-token registration",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "403; B owner unchanged",
+      "actual": "403; B owner unchanged",
+      "status": "PASS"
+    },
+    {
+      "id": "API-025",
+      "area": 5,
+      "description": "Patient A cannot edit B profile",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "403",
+      "actual": "403",
+      "status": "PASS"
+    },
+    {
+      "id": "API-026",
+      "area": 5,
+      "description": "Patient A cannot remove B avatar",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "403",
+      "actual": "403",
+      "status": "PASS"
+    },
+    {
+      "id": "API-027",
+      "area": 6,
+      "description": "Patient cannot update clinical profile fields",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "No write to clinical field",
+      "actual": "No write to clinical field",
+      "status": "PASS"
+    },
+    {
+      "id": "API-028",
+      "area": 8,
+      "description": "Cron dose-sweep rejects missing/wrong CRON_SECRET",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "401",
+      "actual": "401",
+      "status": "PASS"
+    },
+    {
+      "id": "API-029",
+      "area": 8,
+      "description": "Cron dose-sweep rejects missing/wrong CRON_SECRET",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "401",
+      "actual": "401",
+      "status": "PASS"
+    },
+    {
+      "id": "API-030",
+      "area": 8,
+      "description": "Cron backup-cron rejects missing/wrong CRON_SECRET",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "401",
+      "actual": "401",
+      "status": "PASS"
+    },
+    {
+      "id": "API-031",
+      "area": 8,
+      "description": "Cron backup-cron rejects missing/wrong CRON_SECRET",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "401",
+      "actual": "401",
+      "status": "PASS"
+    },
+    {
+      "id": "API-032",
+      "area": 8,
+      "description": "Cron patient-archive-sweep rejects missing/wrong CRON_SECRET",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "401",
+      "actual": "401",
+      "status": "PASS"
+    },
+    {
+      "id": "API-033",
+      "area": 8,
+      "description": "Cron patient-archive-sweep rejects missing/wrong CRON_SECRET",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "401",
+      "actual": "401",
+      "status": "PASS"
+    },
+    {
+      "id": "API-034",
+      "area": 8,
+      "description": "Unset CRON_SECRET fails closed",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "401",
+      "actual": "401",
+      "status": "PASS"
+    },
+    {
+      "id": "API-035",
+      "area": 2,
+      "description": "Unauthenticated unlock cannot clear lockout",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "403; lock remains",
+      "actual": "403; lock remains",
+      "status": "PASS"
+    },
+    {
+      "id": "API-036",
+      "area": 2,
+      "description": "Five admin wrong passwords cause server lockout",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "Five 401 responses; lock set for 15 minutes",
+      "actual": "Five 401 responses; lock set for 15 minutes",
+      "status": "PASS"
+    },
+    {
+      "id": "API-037",
+      "area": 2,
+      "description": "Correct admin password rejected during server lock",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "401 or 429",
+      "actual": "401 or 429",
+      "status": "PASS"
+    },
+    {
+      "id": "API-038",
+      "area": 2,
+      "description": "Expired lock permits correct admin password",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "200 custom token",
+      "actual": "200 custom token",
+      "status": "PASS"
+    },
+    {
+      "id": "API-039",
+      "area": 2,
+      "description": "Unknown/known bad admin credentials have same message/status",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "Identical status and error",
+      "actual": "Identical status and error",
+      "status": "PASS"
+    },
+    {
+      "id": "API-040",
+      "area": 2,
+      "description": "Patient password failures rate limited server-side",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "Five 401 then 429, including correct password",
+      "actual": "Five 401 then 429, including correct password",
+      "status": "PASS"
+    },
+    {
+      "id": "API-041",
+      "area": 2,
+      "description": "Recovery does not enumerate admin emails",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "Identical generic response",
+      "actual": "Identical generic response",
+      "status": "PASS"
+    },
+    {
+      "id": "API-042",
+      "area": 2,
+      "description": "Signup does not enumerate MRNs",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "Identical generic response",
+      "actual": "Identical generic response",
+      "status": "PASS"
+    },
+    {
+      "id": "API-043",
+      "area": 3,
+      "description": "admin OTP stored hashed; no API/log plaintext",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "SHA-256 codeHash, no code or otp field/API code",
+      "actual": "SHA-256 codeHash, no code or otp field/API code",
+      "status": "PASS"
+    },
+    {
+      "id": "API-044",
+      "area": 3,
+      "description": "admin OTP resend cooldown",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "429 within 30 seconds",
+      "actual": "429 within 30 seconds",
+      "status": "PASS"
+    },
+    {
+      "id": "API-045",
+      "area": 3,
+      "description": "admin expired OTP rejected",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "400",
+      "actual": "400",
+      "status": "PASS"
+    },
+    {
+      "id": "API-046",
+      "area": 3,
+      "description": "admin OTP max five wrong attempts",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "Sixth attempt 429",
+      "actual": "Sixth attempt 429",
+      "status": "PASS"
+    },
+    {
+      "id": "API-047",
+      "area": 3,
+      "description": "admin OTP single use under concurrent replay",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "Exactly one 200",
+      "actual": "Exactly one 200",
+      "status": "PASS"
+    },
+    {
+      "id": "API-048",
+      "area": 3,
+      "description": "patient OTP stored hashed; no API/log plaintext",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "SHA-256 codeHash, no code or otp field/API code",
+      "actual": "SHA-256 codeHash, no code or otp field/API code",
+      "status": "PASS"
+    },
+    {
+      "id": "API-049",
+      "area": 3,
+      "description": "patient OTP resend cooldown",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "429 within 30 seconds",
+      "actual": "429 within 30 seconds",
+      "status": "PASS"
+    },
+    {
+      "id": "API-050",
+      "area": 3,
+      "description": "patient expired OTP rejected",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "400",
+      "actual": "400",
+      "status": "PASS"
+    },
+    {
+      "id": "API-051",
+      "area": 3,
+      "description": "patient OTP max five wrong attempts",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "Sixth attempt 429",
+      "actual": "Sixth attempt 429",
+      "status": "PASS"
+    },
+    {
+      "id": "API-052",
+      "area": 3,
+      "description": "patient OTP single use under concurrent replay",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "Exactly one 200",
+      "actual": "Exactly one 200",
+      "status": "PASS"
+    },
+    {
+      "id": "API-053",
+      "area": 3,
+      "description": "Signup completion rejects shared verified flag without caller proof",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "403; no account created",
+      "actual": "403; no account created",
+      "status": "PASS"
+    },
+    {
+      "id": "API-054",
+      "area": 3,
+      "description": "Patient trust token hash, expiry, revocation, cross-account binding",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "Only owning account/device accepts unexpired token",
+      "actual": "Only owning account/device accepts unexpired token",
+      "status": "PASS"
+    },
+    {
+      "id": "API-055",
+      "area": 4,
+      "description": "Password-only SDK token cannot use protected admin API",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "401 without second factor/gateway",
+      "actual": "401 without second factor/gateway",
+      "status": "PASS"
+    },
+    {
+      "id": "API-056",
+      "area": 4,
+      "description": "Admin idle session expiration enforced by API",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "401 after expiry",
+      "actual": "401 after expiry",
+      "status": "PASS"
+    },
+    {
+      "id": "API-057",
+      "area": 4,
+      "description": "Sign-out invalidates server session and clears cookie",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "200; cookie Max-Age=0; next API rejected",
+      "actual": "200; cookie Max-Age=0; next API rejected",
+      "status": "PASS"
+    },
+    {
+      "id": "API-058",
+      "area": 4,
+      "description": "Sign out all revokes refresh tokens and all server sessions",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "200; session docs removed; old token rejected",
+      "actual": "200; session docs removed; old token rejected",
+      "status": "PASS"
+    },
+    {
+      "id": "API-059",
+      "area": 1,
+      "description": "Revoked/disabled admin cannot sign in",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "Auth emulator rejects password",
+      "actual": "Auth emulator rejects password",
+      "status": "PASS"
+    },
+    {
+      "id": "API-060",
+      "area": 9,
+      "description": "Missing manager token rejected before mutation",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "401",
+      "actual": "401",
+      "status": "PASS"
+    },
+    {
+      "id": "API-061",
+      "area": 3,
+      "description": "Remote patient-device revocation removes trust and server sessions",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "Device marked revoked; trust rejected; server session deleted",
+      "actual": "Device marked revoked; trust rejected; server session deleted",
+      "status": "PASS"
+    },
+    {
+      "id": "API-062",
+      "area": 3,
+      "description": "Legitimate signup proof creates an account once and still requires login OTP",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "Account linked; proof replay rejected; no protected session yet",
+      "actual": "Account linked; proof replay rejected; no protected session yet",
+      "status": "PASS"
+    },
+    {
+      "id": "API-063",
+      "area": 3,
+      "description": "Admin trusted-device cookie stores only a 30-day hash",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "Secure HttpOnly cookie; SHA-256 hash; trusted shortcut accepts current account",
+      "actual": "Secure HttpOnly cookie; SHA-256 hash; trusted shortcut accepts current account",
+      "status": "PASS"
+    }
+  ]
+}

@@ -3,7 +3,7 @@ import { Download, X, Printer, Mail, Loader2 } from 'lucide-react';
 import Modal from '../../components/Modal';
 import IconButton from '../../components/IconButton';
 import Select from '../../components/Select';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { auth } from '../../lib/firebase';
 import { getTodayDateString } from '../../lib/formatters';
 import jsPDF from 'jspdf';
@@ -11,7 +11,7 @@ import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { CLINIC_LOGO_BASE64 } from '../../assets/clinicLogoBase64';
 import { clinicLogoBase64Cache, drawReportHeader, getClinicLogoBase64 } from '../../lib/pdfReport';
-import { pdfToBytes, sendReportInBackground, warmReportMailer } from '../../lib/reportMailer';
+import { pdfToBytes, reportGeneratedOn, sendReportInBackground, warmReportMailer } from '../../lib/reportMailer';
 import { deriveStockLabel, deriveStockStatus, fmtUnit } from '../../lib/inventoryStock';
 import PreviewViewer from '../../components/PreviewViewer';
 
@@ -106,6 +106,18 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
   const [docSheetHeight, setDocSheetHeight] = useState(null);
 
   const [showEmailInput, setShowEmailInput] = useState(false);
+  // The settings column scrolls; opening the email box brings it (field,
+  // Send button and status) into view and puts the cursor in the field.
+  const emailBoxRef = useRef(null);
+  const emailInputRef = useRef(null);
+  useEffect(() => {
+    if (!showEmailInput) return;
+    const id = requestAnimationFrame(() => {
+      emailBoxRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
+      emailInputRef.current?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [showEmailInput]);
   const [emailTo, setEmailTo] = useState('');
   const [sentTo, setSentTo] = useState('');
   const [queuedTo, setQueuedTo] = useState('');
@@ -194,7 +206,7 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
 
   // The send runs in the background (lib/reportMailer.js) with its own
   // progress toast, so the dialog is free again at once and can be closed.
-  function sendReportEmail(to, subject, html, attachment) {
+  function sendReportEmail(to, subject, report, attachment) {
     const trimmed = to.trim();
     if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
       onToast('Enter a valid recipient email address.', 'error');
@@ -207,7 +219,7 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
     setQueuedTo(trimmed);
     setSentTo('');
     setEmailTo('');
-    sendReportInBackground({ to: trimmed, subject, html, pdf: attachment.pdf, filename: attachment.filename })
+    sendReportInBackground({ to: trimmed, subject, report, pdf: attachment.pdf, filename: attachment.filename })
       .then(ok => {
         setQueuedTo(q => (q === trimmed ? '' : q));
         if (ok) setSentTo(trimmed);
@@ -787,12 +799,23 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
         return;
       }
       const statusSlug = statusFilter !== 'all' ? `-${statusFilter}` : '';
+      const lowOut = rows.reduce((c, item) => {
+        const st = deriveStockStatus(item);
+        if (st === 'low-stock') c.low++; else if (st === 'out-of-stock') c.out++;
+        return c;
+      }, { low: 0, out: 0 });
       await sendReportEmail(
         to,
-        `K&A Clinic — Inventory Stock Report (${periodLabel()})`,
-        `<p>Attached is the K&amp;A Animal Bite Center official inventory stock report for <strong>${periodLabel()}</strong>.</p>`
-          + `<p>Category: ${categoryFilterLabel()} &bull; Status: ${statusFilterLabel()} &bull; ${rows.length} item record${rows.length !== 1 ? 's' : ''}.</p>`
-          + `<p>&mdash; K&amp;A Animal Bite Center</p>`,
+        `K&A Inventory Report – ${periodLabel()}`,
+        {
+          reportName: 'Inventory Stock Report',
+          period: periodLabel(),
+          generatedOn: reportGeneratedOn(),
+          summary: [
+            `${rows.length} item${rows.length !== 1 ? 's' : ''} · ${lowOut.low} low stock · ${lowOut.out} out of stock`,
+            `Filters: ${categoryFilterLabel()} · ${statusFilterLabel()}`,
+          ],
+        },
         { pdf, filename: `inventory-report-${period}${statusSlug}-${getTodayDateString()}.pdf` }
       );
     } catch (err) {
@@ -904,46 +927,10 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
             {/* Export Format */}
             <div>
               <label style={labelStyle}>Export Format</label>
-              <div className="grid grid-cols-2 gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setExportFormat('pdf')}
-                  className={`p-2.5 rounded-xl border text-left flex items-center gap-2.5 transition-all cursor-pointer ${
-                    exportFormat === 'pdf' ? 'border-[#3B50DF] bg-[#EEF2FF] shadow-xs ring-1 ring-[#3B50DF]/30' : 'border-slate-200 bg-white hover:border-slate-300'
-                  }`}
-                >
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-[10px] shrink-0 ${exportFormat === 'pdf' ? 'bg-[#3B50DF] text-white' : 'bg-slate-100 text-slate-600'}`}>
-                    PDF
-                  </div>
-                  <div>
-                    <div className="text-[11px] font-bold text-slate-900">PDF</div>
-                    <div className="text-[10px] text-slate-600">Official printout</div>
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setExportFormat('xls')}
-                  className={`p-2.5 rounded-xl border text-left flex items-center gap-2.5 transition-all cursor-pointer ${
-                    exportFormat === 'xls' ? 'border-[#3B50DF] bg-[#EEF2FF] shadow-xs ring-1 ring-[#3B50DF]/30' : 'border-slate-200 bg-white hover:border-slate-300'
-                  }`}
-                >
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-[10px] shrink-0 ${exportFormat === 'xls' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
-                    XLS
-                  </div>
-                  <div>
-                    <div className="text-[11px] font-bold text-slate-900">Excel</div>
-                    <div className="text-[10px] text-slate-600">Raw data</div>
-                  </div>
-                </button>
-              </div>
-            </div>
-
-            {/* Matching result banner */}
-            <div className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200 text-xs">
-              <span className="font-medium text-slate-600">Matching records:</span>
-              <span className="font-extrabold text-[#3B50DF] bg-[#EEF2FF] px-2.5 py-1 rounded-full border border-[#E0E7FF]">
-                {preview.length} item{preview.length !== 1 ? 's' : ''}
-              </span>
+              <Select value={exportFormat} onChange={e => setExportFormat(e.target.value)} style={selectStyle}>
+                <option value="pdf">PDF – Official printout</option>
+                <option value="xls">Excel – Raw data</option>
+              </Select>
             </div>
 
             {/* Actions */}
@@ -1000,7 +987,7 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
               </button>
 
               {showEmailInput && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px', background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 8, marginTop: 2 }}>
+                <div ref={emailBoxRef} style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px', background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 8, marginTop: 2, scrollMarginBottom: 4 }}>
                   {queuedTo && (
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', background: '#EEF2FF', border: '1px solid #C7D2FE', borderRadius: 8 }}>
                       <Loader2 size={13} style={{ color: '#3B50DF', marginTop: 1, flexShrink: 0, animation: 'spin 1s linear infinite' }} />
@@ -1018,7 +1005,9 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
                     </div>
                   )}
                   <input
+                    ref={emailInputRef}
                     type="email"
+                    aria-label="Recipient email"
                     placeholder="Enter recipient email…"
                     value={emailTo}
                     onChange={e => { setEmailTo(e.target.value); setSentTo(''); }}

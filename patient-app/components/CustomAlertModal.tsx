@@ -1,17 +1,22 @@
 // patient-app/components/CustomAlertModal.tsx
+// The app's one confirmation / message popup (used instead of the native
+// Alert everywhere): rounded card, an icon in a tinted circle, title, body,
+// and Cancel (outline, left) · primary action (right). A dimmed backdrop;
+// tapping outside or Android back closes it.
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import {
   Modal,
+  Platform,
+  Pressable,
   StyleSheet,
   Text,
-  TouchableOpacity,
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import { moderateScale, scale, verticalScale } from '../utils/scale';
 
-export type AlertType = 'info' | 'success' | 'warning' | 'error' | 'guest' | 'signout';
+export type AlertType = 'info' | 'success' | 'warning' | 'error' | 'guest' | 'signout' | 'chat';
 
 export interface CustomAlertConfig {
   visible: boolean;
@@ -25,6 +30,8 @@ export interface CustomAlertConfig {
   isDestructive?: boolean;
   /** Show the secondary (left) action in red, for a destructive choice. */
   secondaryDestructive?: boolean;
+  /** Overrides the type's icon. */
+  icon?: React.ComponentProps<typeof Ionicons>['name'];
 }
 
 interface Props {
@@ -71,6 +78,12 @@ const TYPE_CONFIG = {
     iconBg: '#EFF6FF',
     primaryBtnBg: '#1E3A8A',
   },
+  chat: {
+    icon: 'headset-outline' as const,
+    iconColor: '#1E3A8A',
+    iconBg: '#EFF6FF',
+    primaryBtnBg: '#1E3A8A',
+  },
 };
 
 export default function CustomAlertModal({ config, onClose }: Props) {
@@ -85,6 +98,7 @@ export default function CustomAlertModal({ config, onClose }: Props) {
     onSecondaryPress,
     isDestructive = false,
     secondaryDestructive = false,
+    icon,
   } = config;
 
   if (!visible) return null;
@@ -115,39 +129,42 @@ export default function CustomAlertModal({ config, onClose }: Props) {
             <View style={s.card}>
               {/* Icon Badge */}
               <View style={[s.iconBox, { backgroundColor: currentType.iconBg }]}>
-                <Ionicons name={currentType.icon} size={36} color={currentType.iconColor} />
+                <Ionicons name={icon || currentType.icon} size={34} color={currentType.iconColor} />
               </View>
 
               {/* Title & Message */}
               <Text style={s.title}>{title}</Text>
               <Text style={s.message}>{message}</Text>
 
-              {/* Action Buttons */}
+              {/* Action Buttons: Cancel (outline, left) · primary (right) */}
               <View style={s.btnRow}>
                 {secondaryButtonText ? (
-                  <TouchableOpacity
-                    style={s.secondaryBtn}
+                  <Pressable
                     onPress={handleSecondary}
-                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    android_ripple={{ color: 'rgba(15,23,42,0.08)' }}
+                    style={({ pressed }) => [s.btn, s.secondaryBtn, pressed && Platform.OS === 'ios' && s.pressed]}
                   >
                     <Text style={[s.secondaryBtnText, secondaryDestructive && { color: '#DC2626' }]}>{secondaryButtonText}</Text>
-                  </TouchableOpacity>
+                  </Pressable>
                 ) : null}
 
-                <TouchableOpacity
-                  style={[
-                    s.primaryBtn,
+                <Pressable
+                  onPress={handlePrimary}
+                  accessibilityRole="button"
+                  android_ripple={{ color: 'rgba(255,255,255,0.22)' }}
+                  style={({ pressed }) => [
+                    s.btn,
                     {
                       backgroundColor: isDestructive ? '#EF4444' : currentType.primaryBtnBg,
                       flex: secondaryButtonText ? 1 : undefined,
                       width: secondaryButtonText ? undefined : '100%',
                     },
+                    pressed && Platform.OS === 'ios' && s.pressed,
                   ]}
-                  onPress={handlePrimary}
-                  activeOpacity={0.8}
                 >
                   <Text style={s.primaryBtnText}>{primaryButtonText}</Text>
-                </TouchableOpacity>
+                </Pressable>
               </View>
             </View>
           </TouchableWithoutFeedback>
@@ -188,7 +205,7 @@ const s = StyleSheet.create({
     borderRadius: scale(36),
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: verticalScale(18),
+    marginBottom: verticalScale(16),
   },
   title: {
     fontSize: moderateScale(20),
@@ -213,30 +230,28 @@ const s = StyleSheet.create({
     gap: scale(12),
     width: '100%',
   },
-  secondaryBtn: {
-    flex: 1,
-    paddingVertical: verticalScale(15),
-    borderRadius: scale(18),
-    backgroundColor: '#F1F5F9',
+  // overflow hidden + the same radius keeps the Android ripple inside the
+  // button's rounded shape.
+  btn: {
+    minHeight: verticalScale(50),
+    borderRadius: scale(16),
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: scale(12),
+  },
+  secondaryBtn: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
   },
   secondaryBtnText: {
     fontSize: moderateScale(14.5),
     fontWeight: '700',
-    color: '#475569',
+    color: '#334155',
   },
-  primaryBtn: {
-    paddingVertical: verticalScale(15),
-    borderRadius: scale(18),
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#0F172A',
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
-  },
+  pressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
   primaryBtnText: {
     fontSize: moderateScale(14.5),
     fontWeight: '700',

@@ -880,8 +880,16 @@ async function reportCategoryICommand() {
   console.log('Report only: nothing was changed.');
 }
 
+// fix-incidents wrote a real "exact address" onto every incident. The study's
+// ethics rules forbid that (docs/STUDY_MODE.md), so it is refused; use
+// scripts/seed-simulated-incidents.mjs instead.
+const refuseFixIncidents = async () => {
+  console.error('fix-incidents is disabled: the Incident Map holds simulated data only (docs/STUDY_MODE.md). Use scripts/seed-simulated-incidents.mjs.');
+  process.exit(1);
+};
+
 const COMMANDS = {
-  'fix-incidents': fixIncidentsCommand,
+  'fix-incidents': refuseFixIncidents,
   'migrate-pep-4session': migratePep4SessionCommand,
   'normalize-dose-schedules': normalizeDoseSchedulesCommand,
   'restore-early-archives': restoreEarlyArchivesCommand,

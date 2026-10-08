@@ -3,16 +3,17 @@ import { formatTitleCase, formatDateLong, formatDateLong as fmtDate, formatDateS
 import Modal from '../../components/Modal';
 import IconButton from '../../components/IconButton';
 import Select from '../../components/Select';
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { auth } from "../../lib/firebase";
 import { buildDoses, getSchedule } from "../../lib/doseSchedules";
+import { erigStatus, erigStatusLabel } from "../../lib/erig";
 import { LIBON_SEAL_BASE64 } from "../../assets/libonSealBase64";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
 import autoTable from "jspdf-autotable";
 import { CLINIC_LOGO_BASE64 } from "../../assets/clinicLogoBase64";
 import { clinicLogoBase64Cache, drawReportHeader, getClinicLogoBase64 } from "../../lib/pdfReport";
-import { pdfToBytes, sendReportInBackground, warmReportMailer } from "../../lib/reportMailer";
+import { pdfToBytes, reportGeneratedOn, sendReportInBackground, warmReportMailer } from "../../lib/reportMailer";
 import { Printer, Download, Mail, Loader2 } from "lucide-react";
 import { X, derivePatientStatus } from "./shared";
 import PreviewViewer from "../../components/PreviewViewer";
@@ -42,10 +43,6 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
 
   const fileIcon = <svg {...iconProps}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>;
   const [exportFormat, setExportFormat] = useState('pdf'); // 'xls' | 'pdf'
-  const FORMATS = [
-    { key: 'xls', label: 'Excel (XLS)' },
-    { key: 'pdf', label: 'PDF' },
-  ];
 
   const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'completed' | 'overdue' | 'ongoing'
   function statusFilterLabel() {
@@ -94,6 +91,18 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
 
   // ── Email delivery — shared by both bulk and single-patient modes ──────
   const [showEmailInput, setShowEmailInput] = useState(false);
+  // The settings column scrolls; opening the email box brings it (field,
+  // Send button and status) into view and puts the cursor in the field.
+  const emailBoxRef = useRef(null);
+  const emailInputRef = useRef(null);
+  useEffect(() => {
+    if (!showEmailInput) return;
+    const id = requestAnimationFrame(() => {
+      emailBoxRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
+      emailInputRef.current?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [showEmailInput]);
   const [emailTo, setEmailTo] = useState('');
   // The toast renders under the modal's portal, so a send needs its own
   // confirmation inside the card.
@@ -102,7 +111,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
 
   // The send runs in the background (lib/reportMailer.js) with its own
   // progress toast, so the dialog is free again at once and can be closed.
-  function sendReportEmail(to, subject, html, attachment) {
+  function sendReportEmail(to, subject, report, attachment) {
     const trimmed = to.trim();
     if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
       onToast('Enter a valid recipient email address.', 'error');
@@ -115,7 +124,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     setQueuedTo(trimmed);
     setSentTo('');
     setEmailTo('');
-    sendReportInBackground({ to: trimmed, subject, html, pdf: attachment.pdf, filename: attachment.filename })
+    sendReportInBackground({ to: trimmed, subject, report, pdf: attachment.pdf, filename: attachment.filename })
       .then(ok => {
         setQueuedTo(q => (q === trimmed ? '' : q));
         if (ok) setSentTo(trimmed);
@@ -179,6 +188,16 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     return liveSt === 'completed' ? 'completed' : isOverdue ? 'overdue' : 'ongoing';
   }
 
+  // Records store sex as "Male"/"Female" (older ones "M"/"F").
+  function sexCounts(rows) {
+    const c = { male: 0, female: 0, unspecified: 0 };
+    rows.forEach(p => {
+      const s = String(p.sex || '').trim().charAt(0).toUpperCase();
+      if (s === 'M') c.male++; else if (s === 'F') c.female++; else c.unspecified++;
+    });
+    return c;
+  }
+
   function buildReportSummary(rows) {
     const total = rows.length;
     const counts = { ongoing: 0, overdue: 0, completed: 0 };
@@ -193,14 +212,19 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     });
     const pct = n => (total ? `${Math.round((n / total) * 1000) / 10}%` : '0%');
     const active = counts.ongoing + counts.overdue;
+    const sex = sexCounts(rows);
     return {
       total,
+      sex,
       totals: [
         ['Total patients', total],
         ['Active (in treatment)', active],
         ['   of which overdue', counts.overdue],
         ['Completed', counts.completed],
         ['Completion rate', pct(counts.completed)],
+        ['Male', `${sex.male} (${pct(sex.male)})`],
+        ['Female', `${sex.female} (${pct(sex.female)})`],
+        ...(sex.unspecified ? [['Sex not recorded', `${sex.unspecified} (${pct(sex.unspecified)})`]] : []),
       ],
       services: Object.entries(bySvc)
         .sort((a, b) => b[1].total - a[1].total)
@@ -891,7 +915,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
           : (i === 0 ? `Day ${d.day || 0}` : String(d.day || 0))
       )).join(', ');
     }
-    const hasERIG = p?.service === 'PEP' && doses.some(d => (d.n || d.label || '').includes('ERIG'));
+    const hasERIG = p?.service === 'PEP' && (erigStatus(p).given || doses.some(d => (d.n || d.label || '').includes('ERIG')));
     const progress = doses.length ? ` · ${doneCount} of ${doses.length} dose${doses.length === 1 ? '' : 's'} given` : '';
     return `${hasERIG ? 'ERIG + ' : ''}${schedule.label}: ${timing}${progress}`;
   }
@@ -924,6 +948,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
       ? [
           ['Presenting Complaint', `Clinical evaluation and post-exposure prophylaxis following exposure to ${p.animal || 'animal'} on ${fmtDate(p.date) || registered}. Assessed as Category ${p.cat || '—'} bite exposure.`],
           ['Exposure Category', `Category ${p.cat || '—'}`],
+          ['ERIG', erigStatusLabel(p, d => formatDateShort(d) || d)],
           ...(showWoundDetail
             ? [['Wound Site / Depth', `${p.woundLocation || '—'} · ${p.woundDepth || '—'} · Bites: ${p.numberOfBites || '1'}`]]
             : [['Wound Assessment', PATIENT_HIDDEN_NOTE]]),
@@ -1374,12 +1399,19 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
         return;
       }
       const statusSlug = statusFilter !== 'all' ? `-${statusFilter}` : '';
+      const sex = sexCounts(rows);
       await sendReportEmail(
         to,
-        `K&A Clinic — Health Monitoring Report (${periodLabel()})`,
-        `<p>Attached is the K&amp;A Animal Bite Center health monitoring report for <strong>${periodLabel()}</strong>.</p>`
-          + `<p>Service: ${serviceFilterLabel()} &bull; Status: ${statusFilterLabel()} &bull; ${rows.length} patient record${rows.length !== 1 ? 's' : ''}.</p>`
-          + `<p>&mdash; K&amp;A Animal Bite Center</p>`,
+        `K&A Clinic Report – ${periodLabel()}`,
+        {
+          reportName: 'Clinic Report',
+          period: periodLabel(),
+          generatedOn: reportGeneratedOn(),
+          summary: [
+            `${rows.length} patient${rows.length !== 1 ? 's' : ''} (${sex.male} male, ${sex.female} female) · ${periodLabel()}`,
+            `Filters: ${serviceFilterLabel()} · ${statusFilterLabel()}`,
+          ],
+        },
         { pdf, filename: `health-monitoring-report-${period}${statusSlug}-${getTodayDateString()}.pdf` }
       );
     } catch (err) {
@@ -1397,10 +1429,20 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
         onToast('Could not generate the PDF attachment. Please try again.', 'error');
         return;
       }
+      // Greet the patient by name only when the report goes to their own address.
+      const toPatient = (p.email || '').trim().toLowerCase() === to.trim().toLowerCase();
       await sendReportEmail(
         to,
-        `K&A Clinic — Medical Report for ${formatTitleCase(p.name)}`,
-        `<p>Dear ${formatTitleCase(p.name)},</p><p>Please find your official patient medical report from K&amp;A Animal Bite Center attached as a PDF.</p><p>&mdash; K&amp;A Animal Bite Center</p>`,
+        `K&A Clinic Patient Record – ${formatTitleCase(p.name)}`,
+        {
+          recipientName: toPatient ? formatTitleCase(p.name) : '',
+          reportName: `patient medical record of ${formatTitleCase(p.name)}`,
+          generatedOn: reportGeneratedOn(),
+          summary: [
+            `Patient: ${formatTitleCase(p.name)} · ${p.id || p.mrn || '—'}`,
+            `Service: ${serviceLabel(p.service || 'PEP')}`,
+          ],
+        },
         { pdf, filename: `medical-report-${p.id || p.mrn || p.firestoreId || 'patient'}.pdf` }
       );
     } catch (err) {
@@ -1536,46 +1578,10 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
                 {/* Export Format */}
                 <div>
                   <label style={labelStyle}>Export Format</label>
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <button
-                      type="button"
-                      onClick={() => setExportFormat('pdf')}
-                      className={`p-2.5 rounded-xl border text-left flex items-center gap-2.5 transition-all cursor-pointer ${
-                        exportFormat === 'pdf' ? 'border-[#3B50DF] bg-[#EEF2FF] shadow-xs ring-1 ring-[#3B50DF]/30' : 'border-slate-200 bg-white hover:border-slate-300'
-                      }`}
-                    >
-                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-[10px] shrink-0 ${exportFormat === 'pdf' ? 'bg-[#3B50DF] text-white' : 'bg-slate-100 text-slate-600'}`}>
-                        PDF
-                      </div>
-                      <div>
-                        <div className="text-[11px] font-bold text-slate-900">PDF</div>
-                        <div className="text-[10px] text-slate-600">Official printout</div>
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setExportFormat('xls')}
-                      className={`p-2.5 rounded-xl border text-left flex items-center gap-2.5 transition-all cursor-pointer ${
-                        exportFormat === 'xls' ? 'border-[#3B50DF] bg-[#EEF2FF] shadow-xs ring-1 ring-[#3B50DF]/30' : 'border-slate-200 bg-white hover:border-slate-300'
-                      }`}
-                    >
-                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-[10px] shrink-0 ${exportFormat === 'xls' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
-                        XLS
-                      </div>
-                      <div>
-                        <div className="text-[11px] font-bold text-slate-900">Excel</div>
-                        <div className="text-[10px] text-slate-600">Raw data</div>
-                      </div>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Matching result banner */}
-                <div className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200 text-xs">
-                  <span className="font-medium text-slate-600">Matching records:</span>
-                  <span className="font-extrabold text-[#3B50DF] bg-[#EEF2FF] px-2.5 py-1 rounded-full border border-[#E0E7FF]">
-                    {preview.length} patient{preview.length !== 1 ? 's' : ''}
-                  </span>
+                  <Select value={exportFormat} onChange={e => setExportFormat(e.target.value)} style={selectStyle}>
+                    <option value="pdf">PDF – Official printout</option>
+                    <option value="xls">Excel – Raw data</option>
+                  </Select>
                 </div>
               </>
             ) : (
@@ -1735,7 +1741,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
               </button>
 
               {showEmailInput && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px', background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 8, marginTop: 2 }}>
+                <div ref={emailBoxRef} style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px', background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 8, marginTop: 2, scrollMarginBottom: 4 }}>
                   {queuedTo && (
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', background: '#EEF2FF', border: '1px solid #C7D2FE', borderRadius: 8 }}>
                       <Loader2 size={13} style={{ color: '#3B50DF', marginTop: 1, flexShrink: 0, animation: 'spin 1s linear infinite' }} />
@@ -1753,7 +1759,9 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
                     </div>
                   )}
                   <input
+                    ref={emailInputRef}
                     type="email"
+                    aria-label="Recipient email"
                     placeholder="Enter recipient email…"
                     value={emailTo}
                     onChange={e => { setEmailTo(e.target.value); setSentTo(''); }}

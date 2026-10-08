@@ -111,7 +111,8 @@ export function watchOwnSession(uid: string, deviceId: string, onRevoked: () => 
 
 /** Signs a different device out. Deleting the doc is what that device sees. */
 export async function revokeDeviceSession(uid: string, deviceId: string): Promise<void> {
-  await deleteDoc(doc(db, 'patientSessions', sessionDocId(uid, deviceId)));
+  const { revokePatientDeviceSession } = await import('./backend');
+  await revokePatientDeviceSession(deviceId);
 }
 
 /** Removes this device's own record — called on an intentional sign-out. */
@@ -129,5 +130,7 @@ export async function revokeAllOtherSessions(uid: string, keepDeviceId: string):
   const snap = await getDocs(query(collection(db, 'patientSessions'), where('uid', '==', uid)));
   const others = snap.docs.filter(d => (d.data() as any).deviceId !== keepDeviceId);
   await Promise.all(others.map(d => deleteDoc(d.ref)));
+  const { logoutAllPatientDevices } = await import('./backend');
+  await logoutAllPatientDevices();
   return others.length;
 }

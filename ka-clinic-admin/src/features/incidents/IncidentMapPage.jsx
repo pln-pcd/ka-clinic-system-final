@@ -1,9 +1,16 @@
 // ka-clinic-admin/src/features/incidents/IncidentMapPage.jsx
-// Read-only surveillance map. Pins are created only from a patient record
-// (Patients → Pin Incident Map), never by clicking the map.
-import { CheckCircle2, ChevronDown, Layers, MapPin, ShieldAlert } from 'lucide-react';
+// Incident Map, demo only (thesis ethics rules, docs/STUDY_MODE.md).
+//
+// Shows ONLY simulated, non-identifiable test incidents (isSimulated: true,
+// see lib/simulatedIncidents.js): no addresses, barangays, zones, patients
+// or coordinates appear anywhere on this page, there is no barangay filter or
+// per-barangay count, a banner says the data is simulated, and the map area
+// carries a "SIMULATED DATA" watermark so any screenshot is marked. Only
+// signed-in admins reach it (dashboard route + firestore.rules).
+import { AlertTriangle, MapPin, ShieldAlert } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { LIBON_BARANGAYS, LIBON_BARANGAY_COORDS } from '../../lib/libonGeo';
+import { SIM_BOUNDS, simulatedIncidentLabel, simulatedMonthLabel } from '../../lib/simulatedIncidents';
+import { MAP_BANNER } from '../../lib/studyMode';
 
 import { SkeletonRows } from '../../components/Skeleton';
 // Severity colors mirror the Category II/III convention used across the
@@ -14,21 +21,17 @@ const UNKNOWN_COLOR = '#64748B';
 const categoryColor = (cat) => CATEGORY_COLOR[cat] || UNKNOWN_COLOR;
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-// Popup shown above a pressed pin: address, exposure type + category,
-// exposure date and the anonymized note (no patient details on the map).
-const popupHtml = (inc, loc, color) => `
+// Popup above a pressed pin: a generic label only (no place, no coordinates).
+const popupHtml = (inc, color) => `
   <div class="kna-pop">
-    <div class="kna-pop-eyebrow">Incident details</div>
-    <div class="kna-pop-loc">${esc(loc)}</div>
+    <div class="kna-pop-eyebrow">Simulated incident</div>
+    <div class="kna-pop-loc">Simulated incident #${esc(inc.simNo ?? '?')}</div>
     <div class="kna-pop-grid">
-      <div class="kna-pop-cell"><span>Exposure</span><b>${esc(inc.type || 'Animal bite')}</b></div>
+      <div class="kna-pop-cell"><span>Type</span><b>${esc(inc.type || 'Animal bite')}</b></div>
       <div class="kna-pop-cell"><span>Category</span><b style="color:${color}"><i style="background:${color}"></i>${esc(inc.category || '—')}</b></div>
-      <div class="kna-pop-cell kna-pop-wide"><span>Exposure date</span><b>${esc(inc.date || inc.exposureDate || '—')}</b></div>
+      <div class="kna-pop-cell kna-pop-wide"><span>Month</span><b>${esc(simulatedMonthLabel(inc.month) || '—')}</b></div>
     </div>
-    <div class="kna-pop-anon">
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-      Anonymized: no patient details on the map
-    </div>
+    <div class="kna-pop-anon">Simulated test data, not a real case</div>
   </div>`;
 
 // Crisp SVG teardrop, 28×36, tip at the bottom centre (the marker anchor),
@@ -72,14 +75,9 @@ const MAP_CSS = `
   .kna-pop-cell b { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #1E293B; }
   .kna-pop-cell b i { width: 8px; height: 8px; border-radius: 999px; display: inline-block; }
   .kna-pop-wide { grid-column: 1 / -1; }
-  .kna-pop-anon { margin-top: 10px; display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 600; color: #047857; background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 6px; padding: 2px 8px; }
+  .kna-pop-anon { margin-top: 10px; display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 700; color: #92400E; background: #FEF3C7; border: 1px solid #FDE68A; border-radius: 6px; padding: 2px 8px; }
   .kna-map .kna-pin-tip { font: 600 11px/1.3 'Plus Jakarta Sans', system-ui, sans-serif; color: #0F172A; border-radius: 8px; border: 1px solid #E2E8F0; box-shadow: 0 4px 12px rgba(15,23,42,.18); padding: 4px 8px; }
 `;
-
-// Barangay filter options: 'all' plus each named Libon barangay. The
-// "Zone N" entries in LIBON_BARANGAYS are poblacion zones, not barangays,
-// so the map filter leaves them out.
-const MAP_BARANGAYS = LIBON_BARANGAYS.filter(b => !/^Zone \d+$/.test(b));
 
 // `incidents` and `loading` come from the dashboard's shared listener
 // (useIncidents), which the global search reads too.
@@ -89,20 +87,11 @@ export default function IncidentMapPage({ incidents, loading }) {
   const layerGroupRef = useRef([]);
   const markersRef = useRef({});
   const clusterGroupRef = useRef(null);
-  const layerMenuRef = useRef(null);
 
   const [mapLoaded, setMapLoaded] = useState(false);
-  const [barangayFilter, setBarangayFilter] = useState('all');
-  const [layerMenuOpen, setLayerMenuOpen] = useState(false);
   // The incident whose popup is open (list row highlighted to match).
   const [selectedId, setSelectedId] = useState(null);
   const hoverPin = (id, on) => markersRef.current[id]?.marker?.getElement()?.classList.toggle('is-hover', on);
-
-  useEffect(() => {
-    const handler = e => { if (layerMenuRef.current && !layerMenuRef.current.contains(e.target)) setLayerMenuOpen(false); };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
 
   // ── Load Leaflet CSS/JS + the marker-cluster plugin (same CDN-script
   // pattern as Leaflet core) — mapLoaded only flips once clustering is
@@ -158,19 +147,16 @@ export default function IncidentMapPage({ incidents, loading }) {
     const L = window.L;
     if (!L) return;
 
-    // The whole municipality: every Libon barangay's coordinates (the old
-    // box only covered the town centre, so pins in outer barangays such as
-    // Tipa-tipa could not be reached).
-    const coords = Object.values(LIBON_BARANGAY_COORDS);
-    const bounds = L.latLngBounds(coords.map(c => L.latLng(c.lat, c.lng)));
+    // The box the simulated pins are spread over.
+    const bounds = L.latLngBounds([SIM_BOUNDS.south, SIM_BOUNDS.west], [SIM_BOUNDS.north, SIM_BOUNDS.east]);
 
     // Still restricted to Libon, but the bounds are padded (30%) so a popup
     // on an edge pin has room to pan fully into view. Whole-number zoom
     // levels only: fractional zoom is what caused the tile seam lines.
     const map = L.map(mapRef.current, {
-      center: [13.2999, 123.4372],
-      zoom: 15,
-      minZoom: 14,
+      center: bounds.getCenter(),
+      zoom: 14,
+      minZoom: 13,
       maxZoom: 18,
       zoomSnap: 1,
       maxBounds: bounds.pad(0.3),
@@ -179,17 +165,11 @@ export default function IncidentMapPage({ incidents, loading }) {
       zoomControl: true,
     });
 
-    // Satellite imagery + a labels/roads reference overlay on top (the
-    // "hybrid" view) — pure satellite tiles alone have no place names,
-    // which would make the barangay-level map hard to actually read.
+    // Satellite imagery only: no place-name overlay, so the demo map does
+    // not label barangays or streets.
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
       attribution: 'Tiles &copy; Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
       maxZoom: 19,
-    }).addTo(map);
-
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
-      maxZoom: 19,
-      pane: 'overlayPane',
     }).addTo(map);
 
     leafletMapRef.current = map;
@@ -199,38 +179,20 @@ export default function IncidentMapPage({ incidents, loading }) {
     }, 200);
   }, [mapLoaded]);
 
-  // ── Layer filter — applied to both the map and the feed list so the two
-  // always agree. Pins whose patient has completed treatment are skipped
-  // (mapHidden, set by the dashboard / nightly sweep): the incident record
-  // stays in Firestore, it just no longer shows on the map.
-  const filteredIncidents = useMemo(() => {
-    const list = incidents.filter(inc => {
-      if (inc.mapHidden === true) return false;
-      if (barangayFilter !== 'all') {
-        const incBgy = (inc.barangay || '').trim().toLowerCase();
-        return incBgy === barangayFilter.toLowerCase();
-      }
-      return true;
-    });
-    return list.sort((a, b) => {
-      const dateA = a.date || a.exposureDate || '';
-      const dateB = b.date || b.exposureDate || '';
-      return dateB.localeCompare(dateA) || (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
-    });
-  }, [incidents, barangayFilter]);
+  // Simulated incidents only (useIncidents already queries for them; this is
+  // a second guard), newest month first.
+  const filteredIncidents = useMemo(() => incidents
+    .filter(inc => inc.isSimulated === true && inc.mapHidden !== true)
+    .sort((a, b) => String(b.month || '').localeCompare(String(a.month || '')) || (b.simNo ?? 0) - (a.simNo ?? 0)),
+  [incidents]);
 
   // ── Memoize Leaflet Incident Marker Data ─────────────────────
   const memoizedIncidentLayers = useMemo(() => {
     return filteredIncidents.map(inc => {
-      const lat = inc.lat ?? inc.latitude;
-      const lng = inc.lng ?? inc.longitude;
+      const { lat, lng } = inc;
       if (!lat || !lng) return null;
-
       const color = categoryColor(inc.category);
-      const loc = inc.address || inc.location || (inc.barangay ? `${inc.zone ? inc.zone + ', ' : ''}Brgy. ${inc.barangay}, Libon, Albay` : 'Libon, Albay');
-
-
-      return { id: inc.id, lat, lng, color, category: inc.category, popup: popupHtml(inc, loc, color), tooltip: `${inc.barangay ? `Brgy. ${inc.barangay}` : loc} · ${inc.category || ''}` };
+      return { id: inc.id, lat, lng, color, category: inc.category, popup: popupHtml(inc, color), tooltip: `Simulated incident #${inc.simNo ?? '?'} · ${inc.category || ''}` };
     }).filter(Boolean);
   }, [filteredIncidents]);
 
@@ -279,7 +241,9 @@ export default function IncidentMapPage({ incidents, loading }) {
       // the edges of Libon). Hover shows a small tooltip, hidden while the
       // popup is open.
       marker.bindPopup(inc.popup, { autoPan: true, autoPanPaddingTopLeft: [24, 24], autoPanPaddingBottomRight: [24, 24], maxWidth: 280, minWidth: 240, className: 'kna-inc-popup' });
-      marker.bindTooltip(inc.tooltip, { direction: 'top', offset: [0, -34], opacity: 0.96, className: 'kna-pin-tip' });
+      const tooltip = document.createElement('span');
+      tooltip.textContent = inc.tooltip;
+      marker.bindTooltip(tooltip, { direction: 'top', offset: [0, -34], opacity: 0.96, className: 'kna-pin-tip' });
       marker.on('popupopen', () => { marker.closeTooltip(); setSelectedId(inc.id); });
       marker.on('tooltipopen', () => { if (marker.isPopupOpen()) marker.closeTooltip(); });
       marker.on('popupclose', () => setSelectedId(cur => (cur === inc.id ? null : cur)));
@@ -315,8 +279,7 @@ export default function IncidentMapPage({ incidents, loading }) {
   const panTo = (inc) => {
     setSelectedId(inc.id);
     if (!leafletMapRef.current) return;
-    const lat = inc.lat ?? inc.latitude;
-    const lng = inc.lng ?? inc.longitude;
+    const { lat, lng } = inc;
     if (!lat || !lng) return;
 
     const map = leafletMapRef.current;
@@ -334,57 +297,26 @@ export default function IncidentMapPage({ incidents, loading }) {
   return (
     <div className="flex flex-col gap-4 h-[calc(100vh-120px)] px-6 py-4">
 
-      {/* ── Map Toolbar: title + layer toggle ── */}
+      {/* ── Simulated-data banner ── */}
+      <div role="note" className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-amber-300 bg-amber-50 text-amber-900">
+        <AlertTriangle size={16} className="shrink-0 text-amber-600" aria-hidden="true" />
+        <p className="text-xs font-bold">{MAP_BANNER}</p>
+        <p className="text-[11px] font-medium text-amber-800 ml-auto hidden md:block">Authorized evaluators only · No real patient or location data</p>
+      </div>
+
+      {/* ── Map Toolbar: title + legend ── */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-xs font-semibold text-gray-500">
-          <ShieldAlert size={14} className="text-gray-400" /> Rabies Incident Surveillance Map — Libon, Albay
+          <ShieldAlert size={14} className="text-gray-400" /> Incident Map (Demo)
         </div>
-        <div className="flex items-center gap-3">
-          {/* Pin severity legend */}
-          <div className="flex items-center gap-3 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-[11px] font-semibold text-slate-600">
-            <span className="text-[10px] font-extrabold text-slate-800 uppercase tracking-wider">Pin</span>
-            {Object.entries(CATEGORY_COLOR).map(([cat, color]) => (
-              <span key={cat} className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} /> {cat}
-              </span>
-            ))}
-          </div>
-
-        <div ref={layerMenuRef} className="relative">
-          <button
-            onClick={() => setLayerMenuOpen(o => !o)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            <Layers size={13} className="text-gray-400" />
-            {barangayFilter === 'all' ? 'All Barangays' : `Brgy. ${barangayFilter}`}
-            <ChevronDown size={13} className="text-gray-400" />
-          </button>
-          {layerMenuOpen && (
-            <div className="absolute right-0 top-full mt-1.5 min-w-[200px] bg-white border border-gray-200 rounded-xl shadow-lg p-1.5 z-30 max-h-64 overflow-y-auto">
-              <button
-                onClick={() => { setBarangayFilter('all'); setLayerMenuOpen(false); }}
-                className={`flex items-center justify-between w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                  barangayFilter === 'all' ? 'bg-indigo-50 text-[#3B50DF]' : 'text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                All Barangays
-                {barangayFilter === 'all' && <CheckCircle2 size={13} />}
-              </button>
-              {MAP_BARANGAYS.map(bgy => (
-                <button
-                  key={bgy}
-                  onClick={() => { setBarangayFilter(bgy); setLayerMenuOpen(false); }}
-                  className={`flex items-center justify-between w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                    barangayFilter === bgy ? 'bg-indigo-50 text-[#3B50DF]' : 'text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  Brgy. {bgy}
-                  {barangayFilter === bgy && <CheckCircle2 size={13} />}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        {/* Pin severity legend */}
+        <div className="flex items-center gap-3 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-[11px] font-semibold text-slate-600">
+          <span className="text-[10px] font-extrabold text-slate-800 uppercase tracking-wider">Pin</span>
+          {Object.entries(CATEGORY_COLOR).map(([cat, color]) => (
+            <span key={cat} className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} /> {cat}
+            </span>
+          ))}
         </div>
       </div>
 
@@ -395,6 +327,16 @@ export default function IncidentMapPage({ incidents, loading }) {
         <div className="col-span-8 bg-white rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden flex flex-col relative">
           <style>{MAP_CSS}</style>
           <div ref={mapRef} className="kna-map w-full h-full z-10" />
+          {/* Watermark over the map area: every screenshot reads as simulated. */}
+          <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-[500] flex items-center justify-center overflow-hidden">
+            <span className="select-none text-[clamp(32px,7vw,88px)] font-black tracking-[0.12em] text-white/30 -rotate-[24deg] whitespace-nowrap"
+              style={{ textShadow: '0 2px 6px rgba(15,23,42,0.35)' }}>
+              SIMULATED DATA
+            </span>
+          </div>
+          <div aria-hidden="true" className="pointer-events-none absolute left-3 bottom-3 z-[500] px-2 py-1 rounded-md bg-amber-400/90 text-[10px] font-extrabold tracking-wider text-amber-950">
+            SIMULATED DATA · NOT REAL CASES
+          </div>
 
         </div>
 
@@ -403,7 +345,7 @@ export default function IncidentMapPage({ incidents, loading }) {
           <div className="px-4 py-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50/40">
             <div className="flex items-center gap-2">
               <ShieldAlert size={15} className="text-red-600" />
-              <h3 className="text-[13px] font-bold text-slate-900 tracking-tight">Incidents List</h3>
+              <h3 className="text-[13px] font-bold text-slate-900 tracking-tight">Simulated incidents</h3>
             </div>
             <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
               {filteredIncidents.length}
@@ -416,12 +358,11 @@ export default function IncidentMapPage({ incidents, loading }) {
             ) : filteredIncidents.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-40 gap-1.5 text-center p-4">
                 <MapPin size={24} className="text-slate-300" />
-                <p className="text-xs font-semibold text-slate-600">{incidents.length === 0 ? 'No incidents in Libon' : 'No matching incidents'}</p>
-                <p className="text-[11px] text-slate-400">{incidents.length === 0 ? 'Pin an incident from a patient record' : 'Try switching active filter'}</p>
+                <p className="text-xs font-semibold text-slate-600">No simulated incidents</p>
+                <p className="text-[11px] text-slate-400">Seed them with scripts/seed-simulated-incidents.mjs</p>
               </div>
             ) : filteredIncidents.map(inc => {
               const catColor = categoryColor(inc.category);
-              const loc = inc.address || inc.location || (inc.barangay ? `${inc.zone ? inc.zone + ', ' : ''}Brgy. ${inc.barangay}, Libon, Albay` : 'Libon, Albay');
               return (
                 <div
                   key={inc.id}
@@ -430,28 +371,19 @@ export default function IncidentMapPage({ incidents, loading }) {
                   onMouseEnter={() => hoverPin(inc.id, true)}
                   onMouseLeave={() => hoverPin(inc.id, false)}
                   className={`px-4 py-3 transition-colors group cursor-pointer relative ${selectedId === inc.id ? 'bg-indigo-50/70 shadow-[inset_3px_0_0_#3B50DF]' : 'hover:bg-slate-50/90'}`}
+                  title={simulatedIncidentLabel(inc)}
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      {/* iOS Notes Primary Title Line */}
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[13px] font-bold text-slate-900 group-hover:text-red-600 transition-colors truncate" title={loc}>
-                          {loc}
-                        </span>
-                        <span className="text-[10px] font-normal text-slate-400 flex-shrink-0">
-                          {inc.date || inc.exposureDate || 'Today'}
-                        </span>
-                      </div>
-
-                      {/* iOS Notes Subtitle Line */}
-                      <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 mt-1">
-                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: catColor }} />
-                        <span>{inc.type || 'Dog Bite'}</span>
-                        <span className="text-slate-300">•</span>
-                        <span>{inc.category || '—'}</span>
-                      </div>
-                    </div>
-
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[13px] font-bold text-slate-900 group-hover:text-red-600 transition-colors truncate">
+                      Simulated incident #{inc.simNo ?? '?'}
+                    </span>
+                    <span className="text-[10px] font-normal text-slate-400 flex-shrink-0">{simulatedMonthLabel(inc.month)}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 mt-1">
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: catColor }} />
+                    <span>{inc.type || 'Animal bite'}</span>
+                    <span className="text-slate-300">•</span>
+                    <span>{inc.category || '—'}</span>
                   </div>
                 </div>
               );

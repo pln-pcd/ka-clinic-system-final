@@ -48,7 +48,8 @@ import { authedPostJson } from '../../lib/adminSession';
 import Toast from '../../components/Toast';
 import Avatar from '../../components/Avatar';
 import ConfirmDialog from '../../components/ConfirmDialog';
-import { compressAvatar, removeAdminAvatar, saveAdminAvatar, useAdminAvatar } from '../../lib/adminAvatars';
+import { compressCanvas, removeAdminAvatar, saveAdminAvatar, useAdminAvatar } from '../../lib/adminAvatars';
+import ImageCropModal from '../../components/ImageCropModal';
 import PasswordChecklist, { PasswordMatch } from '../../components/PasswordChecklist';
 import { meetsPasswordPolicy, passwordPolicyError } from '../../lib/passwordPolicy';
 
@@ -201,7 +202,8 @@ export default function SettingsPage({ onLogout }) {
   /* ── Profile photo ── */
   const myUid = auth.currentUser?.uid;
   const savedAvatar = useAdminAvatar(myUid);
-  const [avatarPreview, setAvatarPreview] = useState('');
+  // A picked file waits in the crop step until it is saved or cancelled.
+  const [cropFile, setCropFile] = useState(null);
   const [avatarSaving, setAvatarSaving] = useState(false);
   const avatarInputRef = useRef(null);
   const [photoMenuOpen, setPhotoMenuOpen] = useState(false);
@@ -215,26 +217,24 @@ export default function SettingsPage({ onLogout }) {
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
   }, [photoMenuOpen]);
 
-  const onPickAvatar = async (e) => {
+  const onPickAvatar = (e) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
-    try {
-      setAvatarPreview(await compressAvatar(file));
-    } catch (err) {
-      showToast(err.message || 'Could not use that image.', 'error');
-    }
+    if (!/^image\//.test(file.type)) { showToast('Choose an image file (JPG, PNG or WebP).', 'error'); return; }
+    setCropFile(file);
   };
-  const saveAvatar = async () => {
-    if (!myUid || !avatarPreview) return;
+  // Crop → compress (under 600 KB) → save.
+  const saveCroppedAvatar = async (canvas) => {
+    if (!myUid) return;
     setAvatarSaving(true);
     try {
-      await saveAdminAvatar(myUid, avatarPreview);
-      setAvatarPreview('');
+      await saveAdminAvatar(myUid, compressCanvas(canvas));
+      setCropFile(null);
       showToast('Profile photo updated.');
     } catch (err) {
       console.error('Avatar save failed:', err);
-      showToast('Could not save your photo. Please try again.', 'error');
+      showToast(err.message?.includes('too large') ? err.message : 'Could not save your photo. Please try again.', 'error');
     } finally {
       setAvatarSaving(false);
     }
@@ -244,7 +244,6 @@ export default function SettingsPage({ onLogout }) {
     setAvatarSaving(true);
     try {
       await removeAdminAvatar(myUid);
-      setAvatarPreview('');
       showToast('Profile photo removed.');
     } catch (err) {
       console.error('Avatar remove failed:', err);
@@ -417,8 +416,8 @@ export default function SettingsPage({ onLogout }) {
               <button type="button" onClick={() => (savedAvatar ? setPhotoMenuOpen(o => !o) : avatarInputRef.current?.click())} disabled={avatarSaving}
                 className="relative block rounded-full cursor-pointer outline-none focus-visible:ring-4 focus-visible:ring-indigo-200 disabled:cursor-wait"
                 aria-haspopup={savedAvatar ? 'menu' : undefined} aria-expanded={savedAvatar ? photoMenuOpen : undefined} aria-label={savedAvatar ? 'Change profile photo' : 'Upload profile photo'}
-                title="JPG, PNG or WebP. Resized automatically to under 600 KB.">
-                <Avatar src={avatarPreview || savedAvatar} alt={account.adminName} size={64} />
+                title="JPG, PNG or WebP. You can crop it, then it is resized to under 600 KB.">
+                <Avatar src={savedAvatar} alt={account.adminName} size={64} />
                 <span className="absolute -bottom-0.5 -right-0.5 w-6 h-6 rounded-full bg-[#3B50DF] text-white border-2 border-white flex items-center justify-center shadow-sm" style={{ lineHeight: 0 }}>
                   <Camera size={12} style={{ display: 'block' }} />
                 </span>
@@ -436,19 +435,19 @@ export default function SettingsPage({ onLogout }) {
                 </div>
               )}
               <input ref={avatarInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={onPickAvatar} id="admin-avatar-input" />
+              {cropFile && (
+                <ImageCropModal
+                  file={cropFile}
+                  title="Crop profile photo"
+                  saving={avatarSaving}
+                  onCancel={() => setCropFile(null)}
+                  onSave={saveCroppedAvatar}
+                />
+              )}
             </div>
             <div className="min-w-0">
               <p className="text-sm font-semibold text-slate-900">{account.adminName || 'Your photo'}</p>
-              {avatarPreview ? (
-                <div className="flex items-center gap-2 mt-1.5">
-                  <button type="button" onClick={saveAvatar} disabled={avatarSaving} className={btnPrimary}>
-                    {avatarSaving ? 'Saving…' : 'Save photo'}
-                  </button>
-                  <button type="button" onClick={() => setAvatarPreview('')} disabled={avatarSaving} className={btnSecondary}>Discard</button>
-                </div>
-              ) : (
-                <p className="text-[11px] text-slate-500 mt-0.5">JPG, PNG or WebP · resized to under 600 KB</p>
-              )}
+              <p className="text-[11px] text-slate-500 mt-0.5">JPG, PNG or WebP · cropped, then resized to under 600 KB</p>
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">

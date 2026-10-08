@@ -23,15 +23,16 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
+  Pressable,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import Tap from '../../components/Tap';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { db } from '../../config/backend';
 import { moderateScale, scale, verticalScale } from '../../utils/scale';
@@ -83,11 +84,6 @@ const displayKey = (key: string) => {
   return new Date(y, m - 1, d).toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
   });
-};
-
-const shortKey = (key: string) => {
-  const [y, m, d] = key.split('-').map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
 const shortKeyWithDay = (key: string) => {
@@ -180,21 +176,25 @@ const StatusBadge = ({ status, declined = false }: { status: string; declined?: 
   );
 };
 
-// ─── Appointment Categories ───────────────────────────────────────────────────
-const APPT_CATEGORIES = [
-  { id: 'checkup',     label: 'Check-up',    icon: 'pulse-outline' },
-  { id: 'vaccination', label: 'Vaccination', icon: 'medkit'      },
+// ─── What the visit is for ────────────────────────────────────────────────────
+// The same values as the Admin Dashboard's appointment services
+// (ka-clinic-admin/src/features/appointments/AppointmentsPage.jsx
+// SERVICE_TYPES), saved as-is in `type`, so a booking made here reads the same
+// in the clinic's list. "Walk-in Emergency" is staff-only and not offered.
+const APPT_SERVICES = [
+  { value: 'PEP Follow-up',        label: 'PEP Follow-up',  desc: 'Anti-rabies dose after a bite or scratch', icon: 'medkit-outline' },
+  { value: 'Anti-Tetanus Vaccine', label: 'Anti-Tetanus',   desc: 'Tetanus vaccine for a wound',              icon: 'bandage-outline' },
+  { value: 'PrEP Consultation',    label: 'PrEP',           desc: 'Pre-exposure rabies protection',           icon: 'shield-checkmark-outline' },
+  { value: 'Pneumococcal Vaccine', label: 'Pneumonia',      desc: 'Pneumococcal vaccine',                     icon: 'fitness-outline' },
+  { value: 'General Consultation', label: 'Check-up',       desc: 'General consultation',                     icon: 'pulse-outline' },
 ] as const;
 
-// The services a patient can request a visit for, most-requested first.
-// PrEP is deliberately absent: a pre-exposure course is started by the clinic
-// when the patient is registered, not booked as a visit type here.
-const VACCINE_OPTIONS = [
-  { id: 'Post-Exposure', label: 'Anti-Rabies (PEP)', desc: 'After an animal bite or scratch' },
-  { id: 'Booster',       label: 'Booster Dose',      desc: 'Top-up for a previous course' },
-  { id: 'Anti-Tetano',   label: 'Anti-Tetanus',      desc: 'Tetanus toxoid for wounds' },
-  { id: 'Pneumonia',     label: 'Pneumonia',         desc: 'Pneumococcal vaccine' },
-];
+// Same Sex values as the clinic record (Male / Female).
+const SEX_OPTIONS = ['Male', 'Female'] as const;
+const normalizeSex = (v: unknown): string => {
+  const c = String(v || '').trim().charAt(0).toUpperCase();
+  return c === 'M' ? 'Male' : c === 'F' ? 'Female' : '';
+};
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 export default function AppointmentsScreen() {
@@ -277,44 +277,37 @@ export default function AppointmentsScreen() {
     name: '', age: '', gender: '', address: '', contactNumber: '',
   });
   const [formErrors, setFormErrors] = useState<Partial<PatientForm>>({});
-  // Whether the clinic record has already been folded into the form. The form
-  // is only ever seeded, never re-written under the patient: once they have
-  // typed into it, incoming record data must not clobber what they entered.
-  const prefilledRef = useRef(false);
-
-  // Auto-fill from the patient's own clinic record (`vaccinations/{mrn}` — the
-  // doc the Admin Dashboard writes). Fields the record has no value for are
-  // left genuinely empty so the patient fills them in themselves; nothing here
-  // writes back, so opening the form never changes the stored record.
+  // The patient's own clinic record (`vaccinations/{mrn}`), kept live. The
+  // form is filled from it every time it opens (editable), so it always shows
+  // this patient's current details, never a previous account's or an older
+  // copy. Nothing here writes back to the record.
+  const recordDefaultsRef = useRef<PatientForm>({ name: '', age: '', gender: '', address: '', contactNumber: '' });
   useEffect(() => {
+    recordDefaultsRef.current = { name: (user?.displayName || '').trim(), age: '', gender: '', address: '', contactNumber: '' };
     if (!mrn) return;
     return onSnapshot(doc(db, 'vaccinations', mrn), (snap) => {
-      if (!snap.exists() || prefilledRef.current) return;
+      if (!snap.exists()) return;
       const r: any = snap.data() || {};
       const joinedName = r.name || [r.firstName, r.middleName, r.lastName].filter(Boolean).join(' ');
-      const seeded = {
+      recordDefaultsRef.current = {
         name: (joinedName || user?.displayName || '').trim(),
-        age: r.age !== undefined && r.age !== null ? String(r.age) : '',
-        gender: r.sex || r.gender || '',
+        age: r.age !== undefined && r.age !== null && r.age !== '' ? String(r.age) : '',
+        gender: normalizeSex(r.sex || r.gender),
         address: r.address || '',
         contactNumber: r.contact || r.contactNumber || '',
       };
-      // Only fill blanks — anything already typed wins.
-      setPatientForm(prev => ({
-        name: prev.name || seeded.name,
-        age: prev.age || seeded.age,
-        gender: prev.gender || seeded.gender,
-        address: prev.address || seeded.address,
-        contactNumber: prev.contactNumber || seeded.contactNumber,
-      }));
-      prefilledRef.current = true;
     }, (err) => console.error('Patient record prefill failed:', err));
   }, [mrn, user?.displayName]);
-  // Nothing preselected: the patient picks what the visit is for.
-  const [apptCategory,       setApptCategory]       = useState<'checkup' | 'vaccination' | null>(null);
-  const [typeError,          setTypeError]          = useState('');
-  const [vaccineType,        setVaccineType]        = useState<string>('');
-  const [vaccineDropdownOpen,setVaccineDropdownOpen] = useState(false);
+  // What the visit is for: one of APPT_SERVICES. Nothing preselected.
+  const [apptService, setApptService] = useState<string>('');
+  const [typeError,   setTypeError]   = useState('');
+
+  // Keyboard: the sheet's bottom edge rides on top of the keyboard (Android
+  // reads its height natively; iOS uses KeyboardAvoidingView 'padding').
+  const formKeyboard = useAnimatedKeyboard({ isStatusBarTranslucentAndroid: true, isNavigationBarTranslucentAndroid: true });
+  const formKeyboardLift = useAnimatedStyle(() => ({
+    paddingBottom: Platform.OS === 'android' ? formKeyboard.height.value : 0,
+  }));
 
   // ── Custom Alert Modal State ──────────────────────────────────────────────
   const [alertConfig, setAlertConfig] = useState<CustomAlertConfig>({
@@ -331,7 +324,6 @@ export default function AppointmentsScreen() {
     setAlertConfig(prev => ({ ...prev, visible: false }));
   };
 
-  const GENDER_OPTIONS = ['Male', 'Female', 'Other'];
 
   // ── Firestore: live appointments for this patient ─────────────────────────
   const [myAppointments, setMyAppointments] = useState<FirestoreAppt[]>([]);
@@ -466,14 +458,13 @@ export default function AppointmentsScreen() {
     if (!patientForm.age.trim())           errors.age           = 'Age is required';
     else if (isNaN(Number(patientForm.age)) || Number(patientForm.age) <= 0 || Number(patientForm.age) > 120)
                                            errors.age           = 'Enter a valid age';
-    if (!patientForm.gender)               errors.gender        = 'Gender is required';
+    if (!patientForm.gender)               errors.gender        = 'Choose Male or Female';
     if (!patientForm.address.trim())       errors.address       = 'Address is required';
     if (!patientForm.contactNumber.trim()) errors.contactNumber = 'Contact number is required';
     else if (!/^[0-9+\-\s]{7,15}$/.test(patientForm.contactNumber.trim()))
                                            errors.contactNumber = 'Enter a valid contact number';
     setFormErrors(errors);
-    const tErr = !apptCategory ? 'Choose what the appointment is for'
-      : apptCategory === 'vaccination' && !vaccineType ? 'Choose a vaccine type' : '';
+    const tErr = !apptService ? 'Choose what the appointment is for' : '';
     setTypeError(tErr);
     return Object.keys(errors).length === 0 && !tErr;
   };
@@ -481,12 +472,12 @@ export default function AppointmentsScreen() {
   // ── Open details form (called from "Request Appointment" button) ──────────
   const handleOpenDetailsForm = () => {
     if (!canConfirm) return;
-    // Each opening starts clean: no leftover choice or errors.
+    // Each opening starts from this patient's record, with no leftover choice
+    // or errors.
+    setPatientForm({ ...recordDefaultsRef.current });
     setFormErrors({});
     setTypeError('');
-    setApptCategory(null);
-    setVaccineType('');
-    setVaccineDropdownOpen(false);
+    setApptService('');
     setShowDetailsForm(true);
   };
 
@@ -527,7 +518,6 @@ export default function AppointmentsScreen() {
       return;
     }
 
-    const vaccineLabel = VACCINE_OPTIONS.find(v => v.id === vaccineType)?.label || '';
     setSaving(true);
     try {
       // Claim the hour first, inside a transaction. Whoever creates the slot doc
@@ -548,11 +538,7 @@ export default function AppointmentsScreen() {
       });
 
       setShowDetailsForm(false);
-      setPatientForm({ name: '', age: '', gender: '', address: '', contactNumber: '' });
-      prefilledRef.current = false;
-      setApptCategory(null);
-      setVaccineType('');
-      setVaccineDropdownOpen(false);
+      setApptService('');
       setShowToast(true);
       setTimeout(() => setShowToast(false), 4000);
 
@@ -568,11 +554,8 @@ export default function AppointmentsScreen() {
         contactNumber: patientForm.contactNumber.trim(),
         date:          selectedKey,
         time:          selectedTime,
-        // Saved as the readable label ("Vaccination – Anti-Rabies (PEP)"); with
-        // no vaccine picked it is just "Vaccination", never a dangling dash.
-        type:          apptCategory === 'vaccination'
-          ? (vaccineLabel ? `Vaccination – ${vaccineLabel}` : 'Vaccination')
-          : 'Check-up',
+        // The admin's own service value (APPT_SERVICES).
+        type:          apptService,
         status:        'pending',
         // Distinguishes an in-app booking from a walk-in the clinic keyed in and
         // from the landing page's 'online' form — the dashboard groups on this.
@@ -670,18 +653,18 @@ export default function AppointmentsScreen() {
         <View style={s.section}>
           <View style={s.calCard}>
             <View style={s.calHeader}>
-              <TouchableOpacity
+              <Tap
                 onPress={goToPrev}
                 style={[s.calNavBtn, atCurrentMonth && s.calNavBtnOff]}
                 disabled={atCurrentMonth}
                 activeOpacity={atCurrentMonth ? 1 : 0.75}
               >
                 <Ionicons name="chevron-back" size={18} color={atCurrentMonth ? '#CBD5E1' : C.charcoal}/>
-              </TouchableOpacity>
+              </Tap>
               <Text style={s.calMonthTxt}>{MONTH_NAMES[viewMonth]} {viewYear}</Text>
-              <TouchableOpacity onPress={goToNext} style={s.calNavBtn}>
+              <Tap onPress={goToNext} style={s.calNavBtn}>
                 <Ionicons name="chevron-forward" size={18} color={C.charcoal}/>
-              </TouchableOpacity>
+              </Tap>
             </View>
 
             <View style={s.calWeekRow}>
@@ -705,7 +688,7 @@ export default function AppointmentsScreen() {
                 const tappable   = !isPast && hasSlots && !isFull;
 
                 return (
-                  <TouchableOpacity
+                  <Tap
                     key={key}
                     style={s.calCell}
                     onPress={() => tappable && handleDayPress(day)}
@@ -731,7 +714,7 @@ export default function AppointmentsScreen() {
                         {day}
                       </Text>
                     </View>
-                  </TouchableOpacity>
+                  </Tap>
                 );
               })}
             </View>
@@ -763,9 +746,14 @@ export default function AppointmentsScreen() {
 
         <View style={s.section}>
           {loadingApts ? (
-            <View style={s.emptyCard}>
-              <ActivityIndicator color={C.navy} size="small"/>
-              <Text style={s.emptyCardTxt}>Loading appointments...</Text>
+            // Same size as an appointment card, so the list does not jump
+            // when the first one arrives.
+            <View style={s.apptCard} accessibilityLabel="Loading appointments">
+              <View style={[s.apptDateBox, { backgroundColor: '#E2E8F0' }]} />
+              <View style={{ flex: 1, gap: verticalScale(8) }}>
+                <View style={{ height: verticalScale(14), width: '60%', borderRadius: scale(6), backgroundColor: '#E2E8F0' }} />
+                <View style={{ height: verticalScale(11), width: '40%', borderRadius: scale(6), backgroundColor: '#E2E8F0' }} />
+              </View>
             </View>
           ) : upcomingApts.length === 0 ? (
             <View style={s.emptyCard}>
@@ -776,7 +764,7 @@ export default function AppointmentsScreen() {
             upcomingApts.map(appt => {
               const confirmedLike = appt.status === 'confirmed' || appt.status === 'accepted' || appt.status === 'done';
               return (
-              <TouchableOpacity key={appt.id} style={s.apptCard} activeOpacity={0.85} onPress={() => setSelectedApptDetail(appt)}>
+              <Tap key={appt.id} style={s.apptCard} activeOpacity={0.85} onPress={() => setSelectedApptDetail(appt)}>
                 <View style={[s.apptDateBox, confirmedLike && { backgroundColor: C.greenFaint }]}>
                   <Text style={[s.apptDateNum, confirmedLike && { color: C.green }]}>
                     {new Date(appt.date + 'T00:00:00').getDate()}
@@ -807,12 +795,12 @@ export default function AppointmentsScreen() {
                 <View style={s.apptRight}>
                   <StatusBadge status={appt.status} declined={isEnded(appt) && endedByClinic(appt)}/>
                   {appt.status === 'pending' && (
-                    <TouchableOpacity style={s.cancelBtn} onPress={() => { setCancellationReasonInput(''); setSelectedApptDetail(appt); }}>
+                    <Tap style={s.cancelBtn} onPress={() => { setCancellationReasonInput(''); setSelectedApptDetail(appt); }}>
                       <Ionicons name="close" size={12} color={C.muted}/>
-                    </TouchableOpacity>
+                    </Tap>
                   )}
                 </View>
-              </TouchableOpacity>
+              </Tap>
               );
             })
           )}
@@ -830,7 +818,7 @@ export default function AppointmentsScreen() {
             </View>
             <View style={s.section}>
               {pastApts.map(appt => (
-                <TouchableOpacity
+                <Tap
                   key={appt.id}
                   style={[s.apptCard, { opacity: 0.7 }]}
                   activeOpacity={0.85}
@@ -853,7 +841,7 @@ export default function AppointmentsScreen() {
                       <Text style={s.doneTxt}>Done</Text>
                     </View>
                   </View>
-                </TouchableOpacity>
+                </Tap>
               ))}
             </View>
           </>
@@ -872,7 +860,7 @@ export default function AppointmentsScreen() {
             <View style={s.section}>
               {cancelledApts.map(appt => (
                 <View key={appt.id} style={{ marginBottom: verticalScale(10) }}>
-                  <TouchableOpacity
+                  <Tap
                     style={[s.apptCard, { opacity: 0.9 }]}
                     activeOpacity={0.85}
                     onPress={() => setSelectedApptDetail(appt)}
@@ -901,7 +889,7 @@ export default function AppointmentsScreen() {
                         </View>
                       ) : null}
                     </View>
-                  </TouchableOpacity>
+                  </Tap>
                 </View>
               ))}
             </View>
@@ -922,9 +910,9 @@ export default function AppointmentsScreen() {
                     <Text style={sm.headerTitle}>Pick a Time Slot</Text>
                     {selectedKey && <Text style={sm.headerSub}>{displayKey(selectedKey)}</Text>}
                   </View>
-                  <TouchableOpacity onPress={() => { setShowSlotModal(false); setSelectedKey(null); setSelectedTime(null); }} style={sm.closeBtn}>
+                  <Tap onPress={() => { setShowSlotModal(false); setSelectedKey(null); setSelectedTime(null); }} style={sm.closeBtn}>
                     <Ionicons name="close" size={20} color={C.white}/>
-                  </TouchableOpacity>
+                  </Tap>
                 </LinearGradient>
 
                 <View style={sm.body}>
@@ -934,7 +922,7 @@ export default function AppointmentsScreen() {
                       const active   = selectedTime === slot.time;
                       const disabled = !slot.available;
                       return (
-                        <TouchableOpacity
+                        <Tap
                           key={slot.time}
                           style={[s.timeChip, active && s.timeChipActive, disabled && s.timeChipOff]}
                           onPress={() => !disabled && setSelectedTime(slot.time)}
@@ -955,7 +943,7 @@ export default function AppointmentsScreen() {
                               <Text style={s.fullPillTxt}>Full</Text>
                             </View>
                           )}
-                        </TouchableOpacity>
+                        </Tap>
                       );
                     })}
                   </View>
@@ -970,17 +958,17 @@ export default function AppointmentsScreen() {
 
                   {/* Action buttons */}
                   <View style={sm.footer}>
-                    <TouchableOpacity style={sm.cancelBtn} onPress={() => { setShowSlotModal(false); setSelectedKey(null); setSelectedTime(null); }} activeOpacity={0.8}>
+                    <Tap style={sm.cancelBtn} onPress={() => { setShowSlotModal(false); setSelectedKey(null); setSelectedTime(null); }} activeOpacity={0.8}>
                       <Text style={sm.cancelTxt}>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
+                    </Tap>
+                    <Tap
                       style={[sm.confirmBtn, !canConfirm && { opacity: 0.4 }]}
                       onPress={() => { setShowSlotModal(false); handleOpenDetailsForm(); }}
                       activeOpacity={0.8}
                       disabled={!canConfirm}
                     >
                       <Text style={sm.confirmTxt}>Next</Text>
-                    </TouchableOpacity>
+                    </Tap>
                   </View>
                 </View>
               </View>
@@ -989,204 +977,181 @@ export default function AppointmentsScreen() {
         </TouchableWithoutFeedback>
       </Modal>
 
-      {/* ══ PATIENT DETAILS FORM MODAL ══════════════════════════════════════ */}
-      <Modal visible={showDetailsForm} transparent animationType="fade" statusBarTranslucent>
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <View style={df.overlay}>
-            <View style={df.sheet}>
+      {/* ══ PATIENT DETAILS FORM MODAL ══════════════════════════════════════
+          A bottom sheet: the header and the Back · Request footer stay put,
+          the fields scroll between them (flexShrink lets the ScrollView take
+          only the room the sheet has), and the sheet rises with the keyboard
+          so every field and both buttons stay reachable on small phones. */}
+      <Modal visible={showDetailsForm} transparent animationType="slide" statusBarTranslucent onRequestClose={() => setShowDetailsForm(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <Animated.View style={[df.overlay, formKeyboardLift]}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowDetailsForm(false)} accessibilityLabel="Close" />
+            <View style={[df.sheet, { paddingBottom: insets.bottom }]}>
+              <View style={df.grabber} />
               {/* Header */}
-              <LinearGradient colors={[C.navy, C.charcoal]} style={df.sheetHeader}>
-                <View>
+              <View style={df.sheetHeader}>
+                <View style={{ flex: 1 }}>
                   <Text style={df.sheetTitle}>Patient Details</Text>
-                  <Text style={df.sheetSub}>Fill in your info to complete the booking</Text>
+                  <Text style={df.sheetSub}>Check your details, then request the visit.</Text>
                 </View>
-                <TouchableOpacity onPress={() => setShowDetailsForm(false)} style={df.closeBtn}>
-                  <Ionicons name="close" size={20} color={C.white}/>
-                </TouchableOpacity>
-              </LinearGradient>
+                <Pressable onPress={() => setShowDetailsForm(false)} style={df.closeBtn} hitSlop={8}
+                  android_ripple={{ color: 'rgba(15,23,42,0.08)', borderless: true }} accessibilityLabel="Close">
+                  <Ionicons name="close" size={20} color={C.slate}/>
+                </Pressable>
+              </View>
 
-              {/* Appointment summary pill */}
+              {/* Date / time summary */}
               <View style={df.aptSummary}>
-                <Ionicons name="calendar-outline" size={13} color={C.navy}/>
-                <Text style={df.aptSummaryTxt}>
-                  {selectedKey ? shortKey(selectedKey) : ''} · {selectedTime}
-                </Text>
+                <View style={df.aptSummaryIcon}><Ionicons name="calendar" size={18} color={C.navy}/></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={df.aptSummaryLabel}>Your visit</Text>
+                  <Text style={df.aptSummaryTxt}>
+                    {selectedKey ? new Date(`${selectedKey}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : ''}{selectedTime ? ` · ${selectedTime}` : ''}
+                  </Text>
+                </View>
               </View>
 
               <ScrollView
                 style={df.formScroll}
-                contentContainerStyle={{ paddingBottom: verticalScale(20) }}
+                contentContainerStyle={{ paddingBottom: verticalScale(16) }}
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
-                nestedScrollEnabled={true}
+                automaticallyAdjustKeyboardInsets
               >
-                {/* Appointment Type */}
-                <View style={df.typeSection}>
-                  <Text style={df.typeSectionLabel}>Appointment For <Text style={df.required}>*</Text></Text>
-                  <View style={df.catRow}>
-                    {APPT_CATEGORIES.map(cat => {
-                      const active = apptCategory === cat.id;
+                {/* Appointment for */}
+                <View style={df.section}>
+                  <Text style={df.sectionLabel}>Appointment for <Text style={df.required}>*</Text></Text>
+                  <View style={{ gap: verticalScale(8) }} accessibilityRole="radiogroup">
+                    {APPT_SERVICES.map(opt => {
+                      const active = apptService === opt.value;
                       return (
-                        <TouchableOpacity
-                          key={cat.id}
-                          style={[df.catChip, active && df.catChipActive]}
-                          onPress={() => { setApptCategory(cat.id as any); setVaccineType(''); setVaccineDropdownOpen(false); setTypeError(''); }}
-                          activeOpacity={0.8}
+                        <Pressable
+                          key={opt.value}
+                          onPress={() => { setApptService(opt.value); setTypeError(''); }}
+                          accessibilityRole="radio"
+                          accessibilityState={{ selected: active }}
+                          android_ripple={{ color: 'rgba(30,58,138,0.08)' }}
+                          style={({ pressed }) => [df.option, active && df.optionActive, pressed && Platform.OS === 'ios' && { opacity: 0.85 }]}
                         >
-                          <Ionicons name={cat.icon as any} size={15} color={active ? C.red : '#64748B'} />
-                          <Text style={[df.catLabel, active && df.catLabelActive]}>{cat.label}</Text>
-                        </TouchableOpacity>
+                          <View style={[df.optionIcon, active && df.optionIconActive]}>
+                            <Ionicons name={opt.icon as any} size={17} color={active ? C.white : C.navy} />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={[df.optionLabel, active && { color: C.navy }]}>{opt.label}</Text>
+                            <Text style={df.optionDesc}>{opt.desc}</Text>
+                          </View>
+                          <Ionicons name={active ? 'radio-button-on' : 'radio-button-off'} size={20} color={active ? C.navy : '#94A3B8'} />
+                        </Pressable>
                       );
                     })}
                   </View>
-
                   {typeError ? <Text style={df.errorTxt}>{typeError}</Text> : null}
-
-                  {/* Vaccine sub-dropdown (fully scrollable, in-flow) */}
-                  {apptCategory === 'vaccination' && (
-                    <View style={df.vaccineWrap}>
-                      <TouchableOpacity
-                        style={[df.vaccineSelector, vaccineDropdownOpen && df.vaccineSelectorOpen]}
-                        onPress={() => setVaccineDropdownOpen(v => !v)}
-                        activeOpacity={0.85}
-                      >
-                        <Ionicons name="medkit-outline" size={14} color={vaccineType ? C.navy : C.muted}/>
-                        <Text style={[df.vaccineSelectorTxt, !!vaccineType && { color: C.charcoal }]}>
-                          {vaccineType ? VACCINE_OPTIONS.find(v => v.id === vaccineType)?.label : 'Select vaccine type...'}
-                        </Text>
-                        <Ionicons name={vaccineDropdownOpen ? 'chevron-up' : 'chevron-down'} size={14} color={C.muted}/>
-                      </TouchableOpacity>
-                      {vaccineDropdownOpen && (
-                        <View style={df.vaccineDropdown}>
-                          <ScrollView
-                            style={{ maxHeight: verticalScale(185) }}
-                            nestedScrollEnabled={true}
-                            showsVerticalScrollIndicator={true}
-                            keyboardShouldPersistTaps="handled"
-                          >
-                            {VACCINE_OPTIONS.map((v, i) => {
-                              const sel = vaccineType === v.id;
-                              return (
-                                <TouchableOpacity
-                                  key={v.id}
-                                  style={[df.vaccineOption, sel && df.vaccineOptionActive, i < VACCINE_OPTIONS.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border }]}
-                                  onPress={() => { setVaccineType(v.id); setVaccineDropdownOpen(false); setTypeError(''); }}
-                                  activeOpacity={0.8}
-                                >
-                                  <View style={{ flex: 1 }}>
-                                    <Text style={[df.vaccineOptionTxt, sel && { color: C.navy, fontWeight: '700' }]}>{v.label}</Text>
-                                    <Text style={df.vaccineOptionDesc}>{v.desc}</Text>
-                                  </View>
-                                  {sel && <Ionicons name="checkmark" size={14} color={C.navy}/>}
-                                </TouchableOpacity>
-                              );
-                            })}
-                          </ScrollView>
-                        </View>
-                      )}
-                    </View>
-                  )}
-                </View>
-                {/* Full Name */}
-                <View style={df.fieldWrap}>
-                  <Text style={df.label}>Full Name <Text style={df.required}>*</Text></Text>
-                  <TextInput
-                    style={[df.input, formErrors.name && df.inputError]}
-                    placeholder="e.g. Juan dela Cruz"
-                    placeholderTextColor={C.muted}
-                    value={patientForm.name}
-                    onChangeText={v => { setPatientForm(p => ({ ...p, name: v })); setFormErrors(e => ({ ...e, name: undefined })); }}
-                  />
-                  {formErrors.name && <Text style={df.errorTxt}>{formErrors.name}</Text>}
                 </View>
 
-                {/* Age + Gender row */}
-                <View style={df.row}>
-                  <View style={[df.fieldWrap, { flex: 1, marginRight: scale(8) }]}>
-                    <Text style={df.label}>Age <Text style={df.required}>*</Text></Text>
+                {/* Your details (pre-filled from your clinic record, editable) */}
+                <View style={df.section}>
+                  <Text style={df.sectionLabel}>Your details</Text>
+
+                  <View style={df.fieldWrap}>
+                    <Text style={df.label}>Full name <Text style={df.required}>*</Text></Text>
                     <TextInput
-                      style={[df.input, formErrors.age && df.inputError]}
-                      placeholder="e.g. 28"
-                      placeholderTextColor={C.muted}
-                      keyboardType="numeric"
-                      value={patientForm.age}
-                      onChangeText={v => { setPatientForm(p => ({ ...p, age: v })); setFormErrors(e => ({ ...e, age: undefined })); }}
+                      style={[df.input, formErrors.name && df.inputError]}
+                      placeholder="e.g. Juan dela Cruz"
+                      placeholderTextColor="#94A3B8"
+                      value={patientForm.name}
+                      onChangeText={v => { setPatientForm(p => ({ ...p, name: v })); setFormErrors(e => ({ ...e, name: undefined })); }}
                     />
-                    {formErrors.age && <Text style={df.errorTxt}>{formErrors.age}</Text>}
+                    {formErrors.name && <Text style={df.errorTxt}>{formErrors.name}</Text>}
                   </View>
-                  <View style={[df.fieldWrap, { flex: 1.4 }]}>
-                    <Text style={df.label}>Gender <Text style={df.required}>*</Text></Text>
-                    <View style={df.genderRow}>
-                      {GENDER_OPTIONS.map(g => (
-                        <TouchableOpacity
-                          key={g}
-                          style={[df.genderChip, patientForm.gender === g && df.genderChipActive]}
-                          onPress={() => { setPatientForm(p => ({ ...p, gender: g })); setFormErrors(e => ({ ...e, gender: undefined })); }}
-                          activeOpacity={0.8}
-                        >
-                          <Text style={[df.genderTxt, patientForm.gender === g && df.genderTxtActive]}>{g}</Text>
-                        </TouchableOpacity>
-                      ))}
+
+                  <View style={df.row}>
+                    <View style={[df.fieldWrap, { width: scale(96) }]}>
+                      <Text style={df.label}>Age <Text style={df.required}>*</Text></Text>
+                      <TextInput
+                        style={[df.input, formErrors.age && df.inputError]}
+                        placeholder="e.g. 28"
+                        placeholderTextColor="#94A3B8"
+                        keyboardType="number-pad"
+                        maxLength={3}
+                        value={patientForm.age}
+                        onChangeText={v => { setPatientForm(p => ({ ...p, age: v.replace(/\D/g, '') })); setFormErrors(e => ({ ...e, age: undefined })); }}
+                      />
+                      {formErrors.age && <Text style={df.errorTxt}>{formErrors.age}</Text>}
                     </View>
-                    {formErrors.gender && <Text style={df.errorTxt}>{formErrors.gender}</Text>}
+                    <View style={[df.fieldWrap, { flex: 1 }]}>
+                      <Text style={df.label}>Sex <Text style={df.required}>*</Text></Text>
+                      <View style={df.genderRow} accessibilityRole="radiogroup">
+                        {SEX_OPTIONS.map(g => {
+                          const active = patientForm.gender === g;
+                          return (
+                            <Pressable
+                              key={g}
+                              onPress={() => { setPatientForm(p => ({ ...p, gender: g })); setFormErrors(e => ({ ...e, gender: undefined })); }}
+                              accessibilityRole="radio"
+                              accessibilityState={{ selected: active }}
+                              android_ripple={{ color: 'rgba(30,58,138,0.08)' }}
+                              style={({ pressed }) => [df.genderChip, active && df.genderChipActive, pressed && Platform.OS === 'ios' && { opacity: 0.85 }]}
+                            >
+                              <Text style={[df.genderTxt, active && df.genderTxtActive]}>{g}</Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                      {formErrors.gender && <Text style={df.errorTxt}>{formErrors.gender}</Text>}
+                    </View>
+                  </View>
+
+                  <View style={df.fieldWrap}>
+                    <Text style={df.label}>Address <Text style={df.required}>*</Text></Text>
+                    <TextInput
+                      style={[df.input, df.inputMulti, formErrors.address && df.inputError]}
+                      placeholder="House no., street, barangay, town"
+                      placeholderTextColor="#94A3B8"
+                      multiline
+                      numberOfLines={2}
+                      value={patientForm.address}
+                      onChangeText={v => { setPatientForm(p => ({ ...p, address: v })); setFormErrors(e => ({ ...e, address: undefined })); }}
+                    />
+                    {formErrors.address && <Text style={df.errorTxt}>{formErrors.address}</Text>}
+                  </View>
+
+                  <View style={[df.fieldWrap, { marginBottom: 0 }]}>
+                    <Text style={df.label}>Contact number <Text style={df.required}>*</Text></Text>
+                    <TextInput
+                      style={[df.input, formErrors.contactNumber && df.inputError]}
+                      placeholder="e.g. 0917 123 4567"
+                      placeholderTextColor="#94A3B8"
+                      keyboardType="phone-pad"
+                      value={patientForm.contactNumber}
+                      onChangeText={v => { setPatientForm(p => ({ ...p, contactNumber: v })); setFormErrors(e => ({ ...e, contactNumber: undefined })); }}
+                    />
+                    {formErrors.contactNumber && <Text style={df.errorTxt}>{formErrors.contactNumber}</Text>}
                   </View>
                 </View>
-
-                {/* Address */}
-                <View style={df.fieldWrap}>
-                  <Text style={df.label}>Address <Text style={df.required}>*</Text></Text>
-                  <TextInput
-                    style={[df.input, df.inputMulti, formErrors.address && df.inputError]}
-                    placeholder="House no., street, barangay, city"
-                    placeholderTextColor={C.muted}
-                    multiline
-                    numberOfLines={2}
-                    value={patientForm.address}
-                    onChangeText={v => { setPatientForm(p => ({ ...p, address: v })); setFormErrors(e => ({ ...e, address: undefined })); }}
-                  />
-                  {formErrors.address && <Text style={df.errorTxt}>{formErrors.address}</Text>}
-                </View>
-
-                {/* Contact Number */}
-                <View style={df.fieldWrap}>
-                  <Text style={df.label}>Contact Number <Text style={df.required}>*</Text></Text>
-                  <TextInput
-                    style={[df.input, formErrors.contactNumber && df.inputError]}
-                    placeholder="e.g. 09171234567"
-                    placeholderTextColor={C.muted}
-                    keyboardType="phone-pad"
-                    value={patientForm.contactNumber}
-                    onChangeText={v => { setPatientForm(p => ({ ...p, contactNumber: v })); setFormErrors(e => ({ ...e, contactNumber: undefined })); }}
-                  />
-                  {formErrors.contactNumber && <Text style={df.errorTxt}>{formErrors.contactNumber}</Text>}
-                </View>
-
-                <View style={{ height: verticalScale(16) }}/>
               </ScrollView>
 
-              {/* Submit */}
+              {/* Back (left) · Request Appointment (right) */}
               <View style={df.footer}>
-                <TouchableOpacity style={df.cancelBtn} onPress={() => setShowDetailsForm(false)} activeOpacity={0.8}>
+                <Pressable style={df.cancelBtn} onPress={() => setShowDetailsForm(false)}
+                  android_ripple={{ color: 'rgba(15,23,42,0.08)' }} accessibilityRole="button">
                   <Text style={df.cancelTxt}>Back</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[df.submitBtn, saving && { opacity: 0.7 }]}
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [df.submitBtn, saving && { opacity: 0.7 }, pressed && Platform.OS === 'ios' && { opacity: 0.85 }]}
                   onPress={handleConfirm}
                   disabled={saving}
-                  activeOpacity={0.85}
+                  android_ripple={{ color: 'rgba(255,255,255,0.2)' }}
+                  accessibilityRole="button"
                 >
                   {saving
                     ? <ActivityIndicator color={C.white} size="small"/>
                     : <Ionicons name="send" size={15} color={C.white}/>
                   }
                   <Text style={df.submitTxt}>{saving ? 'Sending...' : 'Request Appointment'}</Text>
-                </TouchableOpacity>
+                </Pressable>
               </View>
             </View>
-          </View>
+          </Animated.View>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -1252,9 +1217,9 @@ export default function AppointmentsScreen() {
                     </View>
                   </View>
                   <View style={ms.divider}/>
-                  <TouchableOpacity style={ms.doneBtn} onPress={handleDone} activeOpacity={0.8}>
+                  <Tap style={ms.doneBtn} onPress={handleDone} activeOpacity={0.8}>
                     <Text style={ms.doneBtnTxt}>Got it!</Text>
-                  </TouchableOpacity>
+                  </Tap>
                 </View>
               </View>
             </TouchableWithoutFeedback>
@@ -1294,9 +1259,9 @@ export default function AppointmentsScreen() {
                         <Text style={sm.headerSub}>{displayKey(selectedApptDetail.date)}</Text>
                       )}
                     </View>
-                    <TouchableOpacity onPress={() => setSelectedApptDetail(null)} style={sm.closeBtn}>
+                    <Tap onPress={() => setSelectedApptDetail(null)} style={sm.closeBtn}>
                       <Ionicons name="close" size={20} color={C.white}/>
-                    </TouchableOpacity>
+                    </Tap>
                   </LinearGradient>
 
                   {selectedApptDetail && (
@@ -1386,11 +1351,11 @@ export default function AppointmentsScreen() {
                       </ScrollView>
 
                       <View style={sm.footer}>
-                        <TouchableOpacity style={sm.cancelBtn} onPress={() => setSelectedApptDetail(null)}>
+                        <Tap style={sm.cancelBtn} onPress={() => setSelectedApptDetail(null)}>
                           <Text style={sm.cancelTxt}>Close</Text>
-                        </TouchableOpacity>
+                        </Tap>
                         {(selectedApptDetail.status === 'pending' || selectedApptDetail.status === 'confirmed' || selectedApptDetail.status === 'accepted') && (
-                          <TouchableOpacity
+                          <Tap
                             style={[sm.confirmBtn, { backgroundColor: '#D97706' }, submittingCancellation && { opacity: 0.6 }]}
                             onPress={handleRequestCancellation}
                             disabled={submittingCancellation}
@@ -1400,7 +1365,7 @@ export default function AppointmentsScreen() {
                             ) : (
                               <Text style={sm.confirmTxt}>Request Cancellation</Text>
                             )}
-                          </TouchableOpacity>
+                          </Tap>
                         )}
                       </View>
                     </>
@@ -1415,43 +1380,43 @@ export default function AppointmentsScreen() {
       {/* ── BOTTOM NAV BAR ── */}
       <View style={[nav.bar, { height: verticalScale(80) + insets.bottom, paddingBottom: verticalScale(8) + insets.bottom }]}>
         {/* Tab 1: Home */}
-        <TouchableOpacity
+        <Tap
           style={nav.tab}
           activeOpacity={0.7}
           onPress={() => router.navigate('/')}
         >
           <Ionicons name="home-outline" size={24} color="#64748B" />
           <Text style={nav.label}>Home</Text>
-        </TouchableOpacity>
+        </Tap>
 
         {/* Tab 2: Appts */}
-        <TouchableOpacity
+        <Tap
           style={nav.tab}
           activeOpacity={0.7}
         >
           <Ionicons name="calendar" size={24} color={C.red} />
           <Text style={[nav.label, nav.labelActive]}>Appts</Text>
-        </TouchableOpacity>
+        </Tap>
 
         {/* Tab 3: Chat */}
-        <TouchableOpacity
+        <Tap
           style={nav.tab}
           activeOpacity={0.7}
           onPress={() => router.navigate('/chat')}
         >
           <Ionicons name="chatbubble-ellipses-outline" size={24} color="#64748B" />
           <Text style={nav.label}>Chat</Text>
-        </TouchableOpacity>
+        </Tap>
 
         {/* Tab 4: Account */}
-        <TouchableOpacity
+        <Tap
           style={nav.tab}
           activeOpacity={0.7}
           onPress={() => router.navigate('/profile')}
         >
           <Ionicons name="person-outline" size={24} color="#64748B" />
           <Text style={nav.label}>Account</Text>
-        </TouchableOpacity>
+        </Tap>
       </View>
 
       {/* Custom Alert Modal */}
@@ -1587,76 +1552,50 @@ const s = StyleSheet.create({
 
 // ─── Patient Details Form styles ──────────────────────────────────────────────
 const df = StyleSheet.create({
-  overlay:     { flex: 1, backgroundColor: 'rgba(10,25,47,0.6)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: scale(20) },
-  sheet:       { backgroundColor: C.white, borderRadius: scale(28), width: '100%', maxHeight: '92%', overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 24, shadowOffset: { width: 0, height: 12 }, elevation: 20 },
-  sheetHeader: { paddingTop: verticalScale(22), paddingBottom: verticalScale(20), paddingHorizontal: scale(22), flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  sheetTitle:  { fontSize: moderateScale(19), fontWeight: '800', color: C.white, letterSpacing: -0.3 },
-  sheetSub:    { fontSize: moderateScale(12), color: 'rgba(255,255,255,0.65)', marginTop: verticalScale(2) },
-  closeBtn:    { width: scale(34), height: verticalScale(34), borderRadius: scale(11), backgroundColor: 'rgba(255,255,255,0.18)', justifyContent: 'center', alignItems: 'center' },
+  overlay:     { flex: 1, backgroundColor: 'rgba(10,25,47,0.6)', justifyContent: 'flex-end' },
+  // overflow hidden + radius: ripples stay inside the sheet's rounded corners.
+  sheet:       { backgroundColor: C.white, borderTopLeftRadius: scale(28), borderTopRightRadius: scale(28), width: '100%', maxHeight: '94%', overflow: 'hidden' },
+  grabber:     { alignSelf: 'center', width: scale(40), height: 4, borderRadius: 2, backgroundColor: '#CBD5E1', marginTop: verticalScale(8) },
+  sheetHeader: { paddingTop: verticalScale(12), paddingBottom: verticalScale(4), paddingHorizontal: scale(20), flexDirection: 'row', alignItems: 'center', gap: scale(12) },
+  sheetTitle:  { fontSize: moderateScale(19), fontWeight: '800', color: C.charcoal, letterSpacing: -0.3 },
+  sheetSub:    { fontSize: moderateScale(12.5), color: C.muted, marginTop: verticalScale(2) },
+  closeBtn:    { width: scale(40), height: scale(40), borderRadius: scale(20), backgroundColor: C.bg, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
 
-  aptSummary:    { flexDirection: 'row', alignItems: 'center', gap: scale(7), backgroundColor: C.navyFaint, marginHorizontal: scale(20), marginTop: verticalScale(14), marginBottom: verticalScale(6), paddingHorizontal: scale(14), paddingVertical: verticalScale(10), borderRadius: scale(12), borderWidth: 1, borderColor: 'rgba(26,48,82,0.12)' },
-  aptSummaryTxt: { fontSize: moderateScale(12), fontWeight: '700', color: C.navy },
+  aptSummary:      { flexDirection: 'row', alignItems: 'center', gap: scale(12), backgroundColor: C.navyFaint, marginHorizontal: scale(20), marginTop: verticalScale(12), marginBottom: verticalScale(4), paddingHorizontal: scale(14), paddingVertical: verticalScale(12), borderRadius: scale(16), borderWidth: 1, borderColor: 'rgba(26,48,82,0.12)' },
+  aptSummaryIcon:  { width: scale(38), height: scale(38), borderRadius: scale(12), backgroundColor: C.white, alignItems: 'center', justifyContent: 'center' },
+  aptSummaryLabel: { fontSize: moderateScale(11), fontWeight: '700', color: C.muted, textTransform: 'uppercase', letterSpacing: 0.4 },
+  aptSummaryTxt:   { fontSize: moderateScale(14), fontWeight: '800', color: C.navy, marginTop: verticalScale(1) },
 
-  formScroll:  { paddingHorizontal: scale(20), paddingTop: verticalScale(10) },
-  row:         { flexDirection: 'row' },
+  formScroll:  { flexShrink: 1, paddingHorizontal: scale(20), paddingTop: verticalScale(8) },
+  section:     { marginTop: verticalScale(14) },
+  sectionLabel:{ fontSize: moderateScale(12), fontWeight: '800', color: C.slate, marginBottom: verticalScale(10), textTransform: 'uppercase', letterSpacing: 0.4 },
+  row:         { flexDirection: 'row', gap: scale(12) },
   fieldWrap:   { marginBottom: verticalScale(14) },
-  label:       { fontSize: moderateScale(12), fontWeight: '700', color: C.slate, marginBottom: verticalScale(6), textTransform: 'uppercase', letterSpacing: 0.3 },
+  label:       { fontSize: moderateScale(12.5), fontWeight: '700', color: C.slate, marginBottom: verticalScale(6) },
   required:    { color: C.red },
-  input:       { backgroundColor: C.bg, borderWidth: 1.5, borderColor: C.border, borderRadius: scale(13), paddingHorizontal: scale(14), paddingVertical: verticalScale(12), fontSize: moderateScale(14), color: C.charcoal, fontWeight: '500' },
+  input:       { backgroundColor: C.bg, borderWidth: 1.5, borderColor: C.border, borderRadius: scale(13), paddingHorizontal: scale(14), minHeight: verticalScale(48), paddingVertical: verticalScale(10), fontSize: moderateScale(15), color: C.charcoal, fontWeight: '500' },
   inputMulti:  { minHeight: verticalScale(64), textAlignVertical: 'top', paddingTop: verticalScale(12) },
   inputError:  { borderColor: C.danger, backgroundColor: C.dangerFaint },
-  errorTxt:    { fontSize: moderateScale(11), color: C.danger, fontWeight: '600', marginTop: verticalScale(4) },
+  errorTxt:    { fontSize: moderateScale(11.5), color: C.danger, fontWeight: '600', marginTop: verticalScale(5) },
 
-  genderRow:      { flexDirection: 'row', gap: scale(6) },
-  genderChip:     { flex: 1, paddingVertical: verticalScale(11), borderRadius: scale(12), borderWidth: 1.5, borderColor: C.border, backgroundColor: C.bg, alignItems: 'center' },
+  option:          { flexDirection: 'row', alignItems: 'center', gap: scale(12), minHeight: verticalScale(56), paddingHorizontal: scale(12), paddingVertical: verticalScale(8), borderRadius: scale(14), borderWidth: 1.5, borderColor: C.border, backgroundColor: C.white, overflow: 'hidden' },
+  optionActive:    { borderColor: C.navy, backgroundColor: C.navyFaint },
+  optionIcon:      { width: scale(34), height: scale(34), borderRadius: scale(10), backgroundColor: C.navyFaint, alignItems: 'center', justifyContent: 'center' },
+  optionIconActive:{ backgroundColor: C.navy },
+  optionLabel:     { fontSize: moderateScale(14), fontWeight: '700', color: C.charcoal },
+  optionDesc:      { fontSize: moderateScale(11.5), color: C.muted, marginTop: verticalScale(1) },
+
+  genderRow:      { flexDirection: 'row', gap: scale(8) },
+  genderChip:     { flex: 1, minHeight: verticalScale(48), borderRadius: scale(13), borderWidth: 1.5, borderColor: C.border, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   genderChipActive:{ borderColor: C.navy, backgroundColor: C.navyFaint },
-  genderTxt:      { fontSize: moderateScale(12), fontWeight: '600', color: C.muted },
-  genderTxtActive:{ color: C.navy, fontWeight: '700' },
+  genderTxt:      { fontSize: moderateScale(14), fontWeight: '600', color: C.slate },
+  genderTxtActive:{ color: C.navy, fontWeight: '800' },
 
-  footer:     { flexDirection: 'row', gap: scale(12), paddingHorizontal: scale(20), paddingVertical: verticalScale(14), borderTopWidth: 1, borderTopColor: C.border, backgroundColor: C.white },
-  cancelBtn:  { flex: 1, paddingVertical: verticalScale(12), borderRadius: scale(12), alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: C.border, backgroundColor: C.bg },
-  cancelTxt:  { fontSize: moderateScale(13), fontWeight: '700', color: C.slate },
-  submitBtn:  { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: scale(8), paddingVertical: verticalScale(12), borderRadius: scale(12), backgroundColor: '#334155' },
-  submitTxt:  { fontSize: moderateScale(13), fontWeight: '800', color: C.white },
-
-  typeSection:      { marginBottom: verticalScale(14) },
-  typeSectionLabel: { fontSize: moderateScale(12), fontWeight: '700', color: C.slate, marginBottom: verticalScale(8), textTransform: 'uppercase', letterSpacing: 0.3 },
-  typeRow:          { gap: scale(8) },
-  typeCard:         { flexDirection: 'row', alignItems: 'flex-start', gap: scale(12), padding: scale(14), borderRadius: scale(16), borderWidth: 1.5, borderColor: C.border, backgroundColor: C.bg },
-  typeEmoji:        { fontSize: moderateScale(22), marginTop: verticalScale(1) },
-  typeLabel:        { fontSize: moderateScale(13), fontWeight: '800', color: C.charcoal },
-  typeTag:          { paddingHorizontal: scale(7), paddingVertical: verticalScale(2), borderRadius: scale(6) },
-  typeTagTxt:       { fontSize: moderateScale(10), fontWeight: '800' },
-  typeDesc:         { fontSize: moderateScale(11), color: C.muted, marginTop: verticalScale(3), lineHeight: moderateScale(16), fontWeight: '400' },
-
-  catRow:           { flexDirection: 'row', gap: scale(10) },
-  catChip:          { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: scale(7), paddingVertical: verticalScale(13), borderRadius: scale(14), borderWidth: 1.5, borderColor: C.border, backgroundColor: C.bg },
-  catChipActive:    { borderColor: C.navy, backgroundColor: C.navyFaint },
-  catEmoji:         { fontSize: moderateScale(18) },
-  catLabel:         { fontSize: moderateScale(13), fontWeight: '700', color: C.muted },
-  catLabelActive:   { color: C.navy },
-
-  vaccineWrap:          { marginTop: verticalScale(10) },
-  vaccineSelector:      { flexDirection: 'row', alignItems: 'center', gap: scale(9), backgroundColor: C.bg, borderWidth: 1.5, borderColor: C.border, borderRadius: scale(13), paddingHorizontal: scale(14), paddingVertical: verticalScale(13) },
-  vaccineSelectorOpen:  { borderColor: C.navy },
-  vaccineSelectorTxt:   { flex: 1, fontSize: moderateScale(14), color: C.muted, fontWeight: '500' },
-  vaccineDropdown:      {
-    marginTop: verticalScale(8),
-    borderWidth: 1.5,
-    borderColor: C.navy,
-    borderRadius: scale(13),
-    backgroundColor: C.white,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 4,
-  },
-  vaccineOption:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: scale(14), paddingVertical: verticalScale(13) },
-  vaccineOptionActive:  { backgroundColor: C.navyFaint },
-  vaccineOptionTxt:     { fontSize: moderateScale(14), color: C.slate, fontWeight: '600' },
-  vaccineOptionDesc:    { fontSize: moderateScale(11), color: C.muted, marginTop: verticalScale(2) },
+  footer:     { flexDirection: 'row', gap: scale(12), paddingHorizontal: scale(20), paddingVertical: verticalScale(12), borderTopWidth: 1, borderTopColor: C.border, backgroundColor: C.white },
+  cancelBtn:  { flex: 1, minHeight: verticalScale(50), borderRadius: scale(14), alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#CBD5E1', backgroundColor: C.white, overflow: 'hidden' },
+  cancelTxt:  { fontSize: moderateScale(14), fontWeight: '700', color: C.slate },
+  submitBtn:  { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: scale(8), minHeight: verticalScale(50), borderRadius: scale(14), backgroundColor: C.navy, overflow: 'hidden' },
+  submitTxt:  { fontSize: moderateScale(14), fontWeight: '800', color: C.white },
 });
 
 const ms = StyleSheet.create({

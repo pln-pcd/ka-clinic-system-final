@@ -23,12 +23,43 @@ const INV_FIELDS = ['name', 'category', 'unit', 'stock', 'minStock'];
 // A new item starts blank (grey placeholders); nothing is pre-chosen.
 const EMPTY_ITEM = () => ({ name: '', category: '', unit: '', stock: '', minStock: '', expiry: '' });
 const INV_EDIT_FIELDS = ['name', 'stock'];
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '../../lib/firebase';
 import { peekLiveCollection, useLiveCollection } from '../../lib/liveStore';
 import Toast from '../../components/Toast';
 import { deriveStockLabel, deriveStockStatus, fmtUnit } from '../../lib/inventoryStock';
 import { lazyModal } from '../../components/LazyModal';
+import Pager, { paginate, useTableReserve } from '../../components/Pager';
+import { getTodayDateString } from '../../lib/formatters';
+
+// An item counts as "expiring soon" when its expiry date is within this many
+// days (already-expired items are included, they need attention most).
+const EXPIRING_SOON_DAYS = 30;
+const expiryOf = item => String(item.expiry || item.expiryDate || '').slice(0, 10);
+const tsOf = v => (typeof v === 'number' ? v : v?.toMillis?.() ?? (v ? new Date(v).getTime() || 0 : 0));
+// Last change to the item: stock moves and edits stamp updatedAt; older
+// items only have createdAt.
+const lastUpdatedOf = item => tsOf(item.updatedAt) || tsOf(item.createdAt);
+
+const STOCK_FILTERS = [
+  { key: 'all', label: 'All stock levels' },
+  { key: 'in-stock', label: 'In stock' },
+  { key: 'low-stock', label: 'Low stock' },
+  { key: 'out-of-stock', label: 'Out of stock' },
+];
+const SORT_OPTIONS = [
+  { key: 'name_asc', label: 'Name (A to Z)' },
+  { key: 'stock_asc', label: 'Stock (lowest first)' },
+  { key: 'stock_desc', label: 'Stock (highest first)' },
+  { key: 'expiry_asc', label: 'Expiry date (soonest)' },
+  { key: 'updated_desc', label: 'Last updated' },
+];
+// Row height of the inventory table, used to reserve a full page of rows.
+const INV_ROW_H = 57;
+
+const menuItemStyle = on => ({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', textAlign: 'left', padding: '6px 8px', borderRadius: 6, border: 'none', background: on ? '#EEF2FF' : 'transparent', color: on ? '#3B50DF' : '#334155', fontSize: '.78125rem', fontWeight: on ? 700 : 500, cursor: 'pointer' });
+const menuHeadStyle = { padding: '4px 8px 2px', fontSize: '.6875rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' };
+const CheckMark = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>;
 
 // The export dialog carries the PDF and Excel libraries and the embedded logo,
 // so its code is downloaded the first time someone opens it.
@@ -187,9 +218,63 @@ export default function VaccineInventoryPage() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const filtered = inventory.filter(item => {
-    return (item.name || '').toLowerCase().includes(debouncedSearchQuery.toLowerCase());
-  });
+  // Filter (category, stock level, expiring soon) and Sort by, as on the
+  // other dashboards. Any change goes back to the first page.
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [stockFilter, setStockFilter] = useState('all');
+  const [expiringOnly, setExpiringOnly] = useState(false);
+  const [sortBy, setSortBy] = useState('name_asc');
+  const [page, setPage] = useState(1);
+  useEffect(() => { setPage(1); }, [debouncedSearchQuery, categoryFilter, stockFilter, expiringOnly, sortBy]);
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  const filterMenuRef = useRef(null);
+  const sortMenuRef = useRef(null);
+  useEffect(() => {
+    const handler = e => {
+      if (filterMenuRef.current && !filterMenuRef.current.contains(e.target)) setFilterMenuOpen(false);
+      if (sortMenuRef.current && !sortMenuRef.current.contains(e.target)) setSortMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const categories = useMemo(
+    () => Array.from(new Set(inventory.map(i => (i.category || '').trim()).filter(Boolean))).sort(),
+    [inventory]
+  );
+  const today = getTodayDateString();
+  const soonCutoff = (() => {
+    const d = new Date(`${today}T12:00:00`);
+    d.setDate(d.getDate() + EXPIRING_SOON_DAYS);
+    return getTodayDateString(d);
+  })();
+  const isExpiringSoon = item => { const e = expiryOf(item); return Boolean(e) && e <= soonCutoff; };
+  const activeFilterCount = (categoryFilter !== 'all') + (stockFilter !== 'all') + expiringOnly;
+
+  const filtered = useMemo(() => {
+    const q = debouncedSearchQuery.trim().toLowerCase();
+    const stockNum = item => parseInt(item.stock, 10) || 0;
+    return inventory
+      .filter(item => !q || (item.name || '').toLowerCase().includes(q))
+      .filter(item => categoryFilter === 'all' || (item.category || '').trim() === categoryFilter)
+      .filter(item => stockFilter === 'all' || deriveStockStatus(item) === stockFilter)
+      .filter(item => !expiringOnly || isExpiringSoon(item))
+      .sort((a, b) => {
+        if (sortBy === 'stock_asc') return stockNum(a) - stockNum(b) || (a.name || '').localeCompare(b.name || '');
+        if (sortBy === 'stock_desc') return stockNum(b) - stockNum(a) || (a.name || '').localeCompare(b.name || '');
+        if (sortBy === 'expiry_asc') {
+          // Items without an expiry date go last.
+          const ea = expiryOf(a), eb = expiryOf(b);
+          if (ea && eb) return ea.localeCompare(eb);
+          return ea ? -1 : eb ? 1 : (a.name || '').localeCompare(b.name || '');
+        }
+        if (sortBy === 'updated_desc') return lastUpdatedOf(b) - lastUpdatedOf(a);
+        return (a.name || '').localeCompare(b.name || '');
+      });
+  }, [inventory, debouncedSearchQuery, categoryFilter, stockFilter, expiringOnly, sortBy, soonCutoff]);
+  const { pages, page: safePage, rows: pageRows } = paginate(filtered, page);
+  const [tableAreaRef, tableReserve] = useTableReserve(INV_ROW_H);
 
   /* ── Add Item ── */
   const handleSave = async () => {
@@ -210,7 +295,8 @@ export default function VaccineInventoryPage() {
         expiry: expirationDate,
         expiryDate: expirationDate,
         status: stockNum <= 0 ? 'critical' : stockNum <= minStockNum ? 'warning' : 'in-stock',
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
       };
       await addDoc(collection(db, 'inventory'), newItem);
       setShowAddModal(false);
@@ -257,6 +343,7 @@ export default function VaccineInventoryPage() {
         expiry: expirationDate,
         expiryDate: expirationDate,
         status: stockNum <= 0 ? 'critical' : stockNum <= minStockNum ? 'warning' : 'in-stock',
+        updatedAt: Date.now(),
       };
       await updateDoc(doc(db, 'inventory', selectedItem.id), updated);
       setShowEditModal(false);
@@ -290,6 +377,7 @@ export default function VaccineInventoryPage() {
     updateDoc(doc(db, 'inventory', selectedItem.id), {
       stock: newStock,
       status: newStock <= 0 ? 'critical' : newStock <= minStock ? 'warning' : 'in-stock',
+      updatedAt: Date.now(),
     })
       .then(() => showToast(`${name} stock updated to ${newStock}`, 'success'))
       .catch(err => {
@@ -349,6 +437,96 @@ export default function VaccineInventoryPage() {
                 style={{ width: '100%', padding: '8px 12px 8px 34px', fontSize: '.8125rem', border: '1.5px solid #CBD5E1', borderRadius: '.5rem', background: '#FFFFFF', color: '#0F172A', outline: 'none' }}
               />
             </div>
+
+            {/* Filter: category, stock level, expiring soon */}
+            <div ref={filterMenuRef} style={{ position: 'relative' }}>
+              <button
+                type="button"
+                onClick={() => setFilterMenuOpen(o => !o)}
+                aria-expanded={filterMenuOpen}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px',
+                  fontSize: '.78125rem', fontWeight: 600,
+                  border: activeFilterCount ? '1.5px solid #3B50DF' : '1.5px solid #CBD5E1',
+                  borderRadius: '.5rem',
+                  background: activeFilterCount ? '#EEF2FF' : '#FFFFFF',
+                  color: activeFilterCount ? '#3B50DF' : '#0F172A',
+                  cursor: 'pointer'
+                }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>
+                {activeFilterCount ? `Filter · ${activeFilterCount}` : 'Filter'}
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+              </button>
+
+              {filterMenuOpen && (
+                <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, minWidth: 215, maxHeight: '400px', overflowY: 'auto', background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: 6, zIndex: 50 }}>
+                  <div style={menuHeadStyle}>Category</div>
+                  {[{ key: 'all', label: 'All categories' }, ...categories.map(c => ({ key: c, label: c }))].map(opt => (
+                    <button key={opt.key} type="button" onClick={() => setCategoryFilter(opt.key)} style={menuItemStyle(categoryFilter === opt.key)}>
+                      {opt.label}
+                      {categoryFilter === opt.key && <CheckMark />}
+                    </button>
+                  ))}
+
+                  <div style={{ margin: '4px 0', borderTop: '1px solid #F1F5F9' }} />
+                  <div style={menuHeadStyle}>Stock status</div>
+                  {STOCK_FILTERS.map(opt => (
+                    <button key={opt.key} type="button" onClick={() => setStockFilter(opt.key)} style={menuItemStyle(stockFilter === opt.key)}>
+                      {opt.label}
+                      {stockFilter === opt.key && <CheckMark />}
+                    </button>
+                  ))}
+
+                  <div style={{ margin: '4px 0', borderTop: '1px solid #F1F5F9' }} />
+                  <div style={menuHeadStyle}>Expiry</div>
+                  <button type="button" onClick={() => setExpiringOnly(v => !v)} style={menuItemStyle(expiringOnly)} aria-pressed={expiringOnly}>
+                    Expiring within {EXPIRING_SOON_DAYS} days
+                    {expiringOnly && <CheckMark />}
+                  </button>
+
+                  {activeFilterCount > 0 && (
+                    <>
+                      <div style={{ margin: '4px 0', borderTop: '1px solid #F1F5F9' }} />
+                      <button type="button"
+                        onClick={() => { setCategoryFilter('all'); setStockFilter('all'); setExpiringOnly(false); setFilterMenuOpen(false); }}
+                        style={{ ...menuItemStyle(false), color: '#64748B', fontWeight: 600 }}
+                      >
+                        Clear filters
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Sort by */}
+            <div ref={sortMenuRef} style={{ position: 'relative' }}>
+              <button
+                type="button"
+                onClick={() => setSortMenuOpen(o => !o)}
+                aria-expanded={sortMenuOpen}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', fontSize: '.78125rem', fontWeight: 600, border: '1.5px solid #CBD5E1', borderRadius: '.5rem', background: '#FFFFFF', color: '#0F172A', cursor: 'pointer' }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="6" x2="20" y2="6" /><line x1="7" y1="12" x2="17" y2="12" /><line x1="10" y1="18" x2="14" y2="18" /></svg>
+                Sort by
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+              </button>
+
+              {sortMenuOpen && (
+                <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, minWidth: 200, background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: 6, zIndex: 50 }}>
+                  {SORT_OPTIONS.map(opt => (
+                    <button key={opt.key} type="button"
+                      onClick={() => { setSortBy(opt.key); setSortMenuOpen(false); }}
+                      style={{ ...menuItemStyle(false), padding: '7px 8px', fontWeight: sortBy === opt.key ? 700 : 500 }}
+                    >
+                      {opt.label}
+                      {sortBy === opt.key && <CheckMark />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Action Buttons */}
@@ -378,7 +556,7 @@ export default function VaccineInventoryPage() {
         </div>
 
         {/* ── Table Area ── */}
-        <div style={{ overflowX: 'auto', borderBottomLeftRadius: 16, borderBottomRightRadius: 16 }}>
+        <div ref={tableAreaRef} style={{ overflowX: 'auto', minHeight: filtered.length ? tableReserve : undefined }}>
           <table className="kna-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '.8125rem', tableLayout: 'fixed' }}>
             <thead>
               <tr style={{ background: '#FAFAFA', borderBottom: '1px solid #E2E8F0', color: '#64748B', fontSize: '.6875rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.5px' }}>
@@ -391,7 +569,7 @@ export default function VaccineInventoryPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(item => (
+              {pageRows.map(item => (
                 <tr
                   key={item.id}
                   style={{ borderBottom: '1px solid #F1F5F9', background: '#FFFFFF', transition: 'background .12s ease', cursor: 'pointer' }}
@@ -412,6 +590,11 @@ export default function VaccineInventoryPage() {
                   </td>
                   <td style={{ padding: '16px 12px', color: '#64748B', fontWeight: 400 }}>
                     {item.expiry || '—'}
+                    {isExpiringSoon(item) && (
+                      <span style={{ display: 'block', fontSize: '.6875rem', fontWeight: 600, color: expiryOf(item) < today ? '#DC2626' : '#D97706', marginTop: 2 }}>
+                        {expiryOf(item) < today ? 'Expired' : 'Expiring soon'}
+                      </span>
+                    )}
                   </td>
                   <td style={{ padding: '16px 12px' }}>
                     {(() => {
@@ -449,6 +632,9 @@ export default function VaccineInventoryPage() {
               )}
             </tbody>
           </table>
+        </div>
+        <div style={{ borderBottomLeftRadius: 16, borderBottomRightRadius: 16, overflow: 'hidden' }}>
+          <Pager page={safePage} pages={pages} total={filtered.length} onPage={setPage} />
         </div>
       </div>
 

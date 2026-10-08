@@ -488,25 +488,11 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
       }
     });
 
-    // Search Incidents — pins hidden from the map (completed cases) are left
-    // out, since the result would open a map that no longer shows them.
-    incidentList.forEach(inc => {
-      if (inc.mapHidden === true) return;
-      const loc = inc.address || inc.location || inc.barangay || '';
-      const victim = inc.victimName || inc.patient || '';
-      if (loc.toLowerCase().includes(q) || victim.toLowerCase().includes(q)) {
-        results.push({
-          type: 'incident',
-          title: `Incident: ${loc || 'Bite Report'}`,
-          sub: victim ? `Victim: ${victim}` : 'Active exposure area',
-          page: 'incidents',
-          item: inc
-        });
-      }
-    });
+    // Incidents are not searched: the map holds simulated demo data only,
+    // with no place or patient text to match (docs/STUDY_MODE.md).
 
     return results.slice(0, 8);
-  }, [searchQuery, allPatients, allAppointments, inventoryList, incidentList]);
+  }, [searchQuery, allPatients, allAppointments, inventoryList]);
 
   // Click Outside Notification Dropdown
   useEffect(() => {
@@ -827,9 +813,11 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
 
   const confirmLogout = async () => {
     try {
-      await signOut(auth);
+      const revocation = authedPostJson('/api/devices', { action: 'logout' }).catch(() => {});
       if (onLogout) onLogout();
       else window.location.href = '/';
+      await signOut(auth);
+      await revocation;
     } catch (e) {
       console.error('Logout error:', e);
     }

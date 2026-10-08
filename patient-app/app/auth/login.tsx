@@ -5,7 +5,6 @@ import { useRouter } from 'expo-router';
 import { goBackOr, resetTo } from '../../utils/navigation';
 import { useState } from 'react';
 import {
-  Alert,
   Dimensions,
   Image,
   KeyboardAvoidingView,
@@ -14,15 +13,16 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
+import Tap from '../../components/Tap';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { auth, checkLoginTrust, getAuthErrorMessage, sendLoginOTP, signInAsGuest, signInWithMRN, signOut } from '../../config/backend';
 import { markOnboardingSeen, setKeepSignedIn } from '../../config/appPrefs';
 import { usePatientAuth } from '../../context/PatientAuthContext';
 import { moderateScale, scale, verticalScale } from '../../utils/scale';
+import CustomAlertModal from '../../components/CustomAlertModal';
 
 const { height } = Dimensions.get('window');
 const NAVY_BLUE = '#1E3A8A';
@@ -39,6 +39,8 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  // "Contact Us" opens the app's own popup, not the native alert.
+  const [showSupport, setShowSupport] = useState(false);
   // Defaults off: this is a medical record, and the phone may be shared.
   const [keepSignedIn, setKeepSignedInState] = useState(false);
   const { completeSecondFactor } = usePatientAuth();
@@ -133,9 +135,9 @@ export default function LoginScreen() {
 
       {/* TOP NAVIGATION */}
       <View style={[styles.navHeader, { top: Math.max(insets.top + (Platform.OS === 'android' ? 12 : 8), verticalScale(42)) }]}>
-        <TouchableOpacity style={styles.backButton} onPress={() => goBackOr(router, '/onboarding4')} activeOpacity={0.7}>
+        <Tap style={styles.backButton} onPress={() => goBackOr(router, '/onboarding4')} activeOpacity={0.7}>
           <Ionicons name="chevron-back" size={22} color="#1E293B" />
-        </TouchableOpacity>
+        </Tap>
       </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
@@ -208,16 +210,16 @@ export default function LoginScreen() {
                     onFocus={() => setFocusedField('pass')}
                     onBlur={() => setFocusedField(null)}
                   />
-                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={{ padding: scale(4) }}>
+                  <Tap onPress={() => setShowPassword(!showPassword)} style={{ padding: scale(4) }}>
                     <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#94A3B8" />
-                  </TouchableOpacity>
+                  </Tap>
                 </View>
               </View>
 
             </View>
 
             <View style={styles.optionsRow}>
-              <TouchableOpacity
+              <Tap
                 onPress={() => setKeepSignedInState(v => !v)}
                 style={styles.keepSignedInBtn}
                 activeOpacity={0.7}
@@ -229,11 +231,11 @@ export default function LoginScreen() {
                   {keepSignedIn && <Ionicons name="checkmark" size={13} color="#FFF" />}
                 </View>
                 <Text style={styles.keepSignedInText}>Keep me signed in</Text>
-              </TouchableOpacity>
+              </Tap>
 
-              <TouchableOpacity onPress={goToForgotPassword}>
+              <Tap onPress={goToForgotPassword}>
                 <Text style={styles.forgotText}>Forgot password?</Text>
-              </TouchableOpacity>
+              </Tap>
             </View>
 
             {keepSignedIn && (
@@ -245,7 +247,7 @@ export default function LoginScreen() {
               </View>
             )}
 
-            <TouchableOpacity
+            <Tap
               style={[styles.loginButton, loading && styles.buttonDisabled]}
               activeOpacity={0.85}
               onPress={handleLogin}
@@ -260,13 +262,13 @@ export default function LoginScreen() {
                 <Text style={styles.loginText}>{loading ? 'Signing in...' : 'Sign In'}</Text>
                 <Ionicons name="log-in-outline" size={20} color="#FFF" style={{ marginLeft: scale(6) }} />
               </LinearGradient>
-            </TouchableOpacity>
+            </Tap>
 
             <View style={styles.secondaryLinkRow}>
               <Text style={styles.secondaryLinkText}>New Patient? </Text>
-              <TouchableOpacity onPress={() => router.push('/auth/signup')}>
+              <Tap onPress={() => router.push('/auth/signup')}>
                 <Text style={styles.linkBold}>Sign up</Text>
-              </TouchableOpacity>
+              </Tap>
             </View>
 
             {/* DIVIDER & GUEST ACCESS */}
@@ -276,7 +278,7 @@ export default function LoginScreen() {
               <View style={styles.line} />
             </View>
 
-            <TouchableOpacity
+            <Tap
               style={[styles.guestButton, guestLoading && styles.buttonDisabled]}
               activeOpacity={0.8}
               onPress={handleGuestLogin}
@@ -284,21 +286,33 @@ export default function LoginScreen() {
             >
               <Text style={styles.guestButtonText}>{guestLoading ? 'Signing in...' : 'Continue as a Guest'}</Text>
               {!guestLoading && <Ionicons name="arrow-forward" size={16} color={NAVY_BLUE} />}
-            </TouchableOpacity>
+            </Tap>
 
-            <TouchableOpacity 
-              onPress={() => Alert.alert('Support Helpline', 'Contact K&A Clinic Frontdesk at support@kaclinic.ph or call (02) 8888-5622.')}
+            <Tap
+              onPress={() => setShowSupport(true)}
               style={styles.troubleLink}
             >
               <Text style={styles.troubleText}>
                 Having trouble? <Text style={styles.troubleBold}>Contact Us</Text>
               </Text>
-            </TouchableOpacity>
+            </Tap>
 
           </Animated.View>
 
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <CustomAlertModal
+        config={{
+          visible: showSupport,
+          type: 'info',
+          icon: 'call-outline',
+          title: 'Contact the clinic',
+          message: 'Contact the K&A Clinic front desk at support@kaclinic.ph or call (02) 8888-5622.',
+          primaryButtonText: 'OK',
+        }}
+        onClose={() => setShowSupport(false)}
+      />
     </View>
   );
 }

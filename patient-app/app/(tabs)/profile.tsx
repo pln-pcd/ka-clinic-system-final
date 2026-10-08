@@ -7,7 +7,6 @@ import { resetTo } from '../../utils/navigation';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import {
-  Alert,
   AppState,
   Image,
   ScrollView,
@@ -16,9 +15,10 @@ import {
   Switch,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
+import Tap from '../../components/Tap';
+import { cacheKeys, peekCache, writeCache } from '../../utils/localCache';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { auth, db, forgetTrustedDevice, signOut, API_BASE_URL } from '../../config/backend';
 import { setKeepSignedIn } from '../../config/appPrefs';
@@ -136,14 +136,16 @@ export default function ProfileScreen() {
 
   // Admin Dashboard's vaccinations/{mrn} doc is the source of truth for this
   // patient's demographic + PEP record — see ka-clinic-admin/src/features/patients/PatientsPage.jsx vaxDoc.
-  const [patientRecord, setPatientRecord] = useState<any | null>(null);
+  // Last-known copy first (utils/localCache), so the profile fields render
+  // filled on the first frame; the listener below keeps it current.
+  const [patientRecord, setPatientRecord] = useState<any | null>(() => (mrn ? peekCache<any>(cacheKeys.vaccination(mrn)) ?? null : null));
   const [recordError, setRecordError] = useState('');
 
   useEffect(() => {
     if (!mrn) { setPatientRecord(null); return; }
     return onSnapshot(doc(db, 'vaccinations', mrn), (snap) => {
       setRecordError('');
-      if (snap.exists()) setPatientRecord(snap.data());
+      if (snap.exists()) { setPatientRecord(snap.data()); writeCache(cacheKeys.vaccination(mrn), snap.data()); }
     }, (err) => {
       console.error('Vaccination record listener error:', err);
       setRecordError(err?.code === 'permission-denied'
@@ -371,8 +373,8 @@ export default function ProfileScreen() {
     if (others === 0) return;
     showAlert({
       type: 'signout',
-      title: 'Sign out all other devices?',
-      message: `${others} other device${others === 1 ? '' : 's'} will be signed out. This device stays signed in.`,
+      title: 'Sign out all devices?',
+      message: `All devices, including this one, will be signed out. Sign in again to continue.`,
       primaryButtonText: 'Sign Out All',
       isDestructive: true,
       onPrimaryPress: async () => {
@@ -639,9 +641,9 @@ export default function ProfileScreen() {
 
   const SubHeader = ({ title, rightElement }: { title: string; rightElement?: React.ReactNode }) => (
     <View style={[s.subHeader, { paddingTop: insets.top + verticalScale(16) }]}>
-      <TouchableOpacity onPress={() => { setCurrentView('main'); setIsEditingPersonal(false); }} style={s.backBtn}>
+      <Tap onPress={() => { setCurrentView('main'); setIsEditingPersonal(false); }} style={s.backBtn}>
         <Ionicons name="chevron-back" size={26} color={C.charcoal} />
-      </TouchableOpacity>
+      </Tap>
       <Text style={s.subHeaderTitle}>{title}</Text>
       <View style={s.subHeaderRight}>{rightElement}</View>
     </View>
@@ -664,7 +666,7 @@ export default function ProfileScreen() {
 
 
   const ProfileItem = ({ icon, label, value, onPress, color = C.slate, isLast = false }: any) => (
-    <TouchableOpacity
+    <Tap
       style={[s.item, isLast && { borderBottomWidth: 0 }]}
       onPress={onPress}
       disabled={!onPress}
@@ -682,7 +684,7 @@ export default function ProfileScreen() {
           <Ionicons name="chevron-forward" size={16} color={C.muted} />
         </View>
       )}
-    </TouchableOpacity>
+    </Tap>
   );
 
   // ── Render sections ─────────────────────────────────────────
@@ -697,7 +699,7 @@ export default function ProfileScreen() {
             <SubHeader
               title="Personal Information"
               rightElement={
-                <TouchableOpacity
+                <Tap
                   style={[s.editToggleBtn, isEditingPersonal && s.editToggleBtnActive]}
                   onPress={() => {
                     if (isGuest || user?.isAnonymous) {
@@ -730,7 +732,7 @@ export default function ProfileScreen() {
                   <Text style={[s.editToggleText, isEditingPersonal && { color: C.white }]}>
                     {isEditingPersonal ? 'Save' : 'Edit'}
                   </Text>
-                </TouchableOpacity>
+                </Tap>
               }
             />
 
@@ -874,14 +876,14 @@ export default function ProfileScreen() {
                           </View>
                           <Text style={s.deviceMeta}>{relativeTime(d.lastActiveAt)}</Text>
                         </View>
-                        <TouchableOpacity 
+                        <Tap
                           onPress={() => confirmLogoutDevice(d)} 
                           style={s.deviceRevokeBtn} 
                           activeOpacity={0.7}
                           accessibilityLabel={`Sign out ${d.label}`}
                         >
                           <Ionicons name="log-out-outline" size={19} color={C.red} />
-                        </TouchableOpacity>
+                        </Tap>
                       </View>
                     );
                   })}
@@ -889,12 +891,12 @@ export default function ProfileScreen() {
               )}
 
               {others.length > 0 && (
-                <TouchableOpacity style={s.deviceRevokeAllBtn} onPress={handleRevokeAllOthers} activeOpacity={0.85}>
+                <Tap style={s.deviceRevokeAllBtn} onPress={handleRevokeAllOthers} activeOpacity={0.85}>
                   <Ionicons name="shield-outline" size={17} color={C.red} />
                   <Text style={s.deviceRevokeAllText}>
                     Sign out all other devices ({others.length})
                   </Text>
-                </TouchableOpacity>
+                </Tap>
               )}
 
               <View style={s.deviceNoteBox}>
@@ -999,7 +1001,7 @@ export default function ProfileScreen() {
 
             {/* Profile card */}
             <View style={s.profileCard}>
-              <TouchableOpacity onPress={handleAvatarPress} style={s.avatarWrap} activeOpacity={0.8}>
+              <Tap onPress={handleAvatarPress} style={s.avatarWrap} activeOpacity={0.8}>
                 {profileImage ? (
                   <Image source={{ uri: profileImage }} style={s.avatar} />
                 ) : (
@@ -1010,7 +1012,7 @@ export default function ProfileScreen() {
                 <View style={s.cameraBadge}>
                   <Ionicons name="camera" size={12} color={C.white} />
                 </View>
-              </TouchableOpacity>
+              </Tap>
               <Text style={s.userName}>{personalData.fullName || user?.displayName || '—'}</Text>
               {user?.email ? <Text style={s.userEmail}>{user.email}</Text> : null}
 
@@ -1052,7 +1054,7 @@ export default function ProfileScreen() {
               <Text style={s.sectionHeader}>Settings & Support</Text>
               <View style={s.card}>
                 {isGuest || user?.isAnonymous ? (
-                  <TouchableOpacity
+                  <Tap
                     style={s.item}
                     onPress={() => {
                       showAlert({
@@ -1087,7 +1089,7 @@ export default function ProfileScreen() {
                         style={{ opacity: 0.55 }}
                       />
                     </View>
-                  </TouchableOpacity>
+                  </Tap>
                 ) : (
                   <View style={s.item}>
                     <View style={[s.iconBox, { backgroundColor: `${C.slate}10` }]}>
@@ -1130,7 +1132,7 @@ export default function ProfileScreen() {
       {/* ── BOTTOM NAV BAR ── */}
       <View style={[nav.bar, { height: verticalScale(80) + insets.bottom, paddingBottom: verticalScale(8) + insets.bottom }]}>
         {/* Tab 1: Home */}
-        <TouchableOpacity
+        <Tap
           style={nav.tab}
           activeOpacity={0.7}
           onPress={() => {
@@ -1141,10 +1143,10 @@ export default function ProfileScreen() {
         >
           <Ionicons name="home-outline" size={24} color="#64748B" />
           <Text style={nav.label}>Home</Text>
-        </TouchableOpacity>
+        </Tap>
 
         {/* Tab 2: Appts */}
-        <TouchableOpacity
+        <Tap
           style={nav.tab}
           activeOpacity={0.7}
           onPress={() => {
@@ -1155,10 +1157,10 @@ export default function ProfileScreen() {
         >
           <Ionicons name="calendar-outline" size={24} color="#64748B" />
           <Text style={nav.label}>Appts</Text>
-        </TouchableOpacity>
+        </Tap>
 
         {/* Tab 3: Chat */}
-        <TouchableOpacity
+        <Tap
           style={nav.tab}
           activeOpacity={0.7}
           onPress={() => {
@@ -1169,16 +1171,16 @@ export default function ProfileScreen() {
         >
           <Ionicons name="chatbubble-ellipses-outline" size={24} color="#64748B" />
           <Text style={nav.label}>Chat</Text>
-        </TouchableOpacity>
+        </Tap>
 
         {/* Tab 4: Account */}
-        <TouchableOpacity
+        <Tap
           style={nav.tab}
           activeOpacity={0.7}
         >
           <Ionicons name="person" size={24} color={C.red} />
           <Text style={[nav.label, nav.labelActive]}>Account</Text>
-        </TouchableOpacity>
+        </Tap>
       </View>
 
       {/* Custom Alert Modal */}

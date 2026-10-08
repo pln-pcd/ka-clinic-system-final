@@ -3,13 +3,15 @@
 // Constraints these templates are written against:
 //   * Table-based layout with inline styles only — Gmail/Outlook strip <style>
 //     blocks and ignore most modern CSS.
-//   * No images or web fonts. An image-heavy mail with little text is a spam
-//     signal, and remote images are blocked by default anyway, so a logo would
-//     render as a broken box for most recipients. The wordmark is live text.
+//   * No remote images or web fonts: remote images are blocked by default in
+//     many clients. The invite/report template carries the logo as an inline
+//     CID attachment instead (./logo.js); the rest use a live-text wordmark.
 //   * Every send also carries a plaintext part — see _lib/mail/mailer.js.
 // Palette matches the patient app's navy (see patient-app/app/auth/*.tsx
 // NAVY_BLUE) so a code that arrives by mail looks like it came from the same
 // product as the screen the patient is typing it into.
+import { LOGO_CID } from './logo.js';
+
 const BRAND_NAVY = '#0A1D47';
 const BRAND_NAVY_LIGHT = '#153A85';
 const BRAND_BLUE = '#1D4ED8';
@@ -234,66 +236,154 @@ export function buildPasswordResetEmailHtml({ resetUrl, email, name }) {
   });
 }
 
-// Manager → staff invite email — mirrors the staff credential interface in AcceptInvitePage.jsx
-export function buildInviteEmailHtml({ inviteUrl, inviterName }) {
-  const invitedBy = inviterName
-    ? `<strong>${inviterName}</strong> has invited you`
-    : 'You have been invited';
+// ─────────────────────── CLEAN TEMPLATE (invites, reports) ───────────────────────
+// A quieter layout than shell(): white page, the clinic logo at the top, dark
+// text, one primary button, a hairline divider and a small grey footer. The
+// logo is an inline CID attachment (see ./logo.js), so callers must add
+// logoAttachment() to the message's attachments.
+const CLINIC_ADDRESS = 'San Juan St., Libon, Albay';
+const CLEAN_INK = '#111827';
+const CLEAN_TEXT = '#374151';
+const CLEAN_MUTED = '#6B7280';
+const CLEAN_RULE = '#E5E7EB';
 
-  const credentialCard = `                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0 24px;background-color:#F8FAFC;border:1px solid #E2E8F0;border-radius:14px;overflow:hidden;">
+export function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function cleanShell({ title, preheader, body, footerNote }) {
+  return `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <meta name="supported-color-schemes" content="light">
+    <title>${title}</title>
+  </head>
+  <body style="margin:0;padding:0;background-color:#FFFFFF;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,Helvetica,sans-serif;-webkit-font-smoothing:antialiased;">
+    <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">${preheader}</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#FFFFFF;">
+      <tr>
+        <td align="center" style="padding:32px 16px;">
+          <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:560px;">
+            <tr>
+              <td style="padding:0 4px 20px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                   <tr>
-                    <td style="padding:18px 22px;background-color:#FFFFFF;border-bottom:1px solid #EDF2F7;">
-                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                        <tr>
-                          <td>
-                            <div style="font-size:10px;font-weight:bold;color:#64748B;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:4px;">Position / Credential</div>
-                            <div style="font-size:16px;font-weight:bold;color:#0F172A;">Clinic Staff</div>
-                          </td>
-                          <td align="right">
-                            <span style="display:inline-block;padding:4px 10px;background-color:#FEF3C7;color:#92400E;font-size:10px;font-weight:bold;border-radius:999px;letter-spacing:0.5px;text-transform:uppercase;">Pending Setup</span>
-                          </td>
-                        </tr>
-                      </table>
+                    <td style="vertical-align:middle;padding-right:12px;">
+                      <img src="cid:${LOGO_CID}" width="44" height="44" alt="K&amp;A" style="display:block;width:44px;height:44px;border:0;outline:none;">
+                    </td>
+                    <td style="vertical-align:middle;">
+                      <div style="font-size:15px;font-weight:bold;color:${CLEAN_INK};line-height:1.25;">${CLINIC_NAME}</div>
+                      <div style="font-size:12px;color:${CLEAN_MUTED};line-height:1.4;">Anti-Rabies Care &amp; Vaccination</div>
                     </td>
                   </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:8px 4px 8px;border-top:1px solid ${CLEAN_RULE};font-size:15px;line-height:1.65;color:${CLEAN_TEXT};">
+${body}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:20px 4px 0;border-top:1px solid ${CLEAN_RULE};">
+                <p style="margin:0 0 6px;font-size:12px;line-height:1.6;color:${CLEAN_MUTED};"><strong style="color:${CLEAN_TEXT};">${CLINIC_NAME}</strong> &middot; ${CLINIC_ADDRESS}</p>
+                ${footerNote ? `<p style="margin:0;font-size:12px;line-height:1.6;color:${CLEAN_MUTED};">${footerNote}</p>` : ''}
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+}
+
+function cleanParagraph(html, marginBottom = 16) {
+  return `                <p style="margin:0 0 ${marginBottom}px;font-size:15px;line-height:1.65;color:${CLEAN_TEXT};">${html}</p>`;
+}
+
+// One solid dark button. bgcolor on the cell keeps it filled in Outlook; the
+// padded <a> gives Gmail (web and mobile) a full-size tap target.
+function cleanButton(href, label) {
+  return `                <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 24px;">
                   <tr>
-                    <td style="padding:18px 22px;">
-                      <div style="font-size:10px;font-weight:bold;color:#64748B;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;">Grants Access To</div>
-                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-size:13px;color:#334155;line-height:2;">
-                        <tr>
-                          <td style="width:22px;color:#1D4ED8;font-weight:bold;font-size:15px;">&#10003;</td>
-                          <td><strong>Patient Records</strong> — Consultations &amp; Medical History</td>
-                        </tr>
-                        <tr>
-                          <td style="width:22px;color:#1D4ED8;font-weight:bold;font-size:15px;">&#10003;</td>
-                          <td><strong>Dose Tracking</strong> — PEP &amp; PrEP Vaccine Schedules</td>
-                        </tr>
-                        <tr>
-                          <td style="width:22px;color:#1D4ED8;font-weight:bold;font-size:15px;">&#10003;</td>
-                          <td><strong>Bite Incident Reports</strong> — Emergency Triage &amp; Intake</td>
-                        </tr>
-                      </table>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td style="padding:10px 22px;background-color:#F1F5F9;border-top:1px solid #E2E8F0;font-size:10.5px;color:#64748B;font-weight:600;letter-spacing:0.2px;">
-                      Authorized by K&amp;A Clinic Care Team &bull; Expires in 48 Hours
+                    <td align="center" bgcolor="${BRAND_NAVY}" style="border-radius:8px;background-color:${BRAND_NAVY};">
+                      <a href="${href}" target="_blank" style="display:inline-block;padding:13px 28px;font-size:15px;font-weight:bold;color:#FFFFFF;text-decoration:none;border-radius:8px;">${label}</a>
                     </td>
                   </tr>
                 </table>`;
+}
 
-  return shell({
-    title: 'Staff Credential Invitation — K&amp;A Animal Bite Center',
-    preheader: 'You have been invited to join the K&A Animal Bite Center staff portal. Complete setup within 48 hours.',
+// Manager → nurse invitation (role value stays "staff").
+export function buildInviteEmailHtml({ inviteUrl, inviterName }) {
+  const who = inviterName ? `<strong style="color:${CLEAN_INK};">${escapeHtml(inviterName)}</strong> has invited you` : 'You have been invited';
+  return cleanShell({
+    title: 'Invitation to join K&amp;A Clinic as a nurse',
+    preheader: 'You have been invited to join K&amp;A Clinic as a nurse / staff member. This link expires in 48 hours.',
     body: [
-      heading('Welcome to the Team'),
-      paragraph(`${invitedBy} to join the <strong>K&amp;A Animal Bite Center</strong> administration dashboard. Activate your staff credential below to set your password and access the clinic system.`),
-      credentialCard,
-      button(inviteUrl, 'Accept Invite & Set Password'),
-      fallbackLink(inviteUrl),
-      footnote('This invitation expires in 48 hours. If you were not expecting this, you can safely ignore this email.'),
+      `                <h1 style="margin:16px 0 16px;font-size:22px;line-height:1.3;font-weight:bold;color:${CLEAN_INK};">You're invited to join K&amp;A Clinic as a nurse</h1>`,
+      cleanParagraph('Good day,'),
+      cleanParagraph(`${who} to join <strong style="color:${CLEAN_INK};">K&amp;A Clinic</strong> as a nurse / staff member. Accept the invitation to set your password and sign in to the clinic dashboard.`),
+      cleanButton(inviteUrl, 'Accept invitation'),
+      cleanParagraph(`If the button doesn't work, copy this link into your browser:<br><a href="${inviteUrl}" target="_blank" style="color:${CLEAN_TEXT};word-break:break-all;font-size:13px;">${inviteUrl}</a>`, 24),
     ].join('\n'),
+    footerNote: "This link expires in 48 hours. If you didn't expect this email, you can ignore it.",
   });
+}
+
+// Report email (clinic report, patient record, inventory report). The PDF is
+// attached by the caller; this is the covering note.
+//   recipientName  optional: "Good day, Maria," vs "Good day,"
+//   reportName     e.g. "Clinic Report"
+//   period         e.g. "September 2026" (optional)
+//   generatedOn    e.g. "October 7, 2026"
+//   summary        short lines, e.g. ["57 patients", "Filters: Category III"]
+export function buildReportEmailHtml({ recipientName, reportName, period, generatedOn, summary = [] }) {
+  const greeting = recipientName ? `Good day, ${escapeHtml(recipientName)},` : 'Good day,';
+  const name = escapeHtml(reportName || 'report');
+  const forPeriod = period ? ` for <strong style="color:${CLEAN_INK};">${escapeHtml(period)}</strong>` : '';
+  const lines = (summary || []).filter(Boolean).map(escapeHtml);
+  const summaryBlock = lines.length
+    ? `                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 20px;">
+                  <tr>
+                    <td style="padding:12px 16px;border-left:3px solid ${CLEAN_RULE};background-color:#F9FAFB;font-size:14px;line-height:1.7;color:${CLEAN_TEXT};">
+                      ${lines.join('<br>')}
+                    </td>
+                  </tr>
+                </table>`
+    : '';
+  return cleanShell({
+    title: `${name}${period ? ` – ${escapeHtml(period)}` : ''}`,
+    preheader: `Attached: ${name}${period ? ` for ${escapeHtml(period)}` : ''} from the K&amp;A Animal Bite Center system.`,
+    body: [
+      '                <div style="height:16px;line-height:16px;font-size:0;">&nbsp;</div>',
+      cleanParagraph(greeting),
+      cleanParagraph(`Please find attached the <strong style="color:${CLEAN_INK};">${name}</strong>${forPeriod}, generated from the K&amp;A Animal Bite Center system${generatedOn ? ` on ${escapeHtml(generatedOn)}` : ''}.`),
+      summaryBlock,
+      cleanParagraph(`Thank you,<br><strong style="color:${CLEAN_INK};">K&amp;A Animal Bite Center</strong>`, 24),
+    ].filter(Boolean).join('\n'),
+    footerNote: 'Sent from the K&amp;A Clinic admin dashboard. If you received this by mistake, please delete it and let the clinic know.',
+  });
+}
+
+export function buildReportEmailText({ recipientName, reportName, period, generatedOn, summary = [] }) {
+  const lines = [
+    recipientName ? `Good day, ${recipientName},` : 'Good day,',
+    '',
+    `Please find attached the ${reportName || 'report'}${period ? ` for ${period}` : ''}, generated from the K&A Animal Bite Center system${generatedOn ? ` on ${generatedOn}` : ''}.`,
+  ];
+  const extra = (summary || []).filter(Boolean);
+  if (extra.length) lines.push('', ...extra);
+  lines.push('', 'Thank you,', `K&A Animal Bite Center · ${CLINIC_ADDRESS}`);
+  return lines.join('\n');
 }
 
 // Patient follow-up / reminder mail. Sent two ways: automatically when the
@@ -389,22 +479,17 @@ export function buildPasswordResetEmailText({ resetUrl, email, name }) {
 export function buildInviteEmailText({ inviteUrl, inviterName }) {
   const invitedBy = inviterName ? `${inviterName} has invited you` : 'You have been invited';
   return [
-    'K&A Animal Bite Center — Staff Invitation',
-    '========================================',
+    "You're invited to join K&A Clinic as a nurse",
     '',
-    `${invitedBy} to join the K&A Animal Bite Center Admin Dashboard as staff.`,
+    'Good day,',
     '',
-    'Credential: Clinic Staff',
-    'Grants Access To:',
-    '  - Patient Records (Consultations & Medical History)',
-    '  - Dose Tracking (PEP & PrEP Schedules)',
-    '  - Bite Incident Reports (Emergency Intake)',
+    `${invitedBy} to join K&A Clinic as a nurse / staff member. Accept the invitation to set your password and sign in to the clinic dashboard:`,
     '',
-    'Activate your account and set your password here:',
     inviteUrl,
     '',
-    'Note: This invite expires in 48 hours.',
+    'This link expires in 48 hours.',
+    "If you didn't expect this email, you can ignore it.",
     '',
-    'K&A Animal Bite Center — Libon, Albay',
+    `K&A Animal Bite Center · ${CLINIC_ADDRESS}`,
   ].join('\n');
 }

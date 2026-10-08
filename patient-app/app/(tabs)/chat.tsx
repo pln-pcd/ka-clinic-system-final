@@ -7,6 +7,7 @@ import {
   addDoc,
   collection,
   doc,
+  getDoc,
   onSnapshot,
   orderBy,
   query,
@@ -16,28 +17,28 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   BackHandler,
+  Image,
   Keyboard,
   KeyboardAvoidingView,
-  Modal,
   Platform,
+  Pressable,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import Tap from '../../components/Tap';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useAnimatedKeyboard, useAnimatedStyle } from 'react-native-reanimated';
 import { db } from '../../config/backend';
 import { usePatientAuth } from '../../context/PatientAuthContext';
 import { moderateScale, scale, verticalScale } from '../../utils/scale';
 import CustomAlertModal, { CustomAlertConfig } from '../../components/CustomAlertModal';
-import { askClinicAssistant, type ChatTurn } from '../../services/chatbot';
+import { askClinicAssistant, type ChatTurn, type ReplyAction } from '../../services/chatbot';
+import { CHATBOT_STUDY_MODE, KAI_DISCLAIMER, KAI_DISCLAIMER_SHORT, STUDY_NOTICE } from '../../config/studyMode';
 
 type BubbleMessage = {
   id: string;
@@ -45,6 +46,8 @@ type BubbleMessage = {
   sender: 'patient' | 'admin' | 'bot';
   createdAt: number;
   senderName?: string;
+  /** Navigation replies carry a button (open the vaccination card / Appts). */
+  action?: ReplyAction;
 };
 type Mode = 'bot' | 'admin';
 
@@ -113,10 +116,50 @@ function renderFormattedMessage(rawText: string, isPatient: boolean) {
   });
 }
 
+// Small round avatar beside a bubble, like the admin Messages page: the
+// patient's own photo (or a person icon) beside "You", the K&A logo beside
+// clinic staff (staff messages carry no staff id, and staff photos are not
+// readable from the patient app), and KAI's mark beside the assistant.
+const AVATAR = scale(30);
+function ChatAvatar({ sender, photo }: { sender: BubbleMessage['sender']; photo: string | null }) {
+  if (sender === 'patient') {
+    return photo
+      ? <Image source={{ uri: photo }} style={s.avatar} accessibilityIgnoresInvertColors />
+      : <View style={[s.avatar, s.avatarIcon]}><Ionicons name="person" size={AVATAR * 0.55} color="#64748B" /></View>;
+  }
+  if (sender === 'admin') {
+    return (
+      <View style={[s.avatar, s.avatarLogo]}>
+        <Image source={require('../../assets/logo-white-nobg.png')} style={{ width: AVATAR * 0.78, height: AVATAR * 0.78 }} resizeMode="contain" />
+      </View>
+    );
+  }
+  return <View style={[s.avatar, s.avatarBot]}><Ionicons name="sparkles" size={AVATAR * 0.5} color="#FFFFFF" /></View>;
+}
+
 export default function ChatScreen() {
   const { user, mrn } = usePatientAuth();
 
   const [mode, setMode] = useState<Mode>('bot');
+
+  // The patient's profile photo for their own bubbles: the clinic-synced copy
+  // (patientAvatars/{mrn}), else the one saved on this phone by the profile
+  // screen.
+  const [myPhoto, setMyPhoto] = useState<string | null>(null);
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    AsyncStorage.getItem(`kna:avatar:${user.uid}`)
+      .then(v => { if (!cancelled && v) setMyPhoto(v); })
+      .catch(() => {});
+    if (mrn) {
+      getDoc(doc(db, 'patientAvatars', mrn))
+        .then(snap => { const url = snap.exists() ? (snap.data() as any)?.dataUrl : null; if (!cancelled && url) setMyPhoto(url); })
+        .catch(() => {});
+    }
+    return () => { cancelled = true; };
+  }, [user?.uid, mrn]);
+
   const [openThreadId, setOpenThreadId] = useState<string | null>(null);
   const [threadLoaded, setThreadLoaded] = useState(false);
   const [escalating, setEscalating] = useState(false);
@@ -284,48 +327,42 @@ export default function ChatScreen() {
     // 'trigger' — always creates a NEW conversation document. A resolved or
     // archived thread is never reopened; it is excluded from the open-thread
     // query above, so this path is the only way back into staff chat.
+    // 'trigger' — confirm first, in the app's own popup.
     if (!user || escalating) return;
-    Alert.alert(
-      'Talk to Clinic Staff',
-      'This starts a new conversation with K&A Clinic staff. Continue?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Continue',
-          onPress: async () => {
-            setEscalating(true);
-            setChatError('');
-            try {
-              const patientName = user.displayName || (user.isAnonymous ? 'Guest Patient' : (user.email?.split('@')[0] ?? 'Patient'));
-              await addDoc(collection(db, 'chatThreads'), {
-                patientUid: user.uid,
-                patientName,
-                patientMrn: mrn || null,
-                patientEmail: user.email || null,
-                status: 'new',
-                unread: true,
-                resolved: false,
-                lastMessage: '',
-                lastMessageAt: Date.now(),
-                createdAt: Date.now(),
-              });
-              // The open-thread listener picks the new document up and flips
-              // the button to 'resume'; switching mode here opens it straight
-              // away so the patient is not left tapping twice.
-              setMode('admin');
-              rememberPendingTrigger(false);
-            } catch (e: any) {
-              console.error('Escalation error:', e);
-              setChatError(e?.code === 'permission-denied'
-                ? 'You do not have permission to start a conversation with clinic staff.'
-                : 'Could not start a conversation with clinic staff. Please try again.');
-            } finally {
-              setEscalating(false);
-            }
-          },
-        },
-      ]
-    );
+    setShowEscalationModal(true);
+  };
+
+  const startEscalation = async () => {
+    if (!user || escalating) return;
+    setEscalating(true);
+    setChatError('');
+    try {
+      const patientName = user.displayName || (user.isAnonymous ? 'Guest Patient' : (user.email?.split('@')[0] ?? 'Patient'));
+      await addDoc(collection(db, 'chatThreads'), {
+        patientUid: user.uid,
+        patientName,
+        patientMrn: mrn || null,
+        patientEmail: user.email || null,
+        status: 'new',
+        unread: true,
+        resolved: false,
+        lastMessage: '',
+        lastMessageAt: Date.now(),
+        createdAt: Date.now(),
+      });
+      // The open-thread listener picks the new document up and flips
+      // the button to 'resume'; switching mode here opens it straight
+      // away so the patient is not left tapping twice.
+      setMode('admin');
+      rememberPendingTrigger(false);
+    } catch (e: any) {
+      console.error('Escalation error:', e);
+      setChatError(e?.code === 'permission-denied'
+        ? 'You do not have permission to start a conversation with clinic staff.'
+        : 'Could not start a conversation with clinic staff. Please try again.');
+    } finally {
+      setEscalating(false);
+    }
   };
 
   // ── End the conversation from the patient side ──────────────────────────
@@ -433,7 +470,7 @@ export default function ChatScreen() {
     }
     setBotMessages(m => [...m, {
       id: `b-${Date.now()}`, text: reply.text, sender: 'bot',
-      createdAt: Date.now(), senderName: BOT_SENDER_LABEL,
+      createdAt: Date.now(), senderName: BOT_SENDER_LABEL, action: reply.action,
     }]);
     // Drives the staff button's trigger state. Only the latest reply counts —
     // a follow-up the bot *can* answer clears the offer again.
@@ -477,6 +514,13 @@ export default function ChatScreen() {
 
   const send = (override?: string) => (mode === 'admin' ? sendAdminMessage() : sendBotMessage(override));
 
+  // Buttons under KAI's personal-info answers.
+  const openReplyAction = (action: ReplyAction) => {
+    if (action.target === 'appointments') router.navigate('/appt');
+    // Home, scrolled to the vaccination card (t makes a repeat tap a new navigation).
+    else router.navigate({ pathname: '/', params: { tab: 'Records', t: String(Date.now()) } });
+  };
+
   const messages = mode === 'admin' ? adminMessages : botMessages;
   const messagesLoaded = mode === 'admin' ? adminMessagesLoaded : true;
   const typing = mode === 'admin' ? sending : botTyping;
@@ -487,16 +531,16 @@ export default function ChatScreen() {
 
       {/* Safe area top padding + header */}
       <View style={[s.header, { paddingTop: Math.max(insets.top, verticalScale(20)), paddingBottom: verticalScale(14), minHeight: verticalScale(74) + insets.top }]}>
-        <TouchableOpacity style={s.headerBtn} onPress={goBack} activeOpacity={0.6}>
+        <Tap style={s.headerBtn} onPress={goBack} activeOpacity={0.6}>
           <Ionicons name="chevron-back" size={22} color={C.text} />
-        </TouchableOpacity>
+        </Tap>
         <View style={{ alignItems: 'center', justifyContent: 'center' }}>
           <Text style={s.headerTitle}>{mode === 'admin' ? (<><Text style={{ color: C.red, fontWeight: '900' }}>K&A</Text> Clinic Staff</>) : (<><Text style={{ color: C.red, fontWeight: '900' }}>{BOT_NAME}</Text> · AI Assistant</>)}</Text>
           <Text style={s.headerSubtitle}>{mode === 'admin' ? 'Chatting with clinic staff' : 'K&A Virtual Assistant · Helpdesk'}</Text>
         </View>
         {/* Refresh — starts a fresh assistant conversation. Bot view only */}
         {mode === 'bot' ? (
-          <TouchableOpacity
+          <Tap
             style={s.headerBtn}
             onPress={startNewBotConversation}
             activeOpacity={0.6}
@@ -504,7 +548,7 @@ export default function ChatScreen() {
             accessibilityLabel="Start a new conversation with KAI"
           >
             <Ionicons name="refresh" size={20} color={C.text} />
-          </TouchableOpacity>
+          </Tap>
         ) : (
           <View style={{ width: scale(44), height: scale(44) }} />
         )}
@@ -517,6 +561,19 @@ export default function ChatScreen() {
         keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
       >
         <Animated.View style={[{ flex: 1 }, keyboardLift]}>
+          {/* Persistent KAI disclaimer (and the study-mode notice). */}
+          {mode === 'bot' && (
+            <View style={s.disclaimer} accessibilityRole="text">
+              <Ionicons name="information-circle-outline" size={16} color="#1E3A8A" style={{ marginTop: 1 }} />
+              <Text style={s.disclaimerTxt}>{KAI_DISCLAIMER}</Text>
+            </View>
+          )}
+          {mode === 'bot' && CHATBOT_STUDY_MODE && (
+            <View style={s.studyNotice} accessibilityRole="text">
+              <Ionicons name="flask-outline" size={14} color="#92400E" />
+              <Text style={s.studyNoticeTxt}>{STUDY_NOTICE}</Text>
+            </View>
+          )}
           {chatError ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), padding: scale(14), backgroundColor: C.redLight }}>
               <Ionicons name="alert-circle-outline" size={16} color={C.red} />
@@ -538,18 +595,18 @@ export default function ChatScreen() {
                 <Text style={s.heroSub}>
                   {mode === 'admin'
                     ? 'Send a message and clinic staff will reply here'
-                    : "I'm your K&A Clinic virtual assistant. Ask about clinic hours, booking appointments, or app help. Medical questions go straight to clinic staff."}
+                    : "I'm the K&A Clinic virtual assistant. Ask about office hours, the clinic's location and contact details, booking an appointment, or finding your way around the app."}
                 </Text>
               </View>
               {mode === 'bot' && (
                 <View style={s.grid}>
                   {SUGGESTIONS.map((sug, i) => (
-                    <TouchableOpacity key={i} style={s.card} onPress={() => sendBotMessage(sug.label)} activeOpacity={0.8}>
+                    <Tap key={i} style={s.card} onPress={() => sendBotMessage(sug.label)} activeOpacity={0.8}>
                       <View style={s.cardIconBox}>
                         <Ionicons name={sug.icon as any} size={20} color={C.red} />
                       </View>
                       <Text style={s.cardText}>{sug.label}</Text>
-                    </TouchableOpacity>
+                    </Tap>
                   ))}
                 </View>
               )}
@@ -565,6 +622,7 @@ export default function ChatScreen() {
                     : PATIENT_SENDER_LABEL;
                 return (
                   <View key={m.id} style={[s.msgRow, isPatient ? s.msgUser : s.msgAi]}>
+                    {!isPatient && <ChatAvatar sender={m.sender} photo={myPhoto} />}
                     <View style={[s.msgColumn, isPatient ? s.msgColumnOwn : s.msgColumnOther]}>
                       {senderLabel && (
                         <Text style={[s.senderLabel, isPatient && s.senderLabelOwn]}>{senderLabel}</Text>
@@ -574,7 +632,20 @@ export default function ChatScreen() {
                           {renderFormattedMessage(m.text, isPatient)}
                         </Text>
                       </View>
+                      {m.action && (
+                        <Pressable
+                          onPress={() => openReplyAction(m.action!)}
+                          accessibilityRole="button"
+                          android_ripple={{ color: 'rgba(30,58,138,0.12)' }}
+                          style={({ pressed }) => [s.replyAction, pressed && Platform.OS === 'ios' && { opacity: 0.8 }]}
+                        >
+                          <Ionicons name={m.action.target === 'appointments' ? 'calendar-outline' : 'list-outline'} size={15} color={C.red} />
+                          <Text style={s.replyActionTxt}>{m.action.label}</Text>
+                          <Ionicons name="chevron-forward" size={14} color={C.red} />
+                        </Pressable>
+                      )}
                     </View>
+                    {isPatient && <ChatAvatar sender="patient" photo={myPhoto} />}
                   </View>
                 );
               })}
@@ -587,7 +658,7 @@ export default function ChatScreen() {
           {/* Bot view controls */}
           {mode === 'bot' && threadLoaded && openThreadId && (
             <View style={s.actionRow}>
-              <TouchableOpacity
+              <Tap
                 style={s.flexBtnPrimary}
                 onPress={onStaffButtonPress}
                 disabled={escalating}
@@ -601,9 +672,9 @@ export default function ChatScreen() {
                     <Text style={s.flexBtnPrimaryTxt}>Back to Clinic Staff</Text>
                   </>
                 )}
-              </TouchableOpacity>
+              </Tap>
 
-              <TouchableOpacity style={s.flexBtnSecondary} onPress={endConversation} disabled={endingConversation} activeOpacity={0.7}>
+              <Tap style={s.flexBtnSecondary} onPress={endConversation} disabled={endingConversation} activeOpacity={0.7}>
                 {endingConversation ? (
                   <ActivityIndicator color={C.red} size="small" />
                 ) : (
@@ -612,19 +683,19 @@ export default function ChatScreen() {
                     <Text style={s.flexBtnSecondaryTxt}>Done / End</Text>
                   </>
                 )}
-              </TouchableOpacity>
+              </Tap>
             </View>
           )}
 
           {/* Staff view */}
           {mode === 'admin' && threadLoaded && openThreadId && (
             <View style={s.actionRow}>
-              <TouchableOpacity style={s.flexBtnSecondary} onPress={() => setMode('bot')} activeOpacity={0.7}>
+              <Tap style={s.flexBtnSecondary} onPress={() => setMode('bot')} activeOpacity={0.7}>
                 <Ionicons name="chatbubble-ellipses-outline" size={15} color={C.textSub} />
                 <Text style={s.flexBtnSecondaryTxt}>Ask Assistant</Text>
-              </TouchableOpacity>
+              </Tap>
 
-              <TouchableOpacity style={s.flexBtnPrimary} onPress={endConversation} disabled={endingConversation} activeOpacity={0.7}>
+              <Tap style={s.flexBtnPrimary} onPress={endConversation} disabled={endingConversation} activeOpacity={0.7}>
                 {endingConversation ? (
                   <ActivityIndicator color="#fff" size="small" />
                 ) : (
@@ -633,47 +704,9 @@ export default function ChatScreen() {
                     <Text style={s.flexBtnPrimaryTxt}>Done / End</Text>
                   </>
                 )}
-              </TouchableOpacity>
+              </Tap>
             </View>
           )}
-
-          {/* ══ TALK TO CLINIC STAFF POPUP MODAL ════════════════════════════════ */}
-          <Modal visible={showEscalationModal} transparent animationType="fade" statusBarTranslucent>
-            <TouchableWithoutFeedback onPress={() => setShowEscalationModal(false)}>
-              <View style={s.modalOverlay}>
-                <TouchableWithoutFeedback onPress={e => e.stopPropagation()}>
-                  <View style={s.modalCard}>
-                    <View style={s.modalHeader}>
-                      <View style={s.modalIconWrap}>
-                        <Ionicons name="medical-outline" size={24} color={C.red} />
-                      </View>
-                      <Text style={s.modalTitle}>Talk to Clinic Staff</Text>
-                    </View>
-                    <Text style={s.modalMsg}>
-                      Medical and rabies-related questions are answered by clinic staff, not the assistant. Would you like to connect directly with K&A Clinic staff?
-                    </Text>
-                    <View style={s.modalActions}>
-                      <TouchableOpacity
-                        style={s.modalCancelBtn}
-                        onPress={() => setShowEscalationModal(false)}
-                      >
-                        <Text style={s.modalCancelTxt}>Dismiss</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={s.modalConfirmBtn}
-                        onPress={() => {
-                          setShowEscalationModal(false);
-                          onStaffButtonPress();
-                        }}
-                      >
-                        <Text style={s.modalConfirmTxt}>Talk to Staff</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </TouchableWithoutFeedback>
-              </View>
-            </TouchableWithoutFeedback>
-          </Modal>
 
           {/* Bottom Chat Input Box */}
           <View
@@ -690,38 +723,56 @@ export default function ChatScreen() {
                 value={input}
                 onChangeText={setInput}
                 placeholder={mode === 'admin' ? 'Message the clinic...' : 'Type a message...'}
+                placeholderTextColor="#6B7280"
                 returnKeyType="send"
                 onSubmitEditing={() => send()}
               />
-              <TouchableOpacity style={[s.sendBtn, (sending || botTyping || !input.trim()) && { opacity: 0.4 }]} onPress={() => send()} disabled={sending || botTyping || !input.trim()}>
+              <Tap style={[s.sendBtn, (sending || botTyping || !input.trim()) && { opacity: 0.4 }]} onPress={() => send()} disabled={sending || botTyping || !input.trim()}>
                 <Ionicons name="arrow-up" size={20} color="#fff" />
-              </TouchableOpacity>
+              </Tap>
             </View>
+            {mode === 'bot' && <Text style={s.inputDisclaimer}>{KAI_DISCLAIMER_SHORT}</Text>}
           </View>
         </Animated.View>
       </KeyboardAvoidingView>
 
       {/* ── BOTTOM NAV BAR ── Anchored stationary at the bottom of the screen */}
       <View style={[nav.bar, { height: navBarHeight, paddingBottom: verticalScale(8) + insets.bottom }]}>
-        <TouchableOpacity style={nav.tab} activeOpacity={0.7} onPress={() => router.navigate('/')}>
+        <Tap style={nav.tab} activeOpacity={0.7} onPress={() => router.navigate('/')}>
           <Ionicons name="home-outline" size={24} color="#64748B" />
           <Text style={nav.label}>Home</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={nav.tab} activeOpacity={0.7} onPress={() => router.navigate('/appt')}>
+        </Tap>
+        <Tap style={nav.tab} activeOpacity={0.7} onPress={() => router.navigate('/appt')}>
           <Ionicons name="calendar-outline" size={24} color="#64748B" />
           <Text style={nav.label}>Appts</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={nav.tab} activeOpacity={0.7}>
+        </Tap>
+        <Tap style={nav.tab} activeOpacity={0.7}>
           <Ionicons name="chatbubble-ellipses" size={24} color={C.red} />
           <Text style={[nav.label, nav.labelActive]}>Chat</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={nav.tab} activeOpacity={0.7} onPress={() => router.navigate('/profile')}>
+        </Tap>
+        <Tap style={nav.tab} activeOpacity={0.7} onPress={() => router.navigate('/profile')}>
           <Ionicons name="person-outline" size={24} color="#64748B" />
           <Text style={nav.label}>Account</Text>
-        </TouchableOpacity>
+        </Tap>
       </View>
 
       <CustomAlertModal config={alertConfig} onClose={hideAlert} />
+
+      {/* Talk to clinic staff: shown after a clinical reply, confirms before a
+          new staff conversation is created. */}
+      <CustomAlertModal
+        config={{
+          visible: showEscalationModal,
+          type: 'chat',
+          title: 'Talk to clinic staff?',
+          message: "This starts a conversation with K&A Clinic staff. They'll reply here during clinic hours.",
+          secondaryButtonText: 'Cancel',
+          onSecondaryPress: () => setShowEscalationModal(false),
+          primaryButtonText: 'Start chat',
+          onPrimaryPress: () => { setShowEscalationModal(false); startEscalation(); },
+        }}
+        onClose={() => setShowEscalationModal(false)}
+      />
     </View>
   );
 }
@@ -870,8 +921,21 @@ const s = StyleSheet.create({
     width: '100%',
   },
 
-  msgUser: { justifyContent: 'flex-end' },
-  msgAi: { justifyContent: 'flex-start' },
+  msgUser: { justifyContent: 'flex-end', alignItems: 'flex-end', gap: scale(8) },
+  msgAi: { justifyContent: 'flex-start', alignItems: 'flex-end', gap: scale(8) },
+
+  avatar: { width: AVATAR, height: AVATAR, borderRadius: AVATAR / 2, overflow: 'hidden' },
+  avatarIcon: { backgroundColor: '#E2E8F0', alignItems: 'center', justifyContent: 'center' },
+  avatarLogo: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', alignItems: 'center', justifyContent: 'center' },
+  avatarBot: { backgroundColor: C.red, alignItems: 'center', justifyContent: 'center' },
+
+  replyAction: {
+    flexDirection: 'row', alignItems: 'center', gap: scale(6),
+    marginTop: verticalScale(8), paddingHorizontal: scale(14), minHeight: verticalScale(40),
+    borderRadius: scale(14), borderWidth: 1.5, borderColor: '#BFDBFE', backgroundColor: '#EFF6FF',
+    overflow: 'hidden',
+  },
+  replyActionTxt: { fontSize: moderateScale(13), fontWeight: '700', color: C.red },
 
   // Width is capped by msgColumn instead; see the comment at the call site.
   bubble: {
@@ -880,8 +944,9 @@ const s = StyleSheet.create({
     borderRadius: scale(20),
   },
 
+  // Leaves room for the avatar beside the bubble.
   msgColumn: {
-    maxWidth: '85%',
+    maxWidth: '78%',
   },
 
   // Keeps a short bubble hugging its own side of the thread rather than
@@ -1051,79 +1116,19 @@ const s = StyleSheet.create({
     color: C.red,
   },
 
-  // Modal styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: scale(24),
+  disclaimer: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: scale(8),
+    paddingHorizontal: scale(14), paddingVertical: verticalScale(9),
+    backgroundColor: '#EFF6FF', borderBottomWidth: 1, borderBottomColor: '#DBEAFE',
   },
-  modalCard: {
-    width: '100%',
-    maxWidth: 380,
-    backgroundColor: '#FFFFFF',
-    borderRadius: scale(24),
-    padding: scale(24),
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
+  disclaimerTxt: { flex: 1, fontSize: moderateScale(12), lineHeight: moderateScale(17), color: '#1E3A8A', fontWeight: '500' },
+  studyNotice: {
+    flexDirection: 'row', alignItems: 'center', gap: scale(6),
+    paddingHorizontal: scale(14), paddingVertical: verticalScale(6),
+    backgroundColor: '#FEF3C7', borderBottomWidth: 1, borderBottomColor: '#FDE68A',
   },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: scale(12),
-    marginBottom: verticalScale(14),
-  },
-  modalIconWrap: {
-    width: scale(44),
-    height: scale(44),
-    borderRadius: scale(22),
-    backgroundColor: C.redLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalTitle: {
-    fontSize: moderateScale(18),
-    fontWeight: '800',
-    color: C.text,
-  },
-  modalMsg: {
-    fontSize: moderateScale(14),
-    lineHeight: moderateScale(20),
-    color: C.textSub,
-    marginBottom: verticalScale(20),
-  },
-  modalActions: {
-    flexDirection: 'row',
-    gap: scale(10),
-  },
-  modalCancelBtn: {
-    flex: 1,
-    paddingVertical: verticalScale(12),
-    borderRadius: scale(12),
-    backgroundColor: C.bg,
-    alignItems: 'center',
-  },
-  modalCancelTxt: {
-    fontSize: moderateScale(13),
-    fontWeight: '700',
-    color: C.textSub,
-  },
-  modalConfirmBtn: {
-    flex: 1,
-    paddingVertical: verticalScale(12),
-    borderRadius: scale(12),
-    backgroundColor: C.red,
-    alignItems: 'center',
-  },
-  modalConfirmTxt: {
-    fontSize: moderateScale(13),
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
+  studyNoticeTxt: { flex: 1, fontSize: moderateScale(11.5), color: '#92400E', fontWeight: '700' },
+  inputDisclaimer: { fontSize: moderateScale(10.5), color: '#64748B', textAlign: 'center', marginTop: verticalScale(6) },
 
   inputContainer: {
     paddingHorizontal: scale(12),
@@ -1149,6 +1154,7 @@ const s = StyleSheet.create({
     flex: 1,
     height: verticalScale(48),
     fontSize: moderateScale(16),
+    color: C.text,
     paddingHorizontal: scale(8),
     paddingVertical: 0,
     textAlignVertical: 'center',

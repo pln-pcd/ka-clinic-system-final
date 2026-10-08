@@ -1,5 +1,6 @@
 // Patients page: the registry list and the flows it opens.
 import { formatTitleCase, formatDateMedium, getTodayDateString, today } from "../../lib/formatters";
+import { MAP_STUDY_MODE } from '../../lib/studyMode';
 import { arrayUnion, collection, doc, getDocs, limit, query, runTransaction, serverTimestamp, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { db } from "../../lib/firebase";
@@ -53,6 +54,13 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
 
   async function handlePinToMap(patientToPin) {
     if (!patientToPin) return;
+    // Study mode: the Incident Map holds simulated data only, and
+    // firestore.rules refuses non-simulated incidents anyway.
+    if (MAP_STUDY_MODE) {
+      showToast('Pinning is turned off during the study: the Incident Map shows simulated data only.', 'error');
+      setPinTarget(null);
+      return;
+    }
     setPinning(true);
     try {
       const barangayVal = patientToPin.barangay || (patientToPin.address ? (patientToPin.address.match(/Brgy\.\s*([^,]+)/)?.[1] || 'San Juan') : 'San Juan');
@@ -97,7 +105,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
       batch.update(doc(db, 'vaccinations', patientToPin.firestoreId), { incidentIds: arrayUnion(incidentRef.id) });
       await batch.commit();
 
-      showToast('Incident pinned to public map! ✓', 'success');
+      showToast('Incident pinned to the map.', 'success');
       setPinTarget(null);
     } catch (err) {
       console.error('Pin incident error:', err);
@@ -279,10 +287,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
         typeOfExposure: form.typeOfExposure || '',
         sourceOfExposure: form.sourceOfExposure || '',
         woundWashed: form.woundWashed || '',
-        rigGiven: form.rigGiven || '',
-        vaxGiven: form.vaxGiven || '',
         genericName: form.genericName || '',
-        route: form.route || '',
         animal: form.animal || '',
         cat: (form.cat || '').replace('Category ', ''),
         date: baseDate,
@@ -873,21 +878,19 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
                 ~76px wide at laptop sizes. It now uses the compact
                 "Sep 5, 2026" form in a wider column, and the table scrolls
                 sideways below 1040px instead of crushing any column. */}
-            <table className="kna-table" style={{ width: '100%', minWidth: 920, borderCollapse: 'collapse', textAlign: 'left', fontSize: '.8125rem', tableLayout: 'fixed' }}>
+            <table className="kna-table" style={{ width: '100%', minWidth: 860, borderCollapse: 'collapse', textAlign: 'left', fontSize: '.8125rem', tableLayout: 'fixed' }}>
               <colgroup>
-                <col style={{ width: '11%' }} />
-                <col style={{ width: '22%' }} />
-                <col style={{ width: '22%' }} />
-                <col style={{ width: '14%' }} />
-                <col style={{ width: '11%' }} />
-                <col style={{ width: '11%' }} />
-                <col style={{ width: '9%' }} />
+                <col style={{ width: '13%' }} />
+                <col style={{ width: '26%' }} />
+                <col style={{ width: '13%' }} />
+                <col style={{ width: '19%' }} />
+                <col style={{ width: '16%' }} />
+                <col style={{ width: '13%' }} />
               </colgroup>
               <thead>
                 <tr style={{ background: '#FAFAFA', borderBottom: '1px solid #E2E8F0', color: '#64748B', fontSize: '.6875rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.5px' }}>
                   <th style={{ padding: '14px 16px 14px 20px', fontWeight: 600, color: '#64748B' }}>Patient ID</th>
                   <th style={{ padding: '14px 16px', fontWeight: 600, color: '#64748B' }}>Name</th>
-                  <th style={{ padding: '14px 16px', fontWeight: 600, color: '#64748B' }}>Email</th>
                   <th style={{ padding: '14px 16px', fontWeight: 600, color: '#64748B' }}>Service</th>
                   <th style={{ padding: '14px 16px', fontWeight: 600, color: '#64748B' }}>Status</th>
                   <th style={{ padding: '14px 16px', fontWeight: 600, color: '#64748B', whiteSpace: 'nowrap' }}>Submitted On</th>
@@ -896,9 +899,9 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={7} style={{ padding: 0 }}><SkeletonRows rows={8} /></td></tr>
+                  <tr><td colSpan={6} style={{ padding: 0 }}><SkeletonRows rows={8} /></td></tr>
                 ) : paginatedPatients.length === 0 ? (
-                  <tr><td colSpan={7} style={{ padding: 0 }}><EmptyState icon={Users} title="No patient records found" text="Try a different search, filter or year." /></td></tr>
+                  <tr><td colSpan={6} style={{ padding: 0 }}><EmptyState icon={Users} title="No patient records found" text="Try a different search, filter or year." /></td></tr>
                 ) : (
                   paginatedPatients.map(p => {
                     const rowId = p.firestoreId || p.id;
@@ -932,9 +935,6 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
                         <td style={{ padding: '14px 16px', fontWeight: 600, color: '#0F172A', fontSize: '.8125rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={formattedName}>
                           {formattedName}
                         </td>
-                        <td style={{ padding: '14px 16px', color: '#334155', fontWeight: 400, fontSize: '.8125rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={p.email || '—'}>
-                          {p.email || '—'}
-                        </td>
                         <td style={{ padding: '14px 16px' }}>
                           <ServiceBadge service={p.service} />
                         </td>
@@ -956,7 +956,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
                               {liveStatus === 'completed' ? 'Completed' : isOverdue ? 'Overdue' : 'Ongoing'}
                             </span>
                             {archiveDue && (
-                              <span style={{ fontSize: '.6875rem', lineHeight: 1.2, color: '#94A3B8', fontWeight: 500, paddingLeft: 2 }}>
+                              <span style={{ fontSize: '.6875rem', lineHeight: 1.2, color: '#94A3B8', fontWeight: 500, paddingLeft: 2, whiteSpace: 'nowrap' }}>
                                 Archives on {formatDateMedium(archiveDue)}
                               </span>
                             )}

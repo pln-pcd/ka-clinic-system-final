@@ -212,18 +212,18 @@ function ageFromDob(dob) {
   return age >= 0 ? String(age) : '';
 }
 
-// With a date of birth the age is calculated and the Age field is locked;
-// without one the age is typed in. Picking or clearing the date keeps the two
-// in step (clearing leaves the calculated age in place to edit).
+// Picking a date of birth pre-fills the age from it; the age stays editable.
+// Clearing the date leaves the age as it is.
 const withDob = (f, dob) => ({ ...f, dob, age: ageFromDob(dob) || f.age });
 
-// The inline age/DOB mismatch (only possible on older records saved before
-// the age was locked), with a one-click fix.
+// Inline warning when the typed age and the date of birth disagree, with a
+// one-click fix. It never blocks saving.
 function AgeDobMismatch({ form, setForm, className = '' }) {
   const calc = ageFromDob(form.dob);
   if (!calc || !String(form.age).trim() || String(form.age) === calc) return null;
   return (
-    <span className={`flex items-center gap-1.5 text-[11.5px] font-semibold text-[#C8151A] ${className}`} role="alert">
+    <span className={`flex items-center gap-1.5 flex-wrap text-[11.5px] font-semibold text-amber-700 ${className}`} role="status">
+      <AlertTriangle size={12} aria-hidden="true" className="shrink-0" />
       Age {form.age} doesn't match the date of birth ({calc} years).
       <button type="button" onClick={() => setForm(f => ({ ...f, age: calc }))}
         className="underline underline-offset-2 text-[#3B50DF] font-bold cursor-pointer bg-transparent border-0 p-0">Use {calc}</button>
@@ -250,12 +250,13 @@ const REGISTER_RULES = {
   dob: f => (!f.dob ? ''
     : f.dob > today() ? 'Date of birth can’t be in the future'
     : f.dob < '1900-01-01' ? 'Enter a real date of birth' : ''),
+  // Age is always typed (a date of birth pre-fills it). A mismatch with the
+  // date of birth is a warning beside the field (AgeDobMismatch), not an error.
   age: f => {
     const age = String(f.age).trim();
-    if (!age) return 'Enter the age, or a date of birth';
+    if (!age) return 'Enter the age';
     if (Number(age) < 1 || Number(age) > 120) return 'Enter an age from 1 to 120';
-    const calc = ageFromDob(f.dob);
-    return calc && calc !== age ? `Age doesn't match the date of birth (${calc} years)` : '';
+    return '';
   },
   email: f => (!f.email.trim() ? 'Enter an email; the patient signs in to the app with it'
     : !EMAIL_RE.test(f.email.trim()) ? 'Enter a valid email, e.g. name@gmail.com' : ''),
@@ -266,9 +267,6 @@ const REGISTER_RULES = {
   typeOfExposure: f => (f.typeOfExposure ? '' : 'Choose the type of exposure'),
   animal: f => (f.animal ? '' : 'Choose the animal'),
   woundWashed: f => (f.woundWashed ? '' : 'Choose yes or no'),
-  rigGiven: f => (f.rigGiven ? '' : 'Choose whether RIG was given'),
-  vaxGiven: f => (f.vaxGiven ? '' : 'Choose yes or no'),
-  route: f => (f.route ? '' : 'Choose the route'),
   date: f => (f.date && f.date > today() ? 'Exposure date can’t be in the future' : ''),
   cat: f => (f.cat !== 'Category II' && f.cat !== 'Category III' ? 'Choose Category II or III'
     : f.animal === 'Bat' && f.cat !== 'Category III' ? 'Bat exposure must be Category III' : ''),
@@ -279,7 +277,7 @@ const REGISTER_RULES = {
 const STEP_FIELDS = {
   identity: ['fname', 'lname', 'sex', 'dob', 'age', 'email', 'contact', 'barangay'],
   services: ['service'],
-  pep_details: ['date', 'typeOfExposure', 'animal', 'cat', 'woundWashed', 'rigGiven', 'vaxGiven', 'route'],
+  pep_details: ['date', 'typeOfExposure', 'animal', 'cat', 'woundWashed'],
   history: ['history'],
 };
 
@@ -296,8 +294,8 @@ export function AddPatientModal({ onClose, onAdd }) {
     /* PEP Details — every choice starts empty (grey placeholder). Only the
        exposure / Day 0 date defaults to today. */
     placeOfExposure: '', typeOfExposure: '', sourceOfExposure: '',
-    cat: '', woundWashed: '', rigGiven: '', vaxGiven: '',
-    genericName: '', route: '',
+    cat: '', woundWashed: '',
+    genericName: '',
     animal: '', date: today(), woundLocation: '', woundDepth: '', numberOfBites: '',
     /* History & General */
     pastVaccines: '', allergies: '', notes: '',
@@ -501,12 +499,11 @@ export function AddPatientModal({ onClose, onAdd }) {
                   </div>
                   <div className="form-field"><label htmlFor="reg-age">Age <Req /></label>
                     <input type="text" inputMode="numeric" {...v.field('age')} value={form.age}
-                      readOnly={Boolean(ageFromBirth)} aria-readonly={Boolean(ageFromBirth)}
-                      style={ageFromBirth ? { background: '#F1F5F9', color: '#475569', cursor: 'default' } : undefined}
-                      onChange={e => { if (!ageFromBirth) set('age', e.target.value.replace(/\D/g, '').slice(0, 3)); }}
+                      onChange={e => set('age', e.target.value.replace(/\D/g, '').slice(0, 3))}
                       placeholder="e.g. 25" />
                     {v.error('age') ? <FieldError v={v} name="age" />
-                      : <span className="apw-help">{ageFromBirth ? 'Calculated from date of birth' : 'Years. Fills in from the date of birth.'}</span>}
+                      : ageFromBirth && String(form.age) !== ageFromBirth ? <AgeDobMismatch form={form} setForm={setForm} className="mt-1" />
+                      : <span className="apw-help">{ageFromBirth ? 'Filled in from the date of birth; you can change it' : 'Years. Fills in from the date of birth.'}</span>}
                   </div>
                 </FormGroup>
 
@@ -579,7 +576,7 @@ export function AddPatientModal({ onClose, onAdd }) {
           {/* STEP 3: PEP DETAILS (Only shown for PEP service), in clinical order */}
           {currentStep.id === 'pep_details' && (
             <div className="apw-step">
-              <StepHeading title="Post-Exposure Prophylaxis (PEP) Details" subtitle="What happened, the wound, then the care already given" />
+              <StepHeading title="Post-Exposure Prophylaxis (PEP) Details" subtitle="What happened, and the wound" />
 
               <div className="apw-groups">
                 <FormGroup title="Exposure" hint="When, how and by which animal.">
@@ -654,35 +651,10 @@ export function AddPatientModal({ onClose, onAdd }) {
                       <span>
                         {form.animal === 'Bat' ? 'Bat exposure is always Category III (WHO), which requires' : 'Category III requires'}
                         {' '}ERIG (equine rabies immunoglobulin) with the first vaccine dose.
-                        {form.rigGiven !== 'Yes (ERIG)' && ' Record it under Treatment once given.'}
+                        {' '}Record it in the Vaccination Tracker when it is given.
                       </span>
                     </p>
                   )}
-                </FormGroup>
-
-                <FormGroup title="Treatment" hint="Care already given at this visit.">
-                  <div className="form-field"><label htmlFor="reg-rigGiven">Rabies immunoglobulin (RIG) given? <Req /></label>
-                    <Select {...v.field('rigGiven', { withBlur: false })} value={form.rigGiven || ''} onChange={e => set('rigGiven', e.target.value)}>
-                      <option value="">Select RIG given</option>
-                      {RIG_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </Select>
-                    <FieldError v={v} name="rigGiven" />
-                  </div>
-                  <div className="form-field"><label htmlFor="reg-vaxGiven">Anti-rabies vaccine given? <Req /></label>
-                    <Select {...v.field('vaxGiven', { withBlur: false })} value={form.vaxGiven || ''} onChange={e => set('vaxGiven', e.target.value)}>
-                      <option value="">Select yes or no</option>
-                      <option>Yes</option><option>No</option>
-                    </Select>
-                    <FieldError v={v} name="vaxGiven" />
-                  </div>
-                  <div className="form-field"><label htmlFor="reg-route">Vaccine route <Req /></label>
-                    <Select {...v.field('route', { withBlur: false })} value={form.route || ''} onChange={e => set('route', e.target.value)}>
-                      <option value="">Select route</option>
-                      <option value="IM">Intramuscular (IM)</option>
-                      <option value="ID">Intradermal (ID)</option>
-                    </Select>
-                    <FieldError v={v} name="route" />
-                  </div>
                 </FormGroup>
               </div>
             </div>
@@ -845,7 +817,6 @@ export function AddPatientModal({ onClose, onAdd }) {
                     ['Source / place', [form.sourceOfExposure, form.placeOfExposure].filter(Boolean).join(' · ')],
                     ['Category', form.cat],
                     ['Wound', `${form.woundLocation || 'Location not set'} · ${form.woundDepth} · ${form.numberOfBites} bite(s) · washed: ${form.woundWashed}`],
-                    ['Treatment', `RIG: ${rigLabel(form.rigGiven)} · vaccine: ${form.vaxGiven} · ${form.route || 'IM'}`],
                   ]} />
                 )}
                 <SummaryCard title="Schedule" stepId="schedule">
@@ -1005,16 +976,13 @@ export function EditPatientModal({ patient, onClose, onSave, inventoryItems = []
                     inputMode="numeric"
                     {...v.field('age')}
                     value={form.age}
-                    readOnly={Boolean(editDobAge)}
-                    aria-readonly={Boolean(editDobAge)}
-                    onChange={e => { if (!editDobAge) set('age', e.target.value.replace(/\D/g, '').slice(0, 3)); }}
+                    onChange={e => set('age', e.target.value.replace(/\D/g, '').slice(0, 3))}
                     placeholder="e.g. 25"
-                    className={`w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] font-medium ${editDobAge ? 'bg-slate-100 text-slate-600 cursor-default' : 'bg-white text-slate-800'}`}
+                    className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] font-medium bg-white text-slate-800"
                   />
-                  {editDobAge && String(form.age) !== editDobAge
-                    ? <AgeDobMismatch form={form} setForm={setForm} className="mt-1" />
-                    : v.error('age') ? <FieldError v={v} name="age" />
-                    : editDobAge ? <span className="block mt-1 text-[11px] text-slate-400">Calculated from date of birth</span> : null}
+                  {v.error('age') ? <FieldError v={v} name="age" />
+                    : editDobAge && String(form.age) !== editDobAge ? <AgeDobMismatch form={form} setForm={setForm} className="mt-1" />
+                    : editDobAge ? <span className="block mt-1 text-[11px] text-slate-400">Filled in from the date of birth; you can change it</span> : null}
                 </div>
                 <div>
                   <label className="block mb-1.5 text-slate-500">Sex</label>
@@ -1029,7 +997,7 @@ export function EditPatientModal({ patient, onClose, onSave, inventoryItems = []
                   </Select>
                 </div>
                 <div>
-                  <label className="block mb-1.5 text-slate-500">Date of Birth</label>
+                  <label className="block mb-1.5 text-slate-500">Date of Birth <span className="font-normal text-slate-400">(optional)</span></label>
                   <DatePicker
                     {...v.field('dob')}
                     value={form.dob || ''}

@@ -4,10 +4,9 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
-import { View, StyleSheet, Text } from 'react-native';
+import { InteractionManager, View, StyleSheet, Text } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { usePatientAuth } from '../context/PatientAuthContext';
-import BrandLoader from './BrandLoader';
 import { setupNotificationChannelAsync } from '../config/notifications';
 import { resetTo } from '../utils/navigation';
 
@@ -24,13 +23,21 @@ export function MobileApp() {
   const router = useRouter();
   const segments = useSegments();
 
+  // Notification channel setup is not needed for the first screen: run it
+  // once the UI has settled.
   useEffect(() => {
-    setupNotificationChannelAsync().catch(() => {});
+    const task = InteractionManager.runAfterInteractions(() => {
+      setupNotificationChannelAsync().catch(() => {});
+    });
+    return () => task.cancel();
   }, []);
 
+  // The native splash stays up while the saved sign-in is resolved (see
+  // PatientAuthContext), then the first real screen replaces it directly;
+  // there is no separate loading screen in between.
   useEffect(() => {
     if (loading) return;
-    SplashScreen.hideAsync();
+    SplashScreen.hideAsync().catch(() => {});
   }, [loading]);
 
   useEffect(() => {
@@ -50,8 +57,8 @@ export function MobileApp() {
     }
   }, [user, loading, segments]);
 
-  // Branded loader while the saved sign-in is checked at launch.
-  if (loading) return <BrandLoader label="Restoring your session…" />;
+  // Still behind the native splash screen.
+  if (loading) return null;
 
   // Explicit provider so useSafeAreaInsets() measures THIS subtree. On web the
   // app renders inside a fixed phone frame, and the router's implicit root

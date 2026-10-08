@@ -149,7 +149,7 @@ export async function sendMail({ to, subject, html, text, attachments, headers, 
   // error) and record the notification as not emailed.
   const recipients = (Array.isArray(to) ? to : String(to || '').split(',')).map(s => s.trim()).filter(Boolean);
   if (recipients.length && recipients.every(isReservedTestAddress)) {
-    console.log(`[mailer] skipped test address. to=${recipients.join(',')} subject="${subject}"`);
+    console.log(`[mailer] skipped test address. to=${recipients.join(',')} message suppressed`);
     return { error: null, skipped: 'test-address', messageId: null, sender: null, role };
   }
 
@@ -157,7 +157,7 @@ export async function sendMail({ to, subject, html, text, attachments, headers, 
   // made-up addresses. The message is logged instead, and sign-in codes can
   // also be read from the emulator UI (patientLoginOtps / otpVerifications).
   if (process.env.FIRESTORE_EMULATOR_HOST) {
-    console.log(`[mailer:emulator] not sent. to=${to} subject="${subject}"`);
+    console.log(`[mailer:emulator] not sent. to=${to} message suppressed`);
     return { error: null, messageId: 'emulator-log', sender: 'emulator', role };
   }
 

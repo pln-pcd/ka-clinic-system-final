@@ -23,6 +23,7 @@
 import { buildInitialDoses } from '../ka-clinic-admin/src/lib/doseSchedules.js';
 import { addDaysToDateString, getTodayDateString } from '../ka-clinic-admin/src/lib/formatters.js';
 import { LIBON_BARANGAYS, geocodeLibonAddress } from '../ka-clinic-admin/src/lib/libonGeo.js';
+import { buildSimulatedIncidents } from '../ka-clinic-admin/src/lib/simulatedIncidents.js';
 
 export const SAMPLE_MARK = { isSeedData: true, sampleBatch: 'sample-2026-09' };
 
@@ -282,37 +283,10 @@ export function buildSampleData(today = getTodayDateString()) {
     records.push({ mrn, name, vax, spec, brgy, zone, cat, erig, completed });
   });
 
-  /* ── Incident pins: only some PEP records, as if staff pinned them ── */
-  let pinSeed = 0;
-  const seen = new Set();
-  const incidents = [];
-  records.filter(r => r.spec.service === 'PEP').forEach((r, idx) => {
-    if (idx % 5 === 3) return;                       // ~1 in 5 PEP patients never pinned
-    const base = geocodeLibonAddress(r.brgy, r.zone);
-    let lat, lng;
-    do {
-      pinSeed++;
-      lat = +(base.lat + (rnd() - 0.5) * 0.0024).toFixed(6);
-      lng = +(base.lng + (rnd() - 0.5) * 0.0024).toFixed(6);
-    } while (seen.has(`${lat},${lng}`));
-    seen.add(`${lat},${lng}`);
-    const id = `pin-${r.mrn}`;
-    const pinnedDay = addDaysToDateString(r.vax.date, 1) > T ? r.vax.date : addDaysToDateString(r.vax.date, 1);
-    incidents.push({
-      id,
-      data: {
-        location: r.vax.address, address: r.vax.address, barangay: r.brgy, zone: r.zone,
-        type: `${r.vax.animal} Bite`, category: `Category ${r.cat}`,
-        description: 'Pinned from a patient record. No identifying details attached.',
-        date: r.vax.date, lat, lng, latitude: lat, longitude: lng,
-        source: 'patient_record', status: r.completed ? 'resolved' : 'active',
-        pinnedAt: ms(pinnedDay, '11:00'), createdAt: ms(pinnedDay, '11:00'),
-        ...(r.completed ? { mapHidden: true, mapHiddenReason: 'patient-completed' } : {}),
-        ...SAMPLE_MARK,
-      },
-    });
-    r.vax.incidentIds = [id];
-  });
+  /* ── Incident pins ── */
+  // Incident Map pins are SIMULATED (lib/simulatedIncidents.js): random
+  // coordinates, no address/barangay/patient, not linked to any record.
+  const incidents = buildSimulatedIncidents({ count: 30, seed: 30, todayIso: T, extra: { ...SAMPLE_MARK } });
 
   /* ── Stock: opening receipt, then one deduction per dose, in time order ── */
   const inventory = Object.entries(INV).map(([key, it]) => ({ key, ...it, used: brandCount[key] || 0, opening: it.final + (brandCount[key] || 0) }));

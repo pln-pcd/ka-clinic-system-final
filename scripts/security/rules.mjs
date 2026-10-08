@@ -1,0 +1,139 @@
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, setLogLevel } from 'firebase/firestore';
+
+// Never accept a live project or remote host. All test data is fictional.
+const projectId = 'demo-ka-security';
+const host = '127.0.0.1';
+setLogLevel('silent');
+const env = await initializeTestEnvironment({ projectId, firestore: {
+  host, port: 8080, rules: readFileSync('ka-clinic-admin/firestore.rules', 'utf8'),
+} });
+const authTime = Math.floor(Date.now() / 1000);
+const roles = ['anonymous', 'patient-own', 'patient-other', 'staff', 'manager', 'revoked', 'pending'];
+const uid = { 'patient-own': 'security-a', 'patient-other': 'security-b', staff: 'security-staff', manager: 'security-manager', revoked: 'security-revoked', pending: 'security-pending' };
+const clients = Object.fromEntries(roles.map(role => [role, role === 'anonymous' ? env.unauthenticatedContext().firestore()
+  : env.authenticatedContext(uid[role], { email: `${uid[role]}@example.test`, auth_time: authTime, firebase: { sign_in_provider: 'custom' } }).firestore()]));
+const adminRoles = ['staff', 'manager'];
+const fixtures = {
+  vaccinations: ['2026-001', { authUid: uid['patient-own'], email: 'security-a@example.test', isArchived: false, name: 'Simulated A' }],
+  authorizedPatients: ['2026-001', { uid: uid['patient-own'], email: 'security-a@example.test', mrn: '2026-001', authorized: true, registered: true }],
+  appointments: ['security-appt', { patientUid: uid['patient-own'], userId: uid['patient-own'], patientId: '2026-001', name: 'Simulated A', contactNumber: '0000000000', date: '2026-12-12', status: 'pending' }],
+  inventory: ['security-item', { quantity: 10 }],
+  incidents: ['security-incident', { isSimulated: true, simNo: 1, type: 'Bite', category: 'II', month: '2026-10', lat: 13, lng: 123 }],
+  chatThreads: ['security-thread', { patientUid: uid['patient-own'], resolved: false, archived: false, lastMessage: '', lastMessageAt: Date.now() }],
+  chatMessages: ['security-message', { threadId: 'security-thread', sender: 'patient', text: '<script>alert(1)</script>', createdAt: Date.now() }],
+  patientNotifications: ['security-notification', { patientId: '2026-001', message: 'Simulated only' }],
+  admins: ['security-manager', { role: 'manager', status: 'active', email: 'security-manager@example.test' }],
+  patientTrustedDevices: ['security-a', { devices: {} }],
+  patientAvatars: ['2026-001', { email: 'security-a@example.test', dataUrl: 'data:image/png;base64,AA==' }],
+  adminAvatars: ['security-manager', { dataUrl: 'data:image/png;base64,AA==', updatedAt: Date.now() }],
+  settings: ['security-config', { clinic: { name: 'Simulated clinic' } }],
+  patientSessions: ['security-a_device', { uid: 'security-a', deviceId: 'device', revoked: false, label: 'Test' }],
+  stockMovements: ['security-movement', { quantity: 1 }],
+  securitySessions: [`security-a_${authTime}`, { uid: 'security-a', authTime, mrn: '2026-001', scope: 'patient', expiresAt: Date.now() + 3600000 }],
+  otpVerifications: ['2026-001', { codeHash: 'test-hash' }],
+  patientLoginOtps: ['security-a', { codeHash: 'test-hash' }],
+  otps: ['security-manager', { codeHash: 'test-hash' }],
+  passwordResets: ['security-manager', { codeHash: 'test-hash' }],
+  loginAttempts: ['security-attempt', { attempts: 0 }],
+  appointmentSlots: ['2026-12-12_0800', { date: '2026-12-12', time: '08:00', heldBy: 'security-a', createdAt: Date.now() }],
+  invites: ['simulated-unguessable-invite', { email: 'invite@example.test', status: 'pending' }],
+  patientChatState: ['security-a', { messageCount: 1 }],
+};
+async function seed() {
+  await env.withSecurityRulesDisabled(async ctx => {
+    const db = ctx.firestore();
+    for (const [role, id] of Object.entries(uid)) {
+      if (['staff', 'manager', 'revoked'].includes(role)) await setDoc(doc(db, 'admins', id), {
+        role: role === 'staff' ? 'staff' : 'manager', status: role === 'revoked' ? 'revoked' : 'active', email: `${id}@example.test`,
+      });
+      if (role !== 'pending') await setDoc(doc(db, 'securitySessions', `${id}_${authTime}`), {
+        uid: id, authTime, mrn: role === 'patient-other' ? '2026-002' : '2026-001', scope: ['staff', 'manager', 'revoked'].includes(role) ? 'admin' : 'patient', expiresAt: Date.now() + 3600000,
+      });
+    }
+    await setDoc(doc(db, 'authorizedPatients', '2026-002'), { uid: 'security-b', email: 'security-b@example.test', mrn: '2026-002', authorized: true, registered: true });
+    await setDoc(doc(db, 'vaccinations', '2026-002'), { authUid: 'security-b', email: 'security-b@example.test', isArchived: false });
+    for (const [collection, [id, data]] of Object.entries(fixtures)) await setDoc(doc(db, collection, id), data);
+  });
+}
+function expected(collection, role, op) {
+  const admin = adminRoles.includes(role), own = role === 'patient-own';
+  if (collection === 'appointmentSlots') return op === 'read' || admin || (own && op === 'create');
+  if (collection === 'invites') return op === 'read';
+  if (collection === 'patientChatState') return ['read', 'delete'].includes(op) && (admin || own);
+  if (['securitySessions', 'patientTrustedDevices', 'otpVerifications', 'patientLoginOtps', 'otps', 'passwordResets', 'loginAttempts'].includes(collection)) return false;
+  if (collection === 'admins') return op === 'read' && role === 'manager';
+  if (collection === 'adminAvatars') return admin && (op === 'read' || role === 'manager');
+  if (collection === 'stockMovements') return admin && ['read', 'create'].includes(op);
+  if (collection === 'patientSessions') return own;
+  if (collection === 'authorizedPatients') return op === 'read' ? admin || own : admin;
+  if (collection === 'vaccinations') return op === 'read' ? admin || own : admin;
+  if (collection === 'patientAvatars' || collection === 'patientNotifications') return op === 'read' ? admin || own : admin;
+  if (collection === 'appointments') return admin || (own && op !== 'delete');
+  if (collection === 'chatThreads') return admin || (own && op !== 'delete');
+  if (collection === 'chatMessages') return admin || (own && ['read', 'create'].includes(op));
+  return admin;
+}
+const results = [];
+async function check(id, description, expectedAllowed, run) {
+  let allowed = true, error = '';
+  try { await run(); } catch (e) { allowed = false; error = e.code || e.message; }
+  const pass = allowed === expectedAllowed && (allowed || error.includes('permission-denied'));
+  results.push({ id, description, steps: 'Seed fictional fixture; direct Firebase SDK request with role token.', expected: expectedAllowed ? 'Allowed' : 'PERMISSION_DENIED', actual: allowed ? 'Allowed' : error, status: pass ? 'PASS' : 'FAIL' });
+  if (!pass) console.log(`FAIL ${id}: expected ${expectedAllowed ? 'allow' : 'deny'}, actual ${allowed ? 'allow' : error}`);
+}
+try {
+  await env.clearFirestore();
+  await seed();
+  for (const [collection, [id, data]] of Object.entries(fixtures)) {
+    for (const role of roles) for (const op of ['read', 'create', 'update', 'delete']) {
+      await env.withSecurityRulesDisabled(async ctx => {
+        const ref = doc(ctx.firestore(), collection, id);
+        if (op === 'create') await deleteDoc(ref); else await setDoc(ref, data);
+      });
+      const ref = doc(clients[role], collection, id);
+      const patch = collection === 'appointments' ? { status: 'cancelled' }
+        : collection === 'chatThreads' ? { resolved: true, closedBy: 'patient', closedAt: Date.now() }
+        : collection === 'adminAvatars' ? { updatedAt: Date.now() }
+        : collection === 'patientSessions' ? { label: 'Updated test' }
+        : collection === 'incidents' ? { mapHidden: true } : { securityTest: true };
+      await check(`RULE-${collection}-${role}-${op}`, `${role}: ${op} ${collection}`, expected(collection, role, op), () => {
+        if (op === 'read') return getDoc(ref);
+        if (op === 'create') return setDoc(ref, data);
+        if (op === 'update') return updateDoc(ref, patch);
+        return deleteDoc(ref);
+      });
+      // Restore parent/ownership/session documents before next collection test.
+      await seed();
+    }
+  }
+  const attacks = [
+    ['patient UID takeover', 'authorizedPatients', '2026-002', { uid: 'security-a' }],
+    ['appointment ownership takeover', 'appointments', 'security-appt', { status: 'cancelled', patientUid: 'security-b' }],
+    ['appointment clinical edit', 'appointments', 'security-appt', { status: 'cancelled', name: 'Attacker' }],
+    ['thread ownership takeover', 'chatThreads', 'security-thread', { patientUid: 'security-b' }],
+    ['thread hidden from staff', 'chatThreads', 'security-thread', { archived: true }],
+  ];
+  for (const [name, collection, id, patch] of attacks) await check(`RULE-attack-${collection}-${name}`, name, false, () => updateDoc(doc(clients['patient-own'], collection, id), patch));
+  await check('RULE-chat-staff-spoof', 'Patient cannot impersonate staff', false, () => setDoc(doc(clients['patient-own'], 'chatMessages', 'spoof'), { threadId: 'security-thread', sender: 'admin', text: 'Fake staff', createdAt: Date.now() }));
+  await env.withSecurityRulesDisabled(ctx => updateDoc(doc(ctx.firestore(), 'vaccinations', '2026-001'), { isArchived: true }));
+  await check('RULE-archived-read', 'Archived patient cannot read clinical record', false, () => getDoc(doc(clients['patient-own'], 'vaccinations', '2026-001')));
+  await seed();
+  await env.withSecurityRulesDisabled(ctx => updateDoc(doc(ctx.firestore(), 'securitySessions', `security-manager_${authTime}`), { expiresAt: Date.now() - 60000 }));
+  await check('RULE-idle-expired', 'Expired admin session cannot read clinical records', false, () => getDoc(doc(clients.manager, 'vaccinations', '2026-001')));
+  await seed();
+  await env.withSecurityRulesDisabled(ctx => deleteDoc(doc(ctx.firestore(), 'securitySessions', `security-a_${authTime}`)));
+  await check('RULE-pending-own', 'Patient without OTP cannot read their own record', false, () => getDoc(doc(clients['patient-own'], 'vaccinations', '2026-001')));
+  await seed();
+  const passwordClient = env.authenticatedContext('security-a', { email: 'security-a@example.test', auth_time: authTime, firebase: { sign_in_provider: 'password' } }).firestore();
+  await check('RULE-password-provider', 'Password-only SDK sign-in cannot bypass the gateway', false, () => getDoc(doc(passwordClient, 'vaccinations', '2026-001')));
+} finally {
+  await env.cleanup();
+}
+mkdirSync('docs/security-results', { recursive: true });
+const file = process.argv.includes('--before') ? 'rules-before.json' : 'rules-after.json';
+writeFileSync(`docs/security-results/${file}`, JSON.stringify({ date: new Date().toISOString(), results }, null, 2));
+const failed = results.filter(r => r.status === 'FAIL').length;
+console.log(`Rules: ${results.length - failed}/${results.length} PASS; ${failed} FAIL`);
+process.exitCode = failed ? 1 : 0;

@@ -7,6 +7,7 @@
 import { cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { enforceDoseTimeline } from './seed-rules.mjs';
+import { buildSimulatedIncidents } from '../ka-clinic-admin/src/lib/simulatedIncidents.js';
 
 // ══════════════════════════════════════════════════════════════════════════
 // node --env-file=.env scripts/fresh-clinic-data.js reset — delete all patient records and reset counters
@@ -578,61 +579,13 @@ function createPatientRecord(mrn, mode, todayIso, regDate, timeStr, usedEmails) 
       createdAt: createdTimestamp,
       isSeedData: true,
     },
-    incident: service === 'PEP' ? {
-      mrn,
-      patientName: fullName,
-      animal: animal || 'Dog',
-      category: category || 'Category II',
-      barangay,
-      zone: zone || barangay,
-      address,
-      lat,
-      lng,
-      exposureDate,
-      date: exposureDate,
-      createdAt: Timestamp.fromDate(new Date(`${exposureDate}T${timeStr}`)),
-      isSeedData: true,
-    } : null,
   };
 }
 
 /* ───────────────────── INCIDENT PINS ───────────────────── */
-// Only ~35 PEP cases become map pins (not every one), picked round-robin
-// across barangays so the map shows spread rather than one crowded zone.
-// Each pin gets a small deterministic jitter (about ±120 m) so pins from the
-// same barangay/zone never sit on identical coordinates.
-const MAX_INCIDENT_PINS = 35;
-function limitIncidentPins(patients) {
-  const byBarangay = new Map();
-  patients.forEach(p => {
-    if (!p.incident) return;
-    const key = p.incident.barangay || '';
-    if (!byBarangay.has(key)) byBarangay.set(key, []);
-    byBarangay.get(key).push(p);
-  });
-  const queues = [...byBarangay.values()];
-  const keep = new Set();
-  while (keep.size < MAX_INCIDENT_PINS && queues.some(q => q.length)) {
-    for (const q of queues) {
-      if (q.length && keep.size < MAX_INCIDENT_PINS) keep.add(q.shift());
-    }
-  }
-  let seed = 7;
-  const rand = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
-  const seen = new Set();
-  patients.forEach(p => {
-    if (!p.incident) return;
-    if (!keep.has(p)) { p.incident = null; return; }
-    let lat, lng;
-    do {
-      lat = +(p.incident.lat + (rand() - 0.5) * 0.0022).toFixed(6);
-      lng = +(p.incident.lng + (rand() - 0.5) * 0.0022).toFixed(6);
-    } while (seen.has(`${lat},${lng}`));
-    seen.add(`${lat},${lng}`);
-    p.incident.lat = lat;
-    p.incident.lng = lng;
-  });
-}
+// Incident Map pins are SIMULATED (lib/simulatedIncidents.js): random
+// coordinates, no address/barangay/patient, not linked to any record.
+const SIMULATED_PIN_COUNT = 35;
 
 /* ───────────────────── INVENTORY SEED DATA ───────────────────── */
 const INVENTORY_ITEMS = [
@@ -859,19 +812,19 @@ async function main() {
     patients.push(rec);
   }
 
-  limitIncidentPins(patients);
+  const simulatedPins = buildSimulatedIncidents({ count: SIMULATED_PIN_COUNT, seed: 35, todayIso, extra: { isSeedData: true } });
 
   const completed = patients.filter(p => p.mode === 'completed').length;
   const ongoing = patients.filter(p => p.mode === 'ongoing').length;
   const overdue = patients.filter(p => p.mode === 'overdue').length;
-  const incidentsCount = patients.filter(p => p.incident !== null).length;
+  const incidentsCount = simulatedPins.length;
 
   console.log(`Generated records:`);
   console.log(`  - MRN Range: ${patients[0].mrn} (${patients[0].vax.date}) to ${patients[patients.length - 1].mrn} (${patients[patients.length - 1].vax.date})`);
   console.log(`  - Completed: ${completed}`);
   console.log(`  - Ongoing: ${ongoing}`);
   console.log(`  - Overdue: ${overdue}`);
-  console.log(`  - Map Incidents to pin: ${incidentsCount}`);
+  console.log(`  - Simulated map incidents: ${incidentsCount}`);
   console.log(`  - Inventory items to seed: ${INVENTORY_ITEMS.length}`);
 
   if (dryRun) {
@@ -922,11 +875,10 @@ async function main() {
     batch.set(db.collection('authorizedPatients').doc(p.mrn), p.auth);
     await commitBatchIfNeeded();
 
-    if (p.incident) {
-      const incRef = db.collection('incidents').doc();
-      batch.set(incRef, p.incident);
-      await commitBatchIfNeeded();
-    }
+  }
+  for (const pin of simulatedPins) {
+    batch.set(db.collection('incidents').doc(pin.id), pin.data);
+    await commitBatchIfNeeded();
   }
 
   // 2. Write Clinic Inventory Items (only if missing)

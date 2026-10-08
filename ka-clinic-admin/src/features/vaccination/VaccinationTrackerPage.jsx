@@ -31,7 +31,9 @@ import Toast from '../../components/Toast';
 import { authedPostJson } from '../../lib/adminSession';
 import { auth, db, listen } from '../../lib/firebase';
 import { peekLiveCollection, useLiveCollection } from '../../lib/liveStore';
-import { brandAvailability, recordDoseChange } from '../../lib/inventoryStock';
+import { brandAvailability, recordDoseChange, recordErigChange } from '../../lib/inventoryStock';
+import { erigStatus, isErigItem } from '../../lib/erig';
+import DatePicker from '../../components/DatePicker';
 import { formatDateShort as fmtDate, getName, getTodayDateString, serviceLabel, titleCaseWords } from '../../lib/formatters';
 import { getEligibleVaccinesForService, buildDoses, getTodayStr, isOverdue } from '../../lib/doseSchedules';
 
@@ -140,17 +142,25 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
   // Latest reminder per patient: undefined = not loaded, null = none.
   const [reminderCache, setReminderCache] = useState({});
   const reminderFetches = useRef(new Set());
+  // ERIG entry in the dose popup (Category III only): the unsaved form, and
+  // the saved entry waiting for "remove" to be confirmed.
+  const blankErig = () => ({ checked: false, vials: '1', date: getTodayDateString(), itemId: '', error: '' });
+  const [erigDraft, setErigDraft] = useState(blankErig);
+  const [erigBusy, setErigBusy] = useState(false);
+  const [erigRemoveAsk, setErigRemoveAsk] = useState(null);
+
   const closeModal = () => {
     setDetailPt(null);
     setAssignedBrand('');
     setReadyKey(null);
+    setErigDraft(blankErig());
     autoOpenedRef.current = null;
     if (onClearSelectedPatient) onClearSelectedPatient();
   };
 
-  // Closing with a ready-but-unconfirmed dose asks first.
+  // Closing with a ready-but-unconfirmed dose (or an unsaved ERIG entry) asks first.
   const requestCloseModal = () => {
-    if (readyKey) setDiscardAsk(true);
+    if (readyKey || erigDraft.checked) setDiscardAsk(true);
     else closeModal();
   };
 
@@ -555,6 +565,56 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
       showToast(`Dose ${di + 1} saved. ${outcome.itemName} stock: ${outcome.before} → ${outcome.after}.`, 'success');
     } else {
       showToast(`Dose ${di + 1} undone. ${outcome.itemName} stock restored to ${outcome.after}.`, 'info');
+    }
+  };
+
+  // ERIG given: deducts the vials from the chosen ERIG item in one
+  // transaction with the record (lib/inventoryStock.js recordErigChange).
+  const saveErig = async (p, erigItems) => {
+    const vials = parseInt(erigDraft.vials, 10);
+    const err = !Number.isInteger(vials) || vials < 1 || vials > 20 ? 'Enter the number of vials (1 to 20)'
+      : !erigDraft.date ? 'Choose the date given'
+      : erigDraft.date > getTodayStr() ? "The date can't be in the future"
+      : erigItems.length && !erigDraft.itemId ? 'Choose the ERIG stock to deduct from' : '';
+    if (err) { setErigDraft(d => ({ ...d, error: err })); return; }
+    const item = erigItems.find(i => i.id === erigDraft.itemId);
+    if (item) {
+      const stock = parseInt(item.stock, 10) || 0;
+      if (stock <= 0) { setErigDraft(d => ({ ...d, error: `${item.name} is out of stock in Inventory.` })); return; }
+      if (stock < vials) { setErigDraft(d => ({ ...d, error: `${item.name} has only ${stock} vial${stock === 1 ? '' : 's'} left.` })); return; }
+    }
+    setErigBusy(true);
+    try {
+      const out = await recordErigChange({ runTransaction, doc, collection, deleteField }, db, {
+        patientId: p.firestoreId, give: true, vials, date: erigDraft.date, stockItemId: item?.id || null,
+        byUid: auth.currentUser?.uid || null, byName: auth.currentUser?.displayName || auth.currentUser?.email || '',
+      });
+      setErigDraft(blankErig());
+      if (!out.moved) showToast('ERIG saved. No ERIG item in Inventory, so no stock was deducted.', 'warning');
+      else if (out.after <= 0) showToast(`ERIG saved. ${out.itemName} is now out of stock (${out.before} → 0).`, 'warning');
+      else if (out.low) showToast(`ERIG saved. ${out.itemName} stock is low: ${out.before} → ${out.after}.`, 'warning');
+      else showToast(`ERIG saved. ${out.itemName} stock: ${out.before} → ${out.after}.`, 'success');
+    } catch (e) {
+      if (e?.code === 'out-of-stock' || e?.code === 'stale') setErigDraft(d => ({ ...d, error: e.message }));
+      else { console.error('saveErig error:', e); showToast('Could not save ERIG. Nothing was changed. Please try again.', 'error'); }
+    } finally {
+      setErigBusy(false);
+    }
+  };
+
+  const removeErig = async (p) => {
+    setErigBusy(true);
+    try {
+      const out = await recordErigChange({ runTransaction, doc, collection, deleteField }, db, {
+        patientId: p.firestoreId, give: false, byUid: auth.currentUser?.uid || null,
+      });
+      showToast(out.moved ? `ERIG removed. ${out.itemName} stock restored to ${out.after}.` : 'ERIG removed. No stock was deducted for it, so none was restored.', 'info');
+    } catch (e) {
+      if (e?.code === 'stale') showToast('ERIG was just updated elsewhere. The record has been refreshed.', 'warning');
+      else { console.error('removeErig error:', e); showToast('Could not remove ERIG. Nothing was changed.', 'error'); }
+    } finally {
+      setErigBusy(false);
+      setErigRemoveAsk(null);
     }
   };
 
@@ -967,6 +1027,8 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
         const daysLabel = !next ? '' : daysToNext == null ? '' : daysToNext === 0 ? 'due today' : daysToNext < 0 ? `${-daysToNext}d overdue` : `in ${daysToNext} day${daysToNext === 1 ? '' : 's'}`;
         const daysTone = !next ? 'text-emerald-700' : daysToNext < 0 ? 'text-rose-600' : daysToNext === 0 ? 'text-amber-700' : 'text-slate-500';
         const readyDose = readyKey ? doses.find(d => d.key === readyKey) : null;
+        const erig = erigStatus(p);
+        const erigItems = inventoryItems.filter(isErigItem);
         const createdRaw = p.createdAt?.toDate ? p.createdAt.toDate() : (typeof p.createdAt === 'number' ? new Date(p.createdAt) : null);
         const regDate = createdRaw ? getTodayDateString(createdRaw) : String(p.date || '').slice(0, 10);
 
@@ -1217,6 +1279,89 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                       })}
                     </ol>
                   </section>
+
+                  {/* ERIG: Category III only, below the checklist. */}
+                  {isPepRecord && erig.required && (
+                    <section className={cardCls} aria-labelledby="erig-head">
+                      <div className="px-4 pt-3 pb-2 flex items-start justify-between gap-2">
+                        <div>
+                          <h4 id="erig-head" className="text-[11px] font-bold uppercase tracking-wider text-slate-500">ERIG</h4>
+                          <p className="text-[11px] text-slate-400 mt-0.5">Equine rabies immunoglobulin, with the first dose.</p>
+                        </div>
+                        {!erig.given && !erigDraft.checked && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 shrink-0">
+                            <AlertTriangle size={11} aria-hidden="true" /> ERIG required for Category III
+                          </span>
+                        )}
+                      </div>
+                      <div className="border-t border-slate-100 px-4 py-2.5">
+                        <label className={`flex items-center gap-3 ${erigBusy ? 'cursor-default' : 'cursor-pointer'}`}>
+                          <input
+                            type="checkbox"
+                            checked={erig.given || erigDraft.checked}
+                            disabled={erigBusy}
+                            onChange={() => {
+                              if (erig.given) setErigRemoveAsk(p);
+                              else setErigDraft(d => (d.checked ? blankErig() : { ...d, checked: true, itemId: d.itemId || (erigItems.find(i => !brandAvailability(i, today).disabled)?.id || ''), error: '' }));
+                            }}
+                            className="w-[18px] h-[18px] rounded accent-[#3B50DF] shrink-0 cursor-pointer"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-xs font-semibold text-slate-900">ERIG given</span>
+                            {erig.given && (
+                              <span className="block text-[11px] text-slate-500 truncate">
+                                <span className="text-emerald-700 font-semibold">Given</span>
+                                {erig.vials ? ` · ${erig.vials} vial${erig.vials === 1 ? '' : 's'}` : ''}
+                                {erig.date ? ` · ${fmtDate(erig.date)}` : ''}
+                                {erig.itemName ? ` · ${erig.itemName}` : ''}
+                                {erig.legacy ? ' · recorded at registration' : ''}
+                              </span>
+                            )}
+                          </span>
+                        </label>
+
+                        {!erig.given && erigDraft.checked && (
+                          <div className="mt-3 space-y-2.5">
+                            {erigItems.length > 0 && (
+                              <div>
+                                <label htmlFor="erig-item" className="block text-[11px] font-semibold text-slate-500 mb-1">Stock</label>
+                                <Select id="erig-item" value={erigDraft.itemId} onChange={e => setErigDraft(d => ({ ...d, itemId: e.target.value, error: '' }))}
+                                  className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none font-semibold text-xs bg-white text-slate-800 focus:border-[#3B50DF]">
+                                  <option value="">Select ERIG stock</option>
+                                  {erigItems.map(item => {
+                                    const a = brandAvailability(item, today);
+                                    return <option key={item.id} value={item.id} disabled={a.disabled} data-badge={a.badge} data-badge-tone={a.tone}>{`${item.name} (${parseInt(item.stock, 10) || 0} left)`}</option>;
+                                  })}
+                                </Select>
+                              </div>
+                            )}
+                            <div className="grid grid-cols-[96px_minmax(0,1fr)] gap-2.5">
+                              <div>
+                                <label htmlFor="erig-vials" className="block text-[11px] font-semibold text-slate-500 mb-1">Vials used</label>
+                                <input id="erig-vials" type="text" inputMode="numeric" value={erigDraft.vials}
+                                  onChange={e => setErigDraft(d => ({ ...d, vials: e.target.value.replace(/\D/g, '').slice(0, 2), error: '' }))}
+                                  className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none font-semibold text-xs bg-white text-slate-800 focus:border-[#3B50DF]" />
+                              </div>
+                              <div>
+                                <label htmlFor="erig-date" className="block text-[11px] font-semibold text-slate-500 mb-1">Date given</label>
+                                <DatePicker id="erig-date" value={erigDraft.date} max={today}
+                                  onChange={e => setErigDraft(d => ({ ...d, date: e.target.value, error: '' }))}
+                                  className="w-full py-2 pl-3 pr-9 border border-slate-300 rounded-xl outline-none font-semibold text-xs bg-white text-slate-800 focus:border-[#3B50DF]" />
+                              </div>
+                            </div>
+                            {!erigItems.length && <p className="text-[11px] text-slate-500">No ERIG item in Inventory: it will be saved without a stock deduction.</p>}
+                            {erigDraft.error && <p className="text-[11px] font-semibold text-rose-600" role="alert">{erigDraft.error}</p>}
+                            <div className="flex justify-end gap-2">
+                              <button type="button" onClick={() => setErigDraft(blankErig())} disabled={erigBusy} className={BTN.outline}>Cancel</button>
+                              <button type="button" onClick={() => saveErig(p, erigItems)} disabled={erigBusy} className={BTN.primary}>
+                                {erigBusy ? 'Saving…' : 'Save ERIG'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </section>
+                  )}
                 </div>
               </div>
 
@@ -1255,12 +1400,13 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
             variant="danger"
             icon={AlertTriangle}
             size="compact"
-            title="Discard unconfirmed dose?"
+            title={readyKey ? "Discard unconfirmed dose?" : "Discard unsaved ERIG entry?"}
             subtitle={[detailPt ? titleCaseWords(getName(detailPt)) : '', doseName].filter(Boolean).join(' · ')}
             message={<>It wasn't saved. <strong>No stock</strong> was deducted.</>}
             details={[
-              ['Brand', assignedBrand],
+              ['Brand', readyKey ? assignedBrand : ''],
               ['Due', i === -1 ? '' : fmtDate(ds[i].date)],
+              ['ERIG', erigDraft.checked ? 'Entry not saved' : ''],
             ]}
             confirmLabel="Discard"
             cancelLabel="Keep editing"
@@ -1295,6 +1441,30 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
           onCancel={() => setUndoTarget(null)}
         />
       )}
+
+      {erigRemoveAsk && (() => {
+        const s = erigStatus(erigRemoveAsk);
+        return (
+          <ConfirmDialog
+            variant="warning"
+            icon={RotateCcw}
+            title="Remove ERIG?"
+            subtitle="Vaccination record"
+            message={<>ERIG goes back to <strong>not given</strong> for this Category III patient.</>}
+            details={[
+              ['Patient', titleCaseWords(getName(erigRemoveAsk))],
+              ['Given', s.date ? fmtDate(s.date) : ''],
+              ['Stock', s.vials && s.itemName ? `+${s.vials} vial${s.vials === 1 ? '' : 's'} returned to ${s.itemName}` : ''],
+            ]}
+            note="Use this only when ERIG was recorded by mistake."
+            confirmLabel="Remove ERIG"
+            busy={erigBusy}
+            busyLabel="Removing…"
+            onConfirm={() => removeErig(erigRemoveAsk)}
+            onCancel={() => setErigRemoveAsk(null)}
+          />
+        );
+      })()}
 
       {/* ── Toast notification banner ── */}
       <Toast

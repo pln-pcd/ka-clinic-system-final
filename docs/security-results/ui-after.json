@@ -1,0 +1,59 @@
+{
+  "date": "2026-10-08T00:17:13.870Z",
+  "results": [
+    {
+      "id": "UI-STAFF",
+      "area": 1,
+      "description": "Staff UI hides manager roster",
+      "steps": "Headless Chrome against local Vite and Firebase emulators. Browser clock advanced for idle checks.",
+      "expected": "Patient Records visible; Manage Admins absent",
+      "actual": "Patient Records visible; Manage Admins absent",
+      "status": "PASS"
+    },
+    {
+      "id": "UI-MANAGER",
+      "area": 1,
+      "description": "Manager UI includes manager roster",
+      "steps": "Headless Chrome against local Vite and Firebase emulators. Browser clock advanced for idle checks.",
+      "expected": "Manage Admins visible",
+      "actual": "Manage Admins visible",
+      "status": "PASS"
+    },
+    {
+      "id": "UI-XSS-NAME",
+      "area": 1,
+      "description": "Script markup in a simulated patient name remains text",
+      "steps": "Headless Chrome against local Vite and Firebase emulators. Browser clock advanced for idle checks.",
+      "expected": "Literal markup visible; no injected script executes",
+      "actual": "Literal markup visible; no injected script executes",
+      "status": "PASS"
+    },
+    {
+      "id": "UI-IDLE-WARNING",
+      "area": 4,
+      "description": "One-minute idle warning",
+      "steps": "Headless Chrome against local Vite and Firebase emulators. Browser clock advanced for idle checks.",
+      "expected": "Warning visible after 29 minutes",
+      "actual": "Warning visible after 29 minutes",
+      "status": "PASS"
+    },
+    {
+      "id": "UI-IDLE-EXPIRY",
+      "area": 4,
+      "description": "30-minute idle sign-out",
+      "steps": "Headless Chrome against local Vite and Firebase emulators. Browser clock advanced for idle checks.",
+      "expected": "Login visible; dashboard removed",
+      "actual": "Login visible; dashboard removed",
+      "status": "PASS"
+    },
+    {
+      "id": "UI-BACK-AFTER-LOGOUT",
+      "area": 4,
+      "description": "Back button cannot expose dashboard",
+      "steps": "Headless Chrome against local Vite and Firebase emulators. Browser clock advanced for idle checks.",
+      "expected": "Login only",
+      "actual": "Login only",
+      "status": "PASS"
+    }
+  ]
+}

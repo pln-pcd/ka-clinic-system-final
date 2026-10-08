@@ -14,6 +14,7 @@ import { getFirestore, Timestamp, FieldPath } from 'firebase-admin/firestore';
 import { buildInitialDoses } from '../../ka-clinic-admin/src/lib/doseSchedules.js';
 import { addDaysToDateString, getTodayDateString } from '../../ka-clinic-admin/src/lib/formatters.js';
 import { geocodeLibonAddress } from '../../ka-clinic-admin/src/lib/libonGeo.js';
+import { buildSimulatedIncidents } from '../../ka-clinic-admin/src/lib/simulatedIncidents.js';
 import { getArchiveDueDate, getCompletionDate } from '../../api/_lib/patientCompletion.js';
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -417,25 +418,9 @@ async function main() {
   const patients = PATIENTS.map((spec, i) => buildPatient(spec, mrns[i], i));
   const byKey = Object.fromEntries(patients.map(p => [p.spec.key, p]));
 
-  // Incident pins for rabies exposures: anonymous docs, linked from the
-  // patient side only. Completed, restored and archived patients' pins are
-  // hidden from the map the way the dashboard and the sweep hide them.
-  const incidents = [];
-  patients.filter(p => p.spec.service === 'PEP').forEach(p => {
-    const id = `demo-inc-${p.mrn}`;
-    const { lat, lng } = geocodeLibonAddress(p.spec.brgy, p.spec.zone);
-    const locationStr = p.vax.address;
-    incidents.push({ id, data: {
-      location: locationStr, address: locationStr, barangay: p.spec.brgy, zone: p.spec.zone,
-      type: `${p.spec.animal} Bite`, category: `Category ${p.spec.cat}`,
-      description: 'Pinned from a patient record. No identifying details attached.',
-      date: p.vax.date, lat, lng, latitude: lat, longitude: lng,
-      source: 'patient_record', status: 'active', pinnedAt: manilaMs(p.vax.date, '11:00'), createdAt: manilaMs(p.vax.date, '11:00'),
-      ...(p.completed ? { mapHidden: true, mapHiddenReason: 'patient-completed' } : {}),
-      ...DEMO_MARK,
-    } });
-    p.vax.incidentIds = [id];
-  });
+  // Incident Map pins are SIMULATED (lib/simulatedIncidents.js): random
+  // coordinates, no address/barangay/patient, not linked to any record.
+  const incidents = buildSimulatedIncidents({ count: 24, seed: 24, todayIso: T, extra: { ...DEMO_MARK } });
 
   // Inventory reconciles with the doses recorded above.
   const used = {};

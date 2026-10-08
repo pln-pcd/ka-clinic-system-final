@@ -39,9 +39,10 @@
 import { gzipSync } from 'node:zlib';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { auth, db, storageBucket } from './_lib/firebaseAdmin.js';
-import { requireAuthenticatedAdmin } from './_lib/auth.js';
+import { requireAuthenticatedAdmin, requireAuthenticatedPatient } from './_lib/auth.js';
 import { isValidEmail, sendMail, warmMailer } from './_lib/mail/mailer.js';
-import { buildFollowUpEmailHtml } from './_lib/mail/templates.js';
+import { buildFollowUpEmailHtml, buildReportEmailHtml, buildReportEmailText } from './_lib/mail/templates.js';
+import { logoAttachment } from './_lib/mail/logo.js';
 import { getArchiveDueDate, getCompletionDate, isSeriesCompleted, lastDoseDate, manilaToday } from './_lib/patientCompletion.js';
 import { routeName } from './_lib/router.js';
 
@@ -102,6 +103,13 @@ async function registerToken(req, res) {
     return;
   }
 
+  const owned = (await ref.get()).data() || {};
+  const caller = await requireAuthenticatedPatient(req);
+  if (caller.error || ref.id !== caller.mrn || (owned.authUid && owned.authUid !== uid)) {
+    res.status(caller.status || 403).json({ success: false, error: 'This record does not belong to your account.' });
+    return;
+  }
+
   // A push token identifies a phone, not a patient. If another patient signed
   // in on this phone before, their record still lists the token and would keep
   // sending that patient's medical reminders to whoever holds the phone now.
@@ -136,7 +144,7 @@ async function unregisterToken(req, res) {
   }
   let decoded;
   try {
-    decoded = await auth.verifyIdToken(idToken);
+    decoded = await auth.verifyIdToken(idToken, true);
   } catch {
     res.status(401).json({ success: false, error: 'Invalid or expired session.' });
     return;
@@ -1063,7 +1071,18 @@ async function sendPatientReport(req, res) {
 
     const to = String(meta.to || '').trim();
     const subject = String(meta.subject || 'K&A Clinic Report').trim();
-    const html = String(meta.html || '');
+    // `report` carries the covering-note fields; the server renders the
+    // shared clean template from them. A raw `html` body is still accepted
+    // from older dashboard builds.
+    const report = meta.report && typeof meta.report === 'object' ? {
+      recipientName: String(meta.report.recipientName || '').trim().slice(0, 120),
+      reportName: String(meta.report.reportName || 'Report').trim().slice(0, 120),
+      period: String(meta.report.period || '').trim().slice(0, 120),
+      generatedOn: String(meta.report.generatedOn || '').trim().slice(0, 60),
+      summary: (Array.isArray(meta.report.summary) ? meta.report.summary : []).slice(0, 6).map(l => String(l).slice(0, 240)),
+    } : null;
+    const html = report ? buildReportEmailHtml(report) : String(meta.html || '');
+    const text = report ? buildReportEmailText(report) : undefined;
     const attachmentFilename = String(meta.filename || meta.attachmentFilename || 'report.pdf').trim().replace(/[\\/\r\n"]/g, '_');
 
     if (!to || !isValidEmail(to)) {
@@ -1076,15 +1095,17 @@ async function sendPatientReport(req, res) {
     }
 
     const started = Date.now();
-    const attachments = attachmentContent?.length
-      ? [{ filename: attachmentFilename, content: attachmentContent, contentType: 'application/pdf' }]
-      : undefined;
+    const attachments = [
+      ...(report ? [logoAttachment()] : []),
+      ...(attachmentContent?.length ? [{ filename: attachmentFilename, content: attachmentContent, contentType: 'application/pdf' }] : []),
+    ];
 
     const { error: sendError, messageId, sender } = await sendMail({
       to,
       subject,
       html: html || '<p>Please find your official K&amp;A Clinic report attached.</p>',
-      attachments,
+      text,
+      attachments: attachments.length ? attachments : undefined,
       role: 'auth',
     });
     if (sendError) {
@@ -1219,6 +1240,13 @@ export default async function handler(req, res) {
     }
 
     if (Object.prototype.hasOwnProperty.call(OPEN_ACTIONS, action)) {
+      if (action !== 'ack') {
+        const patient = await requireAuthenticatedPatient(req);
+        if (patient.error) {
+          res.status(patient.status).json({ success: false, error: patient.error });
+          return;
+        }
+      }
       await OPEN_ACTIONS[action](req, res);
       return;
     }

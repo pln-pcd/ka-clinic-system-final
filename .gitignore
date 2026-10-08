@@ -1,5 +1,11 @@
 # Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
 
+# Local tools and machine-specific preferences
+.tmp/
+api-debug.log
+.claude/settings.local.json
+patient-app/.impeccable/hook.cache.json
+
 # dependencies
 node_modules/
 
@@ -13,6 +19,9 @@ expo-env.d.ts
 .kotlin/
 *.orig.*
 *.jks
+*.keystore
+credentials.json
+/patient-app/credentials/
 *.p8
 *.p12
 *.key

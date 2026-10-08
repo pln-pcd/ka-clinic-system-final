@@ -55,7 +55,9 @@ export function pdfToBytes(doc) {
 
 // Queues one report email. Returns a promise that resolves to true when the
 // email was sent; failures are reported through the toast, never thrown.
-export function sendReportInBackground({ to, subject, html, pdf, filename }) {
+// `report` ({ recipientName, reportName, period, generatedOn, summary[] }) is
+// the covering note; the server renders it with the clinic's email template.
+export function sendReportInBackground({ to, subject, report, html, pdf, filename }) {
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   sends = [...sends, { id, to, status: 'sending', progress: 0 }];
   emit();
@@ -66,7 +68,7 @@ export function sendReportInBackground({ to, subject, html, pdf, filename }) {
       // A cached token is refreshed by the SDK when it is close to expiry;
       // forcing a refresh here only added a round trip to every send.
       const idToken = await auth.currentUser.getIdToken();
-      const meta = encodeURIComponent(JSON.stringify({ to, subject, html, filename }));
+      const meta = encodeURIComponent(JSON.stringify({ to, subject, report, html, filename }));
       await new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open('POST', '/api/send-patient-report');
@@ -97,4 +99,9 @@ export function sendReportInBackground({ to, subject, html, pdf, filename }) {
       return false;
     }
   })();
+}
+
+// "October 7, 2026" — the date line used in report covering notes.
+export function reportGeneratedOn(date = new Date()) {
+  return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 }

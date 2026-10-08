@@ -7,7 +7,7 @@
 // Every archived record is loaded (no cap), so the count always matches.
 
 import Select from '../../components/Select';
-import { Clock, Eye, RotateCcw, Search, Users } from 'lucide-react';
+import { ChevronRight, Clock, Eye, RotateCcw, Search, Users } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import Pager, { PAGE_SIZE, useTableReserve } from '../../components/Pager';
 import ConfirmDialog from '../../components/ConfirmDialog';
@@ -146,8 +146,43 @@ function ArchivedPatients({ canAct, onToast }) {
     );
   }
 
+  // Counts for the lifecycle strip.
+  const thisYear = new Date().getFullYear();
+  const archivedThisYear = rows.filter(p => {
+    const ms = toMillis(p.archivedAt);
+    return ms && new Date(ms).getFullYear() === thisYear;
+  }).length;
+  const reArchived = rows.filter(p => p.restoredAt).length;
+  const lifecycle = ['Registered', 'Completed', 'Auto-archived 1 year after completion'];
+
   return (
     <>
+      {/* Record lifecycle: how a record gets here, above the table. */}
+      <div className={`${card} px-5 py-3.5 mb-4 flex items-center justify-between gap-x-6 gap-y-2.5 flex-wrap`}>
+        <div className="min-w-0">
+          <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Record lifecycle</p>
+          <ol className="flex items-center flex-wrap gap-x-1.5 gap-y-1 mt-1" aria-label="Record lifecycle">
+            {lifecycle.map((step, i) => (
+              <li key={step} className="flex items-center gap-1.5 text-xs font-semibold text-slate-800">
+                {i > 0 && <ChevronRight size={13} className="text-slate-400" aria-hidden="true" />}
+                {step}
+              </li>
+            ))}
+          </ol>
+          <p className="text-[11px] text-slate-500 mt-1">A restored record goes back to Patients and auto-archives again 1 year after the restore.</p>
+        </div>
+        {!loading && (
+          <dl className="flex items-center gap-2.5 shrink-0">
+            {[['Archived', rows.length], [`Archived in ${thisYear}`, archivedThisYear], ['Re-archived', reArchived]].map(([label, n]) => (
+              <div key={label} className="rounded-xl border border-slate-200 px-3 py-1.5 text-center min-w-[92px]">
+                <dt className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">{label}</dt>
+                <dd className="text-sm font-semibold text-slate-900 mt-0.5 tabular-nums">{n}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      </div>
+
       <div className={card}>
         <div className="px-5 py-4 border-b border-slate-200 flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[220px] max-w-sm">

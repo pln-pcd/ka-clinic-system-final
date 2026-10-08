@@ -16,7 +16,7 @@ import {
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
+  InteractionManager,
   Animated as RNAnimated,
   Dimensions,
   Image,
@@ -27,11 +27,11 @@ import {
   StatusBar,
   StyleSheet,
   Text,
-  TouchableOpacity,
   TouchableWithoutFeedback,
   UIManager,
   View,
 } from 'react-native';
+import Tap from '../../components/Tap';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatDoseDate, protocolLabel as buildProtocolLabel, serviceCopy, EMPTY, doseStatus, isPepService, clinicToday, displayPatientId, doseBrand, doseState, exposureCategory, exposureTypeLabel, splitName } from '../../utils/patientRecord';
 import Animated, {
@@ -47,11 +47,10 @@ import { db } from '../../config/backend';
 import {
   acknowledgeNotification,
   ensureNotificationPermission,
-  registerForPushNotifications,
 } from '../../config/notifications';
 import { usePatientAuth } from '../../context/PatientAuthContext';
 import { moderateScale, scale, verticalScale } from '../../utils/scale';
-import BrandLoader from '../../components/BrandLoader';
+import { cacheKeys, peekCache, writeCache } from '../../utils/localCache';
 import CustomAlertModal, { CustomAlertConfig } from '../../components/CustomAlertModal';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -147,6 +146,47 @@ const GUEST_PLACEHOLDER_DOSES = [
   { id: 'g4', label: 'Session 4 (Day 28)', done: false, blankRow: true },
 ];
 
+// The vaccination record → the dose rows and next-dose summary Home shows.
+// Pure, so it can seed state on the first render from the cached record.
+function deriveVaccination(data: PatientRecord | null): { record: PatientRecord | null; schedule: VaccineDose[]; next: NextDoseNotif | null } {
+  if (!data) return { record: null, schedule: [], next: null };
+  const rawDoses: any[] = Array.isArray(data.doses) ? data.doses : [];
+  if (rawDoses.length === 0) return { record: data, schedule: [], next: null };
+  const vaccineType = serviceCopy(data.service).short;
+  const todayISO = clinicToday();
+  const schedule = rawDoses.map((d, i) => {
+    const state = doseState(d, todayISO);
+    const st = doseStatus(d, todayISO);
+    return {
+      id: d.key || `d${i + 1}`,
+      dose: i + 1,
+      label: d.n || d.label || `Dose ${i + 1}`,
+      date: formatDoseDate(d.date),
+      rawDate: d.date || null,
+      done: state === 'done',
+      missed: state === 'missed',
+      status: st.status,
+      statusLabel: st.label,
+      vaccineType,
+    } as VaccineDose;
+  });
+  const n = rawDoses.find(d => doseState(d, todayISO) !== 'done');
+  const next: NextDoseNotif = n ? {
+    id: n.key || 'next',
+    doseLabel: n.n || n.label || 'Next Dose',
+    doseDate: formatDoseDate(n.date),
+    message: `Scheduled visit for ${n.n || n.label || 'your next dose'} at K&A Main Clinic.`,
+    sentAt: formatDoseDate(todayISO),
+  } : {
+    id: 'complete',
+    doseLabel: 'All Doses Completed',
+    doseDate: 'Completed',
+    message: 'You have completed your full vaccination protocol.',
+    sentAt: formatDoseDate(todayISO),
+  };
+  return { record: data, schedule, next };
+}
+
 const NotifSwipeToDeleteRow = ({ children, onDelete }: { children: React.ReactNode; onDelete: () => void }) => {
   const translateX = useRef(new RNAnimated.Value(0)).current;
   const isOpen = useRef(false);
@@ -183,7 +223,7 @@ const NotifSwipeToDeleteRow = ({ children, onDelete }: { children: React.ReactNo
   return (
     <View style={{ marginBottom: verticalScale(1), position: 'relative', overflow: 'hidden', borderRadius: scale(12) }}>
       <View style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: scale(76), backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center' }}>
-        <TouchableOpacity
+        <Tap
           onPress={() => {
             snapClose();
             onDelete();
@@ -192,7 +232,7 @@ const NotifSwipeToDeleteRow = ({ children, onDelete }: { children: React.ReactNo
         >
           <Ionicons name="trash-outline" size={18} color="#FFFFFF" />
           <Text style={{ fontSize: moderateScale(10), fontWeight: '700', color: '#FFFFFF', marginTop: verticalScale(2) }}>Delete</Text>
-        </TouchableOpacity>
+        </Tap>
       </View>
       <RNAnimated.View style={{ transform: [{ translateX }], backgroundColor: '#FFFFFF' }} {...panResponder.panHandlers}>
         {children}
@@ -203,8 +243,8 @@ const NotifSwipeToDeleteRow = ({ children, onDelete }: { children: React.ReactNo
 
 export default function RabiesRecoveryApp() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ tab?: string }>();
-  const { user, mrn, isGuest, loading: authLoading } = usePatientAuth();
+  const params = useLocalSearchParams<{ tab?: string; t?: string }>();
+  const { user, mrn, isGuest, mrnLoading, loading: authLoading } = usePatientAuth();
   const insets = useSafeAreaInsets();
 
   const [activeTab, setActiveTab] = useState<'Home' | 'Records'>('Home');
@@ -237,8 +277,14 @@ export default function RabiesRecoveryApp() {
     return user?.isAnonymous || !name ? 'Guest Patient' : name;
   })();
 
-  const [vaccineSchedule, setVaccineSchedule] = useState<VaccineDose[]>([]);
-  const [patientRecord, setPatientRecord] = useState<PatientRecord | null>(null);
+  // Seeded from the last-known record (utils/localCache) on the very first
+  // render, so the cards appear with data instead of filling in afterwards.
+  const [initialDerived] = useState(() => deriveVaccination(mrn ? peekCache<PatientRecord>(cacheKeys.vaccination(mrn)) ?? null : null));
+  const [vaccineSchedule, setVaccineSchedule] = useState<VaccineDose[]>(initialDerived.schedule);
+  const [patientRecord, setPatientRecord] = useState<PatientRecord | null>(initialDerived.record);
+  // True once the live record (or a cached copy) has been applied for this
+  // MRN; until then the next-dose card shows a same-size skeleton.
+  const [recordReady, setRecordReady] = useState(!!initialDerived.record);
 
   // Notification State — derived from real data below (dose reminders, chat
   // replies); dismiss state persists to AsyncStorage per-patient so a cleared
@@ -268,7 +314,7 @@ export default function RabiesRecoveryApp() {
   const [ackedIds, setAckedIds] = useState<string[]>([]);
 
   // Next Dose Notification State
-  const [nextDoseNotif, setNextDoseNotif] = useState<NextDoseNotif | null>(null);
+  const [nextDoseNotif, setNextDoseNotif] = useState<NextDoseNotif | null>(initialDerived.next);
   const [showProgressModal, setShowProgressModal] = useState(false);
 
   // 3D Landscape Card Flip State
@@ -309,6 +355,18 @@ export default function RabiesRecoveryApp() {
       left: 0,
       right: 0,
     };
+  });
+
+  // Each face is laid out at its natural height (header, fields and however
+  // many dose rows there are) and measured; the card's height follows the
+  // face being shown and eases between the two during the flip, so neither
+  // side carries an empty band under its content.
+  const frontH = useSharedValue(0);
+  const backH = useSharedValue(0);
+  const cardHeightStyle = useAnimatedStyle(() => {
+    const f = frontH.value, b = backH.value;
+    if (!f) return { opacity: 0 };
+    return { opacity: 1, height: interpolate(flipAnim.value, [0, 1], [f, b || f]) };
   });
 
   const handleExportFrontCard = async () => {
@@ -367,15 +425,15 @@ export default function RabiesRecoveryApp() {
     }
   };
 
-  // The vaccination card lives inline in this Home feed. Other screens can
-  // still deep-link to it with ?tab=Records, which just scrolls it into view.
-  const { tab: tabParam } = useLocalSearchParams<{ tab?: string }>();
-
+  // The vaccination card lives inline in this Home feed. Other screens (and
+  // KAI's "Open my vaccination card" button) deep-link to it with
+  // ?tab=Records, which scrolls it into view; t makes a repeat tap count.
+  const tabParam = params?.tab;
   useEffect(() => {
     if (tabParam === 'Records') {
       mainScrollViewRef.current?.scrollTo({ y: 340, animated: true });
     }
-  }, [tabParam]);
+  }, [tabParam, params?.t]);
 
   useEffect(() => {
     if (!authLoading && !user) resetTo(router, '/auth/login');
@@ -384,64 +442,42 @@ export default function RabiesRecoveryApp() {
   // Raise the OS permission prompt once the patient is signed in, rather than
   // at the moment the first appointment is confirmed — a prompt appearing then
   // would swallow the very banner it was asked for.
+  // Deferred until after the first render settles so it never competes with
+  // Home appearing. Push token registration itself lives in
+  // app/(tabs)/_layout.tsx (it used to run here as well, twice per launch).
   useEffect(() => {
-    if (user) ensureNotificationPermission();
+    if (!user) return undefined;
+    const task = InteractionManager.runAfterInteractions(() => { ensureNotificationPermission(); });
+    return () => task.cancel();
   }, [user?.uid]);
-
-  // Register this device for clinic-sent push notifications. Needs the MRN so
-  // the server can attach the token to the right vaccination record; guests
-  // have no MRN and are skipped.
-  useEffect(() => {
-    if (user && mrn) registerForPushNotifications(mrn);
-  }, [user?.uid, mrn]);
 
   // Reads the same `vaccinations/{mrn}` doc the Admin Dashboard's Vaccination
   // Tracker writes to (see ka-clinic-admin/src/features/vaccination/VaccinationTrackerPage.jsx cycleStatus) —
   // guest sessions have no MRN, so no vaccination record exists for them.
+  const applyVaccinationRecord = (data: PatientRecord | null) => {
+    const d = deriveVaccination(data);
+    setPatientRecord(d.record);
+    setVaccineSchedule(d.schedule);
+    setNextDoseNotif(d.next);
+    setRecordReady(true);
+  };
+
+  // The last-known record (utils/localCache) is shown first; the live
+  // listener then replaces it and refreshes the cache.
   useEffect(() => {
-    if (!mrn) { setVaccineSchedule([]); setNextDoseNotif(null); setPatientRecord(null); return; }
+    if (!mrn) { setVaccineSchedule([]); setNextDoseNotif(null); setPatientRecord(null); setRecordReady(false); return; }
+    const cacheKey = cacheKeys.vaccination(mrn);
+    const cached = peekCache<PatientRecord>(cacheKey);
+    if (cached) applyVaccinationRecord(cached);
     const vaccineRef = doc(db, 'vaccinations', mrn);
     return onSnapshot(vaccineRef, (snap) => {
-      if (!snap.exists()) { setVaccineSchedule([]); setNextDoseNotif(null); setPatientRecord(null); return; }
+      if (!snap.exists()) { applyVaccinationRecord(null); writeCache(cacheKey, null); return; }
       const data: any = snap.data();
-      setPatientRecord(data);
-      const rawDoses: any[] = Array.isArray(data.doses) ? data.doses : [];
-      if (rawDoses.length === 0) { setVaccineSchedule([]); setNextDoseNotif(null); return; }
-
-      const vaccineType = serviceCopy(data.service).short;
-      const todayISO = clinicToday();
-      setVaccineSchedule(rawDoses.map((d, i) => {
-        const state = doseState(d, todayISO);
-        const rawDate: string | null = d.date || null;
-        return {
-          id: d.key || `d${i + 1}`,
-          dose: i + 1,
-          label: d.n || d.label || `Dose ${i + 1}`,
-          date: formatDoseDate(d.date),
-          rawDate,
-          done: state === 'done',
-          missed: state === 'missed',
-          ...(() => { const st = doseStatus(d, todayISO); return { status: st.status, statusLabel: st.label }; })(),
-          vaccineType,
-        };
-      }));
-
-      const next = rawDoses.find(d => doseState(d, todayISO) !== 'done');
-      setNextDoseNotif(next ? {
-        id: next.key || 'next',
-        doseLabel: next.n || next.label || 'Next Dose',
-        doseDate: formatDoseDate(next.date),
-        message: `Scheduled visit for ${next.n || next.label || 'your next dose'} at K&A Main Clinic.`,
-        sentAt: formatDoseDate(todayISO),
-      } : {
-        id: 'complete',
-        doseLabel: 'All Doses Completed',
-        doseDate: 'Completed',
-        message: 'You have completed your full vaccination protocol.',
-        sentAt: formatDoseDate(todayISO),
-      });
+      applyVaccinationRecord(data);
+      writeCache(cacheKey, data);
     }, (err) => {
       console.error('Vaccination listener error:', err);
+      setRecordReady(true);
     });
   }, [mrn]);
 
@@ -596,9 +632,6 @@ export default function RabiesRecoveryApp() {
     AsyncStorage.setItem(dismissedNotifsKey, JSON.stringify(next)).catch(() => {});
   };
 
-  // Usually follows the launch loader, so the logo is already drawn.
-  if (authLoading) return <BrandLoader label="Loading…" intro={false} />;
-
   const completedDoses = vaccineSchedule.filter(d => d.done).length;
   const progress = vaccineSchedule.length > 0 ? (completedDoses / vaccineSchedule.length) * 100 : 0;
   const vaccineType = vaccineSchedule[0]?.vaccineType ?? serviceCopy(patientRecord?.service).short;
@@ -671,10 +704,10 @@ export default function RabiesRecoveryApp() {
               <Text style={s.hiText}>Hello, {userName || 'Guest Patient'}</Text>
               <Text style={s.feelingText}>How are you feeling today?</Text>
             </View>
-            <TouchableOpacity style={s.notifBtnGlass} onPress={() => setShowNotifPanel(true)} activeOpacity={0.8}>
+            <Tap style={s.notifBtnGlass} onPress={() => setShowNotifPanel(true)} activeOpacity={0.8}>
               <Ionicons name="notifications" size={20} color="#FFFFFF" />
               {unreadCount > 0 && <View style={s.notifDotGlass} />}
-            </TouchableOpacity>
+            </Tap>
           </View>
         </View>
 
@@ -682,9 +715,10 @@ export default function RabiesRecoveryApp() {
         <View style={s.mainContentContainer}>
           <>
               {/* Harmonious Clean Next Dose Protocol Card */}
-              <TouchableOpacity 
+              <Tap
                 style={s.nextDoseNavyCard} 
                 activeOpacity={0.9}
+                pressScale
                 onPress={() => setShowProgressModal(true)}
               >
                 <View style={s.nextDoseNavyDecor} pointerEvents="none" />
@@ -693,6 +727,16 @@ export default function RabiesRecoveryApp() {
                   <Ionicons name="calendar-outline" size={22} color="#475569" />
                 </View>
 
+                {/* While the record is on its way, a skeleton with the same
+                    rows (pill, title, date, hint) holds the card's height. */}
+                {!isGuest && !recordReady && (mrnLoading || !!mrn) ? (
+                  <View style={{ flex: 1 }} pointerEvents="none" accessibilityLabel="Loading your next dose">
+                    <View style={[s.skel, { width: scale(120), height: verticalScale(16), marginBottom: verticalScale(6) }]} />
+                    <View style={[s.skel, { width: '70%', height: verticalScale(18) }]} />
+                    <View style={[s.skel, { width: scale(90), height: verticalScale(13), marginTop: verticalScale(6) }]} />
+                    <View style={[s.skel, { width: scale(150), height: verticalScale(11), marginTop: verticalScale(8) }]} />
+                  </View>
+                ) : (
                 <View style={{ flex: 1 }} pointerEvents="none">
                   {vaccineSchedule.length > 0 && (
                     <View style={s.nextDoseNavyPillRow}>
@@ -702,13 +746,13 @@ export default function RabiesRecoveryApp() {
                     </View>
                   )}
                   <Text style={s.nextDoseNavyDose}>
-                    {nextDoseNotif?.doseLabel ?? (isGuest ? 'No Dose Record' : 'Day 07 (3rd Dose)')}
+                    {nextDoseNotif?.doseLabel ?? (isGuest ? 'No Dose Record' : 'No doses scheduled yet')}
                   </Text>
-                  {(nextDoseNotif || !isGuest) && (
+                  {nextDoseNotif && (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(5), marginTop: verticalScale(2) }}>
                       <Ionicons name="time-outline" size={13} color="#64748B" />
                       <Text style={s.nextDoseNavyDate}>
-                        {nextDoseNotif?.doseDate ?? 'Mar 8, 2026'}
+                        {nextDoseNotif.doseDate}
                       </Text>
                     </View>
                   )}
@@ -719,19 +763,22 @@ export default function RabiesRecoveryApp() {
                     <Ionicons name="arrow-forward" size={11} color="#475569" />
                   </View>
                 </View>
+                )}
 
                 <View style={s.nextDoseArrowBox} pointerEvents="none">
                   <Ionicons name="chevron-forward" size={18} color="#475569" />
                 </View>
-              </TouchableOpacity>
+              </Tap>
 
               {/* ── OFFICIAL VACCINATION RECORD CARD (3D FLIP) ── */}
-              <View style={s.cdcOfficialCardContainer}>
-                <TouchableOpacity activeOpacity={0.96} onPress={toggleCardFlip} style={{ width: '100%', height: '100%' }}>
+              <Animated.View style={[s.cdcOfficialCardContainer, cardHeightStyle]}>
+                <Tap activeOpacity={0.96} onPress={toggleCardFlip} style={{ width: '100%', height: '100%', borderRadius: scale(14) }}
+                  accessibilityRole="button" accessibilityLabel={isFlippedState ? 'Vaccination card, back side. Tap to show the front.' : 'Vaccination card, front side. Tap to show the back.'}>
 
                   {/* FRONT SIDE (LANDSCAPE) */}
-                  <Animated.View style={[s.cdcOfficialCardPaper, frontAnimatedStyle]}>
-                    <ViewShot ref={cardFrontShotRef} options={{ format: 'png', quality: 1 }} style={{ flex: 1 }}>
+                  <Animated.View style={[s.cdcOfficialCardPaper, frontAnimatedStyle]}
+                    onLayout={e => { const h = e.nativeEvent.layout.height; frontH.set(frontH.get() ? withTiming(h, { duration: 220 }) : h); }}>
+                    <ViewShot ref={cardFrontShotRef} options={{ format: 'png', quality: 1 }} style={{ backgroundColor: '#FFFFFF' }}>
                     <View style={s.cdcHeaderBlock}>
                       <View style={s.cdcHeaderTitleRow}>
                         <Image source={require('../../assets/logo-white-nobg.png')} style={s.knAClinicLogoHeader} resizeMode="contain" />
@@ -822,8 +869,9 @@ export default function RabiesRecoveryApp() {
                   </Animated.View>
 
                   {/* BACK SIDE (LANDSCAPE) */}
-                  <Animated.View style={[s.cdcOfficialCardPaper, backAnimatedStyle]}>
-                    <ViewShot ref={cardBackShotRef} options={{ format: 'png', quality: 1 }} style={{ flex: 1 }}>
+                  <Animated.View style={[s.cdcOfficialCardPaper, backAnimatedStyle]}
+                    onLayout={e => { const h = e.nativeEvent.layout.height; backH.set(backH.get() ? withTiming(h, { duration: 220 }) : h); }}>
+                    <ViewShot ref={cardBackShotRef} options={{ format: 'png', quality: 1 }} style={{ backgroundColor: '#FFFFFF' }}>
                     <View style={s.cdcHeaderBlock}>
                       <View style={s.cdcHeaderTitleRow}>
                         <Image source={require('../../assets/logo-white-nobg.png')} style={s.knAClinicLogoHeader} resizeMode="contain" />
@@ -892,21 +940,21 @@ export default function RabiesRecoveryApp() {
                     </View>
                     </ViewShot>
                   </Animated.View>
-                </TouchableOpacity>
-              </View>
+                </Tap>
+              </Animated.View>
 
               {/* Standalone Plain Text & Enlarge Button BELOW Card (NO CARD BOX ON TEXT) */}
               <View style={s.cardExternalControlsRow}>
-                <TouchableOpacity onPress={toggleCardFlip} activeOpacity={0.7} style={{ paddingVertical: verticalScale(4) }}>
+                <Tap onPress={toggleCardFlip} activeOpacity={0.7} style={{ paddingVertical: verticalScale(4) }}>
                   <Text style={s.plainHintTxt}>
                     {isFlippedState ? 'Showing Back (Exposure Record) · Tap to Flip' : 'Showing Front (Vaccination Card) · Tap to Flip'}
                   </Text>
-                </TouchableOpacity>
+                </Tap>
 
-                <TouchableOpacity style={s.enlargeCardBtn} onPress={() => setShowEnlargeModal(true)} activeOpacity={0.85}>
+                <Tap style={s.enlargeCardBtn} onPress={() => setShowEnlargeModal(true)} activeOpacity={0.85}>
                   <Ionicons name="expand-outline" size={13} color="#FFFFFF" />
                   <Text style={s.enlargeCardBtnTxt}>Enlarge Card</Text>
-                </TouchableOpacity>
+                </Tap>
               </View>
 
               {/* ══ COMPREHENSIVE CASE & INCIDENT DETAILS TABLE ══ */}
@@ -1024,14 +1072,14 @@ export default function RabiesRecoveryApp() {
                     : `${completedDoses} of ${vaccineSchedule.length || trackerDoses.length} Doses Completed · ${Math.round(progress)}% Immunized`}
                 </Text>
               </View>
-              <TouchableOpacity
+              <Tap
                 onPress={() => setShowProgressModal(false)}
                 style={s.trackerWebCloseBtn}
                 activeOpacity={0.7}
                 hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               >
                 <Ionicons name="close" size={18} color="#94A3B8" />
-              </TouchableOpacity>
+              </Tap>
             </View>
 
             {/* Dose timeline — a vertical list: one row per dose, read top to
@@ -1100,13 +1148,13 @@ export default function RabiesRecoveryApp() {
               <Text style={s.trackerFooterNote} numberOfLines={2}>
                 Dose dates follow your regimen automatically. Clinic staff record each dose when it is given.
               </Text>
-              <TouchableOpacity
+              <Tap
                 style={s.trackerCloseAction}
                 onPress={() => setShowProgressModal(false)}
                 activeOpacity={0.85}
               >
                 <Text style={s.trackerCloseActionText}>Close</Text>
-              </TouchableOpacity>
+              </Tap>
             </View>
           </View>
         </TouchableWithoutFeedback>
@@ -1130,29 +1178,29 @@ export default function RabiesRecoveryApp() {
                   </View>
                 )}
               </View>
-              <TouchableOpacity onPress={() => setShowNotifPanel(false)} style={s.closeBtn}>
+              <Tap onPress={() => setShowNotifPanel(false)} style={s.closeBtn}>
                 <Ionicons name="close" size={20} color={C.slate} />
-              </TouchableOpacity>
+              </Tap>
             </View>
 
             {/* Filter Row */}
             <View style={s.notifFilterRow}>
-              <TouchableOpacity 
+              <Tap
                 style={[s.notifFilterTab, notifFilter === 'all' && s.notifFilterTabActive]} 
                 onPress={() => setNotifFilter('all')}
               >
                 <Text style={[s.notifFilterTabText, notifFilter === 'all' && s.notifFilterTabTextActive]}>All ({notifications.length})</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
+              </Tap>
+              <Tap
                 style={[s.notifFilterTab, notifFilter === 'unread' && s.notifFilterTabActive]} 
                 onPress={() => setNotifFilter('unread')}
               >
                 <Text style={[s.notifFilterTabText, notifFilter === 'unread' && s.notifFilterTabTextActive]}>Unread ({unreadCount})</Text>
-              </TouchableOpacity>
+              </Tap>
               <View style={{ flex: 1 }} />
-              <TouchableOpacity onPress={markAllNotifsRead}>
+              <Tap onPress={markAllNotifsRead}>
                 <Text style={s.notifActionLink}>Mark all read</Text>
-              </TouchableOpacity>
+              </Tap>
             </View>
 
             <ScrollView style={{ maxHeight: verticalScale(400) }} showsVerticalScrollIndicator={false}>
@@ -1164,7 +1212,7 @@ export default function RabiesRecoveryApp() {
               ) : (
                 displayedNotifications.map(n => (
                   <NotifSwipeToDeleteRow key={n.id} onDelete={() => deleteNotification(n.id)}>
-                    <TouchableOpacity 
+                    <Tap
                       style={s.notifItem}
                       activeOpacity={0.8}
                       onPress={() => {
@@ -1198,31 +1246,31 @@ export default function RabiesRecoveryApp() {
                               <Text style={s.ackConfirmedText}>Acknowledged</Text>
                             </View>
                           ) : (
-                            <TouchableOpacity
+                            <Tap
                               style={s.ackBtn}
                               activeOpacity={0.85}
                               onPress={() => confirmReceipt(n.notificationId)}
                             >
                               <Ionicons name="checkmark" size={14} color="#FFFFFF" />
                               <Text style={s.ackBtnText}>Got it</Text>
-                            </TouchableOpacity>
+                            </Tap>
                           )
                         )}
                       </View>
                       {n.unread && <View style={s.notifUnreadDot} />}
-                    </TouchableOpacity>
+                    </Tap>
                   </NotifSwipeToDeleteRow>
                 ))
               )}
             </ScrollView>
 
             <View style={s.notifFooterRow}>
-              <TouchableOpacity onPress={clearNotifs}>
+              <Tap onPress={clearNotifs}>
                 <Text style={s.clearNotifText}>Clear Notifications</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={s.closeNotifBtn} onPress={() => setShowNotifPanel(false)}>
+              </Tap>
+              <Tap style={s.closeNotifBtn} onPress={() => setShowNotifPanel(false)}>
                 <Text style={s.closeNotifBtnText}>Close</Text>
-              </TouchableOpacity>
+              </Tap>
             </View>
           </View>
         </TouchableWithoutFeedback>
@@ -1239,7 +1287,7 @@ export default function RabiesRecoveryApp() {
             
             {/* Enlarged Card Display Container (90° Rotated Landscape Card matching reference photo) */}
             <View style={s.enlargeCardContainer}>
-              <TouchableOpacity activeOpacity={0.96} onPress={() => setEnlargeFlipped(!enlargeFlipped)} style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
+              <Tap activeOpacity={0.96} onPress={() => setEnlargeFlipped(!enlargeFlipped)} style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
                 {enlargeFlipped ? (
                   /* Back side rotated landscape card */
                   <ViewShot ref={modalCardBackShotRef} options={{ format: 'png', quality: 1 }} style={s.cdcOfficialCardPaperPopup}>
@@ -1394,13 +1442,13 @@ export default function RabiesRecoveryApp() {
                     </View>
                   </ViewShot>
                 )}
-              </TouchableOpacity>
+              </Tap>
             </View>
 
             {/* Action Buttons Row matching user screenshot */}
             <View style={s.enlargeModalActionsRow}>
               {/* Show Back ID / Show Front ID Button */}
-              <TouchableOpacity 
+              <Tap
                 style={s.enlargePillBtn} 
                 onPress={() => setEnlargeFlipped(!enlargeFlipped)}
                 activeOpacity={0.8}
@@ -1409,10 +1457,10 @@ export default function RabiesRecoveryApp() {
                   {enlargeFlipped ? 'Show Front ID' : 'Show Back ID'}
                 </Text>
                 <Ionicons name="swap-horizontal" size={16} color="#2563EB" />
-              </TouchableOpacity>
+              </Tap>
 
               {/* Export Button (exports current active side to photos) */}
-              <TouchableOpacity 
+              <Tap
                 style={[s.enlargePillBtn, exportingCard && { opacity: 0.6 }]} 
                 onPress={handleExportFrontCard}
                 activeOpacity={0.8}
@@ -1426,17 +1474,17 @@ export default function RabiesRecoveryApp() {
                     <Ionicons name="download-outline" size={16} color="#2563EB" />
                   </>
                 )}
-              </TouchableOpacity>
+              </Tap>
             </View>
 
             {/* Close Button */}
-            <TouchableOpacity 
+            <Tap
               style={s.enlargeCloseBtn} 
               onPress={() => setShowEnlargeModal(false)}
               activeOpacity={0.8}
             >
               <Text style={s.enlargeCloseBtnTxt}>Close</Text>
-            </TouchableOpacity>
+            </Tap>
 
           </View>
         </TouchableWithoutFeedback>
@@ -1447,7 +1495,7 @@ export default function RabiesRecoveryApp() {
       {/* ── BOTTOM NAV BAR ── */}
       <View style={[nav.bar, { height: verticalScale(80) + insets.bottom, paddingBottom: verticalScale(8) + insets.bottom }]}>
         {/* Tab 1: Home */}
-        <TouchableOpacity
+        <Tap
           style={nav.tab}
           activeOpacity={0.7}
           onPress={() => {
@@ -1457,37 +1505,37 @@ export default function RabiesRecoveryApp() {
         >
           <Ionicons name={activeTab === 'Home' ? "home" : "home-outline"} size={24} color={activeTab === 'Home' ? C.red : "#64748B"} />
           <Text style={[nav.label, activeTab === 'Home' && nav.labelActive]}>Home</Text>
-        </TouchableOpacity>
+        </Tap>
 
         {/* Tab 2: Appts */}
-        <TouchableOpacity
+        <Tap
           style={nav.tab}
           activeOpacity={0.7}
           onPress={() => router.navigate('/appt')}
         >
           <Ionicons name="calendar-outline" size={24} color="#64748B" />
           <Text style={nav.label}>Appts</Text>
-        </TouchableOpacity>
+        </Tap>
 
         {/* Tab 3: Chat */}
-        <TouchableOpacity
+        <Tap
           style={nav.tab}
           activeOpacity={0.7}
           onPress={() => router.navigate('/chat')}
         >
           <Ionicons name="chatbubble-ellipses-outline" size={24} color="#64748B" />
           <Text style={nav.label}>Chat</Text>
-        </TouchableOpacity>
+        </Tap>
 
         {/* Tab 4: Account */}
-        <TouchableOpacity
+        <Tap
           style={nav.tab}
           activeOpacity={0.7}
           onPress={() => router.navigate('/profile')}
         >
           <Ionicons name="person-outline" size={24} color="#64748B" />
           <Text style={nav.label}>Account</Text>
-        </TouchableOpacity>
+        </Tap>
       </View>
 
       {/* Custom Alert Modal */}
@@ -1567,6 +1615,7 @@ const s = StyleSheet.create({
     marginTop: verticalScale(8),
     zIndex: 10,
   },
+  skel: { backgroundColor: '#E2E8F0', borderRadius: scale(6) },
   nextDoseNavyCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2767,23 +2816,20 @@ const s = StyleSheet.create({
 
   // CDC OFFICIAL CARD PAPER STYLING (COMPACT 250px INLINE CARD)
   cdcOfficialCardContainer: {
-    // Hugs the actual content height (header + 3 field rows + a 5-row dose
-    // table): 520 fit everything but left a large empty gap below the table
-    // since the front/back panes are position:absolute-filled for the flip
-    // animation and can't size to their own content. 300 was too tight once
-    // seen on-device — sized up for a visibly bigger card while still
-    // matching the content height (no re-introduced dead space).
+    // Height comes from the measured faces (cardHeightStyle). This is only
+    // the first frame's size, before the faces report their height.
     width: '100%',
-    height: verticalScale(360),
+    height: verticalScale(300),
     marginTop: verticalScale(4),
     marginBottom: verticalScale(8),
   },
   cdcOfficialCardPaper: {
+    // Absolute for the flip, but no `bottom`: each face takes its content
+    // height, which cardHeightStyle then gives the container.
     position: 'absolute',
     top: verticalScale(0),
     left: scale(0),
     right: scale(0),
-    bottom: verticalScale(0),
     backgroundColor: '#FFFFFF',
     borderRadius: scale(14),
     borderWidth: 1,
@@ -2793,7 +2839,6 @@ const s = StyleSheet.create({
     // shadow for BOTH faces, so the backfaceVisibility-hidden pane's shadow
     // bleeds through and smears across the card mid-rotation. The border
     // alone defines the card edge.
-    justifyContent: 'space-between',
   },
   cdcHeaderBlock: {
     marginBottom: verticalScale(3),
@@ -2920,9 +2965,8 @@ const s = StyleSheet.create({
     backgroundColor: '#F8FAFC',
   },
   cdcTableCell: {
-    // Row padding/size carries most of the work of filling the card's fixed
-    // height — 5 dose rows means every dp here is multiplied by five, so these
-    // values are tuned to land just under the container's interior height.
+    // The card sizes to its rows (see cardHeightStyle), so these only set
+    // how roomy each dose row is.
     paddingHorizontal: scale(6),
     paddingVertical: verticalScale(3.5),
     fontSize: moderateScale(9.5),

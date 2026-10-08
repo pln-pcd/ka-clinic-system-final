@@ -11,6 +11,7 @@
 //    logic (buildDoses) and the same filters the screens use. The browser
 //    check compares these with what the screens actually display.
 import { writeFileSync } from 'node:fs';
+import { FORBIDDEN_INCIDENT_FIELDS } from '../ka-clinic-admin/src/lib/simulatedIncidents.js';
 
 const args = process.argv.slice(2);
 if (args.includes('--emulator')) {
@@ -98,25 +99,16 @@ check('No completed record is past its archive date but still active', vax.filte
   return due <= T ? [`${p._id}: due ${due}`] : [];
 }));
 
-// Pins
-const linked = new Map();
+// Pins: study mode (docs/STUDY_MODE.md). Every incident is simulated, carries
+// none of the identifying fields, and no patient record links to a pin.
 const pinProblems = [];
-vax.forEach(p => {
-  const ids = p.incidentIds || [];
-  if (ids.length > 1) pinProblems.push(`${p._id}: ${ids.length} pins`);
-  ids.forEach(id => { if (linked.has(id)) pinProblems.push(`pin ${id} linked twice`); linked.set(id, p); });
-});
 incidents.forEach(i => {
-  const p = linked.get(i._id);
-  if (!p) { pinProblems.push(`orphan pin ${i._id}`); return; }
-  if (p.service !== 'PEP') pinProblems.push(`${i._id}: linked to ${p.service} record ${p._id}`);
-  if (i.category !== `Category ${p.cat}`) pinProblems.push(`${i._id}: ${i.category} vs record Category ${p.cat}`);
-  const done = trackerStatus(p) === 'completed';
-  if (done && !(i.mapHidden === true && i.mapHiddenReason === 'patient-completed')) pinProblems.push(`${i._id}: record ${p._id} completed but pin visible`);
-  if (!done && i.mapHidden === true) pinProblems.push(`${i._id}: record ${p._id} ongoing but pin hidden`);
+  if (i.isSimulated !== true) pinProblems.push(`${i._id}: not marked isSimulated`);
+  const bad = FORBIDDEN_INCIDENT_FIELDS.filter(f => i[f] !== undefined);
+  if (bad.length) pinProblems.push(`${i._id}: has identifying field(s) ${bad.join(', ')}`);
 });
-[...linked.keys()].forEach(id => { if (!incidents.some(i => i._id === id)) pinProblems.push(`record ${linked.get(id)._id} links missing pin ${id}`); });
-check('Pins: one per PEP record, visible only while ongoing, no orphans', pinProblems);
+vax.forEach(p => { if ((p.incidentIds || []).length) pinProblems.push(`${p._id}: patient record links to a map pin`); });
+check('Pins: simulated only, no address/barangay/patient fields, not linked to records', pinProblems);
 
 // Stock
 const stockProblems = [];

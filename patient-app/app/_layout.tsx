@@ -2,18 +2,11 @@
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState } from 'react';
 import { Platform, Text, TextInput, View } from 'react-native';
-import {
-  useFonts,
-  Roboto_300Light,
-  Roboto_400Regular,
-  Roboto_500Medium,
-  Roboto_700Bold,
-  Roboto_900Black,
-} from '@expo-google-fonts/roboto';
 import { PatientAuthProvider } from '../context/PatientAuthContext';
 import { DesktopApp, MobileApp } from '../components/AppShells';
 
-SplashScreen.preventAutoHideAsync();
+// Held until the saved sign-in is resolved; components/AppShells.tsx hides it.
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 // Real Android devices carry the user's OS font-scale/display-size setting
 // into every unscaled dp value RN renders, which is why a build can look
@@ -60,15 +53,10 @@ function WebRoot() {
   return <DesktopApp />;
 }
 
+// The native app renders in the platform font (no screen sets a Roboto
+// fontFamily), so nothing is loaded before the first frame. The web preview
+// gets Roboto from Google Fonts below.
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts({
-    Roboto_300Light,
-    Roboto_400Regular,
-    Roboto_500Medium,
-    Roboto_700Bold,
-    Roboto_900Black,
-  });
-
   useEffect(() => {
     // Inject Roboto font for Web globally
     if (typeof document !== 'undefined') {
@@ -94,14 +82,9 @@ export default function RootLayout() {
       }
     }
 
-    if (fontsLoaded) {
-      SplashScreen.hideAsync();
-    }
-  }, [fontsLoaded]);
-
-  if (!fontsLoaded && Platform.OS !== 'web') {
-    return null;
-  }
+    // Desktop web never mounts MobileApp, which is what normally hides it.
+    if (Platform.OS === 'web') SplashScreen.hideAsync().catch(() => {});
+  }, []);
 
   return (
     <PatientAuthProvider>

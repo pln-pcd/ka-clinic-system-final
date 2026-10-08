@@ -2,7 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useEffect } from 'react';
-import { Dimensions, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, Platform, StyleSheet, Text, View } from 'react-native';
+import Tap from '../components/Tap';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -88,7 +89,7 @@ export default function Onboarding1() {
             </Text>
           </View>
 
-          <TouchableOpacity 
+          <Tap
             onPress={() => router.push('/onboarding2')} 
             activeOpacity={0.85}
             style={styles.buttonShadow}
@@ -102,7 +103,7 @@ export default function Onboarding1() {
               <Text style={styles.buttonText}>Next</Text>
               <Ionicons name="arrow-forward" size={18} color="#FFF" style={{ marginLeft: 8 }} />
             </LinearGradient>
-          </TouchableOpacity>
+          </Tap>
         </Animated.View>
       </LinearGradient>
     </View>

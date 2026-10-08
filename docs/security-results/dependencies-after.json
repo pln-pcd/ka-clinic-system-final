@@ -1,0 +1,87 @@
+{
+  "date": "2026-10-08T00:11:18.518Z",
+  "audits": {
+    "server": {
+      "vulnerabilities": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 0,
+        "critical": 0,
+        "total": 0
+      },
+      "advisories": []
+    },
+    "admin": {
+      "vulnerabilities": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 5,
+        "critical": 0,
+        "total": 5
+      },
+      "advisories": [
+        {
+          "package": "braces",
+          "title": "braces vulnerable to stack-exhaustion denial of service through deeply nested patterns",
+          "url": "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm",
+          "severity": "high"
+        }
+      ]
+    },
+    "patient": {
+      "vulnerabilities": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 14,
+        "critical": 0,
+        "total": 14
+      },
+      "advisories": [
+        {
+          "package": "braces",
+          "title": "braces vulnerable to stack-exhaustion denial of service through deeply nested patterns",
+          "url": "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm",
+          "severity": "high"
+        },
+        {
+          "package": "node-forge",
+          "title": "node-forge RSA PKCS#1 v1.5 signature verification accepts extra nested DigestAlgorithm elements",
+          "url": "https://github.com/advisories/GHSA-86w9-cpqp-85rv",
+          "severity": "high"
+        }
+      ]
+    }
+  },
+  "results": [
+    {
+      "id": "DEPENDENCIES-server",
+      "area": 8,
+      "description": "server dependency audit",
+      "steps": "npm audit --json in .",
+      "expected": "Zero published advisories",
+      "actual": "0 affected package entries; 0 root advisories",
+      "status": "PASS"
+    },
+    {
+      "id": "DEPENDENCIES-admin",
+      "area": 8,
+      "description": "admin dependency audit",
+      "steps": "npm audit --json in ka-clinic-admin",
+      "expected": "Zero published advisories",
+      "actual": "5 affected package entries; 1 root advisories",
+      "status": "FAIL"
+    },
+    {
+      "id": "DEPENDENCIES-patient",
+      "area": 8,
+      "description": "patient dependency audit",
+      "steps": "npm audit --json in patient-app",
+      "expected": "Zero published advisories",
+      "actual": "14 affected package entries; 2 root advisories",
+      "status": "FAIL"
+    }
+  ]
+}

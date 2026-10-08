@@ -20,9 +20,9 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
+import Tap from '../../components/Tap';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { auth, sendLoginOTP, signOut, verifyLoginOTP } from '../../config/backend';
@@ -153,9 +153,9 @@ export default function VerifyLoginOtp() {
       </LinearGradient>
 
       <View style={[styles.navHeader, { top: Math.max(insets.top + (Platform.OS === 'android' ? 12 : 8), verticalScale(42)) }]}>
-        <TouchableOpacity style={styles.backButton} onPress={abandon} activeOpacity={0.7}>
+        <Tap style={styles.backButton} onPress={abandon} activeOpacity={0.7}>
           <Ionicons name="chevron-back" size={22} color="#1E293B" />
-        </TouchableOpacity>
+        </Tap>
       </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
@@ -224,7 +224,7 @@ export default function VerifyLoginOtp() {
               ))}
             </View>
 
-            <TouchableOpacity
+            <Tap
               style={[styles.primaryButton, loading && styles.buttonDisabled]}
               activeOpacity={0.85}
               onPress={handleVerify}
@@ -233,9 +233,9 @@ export default function VerifyLoginOtp() {
               <LinearGradient colors={[NAVY_BLUE, '#172554']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.primaryGradient}>
                 <Text style={styles.primaryButtonText}>{loading ? 'Verifying...' : 'Verify & Sign In'}</Text>
               </LinearGradient>
-            </TouchableOpacity>
+            </Tap>
 
-            <TouchableOpacity
+            <Tap
               style={[styles.resendButton, resendCooldown > 0 && styles.resendDisabled]}
               onPress={handleResend}
               disabled={resendCooldown > 0 || loading}
@@ -244,7 +244,7 @@ export default function VerifyLoginOtp() {
               <Text style={[styles.resendText, resendCooldown > 0 && styles.resendTextDisabled]}>
                 {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : 'Resend code'}
               </Text>
-            </TouchableOpacity>
+            </Tap>
 
             {/* Only when "Keep me signed in" was ticked at login. */}
             {rememberDevice && (

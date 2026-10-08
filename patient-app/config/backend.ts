@@ -11,6 +11,7 @@ import {
   onAuthStateChanged as _onAuthStateChanged,
   sendPasswordResetEmail as _sendPasswordResetEmail,
   signInAnonymously,
+  signInWithCustomToken,
   signInWithEmailAndPassword as _signInWithEmailAndPassword,
   signOut as _signOut,
   updateProfile as _updateProfile,
@@ -121,6 +122,7 @@ export type AuthorizedPatient = {
   authorized: boolean;
   registered: boolean;
   uid?: string | null;
+  verificationToken?: string;
 };
 
 // Admin Dashboard MRNs are generated as "<year>-<seq>" (e.g. "2026-001"),
@@ -159,20 +161,8 @@ export const resolveMRNForUser = async (uid: string, email: string | null): Prom
 };
 
 export const signInWithMRN = async (mrnInput: string, password: string) => {
-  const mrn = normalizeMRN(mrnInput);
-  const record = await lookupAuthorizedPatient(mrn);
-  if (!record || !record.authorized) {
-    throw new Error('MRN not found. Please verify your Medical Record Number.');
-  }
-  // Clinic staff created this record but the patient never finished signup, so
-  // there is no Auth account to sign into — say that plainly instead of letting
-  // Firebase return a generic invalid-credential error. `uid` is checked too:
-  // if it is set, an Auth account demonstrably exists and a stale/missing
-  // `registered` flag must not lock a working account out.
-  if (!record.registered && !record.uid) {
-    throw new Error('This Medical Record Number has not been registered in the app yet. Please tap "Sign up" to create your password first.');
-  }
-  return _signInWithEmailAndPassword(auth, record.email, password);
+  const data = await postToApi<{ customToken: string }>('/api/send-otp', { action: 'login', mrn: normalizeMRN(mrnInput), password });
+  return signInWithCustomToken(auth, data.customToken);
 };
 
 // ── Masking helper — never show a full email in the UI ────────
@@ -239,6 +229,7 @@ async function postToApi<T>(path: string, body: unknown, idToken?: string): Prom
   if (!API_BASE_URL) {
     throw new Error('The clinic server address is not configured for this app build (no EXPO_PUBLIC_API_BASE_URL and no app.json extra.apiBaseUrl). Contact the clinic if this keeps happening.');
   }
+  if (!USE_EMULATOR && !API_BASE_URL.startsWith('https://')) throw new Error('Clinic server requires HTTPS.');
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (idToken) headers.Authorization = `Bearer ${idToken}`;
   const res = await fetch(`${API_BASE_URL}${path}`, {
@@ -266,8 +257,8 @@ export const sendEmailOTP = async (mrnInput: string): Promise<SendOtpResult> => 
 
 export const verifyEmailOTP = async (mrnInput: string, enteredCode: string): Promise<AuthorizedPatient> => {
   const mrn = normalizeMRN(mrnInput);
-  const data = await postToApi<{ patient: AuthorizedPatient }>('/api/verify-otp', { mrn, enteredCode });
-  return { ...data.patient, mrn } as AuthorizedPatient;
+  const data = await postToApi<{ patient: AuthorizedPatient; verificationToken: string }>('/api/verify-otp', { mrn, enteredCode });
+  return { ...data.patient, mrn, verificationToken: data.verificationToken } as AuthorizedPatient;
 };
 
 // Creates the real Firebase Auth account (email/password) for a patient who
@@ -280,8 +271,8 @@ export const completeEmailSignup = async (record: AuthorizedPatient, password: s
   // which has the Admin SDK and can tell "your own half-finished signup"
   // apart from "somebody else's account" — a distinction the client SDK
   // cannot make, and which used to lock patients out of their own email.
-  await postToApi<{ uid: string }>('/api/verify-otp', { action: 'complete-signup', mrn: record.mrn, password });
-  const credential = await _signInWithEmailAndPassword(auth, (record.email || '').toLowerCase().trim(), password);
+  const data = await postToApi<{ uid: string; customToken: string }>('/api/verify-otp', { action: 'complete-signup', mrn: record.mrn, password, verificationToken: record.verificationToken });
+  const credential = await signInWithCustomToken(auth, data.customToken);
   if (record.name && credential.user.displayName !== record.name) {
     await _updateProfile(credential.user, { displayName: record.name }).catch(() => {});
   }
@@ -354,6 +345,12 @@ export const forgetTrustedDevice = async (): Promise<void> => {
   await setTrustToken(null);
 };
 
+export const logoutAllPatientDevices = async (): Promise<void> => {
+  await postToApi('/api/send-otp', { action: 'logout-all' }, await currentIdToken());
+  await setTrustToken(null);
+  await _signOut(auth);
+};
+
 // Thrown when the MRN is valid but no Firebase Auth account exists for it yet.
 // Callers should route the patient to signup instead of showing a generic
 // failure — there is no password to reset until they finish registering.
@@ -368,25 +365,10 @@ export class AccountNotRegisteredError extends Error {
 
 // ── Forgot password — always via the email on file, never phone/OTP ───
 export const requestPasswordReset = async (mrnInput: string): Promise<string> => {
-  const mrn = normalizeMRN(mrnInput);
-  const record = await lookupAuthorizedPatient(mrn);
-  if (!record || !record.authorized) {
-    throw new Error('MRN not found. Please verify your Medical Record Number.');
-  }
-  if (!record.email) {
-    throw new Error('No recovery email on file for this record — please contact the clinic to reset your password.');
-  }
-  // Firebase deliberately resolves sendPasswordResetEmail successfully even for
-  // addresses with no account, so attackers can't probe which emails are
-  // registered. That means an unregistered patient would otherwise be told a
-  // reset link was sent and then wait for mail that is never generated.
-  // `registered` flips to true only in completeEmailSignup(), once the Auth
-  // account actually exists, so it is the reliable pre-check. `uid` is checked
-  // alongside it: if a uid is present the account exists regardless of a
-  // stale flag, and a real reset email should still go out.
-  if (!record.registered && !record.uid) {
-    throw new AccountNotRegisteredError(record.email);
-  }
-  await _sendPasswordResetEmail(auth, record.email);
-  return record.email;
+  await postToApi('/api/send-otp', { action: 'forgot-password', mrn: normalizeMRN(mrnInput) });
+  return '';
 };
+export async function revokePatientDeviceSession(deviceId: string): Promise<void> {
+  const data = await postToApi<{ success?: boolean; error?: string }>('/api/send-otp', { action: 'revoke-device', deviceId }, await currentIdToken());
+  if (!data.success) throw new Error(data.error || 'Unable to sign out this device.');
+}

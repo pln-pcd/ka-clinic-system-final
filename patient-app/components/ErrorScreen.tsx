@@ -6,7 +6,8 @@ import { Ionicons } from '@expo/vector-icons';
 import type { ErrorBoundaryProps } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import Tap from './Tap';
 import { moderateScale, scale, verticalScale } from '../utils/scale';
 
 const NAVY = '#1A3052';
@@ -26,10 +27,10 @@ export default function ErrorScreen({ error, retry }: ErrorBoundaryProps) {
       </View>
       <Text style={s.title}>Something went wrong</Text>
       <Text style={s.text}>{"This screen couldn't load. Please try again."}</Text>
-      <TouchableOpacity style={s.btn} onPress={retry} activeOpacity={0.85} accessibilityRole="button">
+      <Tap style={s.btn} onPress={retry} activeOpacity={0.85} accessibilityRole="button">
         <Ionicons name="refresh" size={16} color="#FFFFFF" />
         <Text style={s.btnText}>Try again</Text>
-      </TouchableOpacity>
+      </Tap>
     </View>
   );
 }

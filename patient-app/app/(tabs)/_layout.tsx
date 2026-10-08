@@ -1,7 +1,7 @@
 // KNAPROTOTYPE/app/(tabs)/_layout.tsx
 import type { NotificationResponse } from 'expo-notifications';
 import { Tabs, useRouter } from 'expo-router';
-import { AppState } from 'react-native';
+import { AppState, InteractionManager } from 'react-native';
 import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import React, { useEffect, useRef, useState } from 'react';
 import CustomAlertModal, { CustomAlertConfig } from '../../components/CustomAlertModal';
@@ -10,7 +10,6 @@ import {
   acknowledgeNotification,
   Notifications,
   registerForPushNotifications,
-  setupNotificationChannelAsync,
 } from '../../config/notifications';
 import { usePatientAuth } from '../../context/PatientAuthContext';
 
@@ -25,12 +24,15 @@ export default function TabsLayout() {
 
   const seenNotifIds = useRef<Set<string> | null>(null);
 
-  // Ensure notification channel is initialized and register device push token
+  // Register this device's push token. Network work that the first screen
+  // does not need, so it waits until the UI has settled. (The channel itself
+  // is created in components/AppShells.tsx.)
   useEffect(() => {
-    setupNotificationChannelAsync().catch(() => {});
-    if (user && mrn) {
+    if (!user || !mrn) return undefined;
+    const task = InteractionManager.runAfterInteractions(() => {
       registerForPushNotifications(mrn).catch(() => {});
-    }
+    });
+    return () => task.cancel();
   }, [user, mrn]);
 
   // A patient who first tapped "Don't allow" and later enabled notifications

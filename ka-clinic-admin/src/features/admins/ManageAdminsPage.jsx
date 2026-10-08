@@ -7,7 +7,6 @@ import Modal from '../../components/Modal';
 import useDiscardGuard from '../../components/useDiscardGuard';
 import {
   AlertTriangle,
-  Link2,
   Mail,
   Search,
   Send,
@@ -39,7 +38,7 @@ import { FieldError, useFieldErrors } from '../../components/FormValidation';
 
 import { SkeletonRows } from '../../components/Skeleton';
 const INVITE_RULES = {
-  email: f => (!f.email.trim() ? 'Enter the staff email address'
+  email: f => (!f.email.trim() ? "Enter the nurse's email address"
     : !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim()) ? 'Enter a valid email, e.g. name@kaclinic.ph' : ''),
 };
 
@@ -117,7 +116,7 @@ export default function ManageAdmins() {
       if (data.warning) {
         showToast('warning', data.warning);
       } else {
-        showToast('success', data.message || 'Invite sent.');
+        showToast('success', data.message || `Invitation sent to ${email}.`);
       }
       if (data.inviteUrl) {
         navigator.clipboard?.writeText(formatLocalInviteUrl(data.inviteUrl));
@@ -141,32 +140,13 @@ export default function ManageAdmins() {
         if (data.warning) {
           showToast('warning', data.warning);
         } else {
-          showToast('success', `Invite sent to ${admin.email}.`);
+          showToast('success', `Invitation sent to ${admin.email}.`);
         }
         if (data.inviteUrl) {
           navigator.clipboard?.writeText(formatLocalInviteUrl(data.inviteUrl));
         }
       } else {
         showToast('error', data.error || 'Could not resend the invite.');
-      }
-    } catch {
-      showToast('error', 'Network error. Please try again.');
-    } finally {
-      setBusyUid(null);
-    }
-  }
-
-  async function handleCopyInviteLink(admin) {
-    setBusyUid(admin.uid);
-    try {
-      const idToken = await auth.currentUser.getIdToken();
-      const data = await postJson('/api/admin-invites', { action: 'get-link', email: admin.email }, { Authorization: `Bearer ${idToken}` });
-      if (data.success && data.inviteUrl) {
-        const link = formatLocalInviteUrl(data.inviteUrl);
-        navigator.clipboard?.writeText(link);
-        showToast('success', `Invite link for ${admin.email} copied to clipboard!`);
-      } else {
-        showToast('error', data.error || 'Could not retrieve invite link.');
       }
     } catch {
       showToast('error', 'Network error. Please try again.');
@@ -262,7 +242,7 @@ export default function ManageAdmins() {
             onClick={() => { setInviteEmail(''); inviteV.clear(); setInviteOpen(true); }}
             className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#3B50DF] hover:bg-[#2F40B5] text-white text-sm font-bold rounded-xl shadow-xs transition-all cursor-pointer shrink-0"
           >
-            <UserPlus size={16} /> Invite Admin
+            <UserPlus size={16} /> Invite Nurses
           </button>
         </div>
 
@@ -390,8 +370,6 @@ export default function ManageAdmins() {
                               )
                             ) : activeTab === 'invited' ? (
                               <>
-                                <IconButton bordered icon={Link2} label="Copy invite link"
-                                  onClick={() => handleCopyInviteLink(admin)} disabled={busyUid === admin.uid} />
                                 <IconButton bordered icon={Send} label="Resend invitation email"
                                   onClick={() => handleResend(admin)} disabled={busyUid === admin.uid} />
                                 <IconButton bordered icon={X} label="Revoke invite" tone="dangerHover"
@@ -423,7 +401,7 @@ export default function ManageAdmins() {
         </div>
       </div>
 
-      {/* ── Invite Admin Modal Card (Portaled to body to blur sidebar + header) ── */}
+      {/* ── Invite a Nurse modal (portaled to body to blur sidebar + header) ── */}
       {inviteOpen && (
         <Modal onClose={requestCloseInvite}>
           {inviteDiscardDialog}
@@ -436,8 +414,8 @@ export default function ManageAdmins() {
                   <UserPlus size={20} />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">Invite New Administrator</h3>
-                  <p className="text-xs text-slate-400 font-normal mt-0.5">Send portal invitation link to clinic staff</p>
+                  <h3 className="text-base font-bold text-slate-900">Invite a Nurse</h3>
+                  <p className="text-xs text-slate-400 font-normal mt-0.5">Invite a nurse to join K&amp;A Clinic as a staff member</p>
                 </div>
               </div>
               <IconButton icon={X} label="Close" size={36} iconSize={18} onClick={requestCloseInvite} />
@@ -447,7 +425,7 @@ export default function ManageAdmins() {
               <div className="kna-form-body">
                 <div>
                   <label htmlFor="invite-admin-email" className="block text-sm font-semibold text-slate-500 mb-2">
-                    Staff Email Address *
+                    Nurse's Email Address *
                   </label>
                   <div className="relative">
                     <Mail className="w-[18px] h-[18px] text-slate-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -455,7 +433,7 @@ export default function ManageAdmins() {
                       {...inviteV.field('email')}
                       autoFocus
                       type="email"
-                      placeholder="staff@kaclinic.ph"
+                      placeholder="nurse@kaclinic.ph"
                       value={inviteEmail}
                       onChange={e => setInviteEmail(e.target.value)}
                       className="w-full bg-white border border-slate-300 pl-11 pr-4 py-3 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:border-[#3B50DF] focus:ring-1 focus:ring-[#3B50DF] transition-all"
@@ -463,7 +441,7 @@ export default function ManageAdmins() {
                   </div>
                   {inviteV.error('email')
                     ? <FieldError v={inviteV} name="email" />
-                    : <p className="text-xs text-slate-400 font-normal mt-2">An invitation email will be delivered to complete account setup.</p>}
+                    : <p className="text-xs text-slate-400 font-normal mt-2">We'll email the nurse an invitation to join K&amp;A Clinic as a staff member. The link expires in 48 hours.</p>}
                 </div>
               </div>
 
@@ -481,7 +459,7 @@ export default function ManageAdmins() {
                   disabled={inviteSending}
                   className={BTN.primary}
                 >
-                  {inviteSending ? 'Sending Invitation…' : 'Send Invite'}
+                  {inviteSending ? 'Sending Invitation…' : 'Send Invitation'}
                 </button>
               </div>
             </form>

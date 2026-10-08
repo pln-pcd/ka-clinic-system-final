@@ -14,6 +14,7 @@ import { auth, db } from './_lib/firebaseAdmin.js';
 import { requireActiveManager } from './_lib/auth.js';
 import { isValidEmail, sendMail } from './_lib/mail/mailer.js';
 import { buildInviteEmailHtml, buildInviteEmailText } from './_lib/mail/templates.js';
+import { logoAttachment } from './_lib/mail/logo.js';
 import { dispatch } from './_lib/router.js';
 import { passwordPolicyError } from './_lib/passwordPolicy.js';
 
@@ -127,10 +128,11 @@ async function invite(req, res, caller) {
   const { error: sendError } = await sendMail({
     to: email,
     subject: manager.name
-      ? `${manager.name} invited you to the K&A Clinic Admin Dashboard`
-      : 'Your invite to the K&A Clinic Admin Dashboard',
+      ? `${manager.name} invited you to join K&A Clinic as a nurse`
+      : 'You are invited to join K&A Clinic as a nurse',
     html: buildInviteEmailHtml({ inviteUrl, inviterName: manager.name }),
     text: buildInviteEmailText({ inviteUrl, inviterName: manager.name }),
+    attachments: [logoAttachment()],
   });
 
   if (sendError) {
@@ -140,7 +142,7 @@ async function invite(req, res, caller) {
     if (isLimitError) {
       res.status(200).json({
         success: true,
-        warning: 'Invite created, but Gmail daily sending limit was reached. You can copy and send the invite link directly.',
+        warning: 'Invite created, but Gmail daily sending limit was reached. The invite link was copied to your clipboard so you can send it directly.',
         email,
         inviteUrl,
         sentAt: Date.now(),
@@ -151,7 +153,7 @@ async function invite(req, res, caller) {
     return;
   }
 
-  res.status(200).json({ success: true, message: `Invite sent to ${email}.`, email, inviteUrl, sentAt: Date.now() });
+  res.status(200).json({ success: true, message: `Invitation sent to ${email}.`, email, inviteUrl, sentAt: Date.now() });
 }
 
 // Manager retrieves active invite link for a pending admin.
@@ -341,9 +343,6 @@ async function adminInvites(req, res) {
     // authenticated, active manager.
     const caller = await requireActiveManager(req);
     if (caller.error) {
-      try {
-        import('node:fs').then(fs => fs.appendFileSync('api-debug.log', `[${new Date().toISOString()}] auth error: ${caller.status} ${caller.error}\n`));
-      } catch {}
       res.status(caller.status).json({ success: false, error: caller.error });
       return;
     }
@@ -351,10 +350,7 @@ async function adminInvites(req, res) {
     await run(req, res, caller);
   } catch (err) {
     console.error(`admin-invites (${action}) error:`, err);
-    try {
-      import('node:fs').then(fs => fs.appendFileSync('api-debug.log', `[${new Date().toISOString()}] ${action} catch error: ${err?.stack || err}\n`));
-    } catch {}
-    res.status(500).json({ success: false, error: err?.message || 'Something went wrong. Please try again.' });
+    res.status(500).json({ success: false, error: 'Something went wrong. Please try again.' });
   }
 }
 
