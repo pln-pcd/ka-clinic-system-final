@@ -26,6 +26,9 @@
     "playwright": "^1.64.0"
   },
   "overrides": {
-    "@grpc/grpc-js": "^1.14.5"
+    "@grpc/grpc-js": "^1.14.5",
+    "jwks-rsa": {
+      "jose": "5.10.0"
+    }
   }
 }

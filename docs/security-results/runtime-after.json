@@ -1,0 +1,14 @@
+{
+  "date": "2026-10-08T02:04:27.990Z",
+  "results": [
+    {
+      "id": "RUNTIME-CJS-JWKS",
+      "area": 8,
+      "description": "Firebase Auth/App Check load and RSA JWKS verification without require(esm)",
+      "steps": "Child Node process disables require(esm); generated test key only; no environment files, credentials or network requests.",
+      "expected": "SDK imports succeed; valid RSA signature accepted; tampered payload rejected",
+      "actual": "Imports and signature checks passed",
+      "status": "PASS"
+    }
+  ]
+}
