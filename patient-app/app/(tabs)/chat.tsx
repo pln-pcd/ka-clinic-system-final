@@ -14,10 +14,10 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useFocusedBack } from '../../utils/useFocusedBack';
 import {
   ActivityIndicator,
-  BackHandler,
   Image,
   Keyboard,
   KeyboardAvoidingView,
@@ -38,7 +38,7 @@ import { usePatientAuth } from '../../context/PatientAuthContext';
 import { moderateScale, scale, verticalScale } from '../../utils/scale';
 import CustomAlertModal, { CustomAlertConfig } from '../../components/CustomAlertModal';
 import { askClinicAssistant, type ChatTurn, type ReplyAction } from '../../services/chatbot';
-import { CHATBOT_STUDY_MODE, KAI_DISCLAIMER, KAI_DISCLAIMER_SHORT, STUDY_NOTICE } from '../../config/studyMode';
+import { KAI_DISCLAIMER } from '../../config/studyMode';
 
 type BubbleMessage = {
   id: string;
@@ -46,7 +46,7 @@ type BubbleMessage = {
   sender: 'patient' | 'admin' | 'bot';
   createdAt: number;
   senderName?: string;
-  /** Navigation replies carry a button (open the vaccination card / Appts). */
+  /** Navigation replies carry a button (open the vaccination card / Appointments). */
   action?: ReplyAction;
 };
 type Mode = 'bot' | 'admin';
@@ -127,14 +127,11 @@ function ChatAvatar({ sender, photo }: { sender: BubbleMessage['sender']; photo:
       ? <Image source={{ uri: photo }} style={s.avatar} accessibilityIgnoresInvertColors />
       : <View style={[s.avatar, s.avatarIcon]}><Ionicons name="person" size={AVATAR * 0.55} color="#64748B" /></View>;
   }
-  if (sender === 'admin') {
-    return (
-      <View style={[s.avatar, s.avatarLogo]}>
-        <Image source={require('../../assets/logo-white-nobg.png')} style={{ width: AVATAR * 0.78, height: AVATAR * 0.78 }} resizeMode="contain" />
-      </View>
-    );
-  }
-  return <View style={[s.avatar, s.avatarBot]}><Ionicons name="sparkles" size={AVATAR * 0.5} color="#FFFFFF" /></View>;
+  return (
+    <View style={[s.avatar, s.avatarLogo]}>
+      <Image source={require('../../assets/logo-white-nobg.png')} style={{ width: AVATAR * 0.78, height: AVATAR * 0.78 }} resizeMode="contain" accessibilityLabel={sender === 'bot' ? 'KAI · K&A Clinic' : 'K&A Clinic staff'} />
+    </View>
+  );
 }
 
 export default function ChatScreen() {
@@ -193,18 +190,21 @@ export default function ChatScreen() {
   const router = useRouter();
   const scrollRef = useRef<ScrollView>(null);
 
-  const goBack = () => goBackOr(router, '/');
-  const goBackRef = useRef(goBack);
-  useEffect(() => { goBackRef.current = goBack; });
-
-  useEffect(() => {
-    if (Platform.OS !== 'android') return;
-    const backHandler = BackHandler.addEventListener(
-      'hardwareBackPress',
-      () => { goBackRef.current(); return true; }
-    );
-    return () => backHandler.remove();
-  }, []);
+  const closeChatSection = useCallback(() => {
+    if (showEscalationModal) {
+      setShowEscalationModal(false);
+      return true;
+    }
+    if (mode === 'admin') {
+      setMode('bot');
+      return true;
+    }
+    return false;
+  }, [mode, showEscalationModal]);
+  const goBack = () => {
+    if (!closeChatSection()) goBackOr(router, '/(tabs)');
+  };
+  useFocusedBack(closeChatSection);
 
   useEffect(() => {
     const showSub = Keyboard.addListener(
@@ -234,7 +234,11 @@ export default function ChatScreen() {
   // Resolved threads are excluded, which is what guarantees an archived
   // conversation is never reopened.
   useEffect(() => {
-    if (!user) return;
+    if (!user || user.isAnonymous) {
+      setOpenThreadId(null);
+      setThreadLoaded(true);
+      return;
+    }
     const q = query(
       collection(db, 'chatThreads'),
       where('patientUid', '==', user.uid),
@@ -534,7 +538,7 @@ export default function ChatScreen() {
         <Tap style={s.headerBtn} onPress={goBack} activeOpacity={0.6}>
           <Ionicons name="chevron-back" size={22} color={C.text} />
         </Tap>
-        <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'center', paddingHorizontal: scale(8) }}>
           <Text style={s.headerTitle}>{mode === 'admin' ? (<><Text style={{ color: C.red, fontWeight: '900' }}>K&A</Text> Clinic Staff</>) : (<><Text style={{ color: C.red, fontWeight: '900' }}>{BOT_NAME}</Text> · AI Assistant</>)}</Text>
           <Text style={s.headerSubtitle}>{mode === 'admin' ? 'Chatting with clinic staff' : 'K&A Virtual Assistant · Helpdesk'}</Text>
         </View>
@@ -561,17 +565,11 @@ export default function ChatScreen() {
         keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
       >
         <Animated.View style={[{ flex: 1 }, keyboardLift]}>
-          {/* Persistent KAI disclaimer (and the study-mode notice). */}
+          {/* One persistent disclaimer in every assistant conversation. */}
           {mode === 'bot' && (
             <View style={s.disclaimer} accessibilityRole="text">
               <Ionicons name="information-circle-outline" size={16} color="#1E3A8A" style={{ marginTop: 1 }} />
               <Text style={s.disclaimerTxt}>{KAI_DISCLAIMER}</Text>
-            </View>
-          )}
-          {mode === 'bot' && CHATBOT_STUDY_MODE && (
-            <View style={s.studyNotice} accessibilityRole="text">
-              <Ionicons name="flask-outline" size={14} color="#92400E" />
-              <Text style={s.studyNoticeTxt}>{STUDY_NOTICE}</Text>
             </View>
           )}
           {chatError ? (
@@ -589,7 +587,7 @@ export default function ChatScreen() {
             <ScrollView contentContainerStyle={s.emptyContent} keyboardShouldPersistTaps="handled">
               <View style={s.hero}>
                 <View style={s.heroIcon}>
-                  <Ionicons name={mode === 'admin' ? 'person-circle' : 'medical'} size={34} color={C.red} />
+                  <Image source={require('../../assets/logo-white-nobg.png')} style={{ width: scale(50), height: scale(50) }} resizeMode="contain" accessibilityLabel="K&A Clinic" />
                 </View>
                 <Text style={s.heroTitle}>{mode === 'admin' ? 'Message the Clinic' : `Hi! I'm ${BOT_NAME}`}</Text>
                 <Text style={s.heroSub}>
@@ -731,7 +729,6 @@ export default function ChatScreen() {
                 <Ionicons name="arrow-up" size={20} color="#fff" />
               </Tap>
             </View>
-            {mode === 'bot' && <Text style={s.inputDisclaimer}>{KAI_DISCLAIMER_SHORT}</Text>}
           </View>
         </Animated.View>
       </KeyboardAvoidingView>
@@ -744,7 +741,7 @@ export default function ChatScreen() {
         </Tap>
         <Tap style={nav.tab} activeOpacity={0.7} onPress={() => router.navigate('/appt')}>
           <Ionicons name="calendar-outline" size={24} color="#64748B" />
-          <Text style={nav.label}>Appts</Text>
+          <Text style={nav.label}>Appointments</Text>
         </Tap>
         <Tap style={nav.tab} activeOpacity={0.7}>
           <Ionicons name="chatbubble-ellipses" size={24} color={C.red} />
@@ -786,7 +783,7 @@ const nav = StyleSheet.create({
     elevation: 20, shadowColor: '#0F172A', shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: -4 },
   },
   tab: { flex: 1, justifyContent: 'center', alignItems: 'center', height: '100%' },
-  label: { fontSize: moderateScale(11), color: '#64748B', marginTop: verticalScale(3), fontWeight: '600' },
+  label: { fontSize: moderateScale(10), color: '#64748B', marginTop: verticalScale(3), fontWeight: '600' },
   labelActive: { color: C.red, fontWeight: '800' },
 });
 
@@ -1122,13 +1119,6 @@ const s = StyleSheet.create({
     backgroundColor: '#EFF6FF', borderBottomWidth: 1, borderBottomColor: '#DBEAFE',
   },
   disclaimerTxt: { flex: 1, fontSize: moderateScale(12), lineHeight: moderateScale(17), color: '#1E3A8A', fontWeight: '500' },
-  studyNotice: {
-    flexDirection: 'row', alignItems: 'center', gap: scale(6),
-    paddingHorizontal: scale(14), paddingVertical: verticalScale(6),
-    backgroundColor: '#FEF3C7', borderBottomWidth: 1, borderBottomColor: '#FDE68A',
-  },
-  studyNoticeTxt: { flex: 1, fontSize: moderateScale(11.5), color: '#92400E', fontWeight: '700' },
-  inputDisclaimer: { fontSize: moderateScale(10.5), color: '#64748B', textAlign: 'center', marginTop: verticalScale(6) },
 
   inputContainer: {
     paddingHorizontal: scale(12),

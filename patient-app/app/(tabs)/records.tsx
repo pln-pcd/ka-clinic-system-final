@@ -303,14 +303,14 @@ export default function RecordsScreen() {
           <Text style={nav.label}>Home</Text>
         </TouchableOpacity>
 
-        {/* Tab 2: Appts */}
+        {/* Tab 2: Appointments */}
         <TouchableOpacity
           style={nav.tab}
           activeOpacity={0.7}
           onPress={() => router.navigate('/appt')}
         >
           <Ionicons name="calendar-outline" size={24} color="#64748B" />
-          <Text style={nav.label}>Appts</Text>
+          <Text style={nav.label}>Appointments</Text>
         </TouchableOpacity>
 
         {/* Tab 3: Chat */}
@@ -509,6 +509,6 @@ const nav = StyleSheet.create({
     paddingHorizontal: scale(4),
   },
   tab: { flex: 1, justifyContent: 'center', alignItems: 'center', height: '100%' },
-  label: { fontSize: moderateScale(11), color: '#64748B', marginTop: verticalScale(3), fontWeight: '600' },
+  label: { fontSize: moderateScale(10), color: '#64748B', marginTop: verticalScale(3), fontWeight: '600' },
   labelActive: { color: C.red, fontWeight: '800' },
 });

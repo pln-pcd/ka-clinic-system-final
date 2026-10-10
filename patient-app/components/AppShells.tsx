@@ -76,11 +76,10 @@ export function MobileApp() {
         {/* Leaving OTP must sign the pending session out — the on-screen back
             button (and Android back, handled in the screen) does that. */}
         <Stack.Screen name="auth/verify-login-otp" options={{ gestureEnabled: false }} />
-        <Stack.Screen name="onboarding" />
-        <Stack.Screen name="onboarding1" />
-        <Stack.Screen name="onboarding2" />
-        <Stack.Screen name="onboarding3" />
-        <Stack.Screen name="onboarding4" />
+        <Stack.Screen name="onboarding1" options={{ animation: 'slide_from_right', animationDuration: 240, contentStyle: { backgroundColor: '#FFFFFF' } }} />
+        <Stack.Screen name="onboarding2" options={{ animation: 'slide_from_right', animationDuration: 240, contentStyle: { backgroundColor: '#FFFFFF' } }} />
+        <Stack.Screen name="onboarding3" options={{ animation: 'slide_from_right', animationDuration: 240, contentStyle: { backgroundColor: '#FFFFFF' } }} />
+        <Stack.Screen name="onboarding4" options={{ animation: 'slide_from_right', animationDuration: 240, contentStyle: { backgroundColor: '#FFFFFF' } }} />
       </Stack>
     </SafeAreaProvider>
   );

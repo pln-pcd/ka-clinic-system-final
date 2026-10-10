@@ -1,0 +1,63 @@
+{
+  "date": "2026-10-10T09:46:38.674494+00:00",
+  "sha256": "d04f1c6d8e0ac669d1beacb9922b49b47f65a32235e2b82a94e1a2aca653f412",
+  "bytes": 103617452,
+  "certificateSha256": "4fef45c1eae069ede9b94c98567b94116f9765e778257a69ab729a3391b62bfe",
+  "bundleSha256": "69fc421e8482d5c9899582f8c9e524f6144e866d118ee2563e2fdffb97bc5d1e",
+  "results": [
+    {
+      "id": "APK-SIGNATURE",
+      "area": 8,
+      "description": "APK signature is valid and matches v1.0.2",
+      "steps": "Inspect the signed release APK; optional read-only isolated emulator inspection",
+      "expected": "4fef45c1eae069ede9b94c98567b94116f9765e778257a69ab729a3391b62bfe",
+      "actual": "4fef45c1eae069ede9b94c98567b94116f9765e778257a69ab729a3391b62bfe",
+      "status": "PASS"
+    },
+    {
+      "id": "APK-VERSION",
+      "area": 8,
+      "description": "Release package and version allow an upgrade",
+      "steps": "Inspect the signed release APK; optional read-only isolated emulator inspection",
+      "expected": "com.anonymous.knarabiesmonitoring; 1.0.4; versionCode 5",
+      "actual": "package: name='com.anonymous.knarabiesmonitoring' versionCode='5' versionName='1.0.4' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'",
+      "status": "PASS"
+    },
+    {
+      "id": "APK-TRANSPORT",
+      "area": 7,
+      "description": "Compiled manifest disables cleartext traffic and app backup",
+      "steps": "Inspect the signed release APK; optional read-only isolated emulator inspection",
+      "expected": "Both false",
+      "actual": "Both false",
+      "status": "PASS"
+    },
+    {
+      "id": "APK-BUNDLE",
+      "area": 8,
+      "description": "Packaged bundle equals the final compiled output and includes remote revocation",
+      "steps": "Inspect the signed release APK; optional read-only isolated emulator inspection",
+      "expected": "Byte equality; revoke-device present",
+      "actual": "Byte equal; remote revocation included",
+      "status": "PASS"
+    },
+    {
+      "id": "APK-ABIS",
+      "area": 8,
+      "description": "Release includes all four Android architectures",
+      "steps": "Inspect the signed release APK; optional read-only isolated emulator inspection",
+      "expected": "arm64-v8a, armeabi-v7a, x86, x86_64",
+      "actual": "arm64-v8a, armeabi-v7a, x86, x86_64",
+      "status": "PASS"
+    },
+    {
+      "id": "APK-EMULATOR-LAUNCH",
+      "area": 9,
+      "description": "Release app renders onboarding without native/JS crash",
+      "steps": "Inspect the signed release APK; optional read-only isolated emulator inspection",
+      "expected": "Onboarding visible; process alive; zero app error logs",
+      "actual": "Onboarding visible; process alive; zero app error logs",
+      "status": "PASS"
+    }
+  ]
+}

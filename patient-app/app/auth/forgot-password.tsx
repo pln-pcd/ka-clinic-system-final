@@ -5,6 +5,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBackOr } from '../../utils/navigation';
 import { useState } from 'react';
 import {
   Dimensions,
@@ -78,7 +79,7 @@ export default function ForgotPasswordScreen() {
 
       {/* TOP NAVIGATION */}
       <View style={[styles.navHeader, { top: Math.max(insets.top + (Platform.OS === 'android' ? 12 : 8), verticalScale(42)) }]}>
-        <Tap style={styles.backButton} onPress={() => router.back()} activeOpacity={0.7}>
+        <Tap style={styles.backButton} onPress={() => goBackOr(router, '/auth/login')} activeOpacity={0.7}>
           <Ionicons name="chevron-back" size={22} color="#1E293B" />
         </Tap>
       </View>

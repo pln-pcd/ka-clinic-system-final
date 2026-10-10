@@ -95,10 +95,9 @@ export const onAuthStateChanged = _onAuthStateChanged;
 export const signOut = _signOut;
 export const updateProfile = _updateProfile;
 
-// "Continue as Guest" now creates a real anonymous Firebase Auth session —
-// request.auth is non-null so Firestore rules that require auth (chatThreads,
-// appointments, etc.) still evaluate correctly. Guests simply have no
-// authorizedPatients/vaccinations record, so patient-specific data stays empty.
+// Guest mode creates an anonymous Firebase Auth session. Protected records,
+// appointments and staff conversations still require a verified patient.
+// Guests have no authorizedPatients/vaccinations record; their data stays empty.
 export const signInAsGuest = () => signInAnonymously(auth);
 
 // Base URL for the /api/send-otp and /api/verify-otp serverless functions

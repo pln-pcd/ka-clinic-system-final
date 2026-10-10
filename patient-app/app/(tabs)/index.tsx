@@ -32,6 +32,7 @@ import {
   View,
 } from 'react-native';
 import Tap from '../../components/Tap';
+import DoseTimeline from '../../components/DoseTimeline';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatDoseDate, protocolLabel as buildProtocolLabel, serviceCopy, EMPTY, doseStatus, isPepService, clinicToday, displayPatientId, doseBrand, doseState, exposureCategory, exposureTypeLabel, splitName } from '../../utils/patientRecord';
 import Animated, {
@@ -357,16 +358,14 @@ export default function RabiesRecoveryApp() {
     };
   });
 
-  // Each face is laid out at its natural height (header, fields and however
-  // many dose rows there are) and measured; the card's height follows the
-  // face being shown and eases between the two during the flip, so neither
-  // side carries an empty band under its content.
+  // Measure natural content inside each face, then give BOTH faces the
+  // larger height. Flipping never shifts the content below the card.
   const frontH = useSharedValue(0);
   const backH = useSharedValue(0);
   const cardHeightStyle = useAnimatedStyle(() => {
     const f = frontH.value, b = backH.value;
     if (!f) return { opacity: 0 };
-    return { opacity: 1, height: interpolate(flipAnim.value, [0, 1], [f, b || f]) };
+    return { opacity: 1, height: Math.max(f, b) };
   });
 
   const handleExportFrontCard = async () => {
@@ -503,7 +502,7 @@ export default function RabiesRecoveryApp() {
   // app/(tabs)/chat.tsx startEscalation) purely to surface an "admin
   // replied" notification here.
   useEffect(() => {
-    if (!user) { setChatThread(null); return; }
+    if (!user || user.isAnonymous) { setChatThread(null); return; }
     const q = query(collection(db, 'chatThreads'), where('patientUid', '==', user.uid), orderBy('lastMessageAt', 'desc'), limit(1));
     return onSnapshot(q, (snap) => {
       setChatThread(snap.empty ? null : snap.docs[0].data());
@@ -514,7 +513,7 @@ export default function RabiesRecoveryApp() {
   // the dashboard surfaces here without a refresh. Mirrors the query in
   // app/(tabs)/appt.tsx, which the Firestore rules scope to `userId`.
   useEffect(() => {
-    if (!user) {
+    if (!user || user.isAnonymous) {
       setConfirmedAppts([]);
       setDeclinedAppts([]);
       return;
@@ -756,12 +755,10 @@ export default function RabiesRecoveryApp() {
                       </Text>
                     </View>
                   )}
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(4), marginTop: verticalScale(5) }}>
-                    <Text style={s.tapProgressHintNavy}>
-                      {isGuest ? 'Sign up to track your doses' : 'Tap to view protocol tracker'}
-                    </Text>
-                    <Ionicons name="arrow-forward" size={11} color="#475569" />
-                  </View>
+                  <Text style={[s.tapProgressHintNavy, { marginTop: verticalScale(5), flexShrink: 1 }]}>
+                    {isGuest ? 'Sign up to track your doses' : 'Tap to view protocol tracker'}{' '}
+                    <Ionicons name="arrow-forward" size={12} color="#475569" />
+                  </Text>
                 </View>
                 )}
 
@@ -776,9 +773,9 @@ export default function RabiesRecoveryApp() {
                   accessibilityRole="button" accessibilityLabel={isFlippedState ? 'Vaccination card, back side. Tap to show the front.' : 'Vaccination card, front side. Tap to show the back.'}>
 
                   {/* FRONT SIDE (LANDSCAPE) */}
-                  <Animated.View style={[s.cdcOfficialCardPaper, frontAnimatedStyle]}
-                    onLayout={e => { const h = e.nativeEvent.layout.height; frontH.set(frontH.get() ? withTiming(h, { duration: 220 }) : h); }}>
-                    <ViewShot ref={cardFrontShotRef} options={{ format: 'png', quality: 1 }} style={{ backgroundColor: '#FFFFFF' }}>
+                  <Animated.View style={[s.cdcOfficialCardPaper, frontAnimatedStyle]}>
+                    <ViewShot ref={cardFrontShotRef} options={{ format: 'png', quality: 1 }} style={{ backgroundColor: '#FFFFFF' }}
+                      onLayout={e => frontH.set(e.nativeEvent.layout.height + scale(20) + 2)}>
                     <View style={s.cdcHeaderBlock}>
                       <View style={s.cdcHeaderTitleRow}>
                         <Image source={require('../../assets/logo-white-nobg.png')} style={s.knAClinicLogoHeader} resizeMode="contain" />
@@ -851,13 +848,13 @@ export default function RabiesRecoveryApp() {
                         const dateCell = d.blankRow ? EMPTY : (d.date ? formatDoseDate(d.date) : EMPTY);
                         return (
                           <View key={d.id || d.key || idx} style={[s.cdcTableRow, idx % 2 === 1 && s.cdcTableRowAlt]}>
-                            <Text style={[s.cdcTableCell, { flex: 1.1, fontWeight: '700', color: '#0F172A' }]} numberOfLines={1}>
+                            <Text style={[s.cdcTableCell, { flex: 1.1, fontWeight: '700', color: '#0F172A' }]}>
                               {d.label || d.n || d.name || `Dose ${idx + 1}`}
                             </Text>
-                            <Text style={[s.cdcTableCell, { flex: 2.1, fontWeight: '600' }]} numberOfLines={1}>
+                            <Text style={[s.cdcTableCell, { flex: 2.1, fontWeight: '600' }]}>
                               {vaccineCell}
                             </Text>
-                            <Text style={[s.cdcTableCell, { flex: 1.1, borderRightWidth: 0 }]} numberOfLines={1}>
+                            <Text style={[s.cdcTableCell, { flex: 1.1, borderRightWidth: 0 }]}>
                               {dateCell}
                             </Text>
                           </View>
@@ -869,9 +866,9 @@ export default function RabiesRecoveryApp() {
                   </Animated.View>
 
                   {/* BACK SIDE (LANDSCAPE) */}
-                  <Animated.View style={[s.cdcOfficialCardPaper, backAnimatedStyle]}
-                    onLayout={e => { const h = e.nativeEvent.layout.height; backH.set(backH.get() ? withTiming(h, { duration: 220 }) : h); }}>
-                    <ViewShot ref={cardBackShotRef} options={{ format: 'png', quality: 1 }} style={{ backgroundColor: '#FFFFFF' }}>
+                  <Animated.View style={[s.cdcOfficialCardPaper, backAnimatedStyle]}>
+                    <ViewShot ref={cardBackShotRef} options={{ format: 'png', quality: 1 }} style={{ backgroundColor: '#FFFFFF' }}
+                      onLayout={e => backH.set(e.nativeEvent.layout.height + scale(20) + 2)}>
                     <View style={s.cdcHeaderBlock}>
                       <View style={s.cdcHeaderTitleRow}>
                         <Image source={require('../../assets/logo-white-nobg.png')} style={s.knAClinicLogoHeader} resizeMode="contain" />
@@ -1006,50 +1003,7 @@ export default function RabiesRecoveryApp() {
                   <Text style={s.recordsSectionTitle}>{vaccineCopy.timelineTitle}</Text>
                 </View>
 
-                <View style={s.recordsTableCard}>
-                  {/* Table Header Row */}
-                  <View style={s.recordsTableHeaderRow}>
-                    <Text style={[s.recordsTableHeaderCell, { flex: 1.1 }]}>DOSE</Text>
-                    <Text style={[s.recordsTableHeaderCell, { flex: 1.4 }]}>VACCINE</Text>
-                    <Text style={[s.recordsTableHeaderCell, { flex: 1.1 }]}>DOSAGE</Text>
-                    <Text style={[s.recordsTableHeaderCell, { flex: 1.0 }]}>DATE</Text>
-                    <Text style={[s.recordsTableHeaderCell, { flex: 0.9, textAlign: 'center' }]}>STATUS</Text>
-                  </View>
-
-                  {doseList.map((d: any, idx: number) => {
-                    const state = doseState(d, today);
-                    const st = doseStatus(d, today);
-                    const vaccineName = d.blankRow ? EMPTY : doseBrand(d, pr, state);
-                    const dosageVal = d.blankRow ? EMPTY : (d.dosage || pr.route || EMPTY);
-                    const dateVal = d.date ? formatDoseDate(d.date) : EMPTY;
-                    const isAlt = idx % 2 === 1;
-                    const isLast = idx === doseList.length - 1;
-
-                    return (
-                      <View key={d.id || idx} style={[s.recordsTableRow, isAlt && s.recordsTableRowAlt, isLast && { borderBottomWidth: 0 }]}>
-                        <Text style={[s.recordsTableCellValue, { flex: 1.1, fontWeight: '700', color: '#1E293B' }]} numberOfLines={1}>
-                          {d.label || d.n || `Dose ${idx + 1}`}
-                        </Text>
-                        <Text style={[s.recordsTableCellValue, { flex: 1.4 }]} numberOfLines={1}>
-                          {vaccineName}
-                        </Text>
-                        <Text style={[s.recordsTableCellValue, { flex: 1.1 }]} numberOfLines={1}>
-                          {dosageVal}
-                        </Text>
-                        <Text style={[s.recordsTableCellValue, { flex: 1.0 }]} numberOfLines={1}>
-                          {dateVal}
-                        </Text>
-                        <View style={{ flex: 0.9, alignItems: 'center', justifyContent: 'center' }}>
-                          <View style={[s.recordsMiniBadge, st.status === 'given' ? s.recordsMiniBadgeDone : st.status === 'overdue' ? s.recordsMiniBadgeMissed : st.status === 'due_today' ? s.recordsMiniBadgeToday : s.recordsMiniBadgePending]}>
-                            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={[s.recordsMiniBadgeTxt, st.status === 'given' ? s.recordsMiniBadgeTxtDone : st.status === 'overdue' ? s.recordsMiniBadgeTxtMissed : st.status === 'due_today' ? s.recordsMiniBadgeTxtToday : s.recordsMiniBadgeTxtPending]}>
-                              {d.blankRow ? EMPTY : st.label}
-                            </Text>
-                          </View>
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
+                <DoseTimeline doses={doseList} record={pr} today={today} />
               </View>
           </>
         </View>
@@ -1163,7 +1117,7 @@ export default function RabiesRecoveryApp() {
   </Modal>
 
       {/* ── NOTIFICATION PANEL MODAL ── */}
-      <Modal visible={showNotifPanel} animationType="slide" transparent>
+      <Modal visible={showNotifPanel} animationType="slide" transparent onRequestClose={() => setShowNotifPanel(false)}>
         <TouchableWithoutFeedback onPress={() => setShowNotifPanel(false)}>
           <View style={s.centeredOverlay}>
             <TouchableWithoutFeedback onPress={e => e.stopPropagation()}>
@@ -1279,7 +1233,7 @@ export default function RabiesRecoveryApp() {
   </Modal>
 
       {/* ── ENLARGE CARD POPUP MODAL (Matching Reference UI) ── */}
-      <Modal visible={showEnlargeModal} animationType="slide" transparent statusBarTranslucent>
+      <Modal visible={showEnlargeModal} animationType="slide" transparent statusBarTranslucent onRequestClose={() => setShowEnlargeModal(false)}>
         <TouchableWithoutFeedback onPress={() => setShowEnlargeModal(false)}>
           <View style={s.enlargeModalOverlay}>
             <TouchableWithoutFeedback onPress={e => e.stopPropagation()}>
@@ -1427,13 +1381,13 @@ export default function RabiesRecoveryApp() {
                         const dateCell = d.blankRow ? EMPTY : (d.date ? formatDoseDate(d.date) : EMPTY);
                         return (
                           <View key={d.id || d.key || idx} style={[s.cdcTableRow, idx % 2 === 1 && s.cdcTableRowAlt]}>
-                            <Text style={[s.cdcTableCellPopup, { flex: 1.1, fontWeight: '700', color: '#0F172A' }]} numberOfLines={1}>
+                            <Text style={[s.cdcTableCellPopup, { flex: 1.1, fontWeight: '700', color: '#0F172A' }]}>
                               {d.label || d.n || d.name || `Dose ${idx + 1}`}
                             </Text>
-                            <Text style={[s.cdcTableCellPopup, { flex: 2.1, fontWeight: '600' }]} numberOfLines={1}>
+                            <Text style={[s.cdcTableCellPopup, { flex: 2.1, fontWeight: '600' }]}>
                               {vaccineCell}
                             </Text>
-                            <Text style={[s.cdcTableCellPopup, { flex: 1.1, borderRightWidth: 0 }]} numberOfLines={1}>
+                            <Text style={[s.cdcTableCellPopup, { flex: 1.1, borderRightWidth: 0 }]}>
                               {dateCell}
                             </Text>
                           </View>
@@ -1507,14 +1461,14 @@ export default function RabiesRecoveryApp() {
           <Text style={[nav.label, activeTab === 'Home' && nav.labelActive]}>Home</Text>
         </Tap>
 
-        {/* Tab 2: Appts */}
+        {/* Tab 2: Appointments */}
         <Tap
           style={nav.tab}
           activeOpacity={0.7}
           onPress={() => router.navigate('/appt')}
         >
           <Ionicons name="calendar-outline" size={24} color="#64748B" />
-          <Text style={nav.label}>Appts</Text>
+          <Text style={nav.label}>Appointments</Text>
         </Tap>
 
         {/* Tab 3: Chat */}
@@ -1555,7 +1509,7 @@ const nav = StyleSheet.create({
     paddingHorizontal: scale(4),
   },
   tab: { flex: 1, justifyContent: 'center', alignItems: 'center', height: '100%' },
-  label: { fontSize: moderateScale(11), color: '#64748B', marginTop: verticalScale(3), fontWeight: '600' },
+  label: { fontSize: moderateScale(10), color: '#64748B', marginTop: verticalScale(3), fontWeight: '600' },
   labelActive: { color: C.red, fontWeight: '800' },
 });
 
@@ -2824,9 +2778,9 @@ const s = StyleSheet.create({
     marginBottom: verticalScale(8),
   },
   cdcOfficialCardPaper: {
-    // Absolute for the flip, but no `bottom`: each face takes its content
-    // height, which cardHeightStyle then gives the container.
+    // Equal face dimensions; natural content is measured in the ViewShot.
     position: 'absolute',
+    height: '100%',
     top: verticalScale(0),
     left: scale(0),
     right: scale(0),

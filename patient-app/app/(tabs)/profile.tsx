@@ -5,7 +5,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { resetTo } from '../../utils/navigation';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useFocusedBack } from '../../utils/useFocusedBack';
 import {
   AppState,
   Image,
@@ -112,6 +113,15 @@ export default function ProfileScreen() {
   const [devices, setDevices] = useState<DeviceSession[]>([]);
   const [devicesLoading, setDevicesLoading] = useState(true);
   const [isEditingPersonal, setIsEditingPersonal] = useState(false);
+  const closeAccountSection = useCallback(() => {
+    setCurrentView('main');
+    setIsEditingPersonal(false);
+  }, []);
+  useFocusedBack(useCallback(() => {
+    if (currentView === 'main') return false;
+    closeAccountSection();
+    return true;
+  }, [currentView, closeAccountSection]));
   const [personalData, setPersonalData] = useState(EMPTY_PERSONAL_DATA);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   // Null until the patient actually has a picture. The placeholder used to be
@@ -641,7 +651,7 @@ export default function ProfileScreen() {
 
   const SubHeader = ({ title, rightElement }: { title: string; rightElement?: React.ReactNode }) => (
     <View style={[s.subHeader, { paddingTop: insets.top + verticalScale(16) }]}>
-      <Tap onPress={() => { setCurrentView('main'); setIsEditingPersonal(false); }} style={s.backBtn}>
+      <Tap onPress={closeAccountSection} style={s.backBtn} accessibilityRole="button" accessibilityLabel="Back to Account">
         <Ionicons name="chevron-back" size={26} color={C.charcoal} />
       </Tap>
       <Text style={s.subHeaderTitle}>{title}</Text>
@@ -1145,7 +1155,7 @@ export default function ProfileScreen() {
           <Text style={nav.label}>Home</Text>
         </Tap>
 
-        {/* Tab 2: Appts */}
+        {/* Tab 2: Appointments */}
         <Tap
           style={nav.tab}
           activeOpacity={0.7}
@@ -1156,7 +1166,7 @@ export default function ProfileScreen() {
           }}
         >
           <Ionicons name="calendar-outline" size={24} color="#64748B" />
-          <Text style={nav.label}>Appts</Text>
+          <Text style={nav.label}>Appointments</Text>
         </Tap>
 
         {/* Tab 3: Chat */}
@@ -1468,6 +1478,6 @@ const nav = StyleSheet.create({
     paddingHorizontal: scale(4),
   },
   tab: { flex: 1, justifyContent: 'center', alignItems: 'center', height: '100%' },
-  label: { fontSize: moderateScale(11), color: '#64748B', marginTop: verticalScale(3), fontWeight: '600' },
+  label: { fontSize: moderateScale(10), color: '#64748B', marginTop: verticalScale(3), fontWeight: '600' },
   labelActive: { color: C.red, fontWeight: '800' },
 });

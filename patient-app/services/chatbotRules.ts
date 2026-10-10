@@ -196,14 +196,14 @@ export const BOOKING_REPLY =
   '📅 **Booking an Appointment:**\n' +
   '• Appointments are on **Saturdays and Sundays**, one patient per hourly slot, 8:00 AM – 5:00 PM (no slots 12:00 – 1:00 PM).\n' +
   '• **Monday to Friday** is walk-in: no booking needed.\n' +
-  '• **In the app:** open the **Appts** tab, pick a weekend date and a free time, fill in your details, then tap **Request Appointment**. The clinic confirms it.\n' +
-  '• **To cancel:** open the appointment in the **Appts** tab and request cancellation; staff review it.\n' +
+  '• **In the app:** open the **Appointments** tab, pick a weekend date and a free time, fill in your details, then tap **Request Appointment**. The clinic confirms it.\n' +
+  '• **To cancel:** open the appointment in the **Appointments** tab and request cancellation; staff review it.\n' +
   '• **On the website:** tap **Book Appointment**.';
 
 export const APP_NAV_REPLY =
   '📱 **Finding your way around the app:**\n' +
   '• **Home:** your vaccination card (tap it to flip; **Enlarge Card** to save a copy) and your schedule\n' +
-  '• **Appts:** book, view or cancel weekend appointments\n' +
+  '• **Appointments:** book, view or cancel weekend appointments\n' +
   '• **Chat:** KAI, or **Talk to clinic staff**\n' +
   '• **Account:** profile photo, contact details, notifications, signed-in devices\n\n' +
   'Sign in with your **Medical Record Number (MRN)** and password; use **Forgot Password** on the login screen if needed.';

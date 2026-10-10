@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { askGemini } from '../../lib/geminiService';
-import { CHATBOT_STUDY_MODE, KAI_DISCLAIMER, KAI_DISCLAIMER_SHORT, STUDY_NOTICE } from '../../lib/studyMode';
+import { KAI_DISCLAIMER } from '../../lib/studyMode';
 
 /* Inject typing animation keyframes once */
 const CHATBOT_STYLE_ID = 'ka-chatbot-styles';
@@ -198,11 +198,7 @@ export default function Chatbot() {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               flexShrink: 0, boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
             }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4.8 2.3A.3.3 0 105 2H4a2 2 0 00-2 2v5a6 6 0 006 6v0a6 6 0 006-6V4a2 2 0 00-2-2h-1a.2.2 0 10.3.3" />
-                <path d="M8 15v1a6 6 0 006 6v0a6 6 0 006-6v-4" />
-                <line x1="2" y1="12" x2="22" y2="12" />
-              </svg>
+              <img src="/assets/dashboard/logo-white-nobg.png" alt="K&A Clinic" style={{ width: 30, height: 30, objectFit: 'contain', background: '#FFFFFF', borderRadius: '50%' }} />
             </div>
             <div>
               <div style={{ fontSize: '0.9375rem', fontWeight: 800, color: '#FFFFFF', letterSpacing: '-0.01em' }}>KAI · K&A Assistant</div>
@@ -235,21 +231,13 @@ export default function Chatbot() {
           </button>
         </div>
 
-        {/* ── Persistent disclaimer (and the study-mode notice) ── */}
+        {/* ── Persistent assistant disclaimer ── */}
         <div role="note" style={{
           padding: '9px 16px', background: '#F8FAFC', borderBottom: '1px solid #E2E8F0',
           fontSize: '0.6875rem', lineHeight: 1.5, color: '#334155', fontWeight: 500, flexShrink: 0,
         }}>
           {KAI_DISCLAIMER}
         </div>
-        {CHATBOT_STUDY_MODE && (
-          <div role="note" style={{
-            padding: '6px 16px', background: '#FEF3C7', borderBottom: '1px solid #FDE68A',
-            fontSize: '0.6875rem', color: '#92400E', fontWeight: 700, flexShrink: 0,
-          }}>
-            {STUDY_NOTICE}
-          </div>
-        )}
 
         {/* ── Messages ── */}
         <div ref={msgsRef} className="cb-no-scrollbar" style={{
@@ -405,7 +393,6 @@ export default function Chatbot() {
             </svg>
           </button>
         </div>
-        <div style={{ fontSize: '0.625rem', color: '#64748B', textAlign: 'center', marginTop: 6 }}>{KAI_DISCLAIMER_SHORT}</div>
         </div>
       </div>
     </>

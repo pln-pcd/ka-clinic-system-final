@@ -22,7 +22,7 @@ import {
 
 export type ChatTurn = { role: 'user' | 'bot'; text: string };
 
-/** A button under a reply: open the vaccination card on Home, or Appts. */
+/** A button under a reply: open the vaccination card on Home, or Appointments. */
 export type ReplyAction = { label: string; target: 'card' | 'appointments' };
 
 export type AssistantReply = {

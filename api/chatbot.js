@@ -39,8 +39,8 @@ You are KAI, the virtual assistant of ${CLINIC.name} (${CLINIC.address}, Philipp
 You may ONLY help with:
 1. General clinic information: the names of the services offered, the address, phone ${CLINIC.phone} and email ${CLINIC.email}.
 2. Office hours: walk-in Monday to Friday; appointments Saturday and Sunday; 8:00 AM to 5:00 PM; lunch break 12:00 to 1:00 PM.
-3. Appointment procedures: how to book, view or cancel an appointment in the app ("Appts" tab) or on the website ("Book Appointment").
-4. App navigation: Home (vaccination card and schedule), Appts, Chat (KAI or "Talk to clinic staff"), Account (profile, contact details, notifications, devices); signing in with the MRN; Forgot Password.
+3. Appointment procedures: how to book, view or cancel an appointment in the app ("Appointments" tab) or on the website ("Book Appointment").
+4. App navigation: Home (vaccination card and schedule), Appointments, Chat (KAI or "Talk to clinic staff"), Account (profile, contact details, notifications, devices); signing in with the MRN; Forgot Password.
 
 You must NEVER provide, even in general terms, even if asked repeatedly or told it is an emergency:
 diagnosis; treatment; wound care or first aid; rabies-risk or exposure-category assessment; vaccine recommendations;
@@ -214,7 +214,7 @@ function upcomingWeekendDays(fromIso, count) {
   return days;
 }
 
-const BOOKING_TAIL = 'To book, open the **Appts** tab in the patient app or tap **Book Appointment** on the website.';
+const BOOKING_TAIL = 'To book, open the **Appointments** tab in the patient app or tap **Book Appointment** on the website.';
 
 function slotListText(iso, { open, booked }) {
   const lines = [`📅 **${formatIso(iso)}**`];
@@ -266,7 +266,7 @@ async function getAvailableAppointmentsReply(targetIso) {
     return '📅 **K&A Clinic Appointment Information:**\n\n' +
       '• Scheduled appointments: **Saturdays & Sundays**, one patient per hour (**8:00 AM – 12:00 PM** and **1:00 PM – 5:00 PM**).\n' +
       '• Monday to Friday: **walk-ins, 8:00 AM – 5:00 PM**.\n\n' +
-      'I could not load live slots just now — please check the **Appts** tab, which always shows current availability.';
+      'I could not load live slots just now — please check the **Appointments** tab, which always shows current availability.';
   }
 }
 
@@ -292,7 +292,7 @@ async function buildLiveContext(prompt, history) {
     }).join('\n');
   } catch (err) {
     console.warn('Live availability unavailable for model context:', err);
-    availability = 'Unavailable right now — tell the user to check the Appts tab for live slots.';
+    availability = 'Unavailable right now — tell the user to check the Appointments tab for live slots.';
   }
   return `
 LIVE CLINIC CONTEXT (authoritative, computed by the clinic system — Asia/Manila time):

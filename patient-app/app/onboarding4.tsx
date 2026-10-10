@@ -3,14 +3,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { resetTo } from '../utils/navigation';
 import React, { useEffect } from 'react';
-import { Dimensions, Platform, StyleSheet, Text, View } from 'react-native';
+import { Dimensions, Image, Platform, StyleSheet, Text, View } from 'react-native';
 import Tap from '../components/Tap';
-import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming
-} from 'react-native-reanimated';
+import { preloadOnboarding } from '../utils/preloadOnboarding';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { markOnboardingSeen } from '../config/appPrefs';
 import { moderateScale, scale, verticalScale } from '../utils/scale';
@@ -22,22 +17,7 @@ export default function Onboarding4() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const fadeAnim = useSharedValue(0);
-  const translateY = useSharedValue(20);
-
-  useEffect(() => {
-    fadeAnim.value = withTiming(1, { duration: 800, easing: Easing.out(Easing.quad) });
-    translateY.value = withTiming(0, { duration: 800, easing: Easing.out(Easing.exp) });
-  }, []);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    opacity: fadeAnim.value,
-    transform: [{ translateY: translateY.value }],
-  }));
-
-  const imageAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: fadeAnim.value,
-  }));
+  useEffect(preloadOnboarding, []);
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -91,15 +71,15 @@ export default function Onboarding4() {
         {/* ILLUSTRATION AREA - 54% SCREEN HEIGHT */}
         <View style={styles.illustrationWrapper}>
           <View style={styles.glassEffect} />
-          <Animated.Image 
+          <Image
             source={require('../assets/onboarding4.png')} 
-            style={[styles.image, imageAnimatedStyle]}
+            style={styles.image}
             resizeMode="contain"
           />
         </View>
 
         {/* WHITE CARD - 46% SCREEN HEIGHT (BUTTON ELEVATED ABOVE NAV BAR) */}
-        <Animated.View style={[styles.card, animatedStyle, { paddingBottom: bottomPadding }]}>
+        <View style={[styles.card, { paddingBottom: bottomPadding }]}>
           <View style={styles.cardContent}>
             <View style={styles.indicatorContainer}>
               <View style={styles.indicator} />
@@ -112,7 +92,7 @@ export default function Onboarding4() {
             <Text style={styles.title}>Book Appointments{"\n"}From Your Phone</Text>
             
             <Text style={styles.description}>
-              Request a weekend slot in the Appts tab — taken slots are blocked automatically, so there are no double bookings — then track its status as the clinic confirms, and reschedule or cancel from the same place.
+              Request a weekend slot in the Appointments tab — taken slots are blocked automatically, so there are no double bookings — then track its status as the clinic confirms, and reschedule or cancel from the same place.
             </Text>
           </View>
 
@@ -131,7 +111,7 @@ export default function Onboarding4() {
               <Ionicons name="rocket-sharp" size={18} color="#FFF" style={{ marginLeft: 8 }} />
             </LinearGradient>
           </Tap>
-        </Animated.View>
+        </View>
       </LinearGradient>
     </View>
   );

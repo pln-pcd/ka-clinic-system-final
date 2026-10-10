@@ -332,7 +332,13 @@ export default function AppointmentsScreen() {
   const [aptsError, setAptsError] = useState('');
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || user.isAnonymous) {
+      setMyAppointments([]);
+      setAptsError('');
+      setLoadingApts(false);
+      return;
+    }
+    setLoadingApts(true);
     const q = query(
       collection(db, 'appointments'),
       where('userId', '==', user.uid),
@@ -613,6 +619,26 @@ export default function AppointmentsScreen() {
   while (cells.length % 7 !== 0) cells.push(null);
 
   // ─────────────────────────────────────────────────────────────────────────
+  const closeAppointmentDetail = () => {
+    if (cancellationReasonInput.trim()) {
+      showAlert({
+        type: 'warning',
+        title: 'Discard Changes?',
+        message: 'You have typed a cancellation reason. Are you sure you want to close without submitting?',
+        primaryButtonText: 'Discard',
+        onPrimaryPress: () => {
+          hideAlert();
+          setSelectedApptDetail(null);
+          setCancellationReasonInput('');
+        },
+        secondaryButtonText: 'Keep Editing',
+        onSecondaryPress: hideAlert,
+      });
+    } else {
+      setSelectedApptDetail(null);
+    }
+  };
+
   return (
     <View style={s.root}>
       <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
@@ -637,7 +663,7 @@ export default function AppointmentsScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: verticalScale(110) + insets.bottom, paddingTop: verticalScale(14) }}>
 
         {aptsError ? (
-          <View style={s.hint}>
+          <View style={[s.hint, s.errorHint]}>
             <Ionicons name="alert-circle-outline" size={14} color={C.red}/>
             <Text style={[s.hintTxt, { color: C.red }]}>{aptsError}</Text>
           </View>
@@ -899,7 +925,7 @@ export default function AppointmentsScreen() {
       </ScrollView>
 
       {/* ══ TIME SLOT MODAL ══════════════════════════════════════════════════ */}
-      <Modal visible={showSlotModal} transparent animationType="fade" statusBarTranslucent>
+      <Modal visible={showSlotModal} transparent animationType="fade" statusBarTranslucent onRequestClose={() => { setShowSlotModal(false); setSelectedKey(null); setSelectedTime(null); }}>
         <TouchableWithoutFeedback onPress={() => { setShowSlotModal(false); setSelectedKey(null); setSelectedTime(null); }}>
           <View style={sm.overlay}>
             <TouchableWithoutFeedback onPress={e => e.stopPropagation()}>
@@ -1171,7 +1197,7 @@ export default function AppointmentsScreen() {
       )}
 
       {/* ── Success Modal ── */}
-      <Modal visible={showSuccess} transparent animationType="fade" statusBarTranslucent>
+      <Modal visible={showSuccess} transparent animationType="fade" statusBarTranslucent onRequestClose={handleDone}>
         <TouchableWithoutFeedback onPress={handleDone}>
           <View style={ms.overlay}>
             <TouchableWithoutFeedback onPress={e => e.stopPropagation()}>
@@ -1228,27 +1254,9 @@ export default function AppointmentsScreen() {
       </Modal>
 
       {/* ══ APPOINTMENT DETAIL MODAL ═════════════════════════════════════════ */}
-      <Modal visible={!!selectedApptDetail} transparent animationType="fade" statusBarTranslucent onShow={() => { setCancellationReasonInput(''); setCancelReasonError(''); }}>
+      <Modal visible={!!selectedApptDetail} transparent animationType="fade" statusBarTranslucent onRequestClose={closeAppointmentDetail} onShow={() => { setCancellationReasonInput(''); setCancelReasonError(''); }}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-          <TouchableWithoutFeedback onPress={() => {
-            if (cancellationReasonInput.trim()) {
-              showAlert({
-                type: 'warning',
-                title: 'Discard Changes?',
-                message: 'You have typed a cancellation reason. Are you sure you want to close without submitting?',
-                primaryButtonText: 'Discard',
-                onPrimaryPress: () => {
-                  hideAlert();
-                  setSelectedApptDetail(null);
-                  setCancellationReasonInput('');
-                },
-                secondaryButtonText: 'Keep Editing',
-                onSecondaryPress: hideAlert,
-              });
-            } else {
-              setSelectedApptDetail(null);
-            }
-          }}>
+          <TouchableWithoutFeedback onPress={closeAppointmentDetail}>
             <Animated.View style={[sm.overlay, detailKeyboardLift]}>
               <TouchableWithoutFeedback onPress={e => e.stopPropagation()}>
                 <View style={sm.card}>
@@ -1259,7 +1267,7 @@ export default function AppointmentsScreen() {
                         <Text style={sm.headerSub}>{displayKey(selectedApptDetail.date)}</Text>
                       )}
                     </View>
-                    <Tap onPress={() => setSelectedApptDetail(null)} style={sm.closeBtn}>
+                    <Tap onPress={closeAppointmentDetail} style={sm.closeBtn}>
                       <Ionicons name="close" size={20} color={C.white}/>
                     </Tap>
                   </LinearGradient>
@@ -1389,13 +1397,13 @@ export default function AppointmentsScreen() {
           <Text style={nav.label}>Home</Text>
         </Tap>
 
-        {/* Tab 2: Appts */}
+        {/* Tab 2: Appointments */}
         <Tap
           style={nav.tab}
           activeOpacity={0.7}
         >
           <Ionicons name="calendar" size={24} color={C.red} />
-          <Text style={[nav.label, nav.labelActive]}>Appts</Text>
+          <Text style={[nav.label, nav.labelActive]}>Appointments</Text>
         </Tap>
 
         {/* Tab 3: Chat */}
@@ -1464,8 +1472,9 @@ const s = StyleSheet.create({
   rowGap:    { flexDirection: 'row', alignItems: 'center', gap: scale(7) },
   subHeading:{ fontSize: moderateScale(14), fontWeight: '800', color: C.charcoal },
 
-  hint:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: scale(6), paddingVertical: verticalScale(12) },
-  hintTxt: { fontSize: moderateScale(12), color: C.muted, fontWeight: '500' },
+  hint:    { flexDirection: 'row', alignItems: 'flex-start', gap: scale(8), marginHorizontal: scale(20), marginVertical: verticalScale(12), padding: scale(14), backgroundColor: C.white, borderRadius: scale(14), borderWidth: 1, borderColor: C.border },
+  hintTxt: { flex: 1, minWidth: 0, fontSize: moderateScale(12), lineHeight: moderateScale(18), color: C.slate, fontWeight: '500' },
+  errorHint: { backgroundColor: C.navyFaint, borderColor: '#DBEAFE' },
 
   datePill:    { backgroundColor: C.navyFaint, paddingHorizontal: scale(10), paddingVertical: verticalScale(4), borderRadius: scale(10) },
   datePillTxt: { fontSize: moderateScale(11), fontWeight: '700', color: C.navy },
@@ -1638,7 +1647,7 @@ const nav = StyleSheet.create({
     paddingHorizontal: scale(4),
   },
   tab: { flex: 1, justifyContent: 'center', alignItems: 'center', height: '100%' },
-  label: { fontSize: moderateScale(11), color: '#64748B', marginTop: verticalScale(3), fontWeight: '600' },
+  label: { fontSize: moderateScale(10), color: '#64748B', marginTop: verticalScale(3), fontWeight: '600' },
   labelActive: { color: C.red, fontWeight: '800' },
 });
 

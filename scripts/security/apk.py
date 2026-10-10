@@ -1,7 +1,9 @@
 """Read-only APK artifact checks. Optional smoke reads require the isolated emulator."""
 import json, os, re, subprocess, sys, hashlib, zipfile
 from pathlib import Path
-apk = Path(sys.argv[1] if len(sys.argv) > 1 else '.tmp/security/release/kna-clinic-1.0.3.apk')
+release = json.loads(Path('patient-app/app.json').read_text(encoding='utf-8'))['expo']
+version, version_code, package = release['version'], str(release['android']['versionCode']), release['android']['package']
+apk = Path(sys.argv[1] if len(sys.argv) > 1 else f'.tmp/security/release/kna-clinic-{version}.apk')
 bundle = Path(sys.argv[2] if len(sys.argv) > 2 else 'C:/ka103/android/app/build/generated/assets/react/release/index.android.bundle')
 sdk = Path(os.environ.get('ANDROID_SDK_ROOT', str(Path(os.environ.get('LOCALAPPDATA', '.')) / 'Android/Sdk')))
 tools = sdk / 'build-tools/36.0.0'
@@ -15,7 +17,7 @@ certificate = re.search(r'SHA-256 digest: ([a-f0-9]+)', certs).group(1)
 previous = '4fef45c1eae069ede9b94c98567b94116f9765e778257a69ab729a3391b62bfe'
 add('APK-SIGNATURE', 'APK signature is valid and matches v1.0.2', previous, certificate, certificate == previous)
 badging = run([tools / ('aapt.exe' if os.name == 'nt' else 'aapt'), 'dump', 'badging', apk])
-add('APK-VERSION', 'Release package and version allow an upgrade', 'com.anonymous.knarabiesmonitoring; 1.0.3; versionCode 4', badging.splitlines()[0], "versionCode='4'" in badging and "versionName='1.0.3'" in badging and "name='com.anonymous.knarabiesmonitoring'" in badging)
+add('APK-VERSION', 'Release package and version allow an upgrade', f'{package}; {version}; versionCode {version_code}', badging.splitlines()[0], f"versionCode='{version_code}'" in badging and f"versionName='{version}'" in badging and f"name='{package}'" in badging)
 manifest = run([tools / ('aapt.exe' if os.name == 'nt' else 'aapt'), 'dump', 'xmltree', apk, 'AndroidManifest.xml'])
 secure = all(re.search(rf'android:{name}.*\(type 0x12\)0x0\b', manifest) for name in ['usesCleartextTraffic', 'allowBackup'])
 add('APK-TRANSPORT', 'Compiled manifest disables cleartext traffic and app backup', 'Both false', 'Both false' if secure else 'Manifest mismatch', secure, 7)
@@ -33,7 +35,8 @@ if '--emulator' in sys.argv:
     errors = run([adb, '-s', 'emulator-5580', 'logcat', '-d', '-s', 'ReactNativeJS:E', 'AndroidRuntime:E'])
     ok = bool(pid) and 'K&amp;A CLINIC' in ui and 'Next' in ui and not errors.strip()
     add('APK-EMULATOR-LAUNCH', 'Release app renders onboarding without native/JS crash', 'Onboarding visible; process alive; zero app error logs', 'Onboarding visible; process alive; zero app error logs' if ok else 'Smoke check mismatch', ok, 9)
-Path('docs/security-results').mkdir(parents=True, exist_ok=True)
-Path('docs/security-results/apk-after.json').write_text(json.dumps(dict(date=__import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat(), sha256=hashlib.sha256(apk.read_bytes()).hexdigest(), bytes=apk.stat().st_size, certificateSha256=certificate, bundleSha256=hashlib.sha256(contents).hexdigest(), results=results), indent=2), encoding='utf-8')
+output = Path(sys.argv[sys.argv.index('--output') + 1] if '--output' in sys.argv else 'docs/security-results/apk-after.json')
+output.parent.mkdir(parents=True, exist_ok=True)
+output.write_text(json.dumps(dict(date=__import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat(), sha256=hashlib.sha256(apk.read_bytes()).hexdigest(), bytes=apk.stat().st_size, certificateSha256=certificate, bundleSha256=hashlib.sha256(contents).hexdigest(), results=results), indent=2), encoding='utf-8')
 print(f'APK: {sum(r["status"] == "PASS" for r in results)}/{len(results)} PASS')
 sys.exit(any(r['status'] == 'FAIL' for r in results))

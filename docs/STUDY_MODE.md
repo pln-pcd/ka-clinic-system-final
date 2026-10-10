@@ -16,7 +16,7 @@ How it is enforced:
 | Blocked topics → one fixed neutral reply: "I can't help with medical questions. Please contact K&A Clinic or a licensed healthcare professional." + clinic phone/email + "Talk to clinic staff" (app). | same |
 | Personal schedule questions ("When is my next dose?") → navigation only: "You can see your vaccination schedule on the Home screen under your vaccination card." + a button to the card. No dates, sessions or counts. | same |
 | The AI system prompt restates the same limits, and the AI's reply is checked again; medical content is replaced by the blocked reply. | `api/chatbot.js` |
-| Visible disclaimer banner at the top of the chat and a short line under the input. | `patient-app/app/(tabs)/chat.tsx`, `ka-clinic-admin/src/components/landing/Chatbot.jsx` |
+| One persistent disclaimer at the top of every chatbot screen: "No medical advice. For urgent or medical concerns, contact the clinic or a licensed healthcare professional." | `patient-app/app/(tabs)/chat.tsx`, `ka-clinic-admin/src/components/landing/Chatbot.jsx` |
 
 Test it: `node scripts/test-chatbot-scope.mjs` (sample prompts with expected categories, run against the server rules and the app copy; also checks that no fixed reply carries medical text).
 
@@ -34,11 +34,13 @@ During the study the chatbot is used with **test prompts only**, never by real p
 
 | Variable | Default | Effect |
 |---|---|---|
-| `VITE_CHATBOT_STUDY_MODE` (admin/website build) | on unless `false` | Website chatbot shows "Test environment — do not enter real patient information." |
-| `EXPO_PUBLIC_CHATBOT_STUDY_MODE` (patient app build) | on unless `false` | Same notice in the app chat. |
 | `VITE_MAP_STUDY_MODE` (admin build) | on unless `false` | "Pin Incident Map" is hidden on patient records and the pin action refuses, so real patient data never becomes map data. |
 
 Turning `VITE_MAP_STUDY_MODE` off after the study is **not enough** to pin real records again: `firestore.rules` also accepts only simulated incidents, and that rule has to be changed and redeployed deliberately.
+
+Chatbot study sessions use test prompts only. The test-environment banner and
+the former chatbot study-mode display flags were removed in release 1.0.4;
+the medical disclaimer stays visible in empty and active assistant chats.
 
 ## Data
 

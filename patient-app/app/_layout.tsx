@@ -75,7 +75,7 @@ export default function RootLayout() {
         styleTag.id = 'roboto-font-style';
         styleTag.textContent = `
           body, button, input, textarea, select, div, span, p, h1, h2, h3, h4, h5, h6, a {
-            font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+            font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
           }
         `;
         document.head.appendChild(styleTag);

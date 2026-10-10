@@ -136,7 +136,6 @@ export default function TabsLayout() {
         <Tabs.Screen name="chat" options={{ headerShown: false }} />
         <Tabs.Screen name="records" options={{ headerShown: false }} />
         <Tabs.Screen name="profile" options={{ headerShown: false }} />
-        <Tabs.Screen name="login" options={{ headerShown: false }} />
       </Tabs>
 
       <CustomAlertModal

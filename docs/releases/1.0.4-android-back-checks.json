@@ -1,0 +1,54 @@
+{
+  "environment": "Isolated emulator-5580; local-only bundled test APK; demo-ka-clinic Firebase emulators; no production sign-in",
+  "results": [
+    {
+      "check": "Onboarding reaches sign-in",
+      "result": "PASS"
+    },
+    {
+      "check": "Local emulator guest opens Home",
+      "result": "PASS"
+    },
+    {
+      "check": "Chat opens",
+      "result": "PASS"
+    },
+    {
+      "check": "Personal Information opens",
+      "result": "PASS"
+    },
+    {
+      "check": "Android Back returns Personal Information to Account after Chat mounted",
+      "result": "PASS"
+    },
+    {
+      "check": "Privacy Policy opens",
+      "result": "PASS"
+    },
+    {
+      "check": "Android Back returns Privacy Policy to Account",
+      "result": "PASS"
+    },
+    {
+      "check": "On-screen Back returns Personal Information to Account",
+      "result": "PASS"
+    },
+    {
+      "check": "Android Back from Account follows visited tab history",
+      "result": "PASS"
+    },
+    {
+      "check": "Android Back from KAI returns Home",
+      "result": "PASS"
+    },
+    {
+      "check": "Enlarged card opens",
+      "result": "PASS"
+    },
+    {
+      "check": "Android Back dismisses enlarged card and stays on Home",
+      "result": "PASS"
+    }
+  ],
+  "runtimeErrors": 0
+}

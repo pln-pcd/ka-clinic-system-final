@@ -117,7 +117,8 @@ During the thesis study the system runs under the ethics rules in [docs/STUDY_MO
 
 - **Chatbot (KAI):** general clinic information, office hours, contact details, appointment procedures and app navigation only. No medical advice of any kind, and no patient's own schedule details (navigation replies instead). A disclaimer is always visible. Test prompts only, no real patients. Test: `node scripts/test-chatbot-scope.mjs`.
 - **Incident map:** simulated, non-identifiable records only (`isSimulated: true`), no addresses / barangays / coordinates, banner + "SIMULATED DATA" watermark, signed-in admins only. Seed: `node --env-file=.env scripts/seed-simulated-incidents.mjs`.
-- **Flags** (on unless set to `false`): `VITE_CHATBOT_STUDY_MODE`, `EXPO_PUBLIC_CHATBOT_STUDY_MODE` (test-environment notice in the chat), `VITE_MAP_STUDY_MODE` (hides "Pin Incident Map" on patient records).
+- **Chatbot study:** test prompts only, with one persistent medical disclaimer. The test-environment banner was removed in 1.0.4.
+- **Flag** (on unless set to `false`): `VITE_MAP_STUDY_MODE` (hides "Pin Incident Map" on patient records).
 - Seed data only; reports contain no incident locations.
 # Security verification and release
 
