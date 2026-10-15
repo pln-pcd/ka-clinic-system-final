@@ -13,7 +13,8 @@
 export const SIM_BOUNDS = { south: 13.270, north: 13.350, west: 123.405, east: 123.480 };
 
 const TYPES = ['Dog bite', 'Dog bite', 'Dog bite', 'Cat bite', 'Cat scratch', 'Dog scratch'];
-const CATEGORIES = ['Category II', 'Category II', 'Category III'];
+// Category I is not used at the clinic: exposures start at Category II.
+const CATEGORIES = ['Category II', 'Category II', 'Category III', 'Category III'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 // Small deterministic PRNG, so a given seed always produces the same set.
@@ -28,9 +29,9 @@ export const simulatedMonthLabel = (ym) => {
   return y && m ? `${MONTHS[m - 1]} ${y}` : '';
 };
 
-/** "Simulated incident #12 · Dog bite · Category II · Sep 2026" */
+/** "Incident #12 · Dog bite · Category II · Sep 2026" */
 export const simulatedIncidentLabel = (inc) =>
-  [`Simulated incident #${inc.simNo ?? '?'}`, inc.type, inc.category, simulatedMonthLabel(inc.month)].filter(Boolean).join(' · ');
+  [`Incident #${inc.simNo ?? '?'}`, inc.type, inc.category, simulatedMonthLabel(inc.month)].filter(Boolean).join(' · ');
 
 /**
  * count simulated incidents spread over the `months` months up to `todayIso`.

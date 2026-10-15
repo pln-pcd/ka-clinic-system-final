@@ -7,7 +7,7 @@
 // Every archived record is loaded (no cap), so the count always matches.
 
 import Select from '../../components/Select';
-import { ChevronRight, Clock, Eye, RotateCcw, Search, Users } from 'lucide-react';
+import { ChevronRight, Clock, Eye, Plus, RotateCcw, Search, Users } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import Pager, { PAGE_SIZE, useTableReserve } from '../../components/Pager';
 import ConfirmDialog from '../../components/ConfirmDialog';

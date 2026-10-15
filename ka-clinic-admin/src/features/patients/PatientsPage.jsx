@@ -1,17 +1,18 @@
 // Patients page: the registry list and the flows it opens.
 import { formatTitleCase, formatDateMedium, getTodayDateString, today } from "../../lib/formatters";
 import { MAP_STUDY_MODE } from '../../lib/studyMode';
-import { arrayUnion, collection, doc, getDocs, limit, query, runTransaction, serverTimestamp, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
+import { arrayUnion, collection, deleteField, doc, getDocs, limit, query, runTransaction, serverTimestamp, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { db } from "../../lib/firebase";
 import { peekLiveCollection, useLiveCollection } from '../../lib/liveStore';
 import { buildDoses, buildInitialDoses } from "../../lib/doseSchedules";
-import { getArchiveDueDate, getCompletionDate, getCompletionYear, getRegistrationYear } from "../../lib/patientArchive";
+import { getArchiveDueDate, getCompletionDate, getCompletionYear, getRegistrationYear, showsRestoredLabel } from "../../lib/patientArchive";
+import { serviceFields } from "../../lib/serviceFields";
 import Toast from "../../components/Toast";
 import IconButton from "../../components/IconButton";
 import { useTableReserve } from "../../components/Pager";
 import EmptyState from "../../components/EmptyState";
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye, Pencil, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye, Pencil, Plus, Users } from "lucide-react";
 import { trackEvent } from "../../lib/analytics";
 import { geocodeLibonAddress } from '../../lib/libonGeo';
 import { ExportReportModal, ServiceBadge, derivePatientStatus, globalCSS } from "./shared";
@@ -25,13 +26,14 @@ const getName = (p) => (p?.name || [p?.fname, p?.lname].filter(Boolean).join(' '
 const AVATAR_COLORS = ['#3D5AFE', '#06B6D4', '#F59E0B', '#22C55E', '#8B5CF6', '#EF4444', '#EC4899', '#14B8A6'];
 
 /* ─────────────────────────── ROOT APP ─────────────────────────── */
-export default function App({ initialOpenAddModal = false, onAddModalClosed } = {}) {
+export default function App({ initialOpenAddModal = false, onAddModalClosed, initialPatientForAdd = null } = {}) {
   const [patients, setPatients] = useState(() => peekLiveCollection('vaccinations').rows.map((d, i) => ({ ...d, color: AVATAR_COLORS[i % AVATAR_COLORS.length] })));
   const [loading, setLoading] = useState(() => !peekLiveCollection('vaccinations').loaded);
   const [selected, setSelected] = useState(null);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [showModal, setModal] = useState(initialOpenAddModal);
+  const [addPatientInitial, setAddPatientInitial] = useState(initialPatientForAdd);
   const [editPatient, setEditPatient] = useState(null);
   const [toast, setToast] = useState({ msg: '', type: '' });
   const [pinTarget, setPinTarget] = useState(null);
@@ -40,13 +42,26 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
   const [followUpTarget, setFollowUpTarget] = useState(null);
 
   useEffect(() => {
-    if (initialOpenAddModal) {
+    if (initialPatientForAdd) {
+      setAddPatientInitial(initialPatientForAdd);
+      setModal(true);
+    } else if (initialOpenAddModal) {
       setModal(true);
     }
-  }, [initialOpenAddModal]);
+  }, [initialOpenAddModal, initialPatientForAdd]);
+
+  useEffect(() => {
+    const handleOpenAddEvent = (e) => {
+      setAddPatientInitial(e?.detail || null);
+      setModal(true);
+    };
+    window.addEventListener('open-add-patient-modal', handleOpenAddEvent);
+    return () => window.removeEventListener('open-add-patient-modal', handleOpenAddEvent);
+  }, []);
 
   const handleCloseAddModal = () => {
     setModal(false);
+    setAddPatientInitial(null);
     if (onAddModalClosed) onAddModalClosed();
   };
   // Inventory items for vaccine brand dropdown
@@ -214,7 +229,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
   // skipped.
   const [dupCheck, setDupCheck] = useState(null); // { form, setSaving, matches }
 
-  async function handleAddPatient(form, setSaving, { skipDuplicateCheck = false } = {}) {
+  async function handleAddPatient(form, setSaving, returningPatientOrOptions = null) {
     if (!form.fname.trim() || !form.lname.trim()) { showToast('Please fill in first and last name', 'error'); return; }
     if (!form.email.trim()) { showToast('Email is required so the patient can log in to the app', 'error'); return; }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -222,11 +237,16 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
     if (!form.age) { showToast('Age is required', 'error'); return; }
     if (form.contact && !isValidPHPhone(form.contact)) { showToast('Enter a valid Philippine mobile number', 'error'); return; }
 
+    const isReturning = Boolean(returningPatientOrOptions && (returningPatientOrOptions.id || returningPatientOrOptions.mrn || returningPatientOrOptions.firestoreId));
+    const returningPatient = isReturning ? returningPatientOrOptions : null;
+    const skipDuplicateCheck = isReturning || Boolean(returningPatientOrOptions?.skipDuplicateCheck);
+    const returningMrn = returningPatient ? (returningPatient.id || returningPatient.mrn || returningPatient.firestoreId) : null;
+
     const normalEmail = form.email.toLowerCase().trim();
 
     // Prevent duplicate emails across patient records for patient-app uniqueness
     const existingLocal = patients.find(p => (p.email || '').toLowerCase().trim() === normalEmail);
-    if (existingLocal) {
+    if (existingLocal && (!isReturning || (existingLocal.firestoreId !== returningPatient.firestoreId && existingLocal.id !== returningMrn))) {
       showToast(`Email "${normalEmail}" is already registered to ${formatTitleCase(existingLocal.name)} (MRN: ${existingLocal.id || existingLocal.mrn || '—'}). Patient records require a unique email for the Patient App.`, 'error');
       return;
     }
@@ -248,12 +268,16 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
       );
       if (!existingEmailSnap.empty) {
         const existingData = existingEmailSnap.docs[0].data();
-        showToast(`Email "${normalEmail}" is already registered in patient records to ${existingData.name || 'another patient'} (MRN: ${existingData.mrn || existingEmailSnap.docs[0].id}). Each patient must have a unique email for the Patient App.`, 'error');
-        if (typeof setSaving === 'function') setSaving(false);
-        return;
+        const existingDocId = existingEmailSnap.docs[0].id;
+        const isSameReturning = isReturning && (existingDocId === returningMrn || existingData.mrn === returningMrn);
+        if (!isSameReturning) {
+          showToast(`Email "${normalEmail}" is already registered in patient records to ${existingData.name || 'another patient'} (MRN: ${existingData.mrn || existingDocId}). Each patient must have a unique email for the Patient App.`, 'error');
+          if (typeof setSaving === 'function') setSaving(false);
+          return;
+        }
       }
 
-      const caseNo = await getAndIncrementNextMRN();
+      const caseNo = isReturning ? returningMrn : await getAndIncrementNextMRN();
       const cleanFname = formatTitleCase(form.fname.trim());
       const cleanLname = formatTitleCase(form.lname.trim());
       const cleanMname = form.mname && form.mname.trim() ? formatTitleCase(form.mname.trim()) : '';
@@ -265,6 +289,64 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
       const enteredZone = form.zone || '';
       const baseDate = form.date || today();
       const defaultDoseArray = generateDefaultDoses(form.service || 'PEP', baseDate);
+      // Only what this service asked is saved (lib/serviceFields.js); a field
+      // left over from switching services is written empty, so a returning
+      // patient's new case never carries the previous case's answers.
+      const svcFields = serviceFields(form.service || 'PEP');
+      const isPepCase = (form.service || 'PEP') === 'PEP';
+      const asked = (k) => (svcFields.history.includes(k) ? (form[k] || '') : '');
+      const pep = (k) => (isPepCase ? (form[k] || '') : '');
+
+      let updatedCaseHistory = [];
+      if (isReturning) {
+        const prevCaseSnapshot = {
+          service: returningPatient.service || 'PEP',
+          date: returningPatient.date || '',
+          status: returningPatient.status || 'completed',
+          completedAt: returningPatient.completedAt || null,
+          cat: returningPatient.cat || '',
+          animal: returningPatient.animal || '',
+          placeOfExposure: returningPatient.placeOfExposure || '',
+          typeOfExposure: returningPatient.typeOfExposure || '',
+          sourceOfExposure: returningPatient.sourceOfExposure || '',
+          woundLocation: returningPatient.woundLocation || '',
+          woundDepth: returningPatient.woundDepth || '',
+          woundWashed: returningPatient.woundWashed || '',
+          numberOfBites: returningPatient.numberOfBites || '',
+          vaccineBrand: returningPatient.vaccineBrand || '',
+          doses: Array.isArray(returningPatient.doses) ? returningPatient.doses : [],
+          treatments: Array.isArray(returningPatient.treatments) ? returningPatient.treatments : [],
+          erig: returningPatient.erig || null,
+          rigGiven: returningPatient.rigGiven || '',
+          // RIG / Anti-Tetanus entries as saved by the Tracker (separate
+          // fields), and the case's clinical reports, so the whole medical
+          // record of this case lives in its snapshot.
+          ...(returningPatient.rigTreatment ? { rigTreatment: returningPatient.rigTreatment } : {}),
+          ...(returningPatient.antiTetanusTreatment ? { antiTetanusTreatment: returningPatient.antiTetanusTreatment } : {}),
+          reports: Array.isArray(returningPatient.reports) ? returningPatient.reports : [],
+          dose: returningPatient.dose || '',
+          notes: returningPatient.notes || '',
+          pastVaccines: returningPatient.pastVaccines || '',
+          pastVaccinesOther: returningPatient.pastVaccinesOther || '',
+          allergies: returningPatient.allergies || '',
+          woundType: returningPatient.woundType || '',
+          lastTetanus: returningPatient.lastTetanus || '',
+          pneumoHistory: returningPatient.pneumoHistory || '',
+          pneumoHistoryOther: returningPatient.pneumoHistoryOther || '',
+          riskCondition: returningPatient.riskCondition || '',
+          // No longer asked; kept on the snapshot so an old value is not lost.
+          ...(returningPatient.pneumoVaccine ? { pneumoVaccine: returningPatient.pneumoVaccine } : {}),
+          woundImages: Array.isArray(returningPatient.woundImages) ? returningPatient.woundImages : [],
+          archivedAt: returningPatient.archivedAt || null,
+          archivedReason: returningPatient.archivedReason || null,
+          height: returningPatient.height || '',
+          weight: returningPatient.weight || '',
+          bloodPressure: returningPatient.bloodPressure || '',
+          closedAt: Date.now(),
+        };
+        const existingHistory = Array.isArray(returningPatient.caseHistory) ? returningPatient.caseHistory : [];
+        updatedCaseHistory = [...existingHistory, prevCaseSnapshot];
+      }
 
       const vaxDoc = {
         id: caseNo,
@@ -283,33 +365,46 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
         address: form.address || (selectedBarangay ? `${enteredZone ? enteredZone + ', ' : ''}Brgy. ${selectedBarangay}, Libon, Albay` : ''),
         service: form.service || 'PEP',
         vaccineBrand: form.vaccineBrand || '',
-        placeOfExposure: form.placeOfExposure || '',
-        typeOfExposure: form.typeOfExposure || '',
-        sourceOfExposure: form.sourceOfExposure || '',
-        woundWashed: form.woundWashed || '',
+        placeOfExposure: pep('placeOfExposure'),
+        typeOfExposure: pep('typeOfExposure'),
+        sourceOfExposure: pep('sourceOfExposure'),
+        woundWashed: pep('woundWashed'),
         genericName: form.genericName || '',
-        animal: form.animal || '',
-        cat: (form.cat || '').replace('Category ', ''),
+        animal: pep('animal'),
+        cat: pep('cat').replace('Category ', ''),
         date: baseDate,
-        notes: form.notes || '',
-        pastVaccines: form.pastVaccines || '',
-        allergies: form.allergies || '',
-        woundLocation: form.woundLocation || '',
-        woundDepth: form.woundDepth || '',
-        numberOfBites: form.numberOfBites || '',
-        woundType: form.woundType || '',
-        lastTetanus: form.lastTetanus || '',
-        hepaVariant: form.hepaVariant || '',
-        riskFactor: form.riskFactor || '',
-        priorHepa: form.priorHepa || '',
-        pneumoVaccine: form.pneumoVaccine || '',
-        riskCondition: form.riskCondition || '',
-        priorPneumo: form.priorPneumo || '',
+        notes: asked('notes'),
+        pastVaccines: asked('pastVaccines'),
+        pastVaccinesOther: asked('pastVaccines') === 'Others' ? (form.pastVaccinesOther || '').trim() : '',
+        allergies: asked('allergies'),
+        woundLocation: pep('woundLocation'),
+        woundDepth: pep('woundDepth'),
+        numberOfBites: pep('numberOfBites'),
+        woundType: asked('woundType'),
+        lastTetanus: asked('lastTetanus'),
+        pneumoHistory: asked('pneumoHistory'),
+        pneumoHistoryOther: asked('pneumoHistory') === 'Others' ? (form.pneumoHistoryOther || '').trim() : '',
+        riskCondition: asked('riskCondition'),
+        // The old vaccine-variant field is no longer asked. A returning
+        // patient's old value moved to the case snapshot above.
+        ...(isReturning ? { pneumoVaccine: '', priorPneumo: '' } : {}),
+        // The previous case's RIG / Anti-Tetanus entries and clinical
+        // reports moved to its snapshot; the new case starts without them
+        // (this write merges, so they must be cleared explicitly).
+        reports: [],
+        ...(isReturning ? { erig: deleteField(), rigTreatment: deleteField(), antiTetanusTreatment: deleteField(), rigGiven: deleteField() } : {}),
         status: 'ongoing',
         dose: `0/${defaultDoseArray.length}`,
         doses: defaultDoseArray,
+        treatments: [],
+        caseHistory: updatedCaseHistory,
+        completedAt: null,
+        isArchived: false,
+        archivedAt: null,
+        archivedReason: null,
         woundImages: [],
-        createdAt: serverTimestamp(),
+        createdAt: isReturning ? (returningPatient.createdAt || serverTimestamp()) : serverTimestamp(),
+        lastServiceStartedAt: serverTimestamp(),
       };
 
       const authDoc = {
@@ -318,18 +413,22 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
         email: normalEmail,
         contact: formattedContact,
         authorized: true,
-        registered: false,
-        uid: null,
-        createdAt: serverTimestamp(),
+        registered: isReturning ? (returningPatient.registered ?? false) : false,
+        uid: isReturning ? (returningPatient.uid ?? null) : null,
       };
+      if (!isReturning) {
+        authDoc.createdAt = serverTimestamp();
+      }
 
       await Promise.all([
-        setDoc(doc(db, 'vaccinations', caseNo), vaxDoc),
-        setDoc(doc(db, 'authorizedPatients', caseNo), authDoc)
+        setDoc(doc(db, 'vaccinations', caseNo), vaxDoc, { merge: true }),
+        setDoc(doc(db, 'authorizedPatients', caseNo), authDoc, { merge: true }),
       ]);
 
-      trackEvent('patient_registered');
-      showToast(`${fullName} registered and authorized for app login`, 'success');
+      trackEvent(isReturning ? 'patient_service_added' : 'patient_registered');
+      showToast(isReturning
+        ? `New service (${form.service || 'PEP'}) added for ${fullName} under MRN ${caseNo}`
+        : `${fullName} registered and authorized for app login`, 'success');
       handleCloseAddModal();
     } catch (err) {
       console.error('Add patient error:', err);
@@ -383,10 +482,14 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
       animal: form.animal || '', cat: (form.cat || '').replace('Category ', ''),
       date: form.date || editPatient.date, notes: form.notes || '',
       pastVaccines: form.pastVaccines || '', allergies: form.allergies || '',
+      pastVaccinesOther: form.pastVaccines === 'Others' ? (form.pastVaccinesOther || '').trim() : '',
       woundLocation: form.woundLocation || '', woundDepth: form.woundDepth || '', numberOfBites: form.numberOfBites || '',
       woundType: form.woundType || '', lastTetanus: form.lastTetanus || '',
-      hepaVariant: form.hepaVariant || '', riskFactor: form.riskFactor || '', priorHepa: form.priorHepa || '',
-      pneumoVaccine: form.pneumoVaccine || '', riskCondition: form.riskCondition || '', priorPneumo: form.priorPneumo || '',
+      pneumoHistory: form.pneumoHistory || '',
+      pneumoHistoryOther: form.pneumoHistory === 'Others' ? (form.pneumoHistoryOther || '').trim() : '',
+      riskCondition: form.riskCondition || '',
+      // pneumoVaccine (the old vaccine variant) and the never-asked hepa /
+      // priorPneumo fields are left untouched, so an old record keeps them.
     };
     setEditPatient(null);
     showToast('Patient info updated', 'success');
@@ -510,6 +613,8 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
     })
     .filter(p => {
       if (filter === 'all') return true;
+      // Same rule as the "Restored" note (lib/patientArchive.js).
+      if (filter === 'restored') return showsRestoredLabel(p);
       const liveStatus = derivePatientStatus(p);
       const isOverdue = liveStatus !== 'completed' && (liveStatus === 'overdue' || p.status === 'overdue' || buildDoses(p).some(d => d.status === 'miss'));
       if (filter === 'ongoing') return liveStatus !== 'completed' && !isOverdue;
@@ -541,10 +646,15 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
       if (sortBy === 'newest') return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0) || (b.id || '').localeCompare(a.id || '');
       if (sortBy === 'oldest') return (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0) || (a.id || '').localeCompare(b.id || '');
       if (sortBy === 'completed_recent') {
-        // Completed records first, most recently completed on top; the rest
-        // keep newest-registered order underneath.
         const ca = getCompletionDate(a), cb = getCompletionDate(b);
         if (ca || cb) return (cb || '').localeCompare(ca || '');
+        return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
+      }
+      if (sortBy === 'restored_desc') {
+        // Same rule as the note: every record showing it, newest restore first.
+        const ra = showsRestoredLabel(a) ? a.restoredAt : '';
+        const rb = showsRestoredLabel(b) ? b.restoredAt : '';
+        if (ra || rb) return rb.localeCompare(ra);
         return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
       }
       if (sortBy === 'name_asc') return (a.name || '').localeCompare(b.name || '');
@@ -564,7 +674,32 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
           onPinMap={p => setPinTarget(p)}
           onExport={p => setExportModal(p)}
           onEdit={p => setEditPatient(p)}
+          onAddAnotherService={p => {
+            setAddPatientInitial(p);
+            setModal(true);
+          }}
         />
+        {showModal && (
+          <AddPatientModal
+            onClose={handleCloseAddModal}
+            onAdd={handleAddPatient}
+            initialPatient={addPatientInitial}
+            inventoryItems={inventoryItems}
+            onToast={showToast}
+          />
+        )}
+        {dupCheck && (
+          <DuplicatePatientModal
+            form={dupCheck.form}
+            matches={dupCheck.matches}
+            onCancel={() => setDupCheck(null)}
+            onProceed={() => {
+              const { form, setSaving } = dupCheck;
+              setDupCheck(null);
+              handleAddPatient(form, setSaving, { skipDuplicateCheck: true });
+            }}
+          />
+        )}
         {editPatient && (
           <EditPatientModal
             patient={editPatient}
@@ -602,6 +737,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
     { key: 'ongoing', label: 'Ongoing' },
     { key: 'overdue', label: 'Overdue' },
     { key: 'completed', label: 'Completed' },
+    { key: 'restored', label: 'Restored' },
     { key: 'prep', label: 'PrEP' },
     { key: 'pep', label: 'PEP' },
     { key: 'tetanus', label: 'Anti-Tetanus' },
@@ -611,6 +747,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
     { key: 'newest', label: 'Registered (Newest)' },
     { key: 'oldest', label: 'Registered (Oldest)' },
     { key: 'completed_recent', label: 'Completed (Most Recent)' },
+    { key: 'restored_desc', label: 'Restored (Most Recent)' },
     { key: 'name_asc', label: 'Name (A–Z)' },
     { key: 'mrn_asc', label: 'Patient ID' },
   ];
@@ -720,6 +857,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
                       { key: 'ongoing', label: 'Ongoing' },
                       { key: 'overdue', label: 'Overdue' },
                       { key: 'completed', label: 'Completed' },
+                      { key: 'restored', label: 'Restored' },
                     ].map(opt => (
                       <button key={opt.key} type="button"
                         onClick={() => { setFilter(opt.key); setCurrentPage(1); setFilterMenuOpen(false); }}
@@ -880,12 +1018,12 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
                 sideways below 1040px instead of crushing any column. */}
             <table className="kna-table" style={{ width: '100%', minWidth: 860, borderCollapse: 'collapse', textAlign: 'left', fontSize: '.8125rem', tableLayout: 'fixed' }}>
               <colgroup>
-                <col style={{ width: '13%' }} />
+                <col style={{ width: '12%' }} />
                 <col style={{ width: '26%' }} />
-                <col style={{ width: '13%' }} />
+                <col style={{ width: '14%' }} />
                 <col style={{ width: '19%' }} />
-                <col style={{ width: '16%' }} />
-                <col style={{ width: '13%' }} />
+                <col style={{ width: '15%' }} />
+                <col style={{ width: '14%' }} />
               </colgroup>
               <thead>
                 <tr style={{ background: '#FAFAFA', borderBottom: '1px solid #E2E8F0', color: '#64748B', fontSize: '.6875rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.5px' }}>
@@ -955,11 +1093,15 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
                             }}>
                               {liveStatus === 'completed' ? 'Completed' : isOverdue ? 'Overdue' : 'Ongoing'}
                             </span>
-                            {archiveDue && (
+                            {showsRestoredLabel(p) ? (
+                              <span style={{ fontSize: '.6875rem', lineHeight: 1.2, color: '#0284C7', fontWeight: 600, paddingLeft: 2, whiteSpace: 'nowrap' }} title={`Restored on ${formatDateMedium(p.restoredAt)}${p.restoredBy?.name ? ` by ${p.restoredBy.name}` : ''}`}>
+                                Restored: {formatDateMedium(p.restoredAt)}
+                              </span>
+                            ) : archiveDue ? (
                               <span style={{ fontSize: '.6875rem', lineHeight: 1.2, color: '#94A3B8', fontWeight: 500, paddingLeft: 2, whiteSpace: 'nowrap' }}>
                                 Archives on {formatDateMedium(archiveDue)}
                               </span>
-                            )}
+                            ) : null}
                           </div>
                         </td>
                         <td style={{ padding: '14px 16px', color: '#64748B', fontWeight: 400, fontSize: '.8125rem', whiteSpace: 'nowrap' }}>
@@ -1004,7 +1146,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed } = 
         </div>
       </div>
 
-      {showModal && <AddPatientModal onClose={handleCloseAddModal} onAdd={handleAddPatient} inventoryItems={inventoryItems} onToast={showToast} />}
+      {showModal && <AddPatientModal onClose={handleCloseAddModal} onAdd={handleAddPatient} initialPatient={addPatientInitial} inventoryItems={inventoryItems} onToast={showToast} />}
       {dupCheck && (
         <DuplicatePatientModal
           form={dupCheck.form}

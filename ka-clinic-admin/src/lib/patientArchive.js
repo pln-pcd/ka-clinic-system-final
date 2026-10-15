@@ -80,6 +80,21 @@ export function getRestoreDate(p) {
 }
 
 /**
+ * The "Restored: <date>" note on the Patients table and the record header:
+ * shown whenever the record has been restored from the Archive, including
+ * while a new service registered on it is ongoing or completed. It leaves
+ * the Patients list only with the record itself (re-archived); restoring it
+ * again shows the newest date, and earlier restores stay in restoreHistory.
+ * The Restored filter and sort use this same rule.
+ *
+ * restoredLabelHidden (written briefly by an earlier version when a new
+ * service started) is ignored, so those records show the note again.
+ */
+export function showsRestoredLabel(p) {
+  return Boolean(getRestoreDate(p));
+}
+
+/**
  * When the one-year stay on the Patients list starts: the completion date,
  * or the latest restore if that is later. Restoring an archived record
  * restarts the year, so it cannot be re-archived early.
@@ -141,6 +156,7 @@ export async function restorePatientRecord(patient) {
     archivedBy: deleteField(),
     restoredAt,
     restoredBy,
+    restoredLabelHidden: deleteField(),
     restoreHistory: arrayUnion({
       restoredAt,
       restoredAtMs: Date.now(),

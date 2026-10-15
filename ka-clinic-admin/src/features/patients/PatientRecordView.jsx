@@ -7,7 +7,7 @@ import IconButton from '../../components/IconButton';
 import Select from '../../components/Select';
 import StatusBadge from '../../components/StatusBadge';
 import EmptyState from '../../components/EmptyState';
-import { CalendarDays, Syringe } from 'lucide-react';
+import { CalendarDays, Download, Eye, History, Plus, Syringe } from 'lucide-react';
 import { formatTitleCase, formatDateLong as fmtDate, formatDateMedium, getTodayDateString, formatServiceType, serviceLabel } from "../../lib/formatters";
 import { collection, doc, getDoc, query, updateDoc } from "firebase/firestore";
 import { useEffect, useState } from "react";
@@ -15,7 +15,8 @@ import { FieldError, FormErrorNote, useFieldErrors } from "../../components/Form
 import { BTN } from "../../lib/buttons";
 import { db, listen } from "../../lib/firebase";
 import { buildDoses } from "../../lib/doseSchedules";
-import { getCompletionDate, getRestoreDate } from "../../lib/patientArchive";
+import { getCompletionDate, getRestoreDate, restorePatientRecord, showsRestoredLabel } from "../../lib/patientArchive";
+import { serviceFields, serviceFieldRows, showsTreatments } from "../../lib/serviceFields";
 import { erigStatus, erigStatusLabel } from "../../lib/erig";
 import { MAP_STUDY_MODE } from "../../lib/studyMode";
 import { ExportReportModal, ServiceBadge, X, derivePatientStatus } from "./shared";
@@ -55,11 +56,13 @@ export function isRabiesOrBiteIncident(patient) {
 // Label + value pair. A missing value shows an em dash rather than a guess —
 // the record view previously filled gaps with plausible defaults ("Female",
 // "Rabipur", "10:00 am"), which put data on screen that nobody entered.
-function InfoField({ label, value, full = false }) {
+// size 'lg': the General Information card, larger text at normal weight.
+function InfoField({ label, value, full = false, size = 'sm' }) {
+  const lg = size === 'lg';
   return (
     <div className={full ? 'col-span-2 min-w-0' : 'min-w-0'}>
-      <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wider block">{label}</span>
-      <span className="text-xs font-medium text-slate-900 mt-1 block break-words">{value || '—'}</span>
+      <span className={`${lg ? 'text-[11px]' : 'text-[10px]'} font-medium text-slate-500 uppercase tracking-wider block`}>{label}</span>
+      <span className={`${lg ? 'text-sm font-normal' : 'text-xs font-medium'} text-slate-900 mt-1 block break-words`}>{value || '—'}</span>
     </div>
   );
 }
@@ -79,13 +82,16 @@ function SectionTitle({ title, subtitle, action }) {
 /* ─────────────────────────── MEDICAL RECORD DETAIL (DOC-CENTER LAYOUT + DOSE SCHEDULE) ─────────────────────────── */
 // readOnly: opened from the Archive page. Every edit path (Edit Record, Add
 // Report, pin to map) is hidden and a Restore button is offered instead.
-export function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEdit, onPinMap, readOnly = false, onRestore, restoring = false, backLabel = 'Back to Patients List' }) {
+export function MedicalRecordDetail({ patient, records, patients, onBack, onToast, onEdit, onPinMap, readOnly = false, onRestore, restoring = false, backLabel = 'Back to Patients List', onAddAnotherService }) {
   const [patientApts, setPatientApts] = useState([]);
   const [aptsLoading, setAptsLoading] = useState(true);
   const [aptTab, setAptTab] = useState('all'); // 'all' | 'upcoming' | 'completed'
   const [showAddReportModal, setShowAddReportModal] = useState(false);
   const [viewingReport, setViewingReport] = useState(null);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [viewingCase, setViewingCase] = useState(null);
+  // A previous case exported from its pop-up: { caseData, index }.
+  const [exportingCase, setExportingCase] = useState(null);
 
   // Profile photo lives on patientAvatars/{mrn} (set from the patient app), fetched
   // only here so list views never pull image data.
@@ -189,7 +195,8 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
   // Same status rules as the Patients table, so the list and the record
   // never disagree about a patient.
   const completedOn = liveStatus === 'completed' ? getCompletionDate({ ...rec, ...patient }) : '';
-  const restoredOn = getRestoreDate({ ...rec, ...patient });
+  // Same rule as the Patients table (lib/patientArchive.js).
+  const restoredOn = showsRestoredLabel({ ...rec, ...patient }) ? getRestoreDate({ ...rec, ...patient }) : '';
   const isOverdue = liveStatus !== 'completed' && (liveStatus === 'overdue' || buildDoses(rec).some(d => d.status === 'miss'));
   const statusKey = liveStatus === 'completed' ? 'completed' : isOverdue ? 'overdue' : 'ongoing';
 
@@ -232,6 +239,30 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
             Export Patient Record
           </button>
+          {(isCompletedOrArchived || readOnly) && (
+            <button
+              className="px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors cursor-pointer flex items-center gap-1.5"
+              onClick={async () => {
+                try {
+                  if (patient.isArchived) {
+                    await restorePatientRecord(patient);
+                    onToast?.('Record restored from archive', 'success');
+                  }
+                } catch (e) {
+                  console.warn('Auto restore error:', e);
+                }
+                if (onAddAnotherService) {
+                  onAddAnotherService(patient);
+                } else {
+                  window.dispatchEvent(new CustomEvent('open-add-patient-modal', { detail: patient }));
+                }
+              }}
+              title="Add another vaccination service for this patient (reuses MRN)"
+            >
+              <Plus size={14} />
+              Add Another Service
+            </button>
+          )}
           {readOnly ? (
             onRestore && (
               <button
@@ -269,11 +300,20 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
             <h2 className="text-lg font-semibold text-slate-900 leading-tight truncate">{patient.name}</h2>
             <StatusBadge status={statusKey} size="md" />
             <ServiceBadge service={rec.service || patient.service} />
+            {restoredOn && (
+              <span
+                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-200"
+                title={`Restored on ${formatDateMedium(restoredOn)}${patient.restoredBy?.name ? ` by ${patient.restoredBy.name}` : ''}${Array.isArray(patient.restoreHistory) && patient.restoreHistory.length > 1
+                  ? ` · earlier restores: ${patient.restoreHistory.slice(0, -1).map(h => `${formatDateMedium(h.restoredAt)}${h.restoredBy?.name ? ` (${h.restoredBy.name})` : ''}`).join(', ')}`
+                  : ''}`}
+              >
+                Restored: {formatDateMedium(restoredOn)}
+              </span>
+            )}
           </div>
           <p className="text-xs text-slate-500 mt-1 truncate">
             {patient.email || 'No email registered'}
             {completedOn && <span className="text-slate-400"> · Completed on {formatDateMedium(completedOn)}</span>}
-            {restoredOn && <span className="text-slate-400"> · Restored on {formatDateMedium(restoredOn)}</span>}
           </p>
         </div>
         <div className="flex items-center gap-2.5 shrink-0">
@@ -291,50 +331,67 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
       {/* ── CLINICAL (wider) · GENERAL INFORMATION ── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-4">
 
-        {/* Medical History & Exposure — its own card, key facts first */}
+        {/* Medical History (& Exposure for PEP) — its own card, key facts
+            first. Only the fields this service asks (lib/serviceFields.js);
+            "—" means asked but left empty. */}
         <div className={`lg:col-span-7 ${card} p-6`}>
-          <SectionTitle title="Medical History & Exposure" />
           {(() => {
-            const cat = rec.cat || patient.cat;
-            const allergies = rec.allergies || patient.allergies;
+            const merged = { ...patient, ...rec };
+            const cfg = serviceFields(merged.service);
+            const isPepCard = cfg.exposure.length > 0;
+            const rows = [...serviceFieldRows(merged, 'exposure'), ...serviceFieldRows(merged, 'history', { exclude: ['notes'] })];
+            const factKeys = isPepCard ? ['cat', 'animal', 'allergies'] : [...new Set([cfg.history[0], 'allergies'])].filter(k => k && k !== 'notes');
+            const facts = factKeys.map(k => rows.find(r => r.key === k)).filter(Boolean);
+            const rest = rows.filter(r => !factKeys.includes(r.key));
+            const allergies = merged.allergies;
             const hasAllergy = Boolean(allergies) && !/^(none|no known allergies|n\/?a|unknown|—)$/i.test(String(allergies).trim());
-            const fact = (label, value, warn) => (
-              <div className={`rounded-xl border px-3.5 py-3 ${warn ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-slate-50'}`}>
+            const warnOf = k => (k === 'cat' ? String(merged.cat || '').includes('III') : k === 'allergies' ? hasAllergy : false);
+            const fact = (key, label, value, warn) => (
+              <div key={key} className={`rounded-xl border px-3.5 py-3 ${warn ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-slate-50'}`}>
                 <span className={`text-[10px] font-medium uppercase tracking-wider block ${warn ? 'text-amber-700' : 'text-slate-500'}`}>{label}</span>
-                <span className={`text-sm font-semibold mt-1 block ${value ? (warn ? 'text-amber-900' : 'text-slate-900') : 'text-slate-400'}`}>{value || '—'}</span>
+                <span className={`text-sm font-semibold mt-1 block break-words ${value ? (warn ? 'text-amber-900' : 'text-slate-900') : 'text-slate-400'}`}>{value || '—'}</span>
               </div>
             );
+            const treatments = Array.isArray(merged.treatments) ? merged.treatments : [];
+            const s = erigStatus(merged);
+            const showTreat = showsTreatments(merged);
             return (
               <>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
-                  {fact('Exposure Category', cat ? `Category ${cat}` : '', cat === 'III')}
-                  {fact('Biting Animal', rec.animal || patient.animal, false)}
-                  {fact('Known Allergies', allergies, hasAllergy)}
+                <SectionTitle title={isPepCard ? 'Medical History & Exposure' : 'Medical History'} />
+                <div className={`grid grid-cols-1 ${facts.length === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-3 mb-5`}>
+                  {facts.map(r => fact(r.key, r.label, r.value, warnOf(r.key)))}
                 </div>
-                <div className="grid grid-cols-3 gap-x-4 gap-y-3.5">
-                  <InfoField label="Wound Location" value={rec.woundLocation || patient.woundLocation || patient.biteLocation} />
-                  <InfoField label="Vaccine Brand" value={rec.vaccineBrand || patient.vaccineBrand} />
-                  <InfoField label="Past Vaccines" value={rec.pastVaccines || patient.pastVaccines} />
-                  {(() => {
-                    // ERIG (recorded in the Vaccination Tracker) for PEP records.
-                    const merged = { ...patient, ...rec };
-                    if ((merged.service || 'PEP') !== 'PEP') return null;
-                    const s = erigStatus(merged);
-                    const missing = s.required && !s.given;
-                    return (
+                {(rest.length > 0 || showTreat) && (
+                  <div className="grid grid-cols-3 gap-x-4 gap-y-3.5">
+                    {rest.map(r => <InfoField key={r.key} label={r.label} value={r.value} />)}
+                    {showTreat && (
                       <div className="col-span-3 min-w-0">
-                        <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wider block">ERIG</span>
-                        <span className={`text-xs font-medium mt-1 block break-words ${missing ? 'text-amber-700' : 'text-slate-900'}`}>
-                          {erigStatusLabel(merged, formatDateMedium)}
-                        </span>
+                        <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wider block">Category III Treatments</span>
+                        {treatments.length > 0 ? (
+                          <div className="mt-1.5 flex flex-wrap gap-2">
+                            {treatments.map((t, idx) => (
+                              <span key={t.id || idx} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-100 text-xs font-semibold text-slate-800">
+                                <span className="text-[#3B50DF] font-bold">{t.product}</span>
+                                <span className="text-slate-500">· {t.ml ?? t.mg ?? 0} mL</span>
+                                <span className="text-slate-400">· {formatDateMedium(t.date)}</span>
+                              </span>
+                            ))}
+                          </div>
+                        ) : s.given ? (
+                          <span className="text-xs font-medium mt-1 block text-slate-900">
+                            {erigStatusLabel(merged, formatDateMedium)}
+                          </span>
+                        ) : (
+                          <span className="text-xs font-medium mt-1 block text-amber-700">Required (Category III), not yet recorded</span>
+                        )}
                       </div>
-                    );
-                  })()}
-                </div>
+                    )}
+                  </div>
+                )}
                 <div className="pt-4 mt-4 border-t border-slate-100">
                   <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wider block mb-1.5">Doctor / Nurse Remarks</span>
                   <p className="text-xs text-slate-700 leading-relaxed bg-slate-50 px-3 py-2.5 rounded-lg border border-slate-200">
-                    {rec.notes || 'No clinical remarks recorded.'}
+                    {merged.notes || 'No clinical remarks recorded.'}
                   </p>
                 </div>
               </>
@@ -356,16 +413,16 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
               </button>
             )}
           />
-          <div className="grid grid-cols-2 gap-x-4 gap-y-3.5">
-            <InfoField label="Sex" value={rec.sex || patient.sex} />
-            <InfoField label="Birth Date / Age" value={[rec.dob ? fmtDate(rec.dob) : '', rec.age ? `${rec.age} yrs old` : ''].filter(Boolean).join(' · ')} />
-            <InfoField label="Height / Weight" value={[rec.height ? `${rec.height} cm` : '', rec.weight ? `${rec.weight} kg` : ''].filter(Boolean).join(' · ')} />
-            <InfoField label="Blood Pressure" value={rec.bloodPressure} />
-            <InfoField label="Mobile Number" value={rec.contact || patient.contact} />
-            <InfoField label="Registration Date" value={rec.date ? fmtDate(rec.date) : ''} />
-            <InfoField label="Address" value={rec.address && rec.address !== '—' ? rec.address : ''} full />
+          <div className="grid grid-cols-2 gap-x-4 gap-y-4">
+            <InfoField size="lg" label="Sex" value={rec.sex || patient.sex} />
+            <InfoField size="lg" label="Birth Date / Age" value={[rec.dob ? fmtDate(rec.dob) : '', rec.age ? `${rec.age} yrs old` : ''].filter(Boolean).join(' · ')} />
+            <InfoField size="lg" label="Height / Weight" value={[rec.height ? `${rec.height} cm` : '', rec.weight ? `${rec.weight} kg` : ''].filter(Boolean).join(' · ')} />
+            <InfoField size="lg" label="Blood Pressure" value={rec.bloodPressure} />
+            <InfoField size="lg" label="Mobile Number" value={rec.contact || patient.contact} />
+            <InfoField size="lg" label="Registration Date" value={rec.date ? fmtDate(rec.date) : ''} />
+            <InfoField size="lg" label="Address" value={rec.address && rec.address !== '—' ? rec.address : ''} full />
             {(rec.emergencyName || rec.emergencyPhone || rec.guardian || rec.emergencyContact) && (
-              <InfoField
+              <InfoField size="lg"
                 label="Emergency Contact"
                 full
                 value={rec.emergencyName
@@ -437,7 +494,13 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
                         </span>
                         <div className="min-w-0 flex-1">
                           <p className="text-xs font-medium truncate leading-tight text-slate-900">{d.label}</p>
-                          <p className="text-[11px] text-slate-500 mt-0.5">{d.date ? formatDateMedium(d.date) : 'Not scheduled'}</p>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            {d.date ? formatDateMedium(d.date) : 'Not scheduled'}
+                            {/* Brand given, per dose (Vaccination Tracker); old doses fall back to the record-level brand. */}
+                            {d.isDone && (d.brand || d.vaccineBrand || rec.vaccineBrand || patient.vaccineBrand) && (
+                              <span className="text-slate-400"> · {d.brand || d.vaccineBrand || rec.vaccineBrand || patient.vaccineBrand}</span>
+                            )}
+                          </p>
                         </div>
                         <span className={`text-[11px] font-medium shrink-0 ${tone.tag}`}>{tone.label}</span>
                       </li>
@@ -561,6 +624,99 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
         )}
       </div>
 
+      {/* ── PREVIOUS SERVICES (RETURNING PATIENT PRIOR CASES) ── */}
+      {(() => {
+        const historyList = (Array.isArray(patient?.caseHistory) && patient.caseHistory.length > 0)
+          ? patient.caseHistory
+          : (Array.isArray(rec?.caseHistory) && rec.caseHistory.length > 0)
+          ? rec.caseHistory
+          : [];
+        if (historyList.length === 0) return null;
+
+        return (
+          <div className={`${card} p-6 mt-4 flex flex-col`}>
+            <SectionTitle
+              title="Previous Services"
+              subtitle={`Earlier cases registered under this patient's MRN (${patient.id || patient.mrn || '—'})`}
+            />
+            <div className="rounded-xl border border-slate-200 overflow-hidden overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead className="bg-slate-50 text-[10.5px] uppercase font-semibold text-slate-500 border-b border-slate-200">
+                  <tr>
+                    <th className="px-4 py-3">Service</th>
+                    <th className="px-3.5 py-3">Date</th>
+                    <th className="px-3.5 py-3">Doses Given</th>
+                    <th className="px-3.5 py-3">RIG / Anti-Tetanus</th>
+                    <th className="px-3.5 py-3">Completion Date</th>
+                    <th className="px-3.5 py-3">Status</th>
+                    <th className="px-4 py-3 text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700">
+                  {historyList.map((hist, hIdx) => {
+                    const hDoses = Array.isArray(hist.doses) ? hist.doses : [];
+                    const hDone = hDoses.filter(d => d.s === 'done' || d.status === 'done' || d.done).length;
+                    const hTreatments = Array.isArray(hist.treatments) ? hist.treatments : [];
+                    const doseDatesSummary = hDoses
+                      .filter(d => d.date)
+                      .map((d, i) => `D${i + 1}: ${formatDateMedium(d.date)}`)
+                      .join(' · ');
+
+                    return (
+                      <tr key={hIdx} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <ServiceBadge service={hist.service || 'PEP'} />
+                            <span className="font-semibold text-slate-900">{serviceLabel(hist.service)}</span>
+                          </div>
+                          {/* Exposure category only for services that ask it (PEP). */}
+                          {serviceFields(hist.service).exposure.includes('cat') && (
+                            <span className="block mt-0.5 text-[10.5px] text-slate-500">{hist.cat ? `Category ${hist.cat}` : 'Category —'}</span>
+                          )}
+                        </td>
+                        <td className="px-3.5 py-3 whitespace-nowrap text-slate-600">
+                          {hist.date ? formatDateMedium(hist.date) : '—'}
+                        </td>
+                        <td className="px-3.5 py-3 whitespace-nowrap" title={doseDatesSummary || undefined}>
+                          <span className="font-semibold text-slate-900">{hDone} of {hDoses.length}</span>
+                          {doseDatesSummary && (
+                            <span className="block text-[10px] text-slate-400 truncate max-w-[160px]">{doseDatesSummary}</span>
+                          )}
+                        </td>
+                        <td className="px-3.5 py-3">
+                          {hTreatments.length ? (
+                            <span className="font-medium text-slate-800">
+                              {hTreatments.map(t => `${t.product} (${t.ml ?? t.mg ?? 0} mL)`).join(', ')}
+                            </span>
+                          ) : showsTreatments(hist) ? (
+                            <span className="text-slate-400">None</span>
+                          ) : null}
+                        </td>
+                        <td className="px-3.5 py-3 whitespace-nowrap text-slate-600">
+                          {hist.completedAt || hist.closedAt ? formatDateMedium(hist.completedAt || hist.closedAt) : '—'}
+                        </td>
+                        <td className="px-3.5 py-3 whitespace-nowrap">
+                          <StatusBadge status={hist.status || 'completed'} size="sm" />
+                        </td>
+                        <td className="px-4 py-3 text-center whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => setViewingCase({ caseData: hist, index: hIdx })}
+                            className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 hover:text-[#3B50DF] hover:border-indigo-200 transition-colors cursor-pointer inline-flex items-center gap-1"
+                          >
+                            <Eye size={12} /> View Record
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ── MODAL 1: ENHANCED ADD REPORT POP-UP CARD ── */}
       {showAddReportModal && (
         <AddReportModal
@@ -598,7 +754,252 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
           onToast={onToast}
         />
       )}
+
+      {/* ── MODAL 4: VIEW PREVIOUS CASE RECORD MODAL ── */}
+      {viewingCase && (
+        <ViewPreviousCaseModal
+          caseData={viewingCase.caseData}
+          index={viewingCase.index}
+          patientName={patient.name}
+          mrn={patient.id || patient.mrn || '—'}
+          onClose={() => setViewingCase(null)}
+          onExport={() => setExportingCase(viewingCase)}
+        />
+      )}
+
+      {/* ── MODAL 5: EXPORT ONE PREVIOUS CASE (its own snapshot, not the active case) ── */}
+      {exportingCase && (
+        <ExportReportModal
+          patients={patients || records}
+          initialPatient={historicalCaseRecord({ ...patient, ...(r || {}) }, exportingCase.caseData, exportingCase.index)}
+          onClose={() => setExportingCase(null)}
+          onToast={onToast}
+        />
+      )}
     </div>
+  );
+}
+
+/* ─────────────────────────── HISTORICAL CASE RECORD ─────────────────────────── */
+// The clinical part of a case: everything a previous-case snapshot holds. A
+// historical export takes these from the snapshot only, so nothing from the
+// active case can leak into it; a key the old snapshot never saved stays empty.
+const CASE_ARRAY_KEYS = ['doses', 'treatments', 'woundImages', 'reports'];
+const CASE_KEYS = [
+  'service', 'date', 'status', 'completedAt', 'closedAt',
+  'cat', 'animal', 'placeOfExposure', 'typeOfExposure', 'sourceOfExposure',
+  'woundLocation', 'woundDepth', 'woundWashed', 'numberOfBites', 'vaccineBrand',
+  'erig', 'rigGiven', 'rigTreatment', 'antiTetanusTreatment', 'notes', 'pastVaccines', 'pastVaccinesOther', 'allergies',
+  'woundType', 'lastTetanus', 'pneumoHistory', 'pneumoHistoryOther', 'riskCondition',
+  'height', 'weight', 'bloodPressure', ...CASE_ARRAY_KEYS,
+];
+
+/** A previous case as a record the export dialog can render: identity from the patient, the case from its snapshot. */
+export function historicalCaseRecord(patient, caseData, index) {
+  const caseFields = Object.fromEntries(CASE_KEYS.map(k => [
+    k, caseData?.[k] ?? (CASE_ARRAY_KEYS.includes(k) ? [] : k === 'erig' ? null : ''),
+  ]));
+  return {
+    // Identity: who the patient is does not change between cases.
+    name: patient.name, email: patient.email, contact: patient.contact,
+    age: patient.age, sex: patient.sex, dob: patient.dob,
+    address: patient.address, barangay: patient.barangay, zone: patient.zone,
+    emergencyName: patient.emergencyName, emergencyRel: patient.emergencyRel, emergencyPhone: patient.emergencyPhone,
+    guardian: patient.guardian, emergencyContact: patient.emergencyContact,
+    id: patient.id || patient.mrn, mrn: patient.mrn || patient.id,
+    ...caseFields,
+    service: caseData?.service || 'PEP',
+    status: caseData?.status || 'completed',
+    caseHistory: [],
+    isHistoricalCase: true,
+    historicalIndex: index + 1,
+  };
+}
+
+// Dose / treatment staff: the tracker saves givenByName / recordedByName;
+// older entries may carry administeredBy or staff.
+const doseStaff = d => d?.givenByName || d?.administeredBy || d?.staff || '';
+const treatmentStaff = t => t?.recordedByName || t?.staff || t?.administeredBy || '';
+const amountMl = x => (x?.ml ?? x?.mg) != null && (x?.ml ?? x?.mg) !== '' ? `${x.ml ?? x.mg} mL` : '';
+
+/* ─────────────────────────── VIEW PREVIOUS CASE MODAL ─────────────────────────── */
+function ViewPreviousCaseModal({ caseData, index, patientName, mrn, onClose, onExport }) {
+  if (!caseData) return null;
+  const doses = Array.isArray(caseData.doses) ? caseData.doses : [];
+  const treatments = Array.isArray(caseData.treatments) ? caseData.treatments : [];
+  const cfg = serviceFields(caseData.service);
+  // Only the fields this case's service asks (lib/serviceFields.js).
+  const rows = [...serviceFieldRows(caseData, 'exposure'), ...serviceFieldRows(caseData, 'history', { exclude: ['notes'] })];
+  const doneOf = d => d.s === 'done' || d.status === 'done' || d.done === true;
+
+  return (
+    <Modal onClose={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden max-w-3xl w-full m-auto flex flex-col max-h-[90vh]">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-bold text-slate-700 bg-white px-2 py-0.5 rounded-md border border-slate-200">
+                Case #{index + 1}
+              </span>
+              <ServiceBadge service={caseData.service || 'PEP'} />
+              <h3 className="text-base font-bold text-slate-900">{patientName}</h3>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              MRN: {mrn} · Registration: {formatDateMedium(caseData.date)}
+              {caseData.completedAt && ` · Completed: ${formatDateMedium(caseData.completedAt)}`}
+            </p>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition-colors cursor-pointer">
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Read-only banner */}
+        <div className="px-6 py-2.5 bg-slate-100/80 border-b border-slate-200 text-[11px] font-semibold text-slate-600 flex items-center justify-between">
+          <span className="flex items-center gap-1.5 text-slate-700">
+            <Eye size={13} className="text-[#3B50DF]" />
+            Historical Case Record · Read-Only Snapshot
+          </span>
+          <StatusBadge status={caseData.status || 'completed'} size="sm" />
+        </div>
+
+        {/* Content */}
+        <div className="p-6 overflow-y-auto space-y-5">
+          <div>
+            <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">{cfg.exposure.length ? 'Exposure & Case Details' : 'Case Details'}</h4>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs">
+              <div>
+                <span className="text-[10px] uppercase font-semibold text-slate-400 block">Service</span>
+                <span className="font-semibold text-slate-800">{serviceLabel(caseData.service || 'PEP')}</span>
+              </div>
+              {rows.map(r => (
+                <div key={r.key} className="min-w-0">
+                  <span className="text-[10px] uppercase font-semibold text-slate-400 block">{r.label}</span>
+                  <span className="font-semibold text-slate-800 break-words">{r.value || '—'}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Doses Table */}
+          <div>
+            <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">Vaccine Dose Schedule</h4>
+            {doses.length === 0 ? (
+              <p className="text-xs text-slate-500 italic bg-slate-50 p-3 rounded-lg border border-slate-200">No doses recorded for this case.</p>
+            ) : (
+              <div className="rounded-xl border border-slate-200 overflow-hidden overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead className="bg-slate-50 text-[10.5px] uppercase font-semibold text-slate-500 border-b border-slate-200">
+                    <tr>
+                      <th className="px-3.5 py-2.5">Dose</th>
+                      <th className="px-3.5 py-2.5">Scheduled Date</th>
+                      <th className="px-3.5 py-2.5">Status</th>
+                      <th className="px-3.5 py-2.5">Vaccine</th>
+                      <th className="px-3.5 py-2.5">Amount Given</th>
+                      <th className="px-3.5 py-2.5">Administered By</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-700">
+                    {doses.map((d, i) => {
+                      const isDone = doneOf(d);
+                      return (
+                        <tr key={i} className={i % 2 ? 'bg-slate-50/50' : 'bg-white'}>
+                          <td className="px-3.5 py-2.5 font-semibold text-slate-900">{d.n || d.label || `Dose ${i + 1}`}</td>
+                          <td className="px-3.5 py-2.5">{d.date ? formatDateMedium(d.date) : '—'}</td>
+                          <td className="px-3.5 py-2.5">
+                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${isDone ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-600'}`}>
+                              {isDone ? 'Given' : 'Pending'}
+                            </span>
+                          </td>
+                          {/* Brand given, per dose; an old dose falls back to the case's brand. */}
+                          <td className="px-3.5 py-2.5">{isDone ? (d.brand || d.vaccineBrand || caseData.vaccineBrand || '—') : '—'}</td>
+                          <td className="px-3.5 py-2.5 font-medium">{amountMl(d) || '—'}</td>
+                          <td className="px-3.5 py-2.5 text-slate-500">{doseStaff(d) || '—'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Treatments: only when the case recorded some, or a PEP Category III case */}
+          {showsTreatments(caseData) && (
+            <div>
+              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">Category III Treatments (RIG / Anti-Tetanus)</h4>
+              {treatments.length === 0 ? (
+                <p className="text-xs text-slate-500 italic bg-slate-50 p-3 rounded-lg border border-slate-200">No RIG / Anti-Tetanus entries recorded for this case.</p>
+              ) : (
+                <div className="rounded-xl border border-slate-200 overflow-hidden">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead className="bg-slate-50 text-[10.5px] uppercase font-semibold text-slate-500 border-b border-slate-200">
+                      <tr>
+                        <th className="px-3.5 py-2.5">Product</th>
+                        <th className="px-3.5 py-2.5">Amount Given</th>
+                        <th className="px-3.5 py-2.5">Date Given</th>
+                        <th className="px-3.5 py-2.5">Administered By</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-slate-700">
+                      {treatments.map((t, idx) => (
+                        <tr key={idx} className="bg-white">
+                          <td className="px-3.5 py-2.5 font-semibold text-[#3B50DF]">{t.product}</td>
+                          <td className="px-3.5 py-2.5 font-medium">{amountMl(t) || '—'}</td>
+                          <td className="px-3.5 py-2.5">{t.date ? formatDateMedium(t.date) : '—'}</td>
+                          <td className="px-3.5 py-2.5 text-slate-500">{treatmentStaff(t) || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Clinical reports logged during this case (kept with its snapshot) */}
+          {Array.isArray(caseData.reports) && caseData.reports.length > 0 && (
+            <div>
+              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">Clinical Reports & Nurse Notes</h4>
+              <ul className="rounded-xl border border-slate-200 divide-y divide-slate-100 text-xs">
+                {caseData.reports.map((rep, i) => (
+                  <li key={rep.id || i} className="px-3.5 py-2.5 flex gap-4">
+                    <span className="w-[92px] shrink-0 text-slate-500 tabular-nums">{formatDateMedium(rep.date || rep.createdAt)}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="font-semibold text-slate-900">{rep.title || 'Clinical Assessment'}</span>
+                      {(rep.notes || rep.injectionSite || rep.woundCondition) && <span className="block text-slate-600 mt-0.5">{rep.notes || rep.injectionSite || rep.woundCondition}</span>}
+                    </span>
+                    <span className="shrink-0 text-slate-500">{rep.author || '—'}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Clinical Remarks */}
+          <div>
+            <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">Clinical Remarks & Notes</h4>
+            <p className="text-xs text-slate-700 leading-relaxed bg-slate-50 px-3.5 py-2.5 rounded-lg border border-slate-200">
+              {caseData.notes || 'No clinical remarks recorded for this case.'}
+            </p>
+          </div>
+        </div>
+
+        {/* Footer: the pop-up stays read-only; Export only renders this snapshot. */}
+        <div className="px-6 py-3 border-t border-slate-200 bg-slate-50 flex justify-end gap-2">
+          {onExport && (
+            <button onClick={onExport} className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 transition-colors cursor-pointer inline-flex items-center gap-1.5"
+              title="Export this case's medical record (from its saved snapshot)">
+              <Download size={13} aria-hidden="true" /> Export
+            </button>
+          )}
+          <button onClick={onClose} className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 transition-colors cursor-pointer">
+            Close
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

@@ -1,34 +1,39 @@
-import { addDoc, collection, doc, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, doc, runTransaction } from 'firebase/firestore';
 import Modal from '../../components/Modal';
 import useDiscardGuard from '../../components/useDiscardGuard';
 import Select from '../../components/Select';
-import { AlertCircle, Check, Download, Edit3, Minus, Package, Plus, X, XCircle } from 'lucide-react';
+import { AlertCircle, Check, Download, Edit3, Package, Plus, X, XCircle } from 'lucide-react';
 import IconButton from '../../components/IconButton';
 import EmptyState from '../../components/EmptyState';
 import DatePicker from '../../components/DatePicker';
 import { BTN, BTN_ICON } from '../../lib/buttons';
 import { FieldError, useFieldErrors } from '../../components/FormValidation';
 
-// Add / Edit item checks, shown inline under each field.
-const INV_RULES = {
-  name: f => (f.name.trim() ? '' : 'Enter the item name'),
-  stock: f => (String(f.stock).trim() === '' ? 'Enter the stock on hand'
+// Add / Edit item checks, shown inline under each field. `others` is the
+// rest of the inventory (for the duplicate-name check).
+const normName = v => String(v || '').trim().replace(/\s+/g, ' ').toLowerCase();
+const invRules = (others) => ({
+  name: f => (!f.name.trim() ? 'Enter the item name'
+    : others.some(i => normName(i.name) === normName(f.name)) ? 'An item with this name already exists' : ''),
+  stock: f => (String(f.stock).trim() === '' ? 'Enter the vials in stock'
     : !/^\d+$/.test(String(f.stock).trim()) ? 'Use a whole number, 0 or more' : ''),
   category: f => (f.category ? '' : 'Choose a category'),
   unit: f => (f.unit ? '' : 'Choose a unit'),
   minStock: f => (!String(f.minStock || '').trim() ? 'Enter the low-stock threshold'
     : !/^[1-9]\d*$/.test(String(f.minStock).trim()) ? 'Use a whole number, 1 or more' : ''),
-};
-const INV_FIELDS = ['name', 'category', 'unit', 'stock', 'minStock'];
+  mlPerVial: f => (!String(f.mlPerVial || '').trim() ? 'Enter mL per vial'
+    : !Number.isFinite(Number(f.mlPerVial)) || toHund(f.mlPerVial) <= 0 ? 'Use a number greater than 0 (up to 2 decimals)' : ''),
+});
+const INV_FIELDS = ['name', 'category', 'unit', 'stock', 'minStock', 'mlPerVial'];
 // A new item starts blank (grey placeholders); nothing is pre-chosen.
-const EMPTY_ITEM = () => ({ name: '', category: '', unit: '', stock: '', minStock: '', expiry: '' });
-const INV_EDIT_FIELDS = ['name', 'stock'];
+const EMPTY_ITEM = () => ({ name: '', category: '', unit: '', stock: '', minStock: '', expiry: '', mlPerVial: '' });
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '../../lib/firebase';
 import { peekLiveCollection, useLiveCollection } from '../../lib/liveStore';
 import Toast from '../../components/Toast';
-import { deriveStockLabel, deriveStockStatus, fmtUnit } from '../../lib/inventoryStock';
+import { EXPIRED_NOTE, deriveStockLabel, deriveStockStatus, fmtUnit, formatStockVials, fromHund, getItemStockMl, isExpired, toHund } from '../../lib/inventoryStock';
 import { lazyModal } from '../../components/LazyModal';
+import { INVENTORY_CATEGORIES, inventoryCategoryLabel, inventoryCategoryOf } from '../../lib/inventoryCategories';
 import Pager, { paginate, useTableReserve } from '../../components/Pager';
 import { getTodayDateString } from '../../lib/formatters';
 
@@ -191,12 +196,8 @@ export default function VaccineInventoryPage() {
   // Edit modal state
   const [showEditModal, setShowEditModal] = useState(false);
   const [editFormData, setEditFormData] = useState(EMPTY_ITEM());
-  const addV = useFieldErrors(INV_RULES, formData, 'inv');
-  const editV = useFieldErrors(INV_RULES, editFormData, 'invedit');
-
-  // Use stock modal state
-  const [showUseStockModal, setShowUseStockModal] = useState(false);
-  const [useStockQty, setUseStockQty] = useState(1);
+  const addV = useFieldErrors(invRules(inventory), formData, 'inv');
+  const editV = useFieldErrors(invRules(inventory.filter(i => i.id !== selectedItem?.id)), editFormData, 'invedit');
 
   // Closing an add/edit/use-stock popup with unsaved entries asks first.
   const [requestCloseAdd, addDiscardDialog] = useDiscardGuard(formData,
@@ -205,9 +206,6 @@ export default function VaccineInventoryPage() {
   const [requestCloseEdit, editDiscardDialog] = useDiscardGuard(editFormData,
     () => { setShowEditModal(false); setSelectedItem(null); },
     { resetKey: showEditModal && selectedItem?.id, enabled: showEditModal });
-  const [requestCloseUse, stockUseDiscardDialog] = useDiscardGuard(useStockQty,
-    () => { setShowUseStockModal(false); setSelectedItem(null); },
-    { resetKey: showUseStockModal && selectedItem?.id, enabled: showUseStockModal });
 
   // Shared live inventory (lib/liveStore.js).
   const invLive = useLiveCollection('inventory');
@@ -240,7 +238,7 @@ export default function VaccineInventoryPage() {
   }, []);
 
   const categories = useMemo(
-    () => Array.from(new Set(inventory.map(i => (i.category || '').trim()).filter(Boolean))).sort(),
+    () => Array.from(new Set(inventory.map(i => inventoryCategoryLabel(i)))).sort(),
     [inventory]
   );
   const today = getTodayDateString();
@@ -257,7 +255,7 @@ export default function VaccineInventoryPage() {
     const stockNum = item => parseInt(item.stock, 10) || 0;
     return inventory
       .filter(item => !q || (item.name || '').toLowerCase().includes(q))
-      .filter(item => categoryFilter === 'all' || (item.category || '').trim() === categoryFilter)
+      .filter(item => categoryFilter === 'all' || inventoryCategoryLabel(item) === categoryFilter)
       .filter(item => stockFilter === 'all' || deriveStockStatus(item) === stockFilter)
       .filter(item => !expiringOnly || isExpiringSoon(item))
       .sort((a, b) => {
@@ -282,19 +280,24 @@ export default function VaccineInventoryPage() {
     setSaving(true);
     try {
       const stockNum = Number(formData.stock) || 0;
-      const minStockNum = Number(formData.minStock);
+      const minStockNum = Number(formData.minStock) || 10;
       const selectedCapitalizedUnit = fmtUnit(formData.unit);
       const expirationDate = formData.expiry || '';
+      // Rounded to 2 decimals; the pool is kept in whole hundredths.
+      const mlPerVialNum = fromHund(toHund(formData.mlPerVial));
+      const stockMl = fromHund(stockNum * toHund(mlPerVialNum));
 
       const newItem = {
         name: formData.name.trim(),
         category: formData.category,
         stock: stockNum,
+        stockMl,
+        mlPerVial: mlPerVialNum,
         minStock: minStockNum,
         unit: selectedCapitalizedUnit,
         expiry: expirationDate,
         expiryDate: expirationDate,
-        status: stockNum <= 0 ? 'critical' : stockNum <= minStockNum ? 'warning' : 'in-stock',
+        status: deriveStockStatus({ stock: stockNum, stockMl, mlPerVial: mlPerVialNum, minStock: minStockNum }),
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
@@ -311,82 +314,88 @@ export default function VaccineInventoryPage() {
   };
 
   /* ── Edit Item ── */
+  // The form opens with the item's current values. "Vials in stock" is the
+  // whole vials of the current pool; the leftover mL of an opened vial stays
+  // in the total mL and is carried over unchanged.
   const openEditModal = (item) => {
-    setSelectedItem(item);
+    const mlPerVial = parseFloat(item.mlPerVial || item.mgPerVial) || 0;
+    const poolH = toHund(getItemStockMl(item) ?? 0);
+    const vialH = toHund(mlPerVial);
+    const vials = vialH > 0 ? Math.floor(poolH / vialH) : (parseInt(item.stock, 10) || 0);
+    setSelectedItem({ ...item, _openVials: vials, _openMlPerVial: mlPerVial, _openPoolMl: fromHund(poolH) });
     setEditFormData({
       name: item.name || '',
-      category: item.category || 'Vaccine',
-      unit: item.unit || 'Vials',
-      stock: String(item.stock ?? ''),
+      category: inventoryCategoryOf(item),
+      unit: item.unit || '',
+      stock: String(vials),
       minStock: String(item.minStock ?? 10),
-      expiry: item.expiry || item.expiryDate || ''
+      expiry: item.expiry || item.expiryDate || '',
+      mlPerVial: mlPerVial ? String(mlPerVial) : '',
     });
     editV.clear();
     setShowEditModal(true);
   };
 
-  const handleEditSave = async () => {
-    if (!selectedItem || !editV.validate(INV_EDIT_FIELDS)) return;
-    setSaving(true);
-    try {
-      const stockNum = Number(editFormData.stock) || 0;
-      const minStockNum = Number(editFormData.minStock) || 10;
-      const selectedCapitalizedUnit = fmtUnit(editFormData.unit || 'Vials');
-      const expirationDate = editFormData.expiry || '';
+  // New pool, in whole hundredths of a mL:
+  //   current pool + (typed vials × new mL per vial) − (vials shown × old mL per vial)
+  // Unchanged fields leave the pool exactly as it is; adding vials adds
+  // whole vials (stock-in); changing mL per vial re-sizes the sealed vials
+  // and keeps the opened vial's loose mL. It reads the item inside a
+  // transaction, so a dose given while the form was open is not lost.
+  const editedPoolHund = (freshPoolH, form, open) => {
+    const newVialH = toHund(form.mlPerVial);
+    const vials = parseInt(form.stock, 10) || 0;
+    if (!open._openMlPerVial) return vials * newVialH; // item had no mL per vial yet
+    return freshPoolH + vials * newVialH - open._openVials * toHund(open._openMlPerVial);
+  };
 
-      const updated = {
-        name: editFormData.name.trim(),
-        category: editFormData.category,
-        unit: selectedCapitalizedUnit,
-        stock: stockNum,
-        minStock: minStockNum,
-        expiry: expirationDate,
-        expiryDate: expirationDate,
-        status: stockNum <= 0 ? 'critical' : stockNum <= minStockNum ? 'warning' : 'in-stock',
-        updatedAt: Date.now(),
-      };
-      await updateDoc(doc(db, 'inventory', selectedItem.id), updated);
+  const handleEditSave = async () => {
+    if (!selectedItem || !editV.validate(INV_FIELDS)) return;
+    setSaving(true);
+    const open = selectedItem;
+    try {
+      const updated = await runTransaction(db, async (tx) => {
+        const ref = doc(db, 'inventory', open.id);
+        const snap = await tx.get(ref);
+        if (!snap.exists()) throw new Error('This item no longer exists.');
+        const fresh = snap.data();
+        const freshPoolH = toHund(getItemStockMl(fresh) ?? 0);
+        const newPoolH = editedPoolHund(freshPoolH, editFormData, open);
+        if (newPoolH < 0) {
+          const err = new Error(`That leaves ${fromHund(newPoolH)} mL. Stock can't go below 0 mL.`);
+          err.code = 'negative';
+          throw err;
+        }
+        const mlPerVialNum = fromHund(toHund(editFormData.mlPerVial));
+        const vialH = toHund(mlPerVialNum);
+        const minStockNum = parseInt(editFormData.minStock, 10) || 10;
+        const stockMl = fromHund(newPoolH);
+        const data = {
+          name: editFormData.name.trim(),
+          category: editFormData.category,
+          unit: fmtUnit(editFormData.unit),
+          stock: Math.floor(newPoolH / vialH),
+          stockMl,
+          mlPerVial: mlPerVialNum,
+          minStock: minStockNum,
+          expiry: editFormData.expiry || '',
+          expiryDate: editFormData.expiry || '',
+          status: deriveStockStatus({ stockMl, mlPerVial: mlPerVialNum, minStock: minStockNum }),
+          updatedAt: Date.now(),
+        };
+        tx.update(ref, data);
+        return { ...data, before: fromHund(freshPoolH) };
+      });
       setShowEditModal(false);
       setSelectedItem(null);
-      showToast(`${updated.name} updated`, 'success');
+      showToast(`${updated.name} updated. Stock: ${updated.before} mL → ${updated.stockMl} mL (${formatStockVials(updated)}).`, 'success');
     } catch (err) {
-      console.error('Inventory edit error:', err);
-      showToast('Could not save the changes. Please try again.', 'error');
+      if (err?.code === 'negative') showToast(err.message, 'error');
+      else { console.error('Inventory edit error:', err); showToast('Could not save the changes. Nothing was changed. Please try again.', 'error'); }
     } finally {
       setSaving(false);
     }
   };
-
-  /* ── Use Stock (reduce) ── */
-  const openUseStockModal = (item) => {
-    setSelectedItem(item);
-    setUseStockQty(1);
-    setShowUseStockModal(true);
-  };
-
-  const handleUseStock = () => {
-    if (!selectedItem) return;
-    const currentStock = parseInt(selectedItem.stock) || 0;
-    const qty = parseInt(useStockQty) || 0;
-    if (qty <= 0 || qty > currentStock) return;
-    const newStock = currentStock - qty;
-    const minStock = parseInt(selectedItem.minStock, 10) || 10;
-    const name = selectedItem.name;
-    setShowUseStockModal(false);
-    setSelectedItem(null);
-    updateDoc(doc(db, 'inventory', selectedItem.id), {
-      stock: newStock,
-      status: newStock <= 0 ? 'critical' : newStock <= minStock ? 'warning' : 'in-stock',
-      updatedAt: Date.now(),
-    })
-      .then(() => showToast(`${name} stock updated to ${newStock}`, 'success'))
-      .catch(err => {
-        console.error('Use stock error:', err);
-        showToast('Could not update the stock. Please try again.', 'error');
-      });
-  };
-
-
 
   return (
     <div className="p-4">
@@ -559,13 +568,14 @@ export default function VaccineInventoryPage() {
         <div ref={tableAreaRef} style={{ overflowX: 'auto', minHeight: filtered.length ? tableReserve : undefined }}>
           <table className="kna-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '.8125rem', tableLayout: 'fixed' }}>
             <thead>
-              <tr style={{ background: '#FAFAFA', borderBottom: '1px solid #E2E8F0', color: '#64748B', fontSize: '.6875rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.5px' }}>
-                <th style={{ padding: '16px 12px 16px 20px', width: '25%', fontWeight: 600, color: '#64748B' }}>Item Name</th>
-                <th style={{ padding: '16px 12px', width: '18%', fontWeight: 600, color: '#64748B' }}>Category</th>
-                <th style={{ padding: '16px 12px', width: '18%', fontWeight: 600, color: '#64748B' }}>Stock</th>
-                <th style={{ padding: '16px 12px', width: '17%', fontWeight: 600, color: '#64748B' }}>Expiry</th>
+              <tr style={{ background: '#FAFAFA', borderBottom: '1px solid #E2E8F0', color: '#64748B', fontSize: '.6875rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.5px', whiteSpace: 'nowrap' }}>
+                <th style={{ padding: '16px 12px 16px 20px', width: '30%', fontWeight: 600, color: '#64748B' }}>Item Name</th>
+                <th style={{ padding: '16px 12px', width: '14%', fontWeight: 600, color: '#64748B' }}>Category</th>
+                <th style={{ padding: '16px 12px', width: '11%', fontWeight: 600, color: '#64748B' }}>mL per Vial</th>
+                <th style={{ padding: '16px 12px', width: '14%', fontWeight: 600, color: '#64748B' }}>Stock</th>
+                <th style={{ padding: '16px 12px', width: '12%', fontWeight: 600, color: '#64748B' }}>Expiry</th>
                 <th style={{ padding: '16px 12px', width: '12%', fontWeight: 600, color: '#64748B' }}>Status</th>
-                <th style={{ padding: '16px 20px 16px 12px', width: '120px', textAlign: 'center', fontWeight: 600, color: '#64748B' }}>Actions</th>
+                <th style={{ padding: '16px 20px 16px 12px', width: '96px', textAlign: 'center', fontWeight: 600, color: '#64748B' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -580,38 +590,62 @@ export default function VaccineInventoryPage() {
                     {item.name}
                   </td>
                   <td style={{ padding: '16px 12px', color: '#475569', fontWeight: 500 }}>
-                    {item.category}
+                    {inventoryCategoryLabel(item, { short: true })}
+                  </td>
+                  <td style={{ padding: '16px 12px', color: '#475569', fontWeight: 600 }}>
+                    {item.mlPerVial ? (
+                      `${item.mlPerVial} mL`
+                    ) : (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200">
+                        Set mL per vial
+                      </span>
+                    )}
                   </td>
                   <td style={{ padding: '16px 12px' }}>
-                    {/* An item at zero stays listed; the red count and the
-                        Out of Stock badge mark it for restocking. */}
-                    <span style={{ fontWeight: 700, color: deriveStockStatus(item) === 'out-of-stock' ? '#DC2626' : '#0F172A' }}>{parseInt(item.stock, 10) || 0}</span>
-                    <span style={{ fontSize: '.6875rem', color: '#64748B', fontWeight: 600, marginLeft: 4 }}>{fmtUnit(item.unit)}</span>
+                    {item.mlPerVial ? (
+                      <>
+                        {/* Whole vials on top; total mL below (it includes an opened vial's leftover). */}
+                        <div style={{ fontWeight: 500, color: deriveStockStatus(item) === 'out-of-stock' ? '#DC2626' : '#0F172A', fontSize: '.875rem', lineHeight: 1.3 }}>
+                          {formatStockVials(item)}
+                        </div>
+                        <div style={{ fontSize: '.75rem', color: '#64748B', fontWeight: 400, marginTop: 2 }}>
+                          {getItemStockMl(item)} mL total
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <span style={{ fontWeight: 500, color: deriveStockStatus(item) === 'out-of-stock' ? '#DC2626' : '#0F172A', fontSize: '.875rem' }}>{parseInt(item.stock, 10) || 0}</span>
+                        <span style={{ fontSize: '.8125rem', color: '#64748B', fontWeight: 600, marginLeft: 4 }}>{fmtUnit(item.unit)}</span>
+                        <div style={{ fontSize: '.75rem', color: '#D97706', fontWeight: 600, marginTop: 3 }}>Set mL per vial</div>
+                      </>
+                    )}
                   </td>
                   <td style={{ padding: '16px 12px', color: '#64748B', fontWeight: 400 }}>
                     {item.expiry || '—'}
                     {isExpiringSoon(item) && (
                       <span style={{ display: 'block', fontSize: '.6875rem', fontWeight: 600, color: expiryOf(item) < today ? '#DC2626' : '#D97706', marginTop: 2 }}>
-                        {expiryOf(item) < today ? 'Expired' : 'Expiring soon'}
+                        {isExpired(item, today) ? EXPIRED_NOTE : 'Expiring soon'}
                       </span>
                     )}
                   </td>
                   <td style={{ padding: '16px 12px' }}>
                     {(() => {
                       const st = deriveStockStatus(item);
-                      const isOut = st === 'out-of-stock';
+                      // Expired stock cannot be used, so it reads like out of stock.
+                      const expired = isExpired(item, today);
+                      const isOut = expired || st === 'out-of-stock';
                       const isLow = st === 'low-stock';
                       const bg = isOut ? '#FEF2F2' : isLow ? '#FFFBEB' : '#ECFDF5';
                       const color = isOut ? '#DC2626' : isLow ? '#D97706' : '#059669';
                       const border = isOut ? '1px solid #FCA5A5' : isLow ? '1px solid #FDE68A' : '1px solid #A7F3D0';
                       return (
                         <span style={{
-                          display: 'inline-block', padding: '4px 10px', borderRadius: '9999px', fontSize: '.6875rem', fontWeight: 600,
+                          display: 'inline-block', padding: '4px 10px', borderRadius: '9999px', fontSize: '.6875rem', fontWeight: 600, whiteSpace: 'nowrap',
                           background: bg,
                           color: color,
                           border: border
                         }}>
-                          {deriveStockLabel(item)}
+                          {expired ? 'Expired' : deriveStockLabel(item)}
                         </span>
                       );
                     })()}
@@ -625,7 +659,7 @@ export default function VaccineInventoryPage() {
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={6} style={{ padding: 0 }}>
+                  <td colSpan={7} style={{ padding: 0 }}>
                     <EmptyState icon={Package} title="No items found" text="Try a different search or filter, or add a new item." />
                   </td>
                 </tr>
@@ -676,9 +710,7 @@ export default function VaccineInventoryPage() {
                     className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 focus:border-[#3B50DF] outline-none"
                   >
                     <option value="">Select category</option>
-                    <option value="Vaccine">Vaccine</option>
-                    <option value="Medicine">Medicine</option>
-                    <option value="Supply">Supply</option>
+                    {INVENTORY_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                   </Select>
                   <FieldError v={addV} name="category" />
                 </div>
@@ -702,7 +734,7 @@ export default function VaccineInventoryPage() {
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label htmlFor="inv-stock" className="text-[13px] font-semibold text-slate-600 block mb-1.5">Stock <span className="text-red-500">*</span></label>
+                  <label htmlFor="inv-stock" className="text-[13px] font-semibold text-slate-600 block mb-1.5">Vials in stock <span className="text-red-500">*</span></label>
                   <input
                     type="number"
                     {...addV.field('stock')}
@@ -737,6 +769,25 @@ export default function VaccineInventoryPage() {
                     className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 focus:border-[#3B50DF] outline-none"
                   />
                 </div>
+              </div>
+              <div>
+                <label htmlFor="inv-mlPerVial" className="text-[13px] font-semibold text-slate-600 block mb-1.5">mL per vial <span className="text-red-500">*</span></label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  {...addV.field('mlPerVial')}
+                  placeholder="e.g. 0.5 or 1.0"
+                  value={formData.mlPerVial || ''}
+                  onChange={e => setFormData(f => ({ ...f, mlPerVial: e.target.value }))}
+                  className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 focus:border-[#3B50DF] outline-none"
+                />
+                <FieldError v={addV} name="mlPerVial" />
+                <span className="text-[11px] text-slate-400 mt-1 block">
+                  {toHund(formData.mlPerVial) > 0 && /^\d+$/.test(String(formData.stock).trim())
+                    ? `Stock pool: ${formData.stock} vials × ${fromHund(toHund(formData.mlPerVial))} mL = ${fromHund(parseInt(formData.stock, 10) * toHund(formData.mlPerVial))} mL`
+                    : 'Vials pool into total mL (e.g. 10 vials × 0.5 mL = 5 mL)'}
+                </span>
               </div>
             </div>
 
@@ -792,35 +843,39 @@ export default function VaccineInventoryPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-[13px] font-semibold text-slate-600 block mb-1.5">Category</label>
+                  <label htmlFor="invedit-category" className="text-[13px] font-semibold text-slate-600 block mb-1.5">Category <span className="text-red-500">*</span></label>
                   <Select
+                    {...editV.field('category', { withBlur: false })}
                     value={editFormData.category}
                     onChange={e => setEditFormData(f => ({ ...f, category: e.target.value }))}
                     className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 focus:border-[#3B50DF] outline-none"
                   >
-                    <option value="Vaccine">Vaccine</option>
-                    <option value="Medicine">Medicine</option>
-                    <option value="Supply">Supply</option>
+                    <option value="">Select category</option>
+                    {INVENTORY_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                   </Select>
+                  <FieldError v={editV} name="category" />
                 </div>
                 <div>
-                  <label className="text-[13px] font-semibold text-slate-600 block mb-1.5">Unit</label>
+                  <label htmlFor="invedit-unit" className="text-[13px] font-semibold text-slate-600 block mb-1.5">Unit <span className="text-red-500">*</span></label>
                   <Select
+                    {...editV.field('unit', { withBlur: false })}
                     value={editFormData.unit}
                     onChange={e => setEditFormData(f => ({ ...f, unit: e.target.value }))}
                     className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 focus:border-[#3B50DF] outline-none"
                   >
+                    <option value="">Select unit</option>
                     <option value="Vials">Vials</option>
                     <option value="Tablets">Tablets</option>
                     <option value="Bottles">Bottles</option>
                     <option value="Boxes">Boxes</option>
                     <option value="Pcs">Pcs</option>
                   </Select>
+                  <FieldError v={editV} name="unit" />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label htmlFor="invedit-stock" className="text-[13px] font-semibold text-slate-600 block mb-1.5">Stock Quantity <span className="text-red-500">*</span></label>
+                  <label htmlFor="invedit-stock" className="text-[13px] font-semibold text-slate-600 block mb-1.5">Vials in stock <span className="text-red-500">*</span></label>
                   <input
                     type="number"
                     {...editV.field('stock')}
@@ -833,6 +888,18 @@ export default function VaccineInventoryPage() {
                   <FieldError v={editV} name="stock" />
                 </div>
                 <div>
+                  <label htmlFor="invedit-minStock" className="text-[13px] font-semibold text-slate-600 block mb-1.5">Min Threshold <span className="text-red-500">*</span></label>
+                  <input
+                    type="number"
+                    {...editV.field('minStock')}
+                    min="1"
+                    value={editFormData.minStock || ''}
+                    onChange={e => setEditFormData(f => ({ ...f, minStock: e.target.value }))}
+                    className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 focus:border-[#3B50DF] outline-none"
+                  />
+                  <FieldError v={editV} name="minStock" />
+                </div>
+                <div>
                   <label className="text-[13px] font-semibold text-slate-600 block mb-1.5">Expiry Date</label>
                   <DatePicker
                     value={editFormData.expiry}
@@ -842,6 +909,29 @@ export default function VaccineInventoryPage() {
                     className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 focus:border-[#3B50DF] outline-none"
                   />
                 </div>
+              </div>
+              <div>
+                <label htmlFor="invedit-mlPerVial" className="text-[13px] font-semibold text-slate-600 block mb-1.5">mL per vial <span className="text-red-500">*</span></label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  {...editV.field('mlPerVial')}
+                  placeholder="e.g. 0.5 or 1.0"
+                  value={editFormData.mlPerVial || ''}
+                  onChange={e => setEditFormData(f => ({ ...f, mlPerVial: e.target.value }))}
+                  className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 focus:border-[#3B50DF] outline-none"
+                />
+                <FieldError v={editV} name="mlPerVial" />
+                {/* What saving will do to the pool, from the same formula the save uses. */}
+                <span className="text-[11px] text-slate-500 mt-1 block">
+                  Now: {selectedItem._openPoolMl} mL{selectedItem._openMlPerVial ? ` (${formatStockVials(selectedItem)})` : ''}
+                  {(() => {
+                    if (!/^\d+$/.test(String(editFormData.stock).trim()) || toHund(editFormData.mlPerVial) <= 0) return null;
+                    const h = editedPoolHund(toHund(selectedItem._openPoolMl), editFormData, selectedItem);
+                    return h < 0 ? <span className="text-red-600"> · would go below 0 mL</span> : <> · after saving: <strong>{fromHund(h)} mL</strong></>;
+                  })()}
+                </span>
               </div>
             </div>
 
@@ -858,61 +948,8 @@ export default function VaccineInventoryPage() {
                 disabled={saving}
                 className={`${BTN.primary} flex-1`}
               >
-                <Check size={BTN_ICON} /> Save Changes
+                <Check size={BTN_ICON} /> {saving ? 'Saving…' : 'Save Changes'}
               </button>
-            </div>
-          </div>
-        </Modal>
-      )}
-
-      {/* ── Use Stock Modal (Portaled to body) ── */}
-      {showUseStockModal && selectedItem && (
-        <Modal onClose={requestCloseUse}>
-          {stockUseDiscardDialog}
-          <div className="bg-white rounded-2xl w-full max-w-xs overflow-hidden shadow-xl" onClick={e => e.stopPropagation()}>
-            <div className="p-6">
-              <div className="text-center mb-4">
-                <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center mx-auto mb-3">
-                  <Minus size={24} />
-                </div>
-                <h2 className="text-base font-bold text-gray-900">Use Stock</h2>
-                <p className="text-sm text-gray-400 mt-1">
-                  Reduce stock for <span className="font-bold text-gray-600">{selectedItem.name}</span>
-                </p>
-                <p className="text-xs text-gray-400 mt-1">
-                  Current stock: <span className="font-black text-gray-700">{selectedItem.stock}</span> {fmtUnit(selectedItem.unit)}
-                </p>
-              </div>
-              <div className="mb-4">
-                <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">Quantity to Use <span className="text-red-500">*</span></label>
-                <input
-                  type="number"
-                  min="1"
-                  max={selectedItem.stock}
-                  value={useStockQty}
-                  onChange={e => setUseStockQty(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm font-bold text-center focus:ring-1 focus:ring-amber-500 outline-none"
-                />
-                <p className="text-[11px] text-gray-400 mt-1.5">
-                  Remaining after use: <span className="font-bold text-gray-600">{Math.max(0, (parseInt(selectedItem.stock) || 0) - (parseInt(useStockQty) || 0))}</span> {fmtUnit(selectedItem.unit)}
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={requestCloseUse}
-                  className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-lg font-bold text-xs hover:bg-gray-50 transition-all"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleUseStock}
-                  disabled={(parseInt(useStockQty) || 0) <= 0 || (parseInt(useStockQty) || 0) > (parseInt(selectedItem.stock) || 0)}
-                  className="flex-1 py-2.5 text-white rounded-lg font-bold text-xs transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
-                  style={{ background: '#F59E0B' }}
-                >
-                  <Minus size={13} /> Confirm
-                </button>
-              </div>
             </div>
           </div>
         </Modal>

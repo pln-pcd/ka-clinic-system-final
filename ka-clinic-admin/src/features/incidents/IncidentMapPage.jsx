@@ -3,35 +3,71 @@
 //
 // Shows ONLY simulated, non-identifiable test incidents (isSimulated: true,
 // see lib/simulatedIncidents.js): no addresses, barangays, zones, patients
-// or coordinates appear anywhere on this page, there is no barangay filter or
-// per-barangay count, a banner says the data is simulated, and the map area
+// or coordinates appear anywhere on this page (the barangay filter places
+// each pin by its coordinates on the page; nothing is stored), a banner says the data is simulated, and the map area
 // carries a "SIMULATED DATA" watermark so any screenshot is marked. Only
 // signed-in admins reach it (dashboard route + firestore.rules).
-import { AlertTriangle, MapPin, ShieldAlert } from 'lucide-react';
+import { CheckCircle2, ChevronDown, Layers, MapPin, ShieldAlert } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { SIM_BOUNDS, simulatedIncidentLabel, simulatedMonthLabel } from '../../lib/simulatedIncidents';
-import { MAP_BANNER } from '../../lib/studyMode';
+import { LIBON_BARANGAYS, LIBON_BARANGAY_COORDS } from '../../lib/libonGeo';
 
 import { SkeletonRows } from '../../components/Skeleton';
 // Severity colors mirror the Category II/III convention used across the
 // rest of the app (vaccination tracker, patient records).
+// Category I is not used (exposures start at Category II), so it has no
+// colour, no legend entry and no pins.
 const CATEGORY_COLOR = { 'Category II': '#EA7A0C', 'Category III': '#D81B25' };
-// Anything else (an old "Category I" pin, or none) is grey and not in the legend.
+// Anything else is grey and not in the legend.
 const UNKNOWN_COLOR = '#64748B';
+
+// Barangay filter: the named Libon barangays (the Zone 1–11 poblacion zones
+// are left out, as before). A pin stores no barangay; the page places it in
+// the barangay whose map point is nearest to the pin.
+const MAP_BARANGAYS = LIBON_BARANGAYS.filter(b => !/^Zone \d+$/.test(b)).sort((a, b) => a.localeCompare(b));
+const nearestBarangay = (lat, lng) => {
+  if (!lat || !lng) return '';
+  const k = Math.cos((lat * Math.PI) / 180); // degrees of longitude are shorter
+  let best = '', bestD = Infinity;
+  for (const b of MAP_BARANGAYS) {
+    const c = LIBON_BARANGAY_COORDS[b];
+    if (!c) continue;
+    const d = (c.lat - lat) ** 2 + ((c.lng - lng) * k) ** 2;
+    if (d < bestD) { bestD = d; best = b; }
+  }
+  return best;
+};
 const categoryColor = (cat) => CATEGORY_COLOR[cat] || UNKNOWN_COLOR;
+
+// Cases closer than about 150 m would draw on top of each other, so each
+// group is fanned out on a small ring around its first case. Every case keeps
+// its own pin (nothing is combined); only where it is drawn moves slightly.
+const OVERLAP_DEG = 0.0014;
+const RING_DEG = 0.0012;
+function spreadOverlapping(pins) {
+  const groups = [];
+  pins.forEach(p => {
+    const g = groups.find(gr => Math.abs(gr[0].lat - p.lat) < OVERLAP_DEG && Math.abs(gr[0].lng - p.lng) < OVERLAP_DEG);
+    if (g) g.push(p); else groups.push([p]);
+  });
+  return groups.flatMap(g => (g.length === 1 ? g : g.map((p, i) => {
+    const a = (2 * Math.PI * i) / g.length;
+    return { ...p, lat: g[0].lat + RING_DEG * Math.sin(a), lng: g[0].lng + RING_DEG * Math.cos(a) };
+  })));
+}
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 // Popup above a pressed pin: a generic label only (no place, no coordinates).
 const popupHtml = (inc, color) => `
   <div class="kna-pop">
-    <div class="kna-pop-eyebrow">Simulated incident</div>
-    <div class="kna-pop-loc">Simulated incident #${esc(inc.simNo ?? '?')}</div>
+    <div class="kna-pop-eyebrow">Exposure Incident</div>
+    <div class="kna-pop-loc">Incident #${esc(inc.simNo ?? '?')}</div>
     <div class="kna-pop-grid">
       <div class="kna-pop-cell"><span>Type</span><b>${esc(inc.type || 'Animal bite')}</b></div>
       <div class="kna-pop-cell"><span>Category</span><b style="color:${color}"><i style="background:${color}"></i>${esc(inc.category || '—')}</b></div>
       <div class="kna-pop-cell kna-pop-wide"><span>Month</span><b>${esc(simulatedMonthLabel(inc.month) || '—')}</b></div>
     </div>
-    <div class="kna-pop-anon">Simulated test data, not a real case</div>
+    <div class="kna-pop-anon">Barangay-level surveillance point</div>
   </div>`;
 
 // Crisp SVG teardrop, 28×36, tip at the bottom centre (the marker anchor),
@@ -44,7 +80,7 @@ const pinSvg = (color) => `
     <circle cx="14" cy="13.5" r="2.2" fill="${color}"/>
   </svg>`;
 
-// Styles for the markers, clusters and the tile-seam fix. Leaflet builds
+// Styles for the markers and the tile-seam fix. Leaflet builds
 // these elements outside React, so they are plain CSS.
 const MAP_CSS = `
   .kna-pin { background: none; border: none; }
@@ -53,11 +89,6 @@ const MAP_CSS = `
   .kna-pin:hover .kna-pin-svg, .kna-pin.is-hover .kna-pin-svg { transform: scale(1.15); }
   .kna-pin.is-selected .kna-pin-svg { transform: scale(1.3); filter: drop-shadow(0 0 0 #fff) drop-shadow(0 0 5px rgba(255,255,255,.95)) drop-shadow(0 3px 5px rgba(15,23,42,.5)); }
   .kna-pin.is-selected, .kna-pin.is-hover { z-index: 1000 !important; }
-  .kna-cluster { background: none; border: none; }
-  .kna-cluster div { width: 100%; height: 100%; border-radius: 9999px; display: flex; align-items: center; justify-content: center;
-    color: #fff; font: 700 12px/1 'Plus Jakarta Sans', system-ui, sans-serif; border: 2px solid #fff;
-    box-shadow: 0 2px 6px rgba(15,23,42,.45), 0 0 0 4px rgba(255,255,255,.28); transition: transform .15s ease; }
-  .kna-cluster:hover div { transform: scale(1.08); }
   /* Adjacent tiles add together, so sub-pixel gaps between them no longer
      show the background through as thin lines. Dark map background so the
      blend never lightens the imagery. */
@@ -86,16 +117,14 @@ export default function IncidentMapPage({ incidents, loading }) {
   const leafletMapRef = useRef(null);
   const layerGroupRef = useRef([]);
   const markersRef = useRef({});
-  const clusterGroupRef = useRef(null);
 
   const [mapLoaded, setMapLoaded] = useState(false);
   // The incident whose popup is open (list row highlighted to match).
   const [selectedId, setSelectedId] = useState(null);
   const hoverPin = (id, on) => markersRef.current[id]?.marker?.getElement()?.classList.toggle('is-hover', on);
 
-  // ── Load Leaflet CSS/JS + the marker-cluster plugin (same CDN-script
-  // pattern as Leaflet core) — mapLoaded only flips once clustering is
-  // actually available, since the marker-sync effect depends on it. ──────
+  // ── Load Leaflet CSS/JS (CDN script). Every case is its own pin, so the
+  // marker-cluster plugin is not loaded. ──────────────────────────────
   useEffect(() => {
     if (!document.getElementById('leaflet-css')) {
       const link = document.createElement('link');
@@ -104,41 +133,19 @@ export default function IncidentMapPage({ incidents, loading }) {
       link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
       document.head.appendChild(link);
     }
-    if (!document.getElementById('leaflet-cluster-css')) {
-      const link1 = document.createElement('link');
-      link1.id = 'leaflet-cluster-css';
-      link1.rel = 'stylesheet';
-      link1.href = 'https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css';
-      document.head.appendChild(link1);
-      const link2 = document.createElement('link');
-      link2.id = 'leaflet-cluster-default-css';
-      link2.rel = 'stylesheet';
-      link2.href = 'https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css';
-      document.head.appendChild(link2);
+    if (window.L) { setMapLoaded(true); return undefined; }
+    let s = document.getElementById('leaflet-js');
+    if (!s) {
+      s = document.createElement('script');
+      s.id = 'leaflet-js';
+      s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      s.async = true;
+      document.head.appendChild(s);
     }
-
-    const loadCluster = () => {
-      if (window.L.markerClusterGroup) { setMapLoaded(true); return; }
-      if (document.getElementById('leaflet-cluster-js')) return;
-      const c = document.createElement('script');
-      c.id = 'leaflet-cluster-js';
-      c.src = 'https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js';
-      c.async = true;
-      c.onload = () => setMapLoaded(true);
-      document.head.appendChild(c);
-    };
-
-    if (window.L) {
-      loadCluster();
-      return;
-    }
-    if (document.getElementById('leaflet-js')) return;
-    const s = document.createElement('script');
-    s.id = 'leaflet-js';
-    s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-    s.async = true;
-    s.onload = () => loadCluster();
-    document.head.appendChild(s);
+    // Also covers a script another visit to this page already started.
+    const onLoad = () => setMapLoaded(true);
+    s.addEventListener('load', onLoad);
+    return () => s.removeEventListener('load', onLoad);
   }, []);
 
   // ── Init Leaflet map centered over Libon, Albay ─────────────
@@ -180,32 +187,52 @@ export default function IncidentMapPage({ incidents, loading }) {
   }, [mapLoaded]);
 
   // Simulated incidents only (useIncidents already queries for them; this is
-  // a second guard), newest month first.
-  const filteredIncidents = useMemo(() => incidents
-    .filter(inc => inc.isSimulated === true && inc.mapHidden !== true)
+  // a second guard), newest month first. Old Category I pins are left out.
+  const shownIncidents = useMemo(() => incidents
+    .filter(inc => inc.isSimulated === true && inc.mapHidden !== true && inc.category !== 'Category I')
     .sort((a, b) => String(b.month || '').localeCompare(String(a.month || '')) || (b.simNo ?? 0) - (a.simNo ?? 0)),
   [incidents]);
 
+  // Barangay dropdown, applied to both the map and the list.
+  const [barangayFilter, setBarangayFilter] = useState('all');
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterRef = useRef(null);
+  useEffect(() => {
+    const onDown = e => { if (filterRef.current && !filterRef.current.contains(e.target)) setFilterOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, []);
+  const barangayOf = useMemo(() => {
+    const m = new Map();
+    shownIncidents.forEach(inc => m.set(inc.id, nearestBarangay(inc.lat, inc.lng)));
+    return m;
+  }, [shownIncidents]);
+  const activeFilters = barangayFilter === 'all' ? 0 : 1;
+  const filteredIncidents = useMemo(() => (barangayFilter === 'all'
+    ? shownIncidents
+    : shownIncidents.filter(inc => barangayOf.get(inc.id) === barangayFilter)),
+  [shownIncidents, barangayFilter, barangayOf]);
+
   // ── Memoize Leaflet Incident Marker Data ─────────────────────
   const memoizedIncidentLayers = useMemo(() => {
-    return filteredIncidents.map(inc => {
+    const placed = filteredIncidents.map(inc => {
       const { lat, lng } = inc;
       if (!lat || !lng) return null;
       const color = categoryColor(inc.category);
-      return { id: inc.id, lat, lng, color, category: inc.category, popup: popupHtml(inc, color), tooltip: `Simulated incident #${inc.simNo ?? '?'} · ${inc.category || ''}` };
+      return { id: inc.id, lat, lng, color, category: inc.category, popup: popupHtml(inc, color), tooltip: `Incident #${inc.simNo ?? '?'} · ${inc.category || ''}` };
     }).filter(Boolean);
+    return spreadOverlapping(placed);
   }, [filteredIncidents]);
 
-  // ── Sync Leaflet Markers (clustered) & Heat Circles ──────────
+  // ── Sync Leaflet Markers: one pin per case, never combined ──────────
   useEffect(() => {
-    if (!leafletMapRef.current || !mapLoaded || !window.L || !window.L.markerClusterGroup) return;
+    if (!leafletMapRef.current || !mapLoaded || !window.L) return;
     const L = window.L;
     const map = leafletMapRef.current;
 
     layerGroupRef.current.forEach(layer => map.removeLayer(layer));
     layerGroupRef.current = [];
     markersRef.current = {};
-    clusterGroupRef.current = null;
 
     const buildPinIcon = (color) => L.divIcon({
       className: 'kna-pin',
@@ -215,25 +242,7 @@ export default function IncidentMapPage({ incidents, loading }) {
       popupAnchor: [0, -32],
     });
 
-    // Overlapping pins become one count bubble that splits on click/zoom.
-    // Red when the cluster holds any Category III pin, orange otherwise.
-    const clusterGroup = L.markerClusterGroup({
-      maxClusterRadius: 38,
-      disableClusteringAtZoom: 18,
-      spiderfyOnMaxZoom: true,
-      showCoverageOnHover: false,
-      iconCreateFunction: (cluster) => {
-        const kids = cluster.getAllChildMarkers();
-        const n = kids.length;
-        const hasIII = kids.some(m => m.options.kna?.category === 'Category III');
-        const size = n < 10 ? 34 : n < 25 ? 40 : 46;
-        return L.divIcon({
-          className: 'kna-cluster',
-          html: `<div style="background:${hasIII ? CATEGORY_COLOR['Category III'] : CATEGORY_COLOR['Category II']}">${n}</div>`,
-          iconSize: [size, size],
-        });
-      },
-    });
+    const pinLayer = L.layerGroup();
     memoizedIncidentLayers.forEach(inc => {
       const marker = L.marker([inc.lat, inc.lng], { icon: buildPinIcon(inc.color), kna: { category: inc.category }, riseOnHover: true });
       // Pressing a pin opens its popup above it. autoPan moves the map so pin
@@ -247,12 +256,11 @@ export default function IncidentMapPage({ incidents, loading }) {
       marker.on('popupopen', () => { marker.closeTooltip(); setSelectedId(inc.id); });
       marker.on('tooltipopen', () => { if (marker.isPopupOpen()) marker.closeTooltip(); });
       marker.on('popupclose', () => setSelectedId(cur => (cur === inc.id ? null : cur)));
-      clusterGroup.addLayer(marker);
+      pinLayer.addLayer(marker);
       markersRef.current[inc.id] = { marker };
     });
-    map.addLayer(clusterGroup);
-    clusterGroupRef.current = clusterGroup;
-    layerGroupRef.current.push(clusterGroup);
+    map.addLayer(pinLayer);
+    layerGroupRef.current.push(pinLayer);
   }, [memoizedIncidentLayers, mapLoaded]);
 
   // Selected pin: bigger marker with a ring; its list row scrolls into view.
@@ -267,7 +275,7 @@ export default function IncidentMapPage({ incidents, loading }) {
     if (!map) return undefined;
     const clear = () => setSelectedId(null);
     map.on('click', clear);
-    // Cluster re-renders recreate marker elements: re-apply the ring.
+    // Keep the selected pin's ring after the map moves.
     const reapply = () => Object.entries(markersRef.current).forEach(([id, { marker }]) => marker.getElement()?.classList.toggle('is-selected', id === selectedIdRef.current));
     map.on('zoomend moveend', reapply);
     return () => { map.off('click', clear); map.off('zoomend moveend', reapply); };
@@ -285,38 +293,63 @@ export default function IncidentMapPage({ incidents, loading }) {
     const map = leafletMapRef.current;
     const obj = markersRef.current[inc.id];
 
-    if (obj?.marker && clusterGroupRef.current) {
-      clusterGroupRef.current.zoomToShowLayer(obj.marker, () => {
-        obj.marker.openPopup();
-      });
-    } else {
-      map.setView([lat, lng], 15.5, { animate: true });
-    }
+    // Zoom in on the pin, then open its popup.
+    map.setView([lat, lng], Math.max(map.getZoom(), 15), { animate: true });
+    // Opened after the pan settles (also when the map did not need to move).
+    if (obj?.marker) setTimeout(() => obj.marker.openPopup(), 350);
   };
 
   return (
     <div className="flex flex-col gap-4 h-[calc(100vh-120px)] px-6 py-4">
 
-      {/* ── Simulated-data banner ── */}
-      <div role="note" className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-amber-300 bg-amber-50 text-amber-900">
-        <AlertTriangle size={16} className="shrink-0 text-amber-600" aria-hidden="true" />
-        <p className="text-xs font-bold">{MAP_BANNER}</p>
-        <p className="text-[11px] font-medium text-amber-800 ml-auto hidden md:block">Authorized evaluators only · No real patient or location data</p>
-      </div>
-
       {/* ── Map Toolbar: title + legend ── */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-xs font-semibold text-gray-500">
-          <ShieldAlert size={14} className="text-gray-400" /> Incident Map (Demo)
+        <div className="flex items-center gap-2 text-xs font-semibold text-gray-700">
+          <ShieldAlert size={15} className="text-[#3B50DF]" /> Incident Surveillance Map
         </div>
-        {/* Pin severity legend */}
-        <div className="flex items-center gap-3 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-[11px] font-semibold text-slate-600">
-          <span className="text-[10px] font-extrabold text-slate-800 uppercase tracking-wider">Pin</span>
-          {Object.entries(CATEGORY_COLOR).map(([cat, color]) => (
-            <span key={cat} className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} /> {cat}
-            </span>
-          ))}
+        <div className="flex items-center gap-3">
+          {/* Pin severity legend */}
+          <div className="flex items-center gap-3 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-[11px] font-semibold text-slate-600">
+            <span className="text-[10px] font-extrabold text-slate-800 uppercase tracking-wider">Severity</span>
+            {Object.entries(CATEGORY_COLOR).map(([cat, color]) => (
+              <span key={cat} className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: color }} /> {cat}
+              </span>
+            ))}
+          </div>
+
+          {/* Barangay dropdown */}
+          <div ref={filterRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setFilterOpen(o => !o)}
+              aria-expanded={filterOpen}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              <Layers size={13} className="text-gray-400" />
+              {barangayFilter === 'all' ? 'All Barangays' : `Brgy. ${barangayFilter}`}
+              <ChevronDown size={13} className="text-gray-400" />
+            </button>
+            {filterOpen && (
+              <div className="absolute right-0 top-full mt-1.5 min-w-[200px] bg-white border border-gray-200 rounded-xl shadow-lg p-1.5 z-[1000] max-h-72 overflow-y-auto">
+                {['all', ...MAP_BARANGAYS].map(b => {
+                  const on = barangayFilter === b;
+                  return (
+                    <button
+                      key={b}
+                      type="button"
+                      onClick={() => { setBarangayFilter(b); setFilterOpen(false); }}
+                      className={`flex items-center justify-between w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                        on ? 'bg-indigo-50 text-[#3B50DF]' : 'text-gray-600 hover:bg-gray-50'}`}
+                    >
+                      {b === 'all' ? 'All Barangays' : `Brgy. ${b}`}
+                      {on && <CheckCircle2 size={13} />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -327,17 +360,6 @@ export default function IncidentMapPage({ incidents, loading }) {
         <div className="col-span-8 bg-white rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden flex flex-col relative">
           <style>{MAP_CSS}</style>
           <div ref={mapRef} className="kna-map w-full h-full z-10" />
-          {/* Watermark over the map area: every screenshot reads as simulated. */}
-          <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-[500] flex items-center justify-center overflow-hidden">
-            <span className="select-none text-[clamp(32px,7vw,88px)] font-black tracking-[0.12em] text-white/30 -rotate-[24deg] whitespace-nowrap"
-              style={{ textShadow: '0 2px 6px rgba(15,23,42,0.35)' }}>
-              SIMULATED DATA
-            </span>
-          </div>
-          <div aria-hidden="true" className="pointer-events-none absolute left-3 bottom-3 z-[500] px-2 py-1 rounded-md bg-amber-400/90 text-[10px] font-extrabold tracking-wider text-amber-950">
-            SIMULATED DATA · NOT REAL CASES
-          </div>
-
         </div>
 
         {/* Incident List Sidebar — iOS Notes-Style List */}
@@ -345,7 +367,7 @@ export default function IncidentMapPage({ incidents, loading }) {
           <div className="px-4 py-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50/40">
             <div className="flex items-center gap-2">
               <ShieldAlert size={15} className="text-red-600" />
-              <h3 className="text-[13px] font-bold text-slate-900 tracking-tight">Simulated incidents</h3>
+              <h3 className="text-[13px] font-bold text-slate-900 tracking-tight">Reported Incidents</h3>
             </div>
             <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
               {filteredIncidents.length}
@@ -358,8 +380,8 @@ export default function IncidentMapPage({ incidents, loading }) {
             ) : filteredIncidents.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-40 gap-1.5 text-center p-4">
                 <MapPin size={24} className="text-slate-300" />
-                <p className="text-xs font-semibold text-slate-600">No simulated incidents</p>
-                <p className="text-[11px] text-slate-400">Seed them with scripts/seed-simulated-incidents.mjs</p>
+                <p className="text-xs font-semibold text-slate-600">No reported incidents</p>
+                <p className="text-[11px] text-slate-400">{activeFilters ? 'None in this barangay' : 'No active surveillance pins on file'}</p>
               </div>
             ) : filteredIncidents.map(inc => {
               const catColor = categoryColor(inc.category);
@@ -375,7 +397,7 @@ export default function IncidentMapPage({ incidents, loading }) {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-[13px] font-bold text-slate-900 group-hover:text-red-600 transition-colors truncate">
-                      Simulated incident #{inc.simNo ?? '?'}
+                      Incident #{inc.simNo ?? '?'}
                     </span>
                     <span className="text-[10px] font-normal text-slate-400 flex-shrink-0">{simulatedMonthLabel(inc.month)}</span>
                   </div>

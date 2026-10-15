@@ -38,6 +38,7 @@ import { addDaysToDateString, formatDateShort as fmtDate, formatServiceType, get
 import StatusBadge from '../../components/StatusBadge';
 import { useLiveCollection } from '../../lib/liveStore';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import { deriveStockStatus, formatStockVials, getItemStockMl } from '../../lib/inventoryStock';
 import ReportSendToasts from '../../components/ReportSendToasts';
 import { NotFoundPage, PageErrorBoundary } from '../../components/ErrorPages';
 
@@ -292,6 +293,7 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
     if (activePage !== 'not-found' && window.location.pathname !== '/') window.history.replaceState({}, '', '/');
   }, [activePage]);
   const [openAddPatientModal, setOpenAddPatientModal] = useState(false);
+  const [addModalInitialPatient, setAddModalInitialPatient] = useState(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // Batch 5/6 — role drives the Manage Admins sidebar item + route guard
@@ -412,7 +414,6 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
     };
     const handleOpenAddPatientModal = () => {
       setActivePage('patients');
-      setOpenAddPatientModal(true);
     };
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('open-patient-record', handleOpenPatientRecord);
@@ -481,7 +482,8 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
         results.push({
           type: 'inventory',
           title: `Stock: ${name}`,
-          sub: `Category: ${cat || 'Supplies'} · ${i.quantity ?? i.stock ?? 0} units remaining`,
+          // Same numbers as the Inventory list: the mL pool and its whole vials.
+          sub: `Category: ${cat || 'Supplies'} · ${(i.mlPerVial || i.mgPerVial) ? `${getItemStockMl(i)} mL (${formatStockVials(i)})` : `${i.quantity ?? i.stock ?? 0} units`} remaining`,
           page: 'inventory',
           item: i
         });
@@ -639,23 +641,25 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
       const docs = invLive.rows;
       setInventoryList(docs);
       const low = docs.filter(d => {
-        const qty = d.quantity ?? d.stock ?? 0;
-        return qty < 10 || d.status === 'critical' || d.status === 'warning';
+        const st = deriveStockStatus(d);
+        return st === 'out-of-stock' || st === 'low-stock';
       });
       setStats(p => ({ ...p, lowStock: low.length }));
 
-      const stockNotifs = low.map(d => ({
-        id: `inv-${d.id}`,
-        type: d.status === 'critical' || (d.quantity ?? d.stock ?? 0) <= 0 ? 'critical' : 'warning',
-        title: (d.quantity ?? d.stock ?? 0) <= 0 ? 'Out of Stock' : 'Low Stock Warning',
-        message: `${d.name || 'Vaccine'} is running low (${d.quantity ?? d.stock ?? '?'} units remaining)`,
-        time: 'Inventory',
-        // Low stock is a live condition: it is dated when the item last
-        // changed, or today when the item has no timestamp.
-        ts: d.updatedAt || d.createdAt || Date.now(),
-        day: getTodayDateString(new Date(d.updatedAt || d.createdAt || Date.now())),
-        icon: 'stock'
-      }));
+      const stockNotifs = low.map(d => {
+        const st = deriveStockStatus(d);
+        const isOut = st === 'out-of-stock';
+        return {
+          id: `inv-${d.id}`,
+          type: isOut ? 'critical' : 'warning',
+          title: isOut ? 'Out of Stock' : 'Low Stock Warning',
+          message: `${d.name || 'Vaccine'} ${isOut ? 'is out of stock' : 'is running low'} (${(d.mlPerVial || d.mgPerVial) ? `${getItemStockMl(d)} mL, ${formatStockVials(d)}` : `${d.stock} vials`})`,
+          time: 'Inventory',
+          ts: d.updatedAt || d.createdAt || Date.now(),
+          day: getTodayDateString(new Date(d.updatedAt || d.createdAt || Date.now())),
+          icon: 'stock'
+        };
+      });
       setNotifications(p => [...stockNotifs, ...p.filter(n => !n.id.startsWith('inv-'))]);
     }
   }, [invLive]);
@@ -1537,7 +1541,11 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
               <div className="page-scroll">
                 <PatientRecordsPage
                   initialOpenAddModal={openAddPatientModal}
-                  onAddModalClosed={() => setOpenAddPatientModal(false)}
+                  initialPatientForAdd={addModalInitialPatient}
+                  onAddModalClosed={() => {
+                    setOpenAddPatientModal(false);
+                    setAddModalInitialPatient(null);
+                  }}
                 />
               </div>
             )}

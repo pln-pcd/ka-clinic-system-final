@@ -10,6 +10,7 @@
 // Anchoring: every schedule counts from the patient's Day 0 (the exposure or
 // registration date on their record). The clinic runs no infant series, so no
 // schedule depends on date of birth or an age group.
+import { itemServesService } from './inventoryCategories.js';
 import { addDaysToDateString, getTodayDateString } from './formatters.js';
 
 /** Calendar-month arithmetic — "1 month later" is not "30 days later". */
@@ -184,14 +185,16 @@ export function isVaccineForService(service, item) {
 }
 
 /**
- * Returns the inventory vaccine items that belong to the specified service
- * (rabies vaccines for PEP/PrEP, tetanus biologics for Anti-Tetanus,
- * pneumococcal vaccines for Pneumonia). No service, or no match, gives an
+ * Returns the inventory items that belong to the specified service, by the
+ * item's Inventory category (lib/inventoryCategories.js): Anti-Rabies for
+ * PEP/PrEP, Anti-Tetanus for Tetanus, Pneumonia for Pneumonia. RIG items
+ * are never dose brands (they have their own card). Older items saved as
+ * "Vaccine" are placed by their name. No service, or no match, gives an
  * empty list: other services' brands are never offered.
  */
 export function getEligibleVaccinesForService(service, inventoryItems = []) {
   if (!service) return [];
-  return inventoryItems.filter(i => i.category === 'Vaccine' && isVaccineForService(service, i));
+  return inventoryItems.filter(i => itemServesService(i, service));
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -256,6 +259,9 @@ export const buildDoses = (p) => {
         s:          status,
         note:       d.note || '',
         brand:      doseBrand,
+        ml:         status === 'done' ? (d.ml ?? d.mg ?? null) : null,
+        stockDeducted: d.stockDeducted,
+        givenByName: d.givenByName || '',
         autoMissed: overdueFlag && status !== 'done',
       };
     });

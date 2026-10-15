@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { auth } from "../../lib/firebase";
 import { buildDoses, getSchedule } from "../../lib/doseSchedules";
 import { erigStatus, erigStatusLabel } from "../../lib/erig";
+import { serviceFieldRows, showsTreatments } from "../../lib/serviceFields";
 import { LIBON_SEAL_BASE64 } from "../../assets/libonSealBase64";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
@@ -138,7 +139,32 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     const curMonth = parseInt(curParts[1], 10);
     const now = new Date();
 
-    return patients.filter(p => {
+    // Flatten active records and previous case encounters from caseHistory
+    // so historical registries (daily, weekly, monthly, yearly) retain previous cases.
+    const allRecords = [];
+    (patients || []).forEach(p => {
+      allRecords.push(p);
+      if (Array.isArray(p.caseHistory) && p.caseHistory.length > 0) {
+        p.caseHistory.forEach((h, hIdx) => {
+          allRecords.push({
+            ...p,
+            ...h,
+            id: p.id || p.mrn,
+            mrn: p.mrn || p.id,
+            isHistoricalCase: true,
+            historicalIndex: hIdx + 1,
+            date: h.date || h.closedAt || p.date,
+            createdAt: h.createdAt || h.date,
+            status: h.status || 'completed',
+            doses: h.doses || [],
+            treatments: h.treatments || [],
+            service: h.service || p.service || 'PEP',
+          });
+        });
+      }
+    });
+
+    return allRecords.filter(p => {
       const pDateStr = p.date ? String(p.date).split('T')[0] : (p.createdAt?.toDate ? getTodayDateString(p.createdAt.toDate()) : '');
       const raw = p.createdAt?.toDate ? p.createdAt.toDate() : (pDateStr ? new Date(`${pDateStr}T12:00:00`) : null);
       let matchesPeriod = true;
@@ -934,27 +960,47 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     const registered = rawDate
       ? (formatDateLong(rawDate) || formatDateShort(rawDate) || String(rawDate).split('T')[0])
       : (p.date || '—');
-    const st = derivePatientStatus(p);
+    // A previous case (exported from its pop-up) keeps the status it was
+    // saved with; its doses are not re-judged against today.
+    const historical = Boolean(p.isHistoricalCase);
+    const st = historical ? String(p.status || 'completed').toLowerCase() : derivePatientStatus(p);
     const isPEP = (p.service || '').trim().toUpperCase() === 'PEP';
-    const caseNo = p.firestoreId ? p.firestoreId.slice(0, 8).toUpperCase() : (p.id || '—');
+    const caseNo = historical
+      ? `Case #${p.historicalIndex} (previous case)`
+      : p.firestoreId ? p.firestoreId.slice(0, 8).toUpperCase() : (p.id || '—');
+    const completedRaw = p.completedAt || p.closedAt;
+    const completed = completedRaw
+      ? (formatDateLong(completedRaw) || formatDateShort(completedRaw) || String(completedRaw).split('T')[0])
+      : '—';
 
     const admin = [
       ['Date', registered, 'MRN', p.id || p.mrn || '—'],
       ['Account / Case No.', caseNo, 'Ward / Service', `${serviceLabel(p.service || 'PEP')} (Animal Bite Clinic)`],
+      ...(historical ? [['Registration Date', registered, 'Completion Date', completed]] : []),
       ['Primary Attending', 'Dr. Francis R. Reyes, MD', 'Status', st.toUpperCase()],
     ];
+
+    // Only the fields this service asks (lib/serviceFields.js). The
+    // patient-safe copy drops wound location and depth, as before.
+    const treatmentText = t => `${t.product || 'Treatment'} (${t.ml ?? t.mg ?? 0} mL${t.date ? ` · ${formatDateShort(t.date) || t.date}` : ''}${(t.recordedByName || t.staff) ? ` · by ${t.recordedByName || t.staff}` : ''})`;
+    const hasTreatments = Array.isArray(p.treatments) && p.treatments.length > 0;
+    const exposureRows = serviceFieldRows(p, 'exposure', { audience, exclude: ['cat'] }).map(r => [r.label, r.value || '—']);
+    const woundWithheld = !showWoundDetail && serviceFieldRows(p, 'exposure').some(r => r.key === 'woundLocation' || r.key === 'woundDepth');
 
     const complaintRows = isPEP
       ? [
           ['Presenting Complaint', `Clinical evaluation and post-exposure prophylaxis following exposure to ${p.animal || 'animal'} on ${fmtDate(p.date) || registered}. Assessed as Category ${p.cat || '—'} bite exposure.`],
           ['Exposure Category', `Category ${p.cat || '—'}`],
-          ['ERIG', erigStatusLabel(p, d => formatDateShort(d) || d)],
-          ...(showWoundDetail
-            ? [['Wound Site / Depth', `${p.woundLocation || '—'} · ${p.woundDepth || '—'} · Bites: ${p.numberOfBites || '1'}`]]
-            : [['Wound Assessment', PATIENT_HIDDEN_NOTE]]),
+          ...exposureRows,
+          ...(woundWithheld ? [['Wound Assessment', PATIENT_HIDDEN_NOTE]] : []),
+          // ERIG and RIG / Anti-Tetanus only for Category III (or when saved).
+          ...(showsTreatments(p) ? [['ERIG', erigStatusLabel(p, d => formatDateShort(d) || d)]] : []),
+          ...(hasTreatments ? [['Cat III Treatments', p.treatments.map(treatmentText).join('; ')]] : []),
         ]
       : [
           ['Presenting Complaint', `Patient received clinical assessment and vaccination administration under the ${serviceLabel(p.service) || 'vaccination'} protocol.`],
+          ...exposureRows,
+          ...(hasTreatments ? [['Treatments', p.treatments.map(treatmentText).join('; ')]] : []),
         ];
 
     const sections = [
@@ -987,25 +1033,55 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
         rows: complaintRows,
       },
       {
-        title: '4. MEDICAL HISTORY',
+        title: '4. MEDICAL HISTORY & PREVIOUS ENCOUNTERS',
         rows: [
-          ['Past Vaccines', p.pastVaccines || 'None reported'],
-          ['Allergies', p.allergies || 'No known allergies'],
+          // "—" only for a field the service asks that was left empty.
+          ...serviceFieldRows(p, 'history', { audience, exclude: ['notes'] }).map(r => [r.label, r.value || '—']),
+          // Remarks are internal clinical notes: clinic copy only.
+          ...(showWoundDetail ? [['Clinical Remarks', p.notes || '—']] : []),
+          ...(Array.isArray(p.caseHistory) && p.caseHistory.length > 0
+            ? [['Previous Case Encounters', `${p.caseHistory.length} prior service encounter(s) recorded under this MRN (see Previous Services table below)`]]
+            : []),
         ],
       },
     ];
 
-    const doseRows = doses.map(d => {
+    // A historical case lists the stored doses as saved (amount and staff
+    // included); "—" where an old case never saved them.
+    const rawDoses = Array.isArray(p.doses) ? p.doses : [];
+    const doseRows = (historical ? rawDoses : doses).map((d, i) => {
       const rawStatus = String(d.status || d.s || 'pending').toLowerCase();
       const isDone = rawStatus === 'done' || rawStatus === 'completed' || d.done === true;
-      const isMiss = rawStatus === 'miss' || rawStatus === 'missed' || rawStatus === 'overdue';
+      const isMiss = !isDone && (rawStatus === 'miss' || rawStatus === 'missed' || rawStatus === 'overdue');
+      const raw = rawDoses[i] || {};
+      const ml = raw.ml ?? raw.mg;
       return {
         label: d.label || d.n || d.dose || d.name || 'Dose',
         date: d.date ? (formatDateShort(d.date) || d.date) : '—',
-        status: isMiss ? 'Overdue' : isDone ? 'Completed' : 'Scheduled',
+        status: historical ? (isDone ? 'Given' : isMiss ? 'Missed' : 'Not given') : isMiss ? 'Overdue' : isDone ? 'Completed' : 'Scheduled',
         kind: isMiss ? 'miss' : isDone ? 'done' : 'pending',
+        amount: ml != null && ml !== '' ? `${ml} mL` : '—',
+        by: raw.givenByName || raw.administeredBy || raw.staff || '—',
       };
     });
+
+    const previousServicesRows = (Array.isArray(p.caseHistory) && p.caseHistory.length > 0)
+      ? p.caseHistory.map((h, i) => {
+          const hDoses = Array.isArray(h.doses) ? h.doses : [];
+          const hDone = hDoses.filter(d => d.s === 'done' || d.status === 'done' || d.done).length;
+          const hTreat = Array.isArray(h.treatments) && h.treatments.length
+            ? h.treatments.map(t => `${t.product} (${t.ml ?? t.mg ?? 0} mL)`).join(', ')
+            : showsTreatments(h) ? 'None' : '';
+          return {
+            caseNo: `Case #${i + 1}`,
+            service: `${serviceLabel(h.service || 'PEP')}${h.cat ? ` (Cat ${h.cat})` : ''}`,
+            date: formatDateShort(h.date || h.closedAt) || h.date || '—',
+            doses: `${hDone}/${hDoses.length}`,
+            treatments: hTreat,
+            status: (h.status || 'completed').toUpperCase(),
+          };
+        })
+      : [];
 
     const assessment = [
       ['Assessment', st === 'completed'
@@ -1015,13 +1091,17 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     ];
 
     return {
+      title: historical ? `PATIENT MEDICAL REPORT (HISTORICAL CASE #${p.historicalIndex})` : 'PATIENT MEDICAL REPORT',
       registered,
       status: st,
+      doseDetail: historical,
       admin,
       sections,
       doseSectionTitle: '5. VACCINATION DOSING SCHEDULE',
       doseRows,
-      assessmentTitle: '6. ASSESSMENTS & RECOMMENDATIONS',
+      previousServicesTitle: '6. PREVIOUS SERVICES & CASE HISTORY',
+      previousServicesRows,
+      assessmentTitle: previousServicesRows.length ? '7. ASSESSMENTS & RECOMMENDATIONS' : '6. ASSESSMENTS & RECOMMENDATIONS',
       assessment,
       officer: {
         name: 'Dr. Francis R. Reyes, MD',
@@ -1074,14 +1154,15 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
         </tbody>
       </table>`;
 
+    // A historical case adds the amount given and who gave each dose.
+    const HEAD = `${CELL}background:#1D4ED8;color:#FFFFFF;text-align:left;font-weight:700;`;
+    const doseCols = m.doseDetail
+      ? [['Dose', 28], ['Date', 20], ['Status', 14], ['Amount Given', 14], ['Administered By', 24]]
+      : [['Dose', 40], ['Scheduled Date', 35], ['Status', 25]];
     const doseTable = `
       <table style="width:100%;border-collapse:collapse;margin-bottom:8px;table-layout:fixed;">
         <thead>
-          <tr>
-            <th style="${CELL}background:#1D4ED8;color:#FFFFFF;text-align:left;font-weight:700;width:40%;">Dose</th>
-            <th style="${CELL}background:#1D4ED8;color:#FFFFFF;text-align:left;font-weight:700;width:35%;">Scheduled Date</th>
-            <th style="${CELL}background:#1D4ED8;color:#FFFFFF;text-align:left;font-weight:700;width:25%;">Status</th>
-          </tr>
+          <tr>${doseCols.map(([h, w]) => `<th style="${HEAD}width:${w}%;">${h}</th>`).join('')}</tr>
         </thead>
         <tbody>
           ${m.doseRows.length
@@ -1090,10 +1171,37 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
             <td style="${VALUE_CELL}">${escapeHtml(d.label)}</td>
             <td style="${VALUE_CELL}">${escapeHtml(d.date)}</td>
             <td style="${VALUE_CELL}font-weight:700;">${escapeHtml(d.status)}</td>
+            ${m.doseDetail ? `<td style="${VALUE_CELL}">${escapeHtml(d.amount)}</td><td style="${VALUE_CELL}">${escapeHtml(d.by)}</td>` : ''}
           </tr>`).join('')
-            : `<tr><td colspan="3" style="${VALUE_CELL}text-align:center;color:#64748B;">No dose schedule on file.</td></tr>`}
+            : `<tr><td colspan="${doseCols.length}" style="${VALUE_CELL}text-align:center;color:#64748B;">No dose schedule on file.</td></tr>`}
         </tbody>
       </table>`;
+
+    const prevServicesTable = m.previousServicesRows.length ? `
+      <div style="font-size:9.5px;font-weight:800;color:#0F172A;letter-spacing:.3px;margin:10px 0 4px;">${escapeHtml(m.previousServicesTitle)}</div>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:8px;table-layout:fixed;">
+        <thead>
+          <tr>
+            <th style="${CELL}background:#0A1D47;color:#FFFFFF;text-align:left;font-weight:700;width:15%;">Case</th>
+            <th style="${CELL}background:#0A1D47;color:#FFFFFF;text-align:left;font-weight:700;width:24%;">Service</th>
+            <th style="${CELL}background:#0A1D47;color:#FFFFFF;text-align:left;font-weight:700;width:15%;">Date</th>
+            <th style="${CELL}background:#0A1D47;color:#FFFFFF;text-align:left;font-weight:700;width:12%;">Doses</th>
+            <th style="${CELL}background:#0A1D47;color:#FFFFFF;text-align:left;font-weight:700;width:20%;">Treatments</th>
+            <th style="${CELL}background:#0A1D47;color:#FFFFFF;text-align:left;font-weight:700;width:14%;">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${m.previousServicesRows.map((ps, i) => `
+          <tr style="background:${i % 2 ? '#FAFAFC' : '#FFFFFF'};">
+            <td style="${VALUE_CELL}font-weight:700;">${escapeHtml(ps.caseNo)}</td>
+            <td style="${VALUE_CELL}">${escapeHtml(ps.service)}</td>
+            <td style="${VALUE_CELL}">${escapeHtml(ps.date)}</td>
+            <td style="${VALUE_CELL}">${escapeHtml(ps.doses)}</td>
+            <td style="${VALUE_CELL}">${escapeHtml(ps.treatments)}</td>
+            <td style="${VALUE_CELL}font-weight:700;color:#15803D;">${escapeHtml(ps.status)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>` : '';
 
     return `
       <div style="font-family:'Plus Jakarta Sans','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0F172A;font-size:10px;line-height:1.5;padding:20px 24px;background:#FFFFFF;">
@@ -1118,7 +1226,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
         <div style="border-top:1.6px solid #0A1D47;border-bottom:.6px solid #0A1D47;height:2px;margin:6px 0 10px;"></div>
 
         <div style="text-align:center;margin-bottom:10px;">
-          <h1 style="margin:0;font-size:13px;font-weight:900;color:#0A1D47;letter-spacing:1px;text-transform:uppercase;">PATIENT MEDICAL REPORT</h1>
+          <h1 style="margin:0;font-size:13px;font-weight:900;color:#0A1D47;letter-spacing:1px;text-transform:uppercase;">${escapeHtml(m.title)}</h1>
         </div>
 
         <!-- Administrative information -->
@@ -1133,6 +1241,8 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
 
         <div style="font-size:9.5px;font-weight:800;color:#0F172A;letter-spacing:.3px;margin:10px 0 4px;">${escapeHtml(m.doseSectionTitle)}</div>
         ${doseTable}
+
+        ${prevServicesTable}
 
         ${sectionHtml(m.assessmentTitle, m.assessment)}
 
@@ -1229,7 +1339,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(10, 29, 71);
-    doc.text('PATIENT MEDICAL REPORT', pageWidth / 2, 31, { align: 'center' });
+    doc.text(m.title, pageWidth / 2, 31, { align: 'center' });
 
     const baseStyles = { fontSize: density.fontSize, cellPadding: density.cellPadding, overflow: 'linebreak', valign: 'top' };
     const GAP = density.gap;
@@ -1266,16 +1376,29 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     // 5. Vaccination Dosing Schedule
     autoTable(doc, {
       startY: doc.lastAutoTable.finalY + GAP,
-      head: [['Dose', 'Scheduled Date', 'Status']],
+      head: [m.doseDetail ? ['Dose', 'Date', 'Status', 'Amount Given', 'Administered By'] : ['Dose', 'Scheduled Date', 'Status']],
       body: m.doseRows.length
-        ? m.doseRows.map(d => [d.label, d.date, d.status])
-        : [['No dose schedule on file.', '', '']],
+        ? m.doseRows.map(d => (m.doseDetail ? [d.label, d.date, d.status, d.amount, d.by] : [d.label, d.date, d.status]))
+        : [m.doseDetail ? ['No dose schedule on file.', '', '', '', ''] : ['No dose schedule on file.', '', '']],
       headStyles: { fillColor: [29, 78, 216], textColor: 255, fontSize: density.fontSize, fontStyle: 'bold' },
       styles: baseStyles,
       alternateRowStyles: { fillColor: [250, 250, 252] },
     });
 
-    // 6. Assessments & Recommendations
+    // 6. Previous Services & Case History (if any)
+    if (m.previousServicesRows.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + GAP,
+        head: [['Case', 'Service', 'Date', 'Doses', 'Treatments', 'Status']],
+        body: m.previousServicesRows.map(ps => [ps.caseNo, ps.service, ps.date, ps.doses, ps.treatments, ps.status]),
+        theme: 'grid',
+        headStyles: { fillColor: [10, 29, 71], textColor: 255, fontSize: density.fontSize, fontStyle: 'bold' },
+        styles: baseStyles,
+        alternateRowStyles: { fillColor: [250, 250, 252] },
+      });
+    }
+
+    // Assessments & Recommendations
     autoTable(doc, {
       startY: doc.lastAutoTable.finalY + GAP,
       head: [[m.assessmentTitle, '']],
@@ -1361,7 +1484,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
   async function exportSinglePatientPdf(p) {
     if (!p) return;
     const logo = (await getClinicLogoBase64()) || logoDataUrl || CLINIC_LOGO_BASE64;
-    buildDocumentPdf(p, docType, 'clinic', logo).save(`medical-report-${p.id || p.mrn || p.firestoreId || 'patient'}-${new Date().toISOString().slice(0, 10)}.pdf`);
+    buildDocumentPdf(p, docType, 'clinic', logo).save(`medical-report-${p.id || p.mrn || p.firestoreId || 'patient'}${p.isHistoricalCase ? `-case-${p.historicalIndex}` : ''}-${new Date().toISOString().slice(0, 10)}.pdf`);
     onToast(`Medical Report exported for ${formatTitleCase(p.name)}`, 'success');
   }
 
@@ -1440,10 +1563,10 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
           generatedOn: reportGeneratedOn(),
           summary: [
             `Patient: ${formatTitleCase(p.name)} · ${p.id || p.mrn || '—'}`,
-            `Service: ${serviceLabel(p.service || 'PEP')}`,
+            `Service: ${serviceLabel(p.service || 'PEP')}${p.isHistoricalCase ? ` · previous case #${p.historicalIndex}` : ''}`,
           ],
         },
-        { pdf, filename: `medical-report-${p.id || p.mrn || p.firestoreId || 'patient'}.pdf` }
+        { pdf, filename: `medical-report-${p.id || p.mrn || p.firestoreId || 'patient'}${p.isHistoricalCase ? `-case-${p.historicalIndex}` : ''}.pdf` }
       );
     } catch (err) {
       console.error('emailSinglePatientPdf error:', err);
@@ -1517,12 +1640,16 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-900">
-                {mode === 'single' ? `Export Patient Record — ${formatTitleCase(selectedPatient?.name || 'Patient')}` : 'Export Clinic Report'}
+                {mode === 'single'
+                  ? `Export Patient Record${selectedPatient?.isHistoricalCase ? ` (Historical Case #${selectedPatient.historicalIndex})` : ''} — ${formatTitleCase(selectedPatient?.name || 'Patient')}`
+                  : 'Export Clinic Report'}
               </h3>
               <p className="text-[11px] text-slate-500 font-normal mt-0.5">
-                {mode === 'single'
-                  ? `Official patient medical report for ${formatTitleCase(selectedPatient?.name || 'Patient')}`
-                  : 'Download, print, or email official clinic registry reports'}
+                {mode !== 'single'
+                  ? 'Download, print, or email official clinic registry reports'
+                  : selectedPatient?.isHistoricalCase
+                  ? `Previous case from its saved snapshot, not the active case · Registered ${formatDateShort(selectedPatient.date) || '—'} · Completed ${formatDateShort(selectedPatient.completedAt || selectedPatient.closedAt) || '—'}`
+                  : `Official patient medical report for ${formatTitleCase(selectedPatient?.name || 'Patient')}`}
               </p>
             </div>
           </div>
@@ -1589,6 +1716,13 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
                 {/* Target patient */}
                 <div>
                   <label style={labelStyle}>Target Patient Record</label>
+                  {selectedPatient?.isHistoricalCase && (
+                    <div role="note" style={{ marginBottom: 8, background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10, padding: '8px 12px', fontSize: '.71875rem', color: '#92400E', lineHeight: 1.45 }}>
+                      <strong>Historical case #{selectedPatient.historicalIndex}</strong> · {serviceLabel(selectedPatient.service)}<br />
+                      Registered {formatDateShort(selectedPatient.date) || '—'} · Completed {formatDateShort(selectedPatient.completedAt || selectedPatient.closedAt) || '—'}<br />
+                      Exported from this case's saved snapshot, not the active case.
+                    </div>
+                  )}
                   {selectedPatient ? (
                     <div style={{ background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 12, padding: '10px 14px', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
                       <div style={{ fontSize: '.8125rem', fontWeight: 800, color: '#0F172A' }}>

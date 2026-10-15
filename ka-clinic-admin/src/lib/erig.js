@@ -1,13 +1,13 @@
 // ERIG (equine rabies immunoglobulin) on a patient record.
 //
 // Category III exposures need ERIG with the first vaccine dose. It is recorded
-// in the Vaccination Tracker's dose popup (recordErigChange in
-// inventoryStock.js) and saved on the record as:
-//   erig: { given: true, vials, date, stockItemId, itemName, stockDeducted,
-//           recordedAt, recordedBy, recordedByName }
-// Records registered before that kept a yes/no answer from the Add Patient
+// in the Vaccination Tracker's RIG card (recordTreatmentChange in
+// inventoryStock.js) as an mL entry in `treatments` and `rigTreatment`
+// ({ product, ml, date, stockItemId, itemName, stockDeducted, recordedByName }).
+// Older records may hold `erig: { given, vials, date, ... }` from the
+// vial-based entry this replaced; it is still read. Records before that kept a yes/no answer from the Add Patient
 // form in `rigGiven` ("Yes (ERIG)" / "No"); it is still read so their status
-// shows correctly. recordErigChange keeps `rigGiven` in step for the same
+// shows correctly. recordTreatmentChange keeps `rigGiven` in step for the same
 // reason.
 
 export const isCategoryIII = (p) => {

@@ -16,6 +16,10 @@ import { weekdayName } from '../../lib/clinicDays';
 import DatePicker from '../../components/DatePicker';
 import { FieldError, FormErrorNote, useFieldErrors } from '../../components/FormValidation';
 import { SERVICE_ICON_STROKE, SERVICE_TYPES, X } from "./shared";
+import {
+  OTHERS, OTHER_TEXT_MAX, PAST_VACCINE_OPTIONS, LEGACY_PAST_VACCINE_OPTIONS, PNEUMO_HISTORY_OPTIONS,
+  RISK_CONDITION_OPTIONS, WOUND_TYPE_OPTIONS, LAST_TETANUS_OPTIONS, serviceFields, fieldLabel, fieldValue, historyErrors,
+} from "../../lib/serviceFields";
 
 /* ─────────────────────────── LIBON GEODATA DICTIONARY ─────────────────────────── */
 // Standard option lists for the patient intake form. Free-text fields were
@@ -35,16 +39,9 @@ export const WOUND_LOCATION_OPTIONS = [
   'Multiple Sites', 'Other',
 ];
 
-export const PAST_VACCINE_OPTIONS = [
-  'None',
-  'Completed PEP (within 1 year)',
-  'Completed PEP (1–3 years ago)',
-  'Completed PEP (over 3 years ago)',
-  'Incomplete / Interrupted PEP',
-  'Pre-Exposure Prophylaxis (PrEP) only',
-  'Tetanus Toxoid only',
-  'Unknown',
-];
+// Past vaccination and the other history lists live in lib/serviceFields.js
+// with the per-service field map; re-exported for older imports.
+export { PAST_VACCINE_OPTIONS };
 
 export const ALLERGY_OPTIONS = [
   'No known allergies',
@@ -270,39 +267,196 @@ const REGISTER_RULES = {
   date: f => (f.date && f.date > today() ? 'Exposure date can’t be in the future' : ''),
   cat: f => (f.cat !== 'Category II' && f.cat !== 'Category III' ? 'Choose Category II or III'
     : f.animal === 'Bat' && f.cat !== 'Category III' ? 'Bat exposure must be Category III' : ''),
-  history: f => ((f.pastVaccines || '').trim() || (f.allergies || '').trim() || (f.notes || '').trim()
-    ? '' : 'Add at least one: past vaccination, allergy or clinical notes'),
+  // Medical History: which fields count, and which are required, follow the
+  // service (lib/serviceFields.js).
+  history: f => historyErrors(f).history,
+  pastVaccinesOther: f => historyErrors(f).pastVaccinesOther,
+  pneumoHistory: f => historyErrors(f).pneumoHistory,
+  pneumoHistoryOther: f => historyErrors(f).pneumoHistoryOther,
 };
 // Checked on Next, in on-screen order (the first invalid one gets focus).
 const STEP_FIELDS = {
   identity: ['fname', 'lname', 'sex', 'dob', 'age', 'email', 'contact', 'barangay'],
   services: ['service'],
   pep_details: ['date', 'typeOfExposure', 'animal', 'cat', 'woundWashed'],
-  history: ['history'],
+  history: ['pneumoHistory', 'pneumoHistoryOther', 'pastVaccinesOther', 'history'],
 };
 
+function parsePatientName(p) {
+  if (!p) return { fname: '', mname: '', lname: '', suffix: '' };
+  if (p.fname || p.lname) {
+    return {
+      fname: p.fname || '',
+      mname: p.mname || '',
+      lname: p.lname || '',
+      suffix: p.suffix || '',
+    };
+  }
+  const raw = String(p.name || '').trim();
+  const commaParts = raw.split(',');
+  let suffix = '';
+  let main = raw;
+  if (commaParts.length > 1) {
+    main = commaParts[0].trim();
+    suffix = commaParts.slice(1).join(',').trim();
+  }
+  const parts = main.split(/\s+/);
+  if (parts.length === 1) return { fname: parts[0], mname: '', lname: '', suffix };
+  if (parts.length === 2) return { fname: parts[0], mname: '', lname: parts[1], suffix };
+  return { fname: parts[0], mname: parts.slice(1, -1).join(' '), lname: parts[parts.length - 1], suffix };
+}
+
+/* ─────────────────────────── MEDICAL HISTORY FIELDS ─────────────────────────── */
+// The Medical History fields for the chosen service, in the order
+// lib/serviceFields.js lists them. Shared by the Register wizard and the
+// Edit modal (variant 'edit' only changes the styling and id prefix).
+const EDIT_LABEL = 'block mb-1.5 text-slate-500';
+const EDIT_INPUT = 'w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800';
+
+function HistoryFields({ form, set, v, variant = 'wizard' }) {
+  const isEdit = variant === 'edit';
+  const cfg = serviceFields(form.service);
+  const oneOfError = Boolean(v.error('history'));
+  const p = isEdit ? 'edit' : 'reg';
+  // The first "at least one" field carries the id the history error focuses.
+  const historyAnchor = cfg.oneOf.find(k => k !== 'notes' && !cfg.required.includes(k));
+  const wrap = (k, full, children) => (
+    <div key={k} className={isEdit ? (full ? 'sm:col-span-2' : '') : `form-field${full ? ' span-all' : ''}`}>{children}</div>
+  );
+  const label = (k, htmlFor, required) => (
+    <label htmlFor={htmlFor} className={isEdit ? EDIT_LABEL : undefined}>
+      {k === 'notes' ? 'Clinical notes' : fieldLabel(k).replace('Known Allergies', 'Allergies')}
+      {required && (isEdit ? <span style={{ color: '#C8151A' }}> *</span> : <Req />)}
+    </label>
+  );
+  const select = (k, options, placeholder, { legacy = [], props = {} } = {}) => {
+    const cur = form[k] || '';
+    const extra = legacy.filter(o => o === cur);
+    return (
+      <Select id={`${p}-${k}`} {...props} value={cur} onChange={e => set(k, e.target.value)} className={isEdit ? EDIT_INPUT : undefined}>
+        <option value="">{placeholder}</option>
+        {[...options, ...extra].map(o => <option key={o} value={o}>{o}</option>)}
+      </Select>
+    );
+  };
+  // "Others": a text box right below the dropdown; required while shown.
+  const otherBox = (k, textKey, placeholder) => form[k] === OTHERS && (
+    <>
+      <input type="text" {...v.field(textKey)} value={form[textKey] || ''} maxLength={OTHER_TEXT_MAX}
+        onChange={e => set(textKey, e.target.value)} placeholder={placeholder} autoComplete="off"
+        className={isEdit ? `${EDIT_INPUT} mt-2` : undefined} />
+      {v.error(textKey) ? <FieldError v={v} name={textKey} />
+        : <span className={isEdit ? 'block mt-1 text-[11px] text-slate-400' : 'apw-help'}>{(form[textKey] || '').length}/{OTHER_TEXT_MAX} characters</span>}
+    </>
+  );
+  const invalidIfOneOf = k => (cfg.oneOf.includes(k) && oneOfError ? { 'aria-invalid': true } : {});
+
+  return cfg.history.map(k => {
+    switch (k) {
+      case 'pastVaccines':
+        return wrap(k, false, <>
+          {label(k, k === historyAnchor ? `${p}-history` : `${p}-${k}`)}
+          {select(k, PAST_VACCINE_OPTIONS, 'Select history', {
+            legacy: isEdit ? LEGACY_PAST_VACCINE_OPTIONS : [],
+            props: { ...invalidIfOneOf(k), ...(k === historyAnchor ? { id: `${p}-history` } : {}) },
+          })}
+          {otherBox(k, 'pastVaccinesOther', 'Type the vaccination history')}
+        </>);
+      case 'pneumoHistory':
+        return wrap(k, false, <>
+          {label(k, `${p}-pneumoHistory`, cfg.required.includes(k))}
+          <Select {...v.field('pneumoHistory', { withBlur: false })} value={form.pneumoHistory || ''}
+            onChange={e => set('pneumoHistory', e.target.value)} className={isEdit ? EDIT_INPUT : undefined}>
+            <option value="">Select history</option>
+            {PNEUMO_HISTORY_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+          </Select>
+          <FieldError v={v} name="pneumoHistory" />
+          {otherBox(k, 'pneumoHistoryOther', 'Type the pneumococcal history')}
+        </>);
+      case 'allergies':
+        return wrap(k, false, <>{label(k, `${p}-allergies`)}{select(k, ALLERGY_OPTIONS, 'Select allergy', { props: invalidIfOneOf(k) })}</>);
+      case 'riskCondition':
+        return wrap(k, false, <>{label(k, `${p}-riskCondition`)}{select(k, RISK_CONDITION_OPTIONS, 'Select condition')}</>);
+      case 'woundType':
+        return wrap(k, false, <>{label(k, `${p}-woundType`)}{select(k, WOUND_TYPE_OPTIONS, 'Select injury type')}</>);
+      case 'lastTetanus':
+        return wrap(k, false, <>{label(k, `${p}-lastTetanus`)}{select(k, LAST_TETANUS_OPTIONS, 'Select last shot')}</>);
+      case 'notes': {
+        // The hint only matters when nothing required already satisfies it.
+        const showHint = !cfg.oneOf.some(x => cfg.required.includes(x));
+        return wrap(k, true, <>
+          {label(k, `${p}-notes`)}
+          <textarea id={`${p}-notes`} {...invalidIfOneOf(k)} aria-describedby={oneOfError ? `${p}-history-err` : undefined}
+            value={form.notes || ''} onChange={e => set('notes', e.target.value)} onBlur={() => v.blur('history')}
+            placeholder="Observations, lab results or assessment notes…"
+            rows={isEdit ? 2 : 7}
+            className={isEdit ? `${EDIT_INPUT} resize-y` : undefined}
+            style={isEdit ? undefined : { resize: 'none', height: 160, overflowY: 'auto' }} />
+          <FieldError v={v} name="history" />
+          {!oneOfError && showHint && (
+            <span className={isEdit ? 'block mt-1 text-[11px] text-slate-400' : 'apw-help'}>
+              Fill in at least one of the {cfg.oneOf.length === 3 ? 'three' : cfg.oneOf.length}: {cfg.oneOf.map(x => (x === 'notes' ? 'clinical notes' : fieldLabel(x).replace('Known ', '').toLowerCase())).join(', ')}.
+            </span>
+          )}
+        </>);
+      }
+      default:
+        return null;
+    }
+  });
+}
+
 /* ─────────────────────────── ADD PATIENT MODAL (MULTI-STEP WIZARD) ─────────────────────────── */
-export function AddPatientModal({ onClose, onAdd }) {
+export function AddPatientModal({ onClose, onAdd, initialPatient = null }) {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const parsed = initialPatient ? parsePatientName(initialPatient) : null;
+  const initialAge = initialPatient?.dob ? (ageFromDob(initialPatient.dob) || initialPatient.age || '') : (initialPatient?.age || '');
   const [form, setForm] = useState({
-    fname: '', mname: '', lname: '', suffix: '', email: '', age: '', sex: '',
-    /* Vitals & birth date — optional, blank means "not recorded" everywhere
-       they are displayed rather than a zero or a guess. */
-    dob: '', height: '', weight: '', bloodPressure: '',
-    barangay: '', zone: '', address: '',
-    contact: '', service: '', vaccineBrand: '',
-    /* PEP Details — every choice starts empty (grey placeholder). Only the
-       exposure / Day 0 date defaults to today. */
-    placeOfExposure: '', typeOfExposure: '', sourceOfExposure: '',
-    cat: '', woundWashed: '',
+    fname: parsed ? parsed.fname : '',
+    mname: parsed ? parsed.mname : '',
+    lname: parsed ? parsed.lname : '',
+    suffix: parsed ? parsed.suffix : '',
+    email: initialPatient?.email || '',
+    age: initialAge ? String(initialAge) : '',
+    sex: initialPatient?.sex || initialPatient?.gender || '',
+    /* Vitals left blank for new case */
+    dob: initialPatient?.dob || '',
+    height: '',
+    weight: '',
+    bloodPressure: '',
+    barangay: initialPatient?.barangay || '',
+    zone: initialPatient?.zone || '',
+    address: initialPatient?.address || '',
+    contact: initialPatient?.contact || initialPatient?.phone || '',
+    guardian: initialPatient?.guardian || initialPatient?.emergencyName || '',
+    guardianPhone: initialPatient?.guardianPhone || initialPatient?.emergencyPhone || '',
+    guardianRel: initialPatient?.guardianRel || initialPatient?.emergencyRel || '',
+    service: '',
+    vaccineBrand: '',
+    /* PEP Details — blank for new case */
+    placeOfExposure: '',
+    typeOfExposure: '',
+    sourceOfExposure: '',
+    cat: '',
+    woundWashed: '',
     genericName: '',
-    animal: '', date: today(), woundLocation: '', woundDepth: '', numberOfBites: '',
-    /* History & General */
-    pastVaccines: '', allergies: '', notes: '',
+    animal: '',
+    date: today(),
+    woundLocation: '',
+    woundDepth: '',
+    numberOfBites: '',
+    /* History & General — blank for new case */
+    pastVaccines: '',
+    pastVaccinesOther: '',
+    allergies: '',
+    notes: '',
     /* Tetanus */
-    woundType: '', lastTetanus: '',
-    /* Pneumonia */
-    pneumoVaccine: '', riskCondition: '', priorPneumo: '',
+    woundType: '',
+    lastTetanus: '',
+    /* Pneumonia: nothing chosen by default; staff must pick */
+    pneumoHistory: '',
+    pneumoHistoryOther: '',
+    riskCondition: '',
   });
 
   const [saving, setSaving] = useState(false);
@@ -358,7 +512,7 @@ export function AddPatientModal({ onClose, onAdd }) {
         return;
       }
     }
-    onAdd(form, setSaving);
+    onAdd(form, setSaving, initialPatient);
   };
 
   const setAddress = (barangay, zone) => setForm(f => ({ ...f, barangay, zone, address: barangay ? `${zone ? zone + ', ' : ''}Brgy. ${barangay}, Libon, Albay` : '' }));
@@ -407,8 +561,12 @@ export function AddPatientModal({ onClose, onAdd }) {
         {/* ── Modal Top Header — same light card head as the Add Report pop-up ── */}
         <div className="px-6 py-3 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between" style={{ flexShrink: 0 }}>
           <div>
-            <h3 className="text-sm font-semibold text-slate-900">Register New Patient</h3>
-            <p className="text-[11px] text-slate-500 mt-0.5">Fill out patient registration details step-by-step</p>
+            <h3 className="text-sm font-semibold text-slate-900">
+              {initialPatient ? `Register New Service for Returning Patient (MRN: ${initialPatient.id || initialPatient.mrn || initialPatient.caseNo})` : 'Register New Patient'}
+            </h3>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              {initialPatient ? 'Demographics preserved. Select new service and enter case details.' : 'Fill out patient registration details step-by-step'}
+            </p>
           </div>
           <IconButton icon={X} label="Close" size={36} iconSize={16} onClick={requestClose} />
         </div>
@@ -669,61 +827,8 @@ export function AddPatientModal({ onClose, onAdd }) {
                 <div className="apw-groups">
                   <section className="apw-group apw-group-stacked">
                     <div className="apw-grid apw-grid-2">
-                      <div className="form-field"><label htmlFor="reg-history">Past vaccination history</label>
-                        <Select id="reg-history" aria-invalid={v.error('history') ? true : undefined} value={form.pastVaccines || ''} onChange={e => set('pastVaccines', e.target.value)}>
-                          <option value="">Select history</option>
-                          {PAST_VACCINE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                        </Select>
-                      </div>
-                      <div className="form-field"><label htmlFor="reg-allergies">Allergies</label>
-                        <Select id="reg-allergies" aria-invalid={v.error('history') ? true : undefined} value={form.allergies || ''} onChange={e => set('allergies', e.target.value)}>
-                          <option value="">Select allergy</option>
-                          {ALLERGY_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                        </Select>
-                      </div>
-
-                      {form.service === 'Tetanus' && (
-                        <>
-                          <div className="form-field"><label htmlFor="reg-woundtype">Wound / injury type</label>
-                            <Select id="reg-woundtype" value={form.woundType || ''} onChange={e => set('woundType', e.target.value)}>
-                              <option value="">Select injury type</option>
-                              <option>Laceration</option><option>Puncture</option><option>Abrasion</option><option>Burn</option><option>Crush injury</option><option>Other</option>
-                            </Select>
-                          </div>
-                          <div className="form-field"><label htmlFor="reg-lasttt">Last tetanus shot</label>
-                            <Select id="reg-lasttt" value={form.lastTetanus || ''} onChange={e => set('lastTetanus', e.target.value)}>
-                              <option value="">Select last shot</option>
-                              <option>Unknown</option><option>Less than 5 years ago</option><option>5–10 years ago</option><option>More than 10 years ago</option><option>Never vaccinated</option>
-                            </Select>
-                          </div>
-                        </>
-                      )}
-
-                      {form.service === 'Pneumonia' && (
-                        <>
-                          <div className="form-field"><label htmlFor="reg-pneumo">Vaccine variant</label>
-                            <Select id="reg-pneumo" value={form.pneumoVaccine || ''} onChange={e => set('pneumoVaccine', e.target.value)}>
-                              <option value="">Select variant</option>
-                              <option>PCV20 (Prevnar 20)</option><option>PPSV23 (Pneumovax 23)</option>
-                            </Select>
-                          </div>
-                          <div className="form-field"><label htmlFor="reg-risk">High-risk condition</label>
-                            <Select id="reg-risk" value={form.riskCondition || ''} onChange={e => set('riskCondition', e.target.value)}>
-                              <option value="">Select condition</option>
-                              <option>None</option><option>Asthma / COPD</option><option>Diabetes</option><option>Heart disease</option><option>Immunocompromised</option><option>Chronic kidney disease</option><option>Smoker</option><option>Age ≥ 65</option><option>Other</option>
-                            </Select>
-                          </div>
-                        </>
-                      )}
-
-                      <div className="form-field span-all"><label htmlFor="reg-notes">Clinical notes</label>
-                        <textarea id="reg-notes" aria-invalid={v.error('history') ? true : undefined} aria-describedby={v.error('history') ? 'reg-history-err' : undefined}
-                          value={form.notes || ''} onChange={e => set('notes', e.target.value)} onBlur={() => v.blur('history')}
-                          placeholder="Observations, lab results or assessment notes…" rows={7}
-                          style={{ resize: 'none', height: 160, overflowY: 'auto' }} />
-                        <FieldError v={v} name="history" />
-                        {!v.error('history') && <span className="apw-help">Fill in at least one of the three.</span>}
-                      </div>
+                      {/* Only what this service asks (lib/serviceFields.js). */}
+                      <HistoryFields form={form} set={set} v={v} />
                     </div>
                   </section>
                 </div>
@@ -797,13 +902,8 @@ export function AddPatientModal({ onClose, onAdd }) {
                   ['Service', `${serviceLabel} · ${SERVICE_TYPES.find(x => x.key === form.service)?.desc || ''}`],
                   ['Regimen', scheduleLabel(form.service)],
                 ]} />
-                <SummaryCard title="Medical history" stepId="history" rows={[
-                  ['Past vaccines', form.pastVaccines],
-                  ['Allergies', form.allergies],
-                  ['Notes', form.notes],
-                  form.service === 'Tetanus' && ['Wound / last shot', `${form.woundType} · ${form.lastTetanus}`],
-                  form.service === 'Pneumonia' && ['Variant / risk', `${form.pneumoVaccine} · ${form.riskCondition}`],
-                ]} />
+                <SummaryCard title="Medical history" stepId="history"
+                  rows={serviceFields(form.service).history.map(k => [k === 'notes' ? 'Notes' : fieldLabel(k), fieldValue(form, k)])} />
                 </div>
                 <div className="flex flex-col gap-3 min-w-0">
                 <SummaryCard title="Contact & address" stepId="identity" rows={[
@@ -882,6 +982,10 @@ const EDIT_RULES = {
   animal: REGISTER_RULES.animal,
   service: f => (f.service ? '' : 'Choose a service'),
   vaccineBrand: f => (!f.service ? 'Choose a service first' : f.vaccineBrand ? '' : 'Choose the vaccine brand'),
+  // Typed "Others" text is required. The pneumococcal history is not forced
+  // here, so older Pneumonia records saved before it existed stay editable.
+  pastVaccinesOther: REGISTER_RULES.pastVaccinesOther,
+  pneumoHistoryOther: REGISTER_RULES.pneumoHistoryOther,
 };
 
 export function EditPatientModal({ patient, onClose, onSave, inventoryItems = [] }) {
@@ -895,9 +999,11 @@ export function EditPatientModal({ patient, onClose, onSave, inventoryItems = []
     animal: patient.animal || '', cat: patient.cat === 'II' || patient.cat === 'III' ? `Category ${patient.cat}` : '',
     date: patient.date || today(),
     woundLocation: patient.woundLocation || '', woundDepth: patient.woundDepth || '', numberOfBites: patient.numberOfBites || '',
-    pastVaccines: patient.pastVaccines || '', allergies: patient.allergies || '', notes: patient.notes || '',
+    pastVaccines: patient.pastVaccines || '', pastVaccinesOther: patient.pastVaccinesOther || '',
+    allergies: patient.allergies || '', notes: patient.notes || '',
     woundType: patient.woundType || '', lastTetanus: patient.lastTetanus || '',
-    pneumoVaccine: patient.pneumoVaccine || '', riskCondition: patient.riskCondition || '', priorPneumo: patient.priorPneumo || '',
+    pneumoHistory: patient.pneumoHistory || '', pneumoHistoryOther: patient.pneumoHistoryOther || '',
+    riskCondition: patient.riskCondition || '',
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const editDobAge = ageFromDob(form.dob);
@@ -915,7 +1021,7 @@ export function EditPatientModal({ patient, onClose, onSave, inventoryItems = []
   // handleEditSave (parent) persists and closes this modal itself; the
   // checks here are the same inline ones as the Register wizard.
   const v = useFieldErrors(EDIT_RULES, form, 'edit');
-  const editFields = ['name', 'age', 'dob', 'email', 'contact', 'service', 'vaccineBrand', ...(isPep ? ['date', 'animal', 'cat'] : [])];
+  const editFields = ['name', 'age', 'dob', 'email', 'contact', 'service', 'vaccineBrand', ...(isPep ? ['date', 'animal', 'cat'] : []), 'pastVaccinesOther', 'pneumoHistoryOther'];
   function handleSave() {
     if (!v.validate(editFields)) return;
     onSave(form);
@@ -1242,93 +1348,8 @@ export function EditPatientModal({ patient, onClose, onSave, inventoryItems = []
                   </span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block mb-1.5 text-slate-500">Past Vaccination History</label>
-                    <Select
-                      value={form.pastVaccines || ''}
-                      onChange={e => set('pastVaccines', e.target.value)}
-                      className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                    >
-                      <option value="">Select history</option>
-                      {PAST_VACCINE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="block mb-1.5 text-slate-500">Allergies</label>
-                    <Select
-                      value={form.allergies || ''}
-                      onChange={e => set('allergies', e.target.value)}
-                      className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                    >
-                      <option value="">Select allergy</option>
-                      {ALLERGY_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                    </Select>
-                  </div>
-
-                  {form.service === 'Tetanus' && (
-                    <>
-                      <div>
-                        <label className="block mb-1.5 text-slate-500">Wound / Injury Type</label>
-                        <Select
-                          value={form.woundType}
-                          onChange={e => set('woundType', e.target.value)}
-                          className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                        >
-                          <option value="">Select injury type</option>
-                          <option>Laceration</option><option>Puncture</option><option>Abrasion</option><option>Burn</option><option>Crush injury</option><option>Other</option>
-                        </Select>
-                      </div>
-                      <div>
-                        <label className="block mb-1.5 text-slate-500">Last Tetanus Shot</label>
-                        <Select
-                          value={form.lastTetanus}
-                          onChange={e => set('lastTetanus', e.target.value)}
-                          className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                        >
-                          <option value="">Select last shot</option>
-                          <option>Unknown</option><option>Less than 5 years ago</option><option>5–10 years ago</option><option>More than 10 years ago</option><option>Never vaccinated</option>
-                        </Select>
-                      </div>
-                    </>
-                  )}
-
-                  {form.service === 'Pneumonia' && (
-                    <>
-                      <div>
-                        <label className="block mb-1.5 text-slate-500">Vaccine Variant</label>
-                        <Select
-                          value={form.pneumoVaccine}
-                          onChange={e => set('pneumoVaccine', e.target.value)}
-                          className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                        >
-                          <option value="">Select variant</option>
-                          <option>PCV20 (Prevnar 20)</option><option>PPSV23 (Pneumovax 23)</option>
-                        </Select>
-                      </div>
-                      <div>
-                        <label className="block mb-1.5 text-slate-500">High-Risk Condition</label>
-                        <Select
-                          value={form.riskCondition}
-                          onChange={e => set('riskCondition', e.target.value)}
-                          className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                        >
-                          <option value="">Select condition</option>
-                          <option>None</option><option>Asthma / COPD</option><option>Diabetes</option><option>Heart disease</option><option>Immunocompromised</option><option>Chronic kidney disease</option><option>Smoker</option><option>Age ≥ 65</option><option>Other</option>
-                        </Select>
-                      </div>
-                    </>
-                  )}
-
-                  <div className="sm:col-span-2">
-                    <label className="block mb-1.5 text-slate-500">Clinical Notes</label>
-                    <textarea
-                      value={form.notes}
-                      onChange={e => set('notes', e.target.value)}
-                      placeholder="Add any relevant observations, lab results, or clinical assessment notes..."
-                      rows={2}
-                      className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800 resize-y"
-                    />
-                  </div>
+                  {/* Same per-service fields as the Register wizard. */}
+                  <HistoryFields form={form} set={set} v={v} variant="edit" />
                 </div>
               </div>
             </div>

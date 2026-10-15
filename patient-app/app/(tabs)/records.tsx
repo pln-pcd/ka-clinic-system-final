@@ -21,6 +21,7 @@ import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTi
 import ViewShot from 'react-native-view-shot';
 import { saveImageToGallery } from '../../utils/saveImage';
 import { formatDoseDate, serviceCopy, EMPTY, doseStatus, isPepService, clinicToday, displayPatientId, doseBrand, doseState, exposureCategory, splitName } from '../../utils/patientRecord';
+import { historyRows } from '../../utils/serviceFields';
 import { db } from '../../config/backend';
 import { usePatientAuth } from '../../context/PatientAuthContext';
 import { moderateScale, scale, verticalScale } from '../../utils/scale';
@@ -218,12 +219,24 @@ export default function RecordsScreen() {
               <Text style={[s.recordTableCellLabel, { flex: 1.2 }]}>Biting Animal</Text>
               <Text style={[s.recordTableCellValue, { flex: 1.8 }]}>{pr.animal || pr.sourceOfExposure || EMPTY}</Text>
             </View>
+            {Array.isArray(pr.treatments) && pr.treatments.length > 0 && (
+              <View style={[s.recordTableRow, s.recordTableRowAlt]}>
+                <Text style={[s.recordTableCellLabel, { flex: 1.2 }]}>Cat III Treatments</Text>
+                <Text style={[s.recordTableCellValue, { flex: 1.8, fontWeight: '700', color: C.charcoal }]}>
+                  {pr.treatments.map((t: any) => `${t.product || 'Treatment'} (${t.ml ?? t.mg ?? 0} mL)`).join(', ')}
+                </Text>
+              </View>
+            )}
             </>
             )}
-            <View style={[s.recordTableRow, s.recordTableRowAlt]}>
-              <Text style={[s.recordTableCellLabel, { flex: 1.2 }]}>Known Allergies</Text>
-              <Text style={[s.recordTableCellValue, { flex: 1.8 }]}>{pr.allergies || EMPTY}</Text>
-            </View>
+            {/* Medical history this service asks (utils/serviceFields.ts). A
+                typed "Others" history shows as typed. */}
+            {historyRows(pr).map((row, i) => (
+              <View key={row.key} style={[s.recordTableRow, i % 2 === 0 && s.recordTableRowAlt]}>
+                <Text style={[s.recordTableCellLabel, { flex: 1.2 }]}>{row.label}</Text>
+                <Text style={[s.recordTableCellValue, { flex: 1.8 }]}>{row.value}</Text>
+              </View>
+            ))}
             <View style={[s.recordTableRow, { borderBottomWidth: 0 }]}>
               <Text style={[s.recordTableCellLabel, { flex: 1.2 }]}>Attending ABTC</Text>
               <Text style={[s.recordTableCellValue, { flex: 1.8, fontWeight: '700', color: C.charcoal }]}>K&A Animal Bite Center</Text>
@@ -288,6 +301,60 @@ export default function RecordsScreen() {
             })}
           </View>
         </View>
+
+        {/* ══ PREVIOUS CASE ENCOUNTERS (FOR RETURNING PATIENTS) ══ */}
+        {Array.isArray(pr.caseHistory) && pr.caseHistory.length > 0 && (
+          <View style={s.section}>
+            <View style={s.sectionHeader}>
+              <View style={s.sectionAccent} />
+              <Text style={s.sectionTitle}>Previous Clinical Cases</Text>
+            </View>
+
+            <View style={s.tableCard}>
+              <View style={s.tableHeaderRow}>
+                <Text style={[s.tableHeaderCell, { flex: 1 }]}>CASE</Text>
+                <Text style={[s.tableHeaderCell, { flex: 1.2 }]}>SERVICE</Text>
+                <Text style={[s.tableHeaderCell, { flex: 1.2 }]}>DATE</Text>
+                <Text style={[s.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>STATUS</Text>
+              </View>
+
+              {pr.caseHistory.map((h: any, idx: number) => {
+                const isAlt = idx % 2 === 1;
+                const isLast = idx === pr.caseHistory.length - 1;
+                const dateStr = formatDoseDate(h.date || h.closedAt);
+                const hDoses = Array.isArray(h.doses) ? h.doses : [];
+                const hDone = hDoses.filter((d: any) => d.s === 'done' || d.status === 'done' || d.done).length;
+                const hTreatments = Array.isArray(h.treatments) ? h.treatments : [];
+
+                return (
+                  <View key={idx} style={[s.recordTableRow, isAlt && s.recordTableRowAlt, isLast && { borderBottomWidth: 0 }]}>
+                    <Text style={[s.recordTableCellValue, { flex: 1, fontWeight: '700', color: C.charcoal }]}>
+                      Case #{idx + 1}
+                    </Text>
+                    <View style={{ flex: 1.2 }}>
+                      <Text style={[s.recordTableCellValue, { fontWeight: '600', color: C.charcoal }]}>
+                        {h.service || 'PEP'}{h.cat ? ` (Cat ${h.cat})` : ''}
+                      </Text>
+                      <Text style={[s.recordTableCellLabel, { fontSize: 10, marginTop: 1 }]}>
+                        {hDone}/{hDoses.length} doses{hTreatments.length ? ` · ${hTreatments.map((t: any) => `${t.product} (${t.ml ?? t.mg ?? 0} mL)`).join(', ')}` : ''}
+                      </Text>
+                    </View>
+                    <Text style={[s.recordTableCellValue, { flex: 1.2 }]}>
+                      {dateStr}
+                    </Text>
+                    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                      <View style={[s.miniBadge, s.miniBadgeDone]}>
+                        <Text numberOfLines={1} style={[s.miniBadgeTxt, s.miniBadgeTxtDone]}>
+                          {(h.status || 'DONE').toUpperCase()}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
 
       </ScrollView>
 

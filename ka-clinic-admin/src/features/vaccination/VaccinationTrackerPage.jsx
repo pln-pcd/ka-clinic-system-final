@@ -19,7 +19,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Clock,
-  Syringe,
+  Pencil,
   FileText,
   RotateCcw,
   Search,
@@ -31,8 +31,9 @@ import Toast from '../../components/Toast';
 import { authedPostJson } from '../../lib/adminSession';
 import { auth, db, listen } from '../../lib/firebase';
 import { peekLiveCollection, useLiveCollection } from '../../lib/liveStore';
-import { brandAvailability, recordDoseChange, recordErigChange } from '../../lib/inventoryStock';
-import { erigStatus, isErigItem } from '../../lib/erig';
+import { brandAvailability, recordDoseChange, recordTreatmentChange, getItemStockMl, parseDoseMl, isRigEntry, isExpired, expiryOf } from '../../lib/inventoryStock';
+import { isRigItem } from '../../lib/inventoryCategories';
+import { erigStatus, isCategoryIII } from '../../lib/erig';
 import DatePicker from '../../components/DatePicker';
 import { formatDateShort as fmtDate, getName, getTodayDateString, serviceLabel, titleCaseWords } from '../../lib/formatters';
 import { getEligibleVaccinesForService, buildDoses, getTodayStr, isOverdue } from '../../lib/doseSchedules';
@@ -57,8 +58,28 @@ async function syncIncidentPinsForCompletion(patient, completed) {
     ).catch(err => console.warn(`Could not update map visibility for incident ${id}:`, err))
   ));
 }
+// Category III products and how each finds its Inventory item: the exact
+// name first, else a whole-word match (so "TT" never matches inside another
+// name, and TIG / ATS never land on the ERIG item).
+export const CAT3_TREATMENTS = [
+  { id: 'cat3_rig', name: 'RIG (Equirab ERIG)', match: /\bequirab\b|\berig\b|\brig\b|rabies immunoglobulin/i },
+  { id: 'cat3_tt', name: 'Tetanus Toxoid (TT)', match: /tetanus toxoid|\btt\b/i },
+  { id: 'cat3_ats', name: 'Anti-Tetanus Serum (ATS 1500 IU)', match: /\bats\b|anti-?tetanus serum/i },
+  { id: 'cat3_tig', name: 'Tetanus Immunoglobulin (TIG 250 IU)', match: /\btig\b|tetanus immunoglobulin/i },
+];
+export const ANTI_TETANUS_PRODUCTS = CAT3_TREATMENTS.filter(t => t.id !== 'cat3_rig').map(t => t.name);
 
+export const isTreatmentProduct = (name) => {
+  return CAT3_TREATMENTS.some(t => t.name === name);
+};
 
+export const findMatchingInventoryItem = (name, items) => {
+  if (!name || !Array.isArray(items)) return null;
+  const exact = items.find(i => i.name && i.name.toLowerCase() === name.toLowerCase());
+  if (exact) return exact;
+  const tDef = CAT3_TREATMENTS.find(t => t.name === name);
+  return tDef ? items.find(i => tDef.match.test(i.name || '')) || null : null;
+};
 
 const deriveStatus = (p) => {
   const doses = buildDoses(p);
@@ -133,6 +154,8 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
   const [undoBusy, setUndoBusy] = useState(false);
   const [saving,       setSaving]       = useState({});
   const [assignedBrand, setAssignedBrand] = useState('');
+  const [assignedMl, setAssignedMl] = useState('');
+  const [treatmentDate, setTreatmentDate] = useState(() => getTodayDateString());
   const itemsPerPage = 10;
 
   // The next dose ticked as READY (not saved until "Confirm dose").
@@ -142,25 +165,44 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
   // Latest reminder per patient: undefined = not loaded, null = none.
   const [reminderCache, setReminderCache] = useState({});
   const reminderFetches = useRef(new Set());
-  // ERIG entry in the dose popup (Category III only): the unsaved form, and
-  // the saved entry waiting for "remove" to be confirmed.
-  const blankErig = () => ({ checked: false, vials: '1', date: getTodayDateString(), itemId: '', error: '' });
-  const [erigDraft, setErigDraft] = useState(blankErig);
-  const [erigBusy, setErigBusy] = useState(false);
-  const [erigRemoveAsk, setErigRemoveAsk] = useState(null);
+
+  // Category III treatments (RIG and Anti-Tetanus) with mL tracking
+  const [rigDraftOpen, setRigDraftOpen] = useState(false);
+  const [rigMl, setRigMl] = useState('');
+  // The RIG product given: an Inventory item in the RIG category. No default.
+  const [rigItemId, setRigItemId] = useState('');
+  const [rigDate, setRigDate] = useState(() => getTodayDateString());
+  const [rigBusy, setRigBusy] = useState(false);
+
+  const [tetanusDraftOpen, setTetanusDraftOpen] = useState(false);
+  const [tetanusProduct, setTetanusProduct] = useState('');
+  const [tetanusMl, setTetanusMl] = useState('');
+  const [tetanusDate, setTetanusDate] = useState(() => getTodayDateString());
+  const [tetanusBusy, setTetanusBusy] = useState(false);
+
+  const [treatmentBusy, setTreatmentBusy] = useState(false);
+  const [treatmentRemoveAsk, setTreatmentRemoveAsk] = useState(null);
 
   const closeModal = () => {
     setDetailPt(null);
     setAssignedBrand('');
+    setAssignedMl('');
     setReadyKey(null);
-    setErigDraft(blankErig());
+    setRigDraftOpen(false);
+    setRigMl('');
+    setRigItemId('');
+    setRigDate(getTodayDateString());
+    setTetanusDraftOpen(false);
+    setTetanusProduct('');
+    setTetanusMl('');
+    setTetanusDate(getTodayDateString());
     autoOpenedRef.current = null;
     if (onClearSelectedPatient) onClearSelectedPatient();
   };
 
-  // Closing with a ready-but-unconfirmed dose (or an unsaved ERIG entry) asks first.
+  // Closing with a ready-but-unconfirmed dose (or unsaved entries) asks first.
   const requestCloseModal = () => {
-    if (readyKey || erigDraft.checked) setDiscardAsk(true);
+    if (readyKey || rigDraftOpen || tetanusDraftOpen) setDiscardAsk(true);
     else closeModal();
   };
 
@@ -419,12 +461,20 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
     const brandToUse = brandOverride || assignedBrand;
 
     // ── STRICT SEQUENTIAL DOSE ENFORCEMENT & VACCINE BRAND CHECK ──
+    let doseMlToUse = 0;
     if (!isCurrentlyDone) {
       // The nurse cannot check if they still haven't chosen the vaccine brand
       if (!brandToUse) {
         showToast(`Please select an assigned Vaccine Brand for ${cur.label} first before checking.`, 'warning');
         return;
       }
+
+      const parsedMl = parseDoseMl(assignedMl);
+      if (parsedMl === null) {
+        showToast('Please enter a valid amount in mL (e.g. 0.5 mL) before confirming dose.', 'error');
+        return;
+      }
+      doseMlToUse = parsedMl;
 
       // User wants to check Dose di -> ALL previous doses (0 .. di - 1) MUST be 'done'
       for (let k = 0; k < di; k++) {
@@ -445,12 +495,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
 
     const nextStatus = isCurrentlyDone ? 'pending' : 'done';
 
-    // Which inventory item this change moves stock on. Giving a dose takes a
-    // vial of the selected brand. Undoing one puts the vial back on the item
-    // it came from, and only if it was really taken: doses saved by this code
-    // record stockItemId and stockDeducted; older doses (no such fields) fall
-    // back to their brand name, as the previous code deducted by name.
-    // buildDoses() drops the stock fields, so read them from the stored dose.
+    // Which inventory item this change moves stock on.
     const storedCur = Array.isArray(fresh.doses) ? fresh.doses[di] : null;
     let stockItemId = null;
     try {
@@ -462,9 +507,16 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
     }
     if (nextStatus === 'done' && stockItemId) {
       const item = inventoryItems.find(i => i.id === stockItemId);
-      if (item && (parseInt(item.stock, 10) || 0) <= 0) {
-        showToast(`${brandToUse} is out of stock in Inventory. Restock it or choose another brand before recording this dose.`, 'error');
+      if (item && isExpired(item, getTodayStr())) {
+        showToast(`${item.name} expired on ${expiryOf(item)} and cannot be used. Choose another brand.`, 'error');
         return;
+      }
+      if (item) {
+        const poolMl = getItemStockMl(item) ?? 0;
+        if (poolMl < doseMlToUse) {
+          showToast(`${brandToUse} has only ${poolMl} mL remaining in Inventory (requested ${doseMlToUse} mL).`, 'error');
+          return;
+        }
       }
     }
 
@@ -476,6 +528,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
             status: nextStatus,
             s: nextStatus,
             brand: nextStatus === 'done' ? brandToUse : '',
+            ml: nextStatus === 'done' ? doseMlToUse : null,
             autoMissed: false,
           }
         : d
@@ -485,14 +538,10 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
     const totalDoses = updatedDoses.length;
     const allDone    = doneCount === totalDoses;
     const newStatus  = allDone ? 'completed' : 'ongoing';
-    // Completion date drives the "Completed on …" label and the 365-day
-    // archive clock (lib/patientArchive.js). Stamped when the final dose
-    // lands, kept if an already-completed record is re-saved, cleared if a
-    // dose is un-done.
     const wasCompleted = doses.length > 0 && doses.every(d => d.status === 'done');
     const completedAt  = allDone ? (wasCompleted && fresh.completedAt ? fresh.completedAt : getTodayStr()) : null;
 
-    // ── INSTANT OPTIMISTIC LOCAL UI UPDATE (ZERO BUFFERING / ZERO DELAY) ──
+    // ── INSTANT OPTIMISTIC LOCAL UI UPDATE ──
     setPatients(prev =>
       prev.map(x =>
         x.firestoreId === p.firestoreId
@@ -520,13 +569,10 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
         : prev
     );
 
-    // Reset assignedBrand for next dose so nurse must select brand again for next dose
+    // Reset assignedBrand and assignedMl for next dose
     setAssignedBrand('');
+    setAssignedMl('');
 
-    // ── PERSIST THE DOSE AND THE STOCK CHANGE TOGETHER ──
-    // lib/inventoryStock.js writes the dose, the stock count and an audit entry in
-    // one transaction, so a stock change can never be lost, doubled, or
-    // applied without its dose, even with two people on the same patient.
     let outcome;
     try {
       outcome = await recordDoseChange({ runTransaction, doc, collection, deleteField }, db, {
@@ -535,17 +581,18 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
         give: nextStatus === 'done',
         brand: brandToUse,
         stockItemId,
+        ml: doseMlToUse,
         byUid: auth.currentUser?.uid || null,
         byName: auth.currentUser?.displayName || auth.currentUser?.email || '',
         readDoses: saved => buildDoses(saved),
         today: getTodayStr(),
       });
     } catch (err) {
-      // Roll the optimistic UI back; the live listener brings in whatever is saved.
       setPatients(prev => prev.map(x => (x.firestoreId === p.firestoreId ? fresh : x)));
       setDetailPt(prev => (prev && prev.firestoreId === p.firestoreId ? fresh : prev));
       if (err?.code === 'stale') showToast('This dose was just updated elsewhere. The list has been refreshed.', 'warning');
       else if (err?.code === 'out-of-stock') showToast(`${err.message} Restock it or choose another brand before recording this dose.`, 'error');
+      else if (err?.code === 'expired') showToast(`${err.message} Choose another brand.`, 'error');
       else {
         console.error('cycleStatus error:', err);
         showToast('Could not save the dose. Nothing was changed. Please try again.', 'error');
@@ -562,59 +609,129 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
     } else if (!outcome.moved) {
       showToast('Dose undone. No stock was deducted for it, so none was restored.', 'info');
     } else if (nextStatus === 'done') {
-      showToast(`Dose ${di + 1} saved. ${outcome.itemName} stock: ${outcome.before} → ${outcome.after}.`, 'success');
+      showToast(`Dose ${di + 1} saved. ${outcome.itemName} stock: ${outcome.before} mL → ${outcome.after} mL.`, 'success');
     } else {
-      showToast(`Dose ${di + 1} undone. ${outcome.itemName} stock restored to ${outcome.after}.`, 'info');
+      showToast(`Dose ${di + 1} undone. ${outcome.itemName} stock restored to ${outcome.after} mL.`, 'info');
     }
   };
 
-  // ERIG given: deducts the vials from the chosen ERIG item in one
-  // transaction with the record (lib/inventoryStock.js recordErigChange).
-  const saveErig = async (p, erigItems) => {
-    const vials = parseInt(erigDraft.vials, 10);
-    const err = !Number.isInteger(vials) || vials < 1 || vials > 20 ? 'Enter the number of vials (1 to 20)'
-      : !erigDraft.date ? 'Choose the date given'
-      : erigDraft.date > getTodayStr() ? "The date can't be in the future"
-      : erigItems.length && !erigDraft.itemId ? 'Choose the ERIG stock to deduct from' : '';
-    if (err) { setErigDraft(d => ({ ...d, error: err })); return; }
-    const item = erigItems.find(i => i.id === erigDraft.itemId);
+  // Saves a RIG or Anti-Tetanus entry: deducts exactly the typed mL from
+  // the product's Inventory item in one transaction with the record
+  // (lib/inventoryStock.js recordTreatmentChange). The entry is its own
+  // field on the record, never a dose, and nothing is ticked or saved for
+  // the nurse. A second click while saving does nothing; the transaction
+  // also refuses a second entry of the same kind.
+  const treatmentInFlight = useRef(false);
+  const saveTreatment = async (p, { kind, product, mlRaw, date, setBusy, onSaved, item: chosenItem = null }) => {
+    if (treatmentInFlight.current) return;
+    if (!product) { showToast(`Choose the ${kind} product first.`, 'error'); return; }
+    const ml = parseDoseMl(mlRaw);
+    if (ml === null) { showToast(`Enter the ${kind} amount in mL (more than 0).`, 'error'); return; }
+    const dateToUse = date || getTodayStr();
+    if (dateToUse > getTodayStr()) { showToast(`The ${kind} date can't be in the future.`, 'error'); return; }
+    const item = chosenItem || findMatchingInventoryItem(product, inventoryItems);
+    if (item && isExpired(item, getTodayStr())) {
+      showToast(`${item.name} expired on ${expiryOf(item)} and cannot be used. Nothing was saved.`, 'error');
+      return;
+    }
     if (item) {
-      const stock = parseInt(item.stock, 10) || 0;
-      if (stock <= 0) { setErigDraft(d => ({ ...d, error: `${item.name} is out of stock in Inventory.` })); return; }
-      if (stock < vials) { setErigDraft(d => ({ ...d, error: `${item.name} has only ${stock} vial${stock === 1 ? '' : 's'} left.` })); return; }
+      const poolMl = getItemStockMl(item) ?? 0;
+      if (poolMl < ml) {
+        showToast(`${item.name} has only ${poolMl} mL left in Inventory (needed ${ml} mL). Nothing was saved.`, 'error');
+        return;
+      }
     }
-    setErigBusy(true);
+    treatmentInFlight.current = true;
+    setBusy(true);
     try {
-      const out = await recordErigChange({ runTransaction, doc, collection, deleteField }, db, {
-        patientId: p.firestoreId, give: true, vials, date: erigDraft.date, stockItemId: item?.id || null,
-        byUid: auth.currentUser?.uid || null, byName: auth.currentUser?.displayName || auth.currentUser?.email || '',
+      const out = await recordTreatmentChange({ runTransaction, doc, collection, deleteField }, db, {
+        patientId: p.firestoreId,
+        give: true,
+        kind: kind === 'RIG' ? 'rig' : 'antiTetanus',
+        today: getTodayStr(),
+        product,
+        stockItemId: item?.id || null,
+        ml,
+        date: dateToUse,
+        byUid: auth.currentUser?.uid || null,
+        byName: auth.currentUser?.displayName || auth.currentUser?.email || '',
       });
-      setErigDraft(blankErig());
-      if (!out.moved) showToast('ERIG saved. No ERIG item in Inventory, so no stock was deducted.', 'warning');
-      else if (out.after <= 0) showToast(`ERIG saved. ${out.itemName} is now out of stock (${out.before} → 0).`, 'warning');
-      else if (out.low) showToast(`ERIG saved. ${out.itemName} stock is low: ${out.before} → ${out.after}.`, 'warning');
-      else showToast(`ERIG saved. ${out.itemName} stock: ${out.before} → ${out.after}.`, 'success');
-    } catch (e) {
-      if (e?.code === 'out-of-stock' || e?.code === 'stale') setErigDraft(d => ({ ...d, error: e.message }));
-      else { console.error('saveErig error:', e); showToast('Could not save ERIG. Nothing was changed. Please try again.', 'error'); }
+      const entry = out.entry;
+      const field = kind === 'RIG' ? 'rigTreatment' : 'antiTetanusTreatment';
+      const apply = x => ({
+        ...x,
+        [field]: entry,
+        ...(kind === 'RIG' ? { rigGiven: 'Yes (ERIG)' } : {}),
+        treatments: [...(Array.isArray(x.treatments) ? x.treatments : []), entry],
+      });
+      setDetailPt(prev => (prev && prev.firestoreId === p.firestoreId ? apply(prev) : prev));
+      setPatients(prev => prev.map(x => (x.firestoreId === p.firestoreId ? apply(x) : x)));
+      onSaved();
+      if (out.moved) showToast(`${product} (${ml} mL) saved. ${out.itemName} stock: ${out.before} mL → ${out.after} mL.`, 'success');
+      else showToast(`${product} (${ml} mL) saved. No matching item in Inventory, so no stock was deducted.`, 'warning');
+    } catch (err) {
+      if (['stale', 'out-of-stock', 'expired', 'no-ml', 'invalid-dose'].includes(err?.code)) {
+        showToast(`${err.message} Nothing was saved.`, 'error');
+      } else {
+        console.error(`Save ${kind} error:`, err);
+        showToast(`Could not save ${kind}. Nothing was changed. Please try again.`, 'error');
+      }
     } finally {
-      setErigBusy(false);
+      treatmentInFlight.current = false;
+      setBusy(false);
     }
   };
 
-  const removeErig = async (p) => {
-    setErigBusy(true);
+  // RIG deducts from the item picked in the card's dropdown.
+  const handleSaveRig = (p) => {
+    const item = inventoryItems.find(i => i.id === rigItemId);
+    if (!item) { showToast('Choose the RIG product first.', 'error'); return; }
+    return saveTreatment(p, {
+      kind: 'RIG', product: item.name, item, mlRaw: rigMl, date: rigDate, setBusy: setRigBusy,
+      onSaved: () => { setRigDraftOpen(false); setRigMl(''); setRigItemId(''); setRigDate(getTodayDateString()); },
+    });
+  };
+
+  const handleSaveAntiTetanus = (p) => saveTreatment(p, {
+    kind: 'Anti-Tetanus', product: tetanusProduct, mlRaw: tetanusMl, date: tetanusDate, setBusy: setTetanusBusy,
+    onSaved: () => { setTetanusDraftOpen(false); setTetanusProduct(''); setTetanusMl(''); setTetanusDate(getTodayDateString()); },
+  });
+
+  const removeTreatment = async (p, treatment) => {
+    setTreatmentBusy(true);
     try {
-      const out = await recordErigChange({ runTransaction, doc, collection, deleteField }, db, {
-        patientId: p.firestoreId, give: false, byUid: auth.currentUser?.uid || null,
+      const isRig = isRigEntry(treatment);
+      const out = await recordTreatmentChange({ runTransaction, doc, collection, deleteField }, db, {
+        patientId: p.firestoreId,
+        give: false,
+        kind: isRig ? 'rig' : 'antiTetanus',
+        treatmentId: treatment.id,
+        product: treatment.product,
+        byUid: auth.currentUser?.uid || null,
+        byName: auth.currentUser?.displayName || auth.currentUser?.email || '',
       });
-      showToast(out.moved ? `ERIG removed. ${out.itemName} stock restored to ${out.after}.` : 'ERIG removed. No stock was deducted for it, so none was restored.', 'info');
+      setDetailPt(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          treatments: (Array.isArray(prev.treatments) ? prev.treatments : []).filter(t => (t.id && treatment.id ? t.id !== treatment.id : t.product !== treatment.product)),
+          ...(isRig ? { rigTreatment: null, rigGiven: 'No' } : { antiTetanusTreatment: null }),
+        };
+      });
+      setPatients(prev => prev.map(x => x.firestoreId === p.firestoreId ? {
+        ...x,
+        treatments: (Array.isArray(x.treatments) ? x.treatments : []).filter(t => (t.id && treatment.id ? t.id !== treatment.id : t.product !== treatment.product)),
+        ...(isRig ? { rigTreatment: null, rigGiven: 'No' } : { antiTetanusTreatment: null }),
+      } : x));
+      showToast(out.moved
+        ? `${treatment.product} removed. ${out.itemName} stock restored: ${out.before} mL → ${out.after} mL.`
+        : `${treatment.product} removed. No stock was deducted for it, so none was restored.`, 'info');
     } catch (e) {
-      if (e?.code === 'stale') showToast('ERIG was just updated elsewhere. The record has been refreshed.', 'warning');
-      else { console.error('removeErig error:', e); showToast('Could not remove ERIG. Nothing was changed.', 'error'); }
+      if (e?.code === 'stale') showToast(`${e.message} The record has been refreshed.`, 'warning');
+      else { console.error('removeTreatment error:', e); showToast('Could not remove the entry. Nothing was changed.', 'error'); }
     } finally {
-      setErigBusy(false);
-      setErigRemoveAsk(null);
+      setTreatmentBusy(false);
+      setTreatmentRemoveAsk(null);
     }
   };
 
@@ -962,7 +1079,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                       </td>
                       <td style={{ padding: '16px 20px 16px 12px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
                         <div style={{ display: 'flex', gap: 6, justifyContent: 'center', alignItems: 'center' }}>
-                          <IconButton icon={Syringe} label="Manage doses" bordered
+                          <IconButton icon={Pencil} label="Edit doses" bordered
                             onClick={(e) => { e.stopPropagation(); setDetailPt(p); setAssignedBrand(''); }} />
                         </div>
                       </td>
@@ -1015,7 +1132,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
         const isPepRecord = serviceName === 'PEP';
         const eligibleVaccines = getEligibleVaccinesForService(serviceName, inventoryItems);
         const allOptions = [...eligibleVaccines];
-        if (assignedBrand && !allOptions.some(item => item.name === assignedBrand)) {
+        if (assignedBrand && !allOptions.some(item => item.name === assignedBrand) && !isTreatmentProduct(assignedBrand)) {
           allOptions.unshift({ id: 'current_selected', name: assignedBrand, stock: '?' });
         }
         const nextIndex = doses.findIndex(d => d.status !== 'done');
@@ -1028,7 +1145,6 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
         const daysTone = !next ? 'text-emerald-700' : daysToNext < 0 ? 'text-rose-600' : daysToNext === 0 ? 'text-amber-700' : 'text-slate-500';
         const readyDose = readyKey ? doses.find(d => d.key === readyKey) : null;
         const erig = erigStatus(p);
-        const erigItems = inventoryItems.filter(isErigItem);
         const createdRaw = p.createdAt?.toDate ? p.createdAt.toDate() : (typeof p.createdAt === 'number' ? new Date(p.createdAt) : null);
         const regDate = createdRaw ? getTodayDateString(createdRaw) : String(p.date || '').slice(0, 10);
 
@@ -1180,33 +1296,220 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                 <div className="w-[440px] shrink-0 px-6 py-5 flex flex-col gap-4 self-start">
                   <section className={cardCls}>
                     <div className="flex items-center justify-between pr-4">
-                      <h4 className={cardHead}>Assigned Vaccine Brand</h4>
+                      <h4 className={cardHead}>Vaccine Brand &amp; Amount</h4>
                       <span className="text-[11px] font-semibold text-slate-500">{serviceLabel(serviceName)}</span>
                     </div>
                     <div className="px-4 pb-4">
-                      {next ? (
-                        <>
-                          <div className="text-xs text-slate-500 mb-1.5">For <span className="font-semibold text-slate-900">{next.label}</span></div>
-                          <Select
-                            id="tracker-brand"
-                            aria-label={`Vaccine brand for ${next.label}`}
-                            value={assignedBrand}
-                            onChange={e => { setAssignedBrand(e.target.value); if (!e.target.value) setReadyKey(null); }}
-                            className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none font-semibold text-xs bg-white text-slate-800 focus:border-[#3B50DF]"
-                          >
-                            <option value="">Select {serviceLabel(serviceName)} vaccine brand</option>
-                            {allOptions.map(item => {
-                              const a = brandAvailability(item, today);
-                              return <option key={item.id} value={item.name} disabled={a.disabled} data-badge={a.badge} data-badge-tone={a.tone}>{item.name}</option>;
-                            })}
-                          </Select>
-                        </>
-                      ) : (
-                        <p className="flex items-center gap-2 text-xs font-semibold text-emerald-700"><CheckCircle size={15} /> All scheduled doses given.</p>
-                      )}
+                      <div className="text-xs text-slate-500 mb-1.5">
+                        {next ? <>For <span className="font-semibold text-slate-900">{next.label}</span></> : 'All scheduled doses given'}
+                      </div>
+                      <Select
+                        id="tracker-brand"
+                        aria-label={`Vaccine brand for ${next?.label || 'scheduled dose'}`}
+                        value={assignedBrand}
+                        onChange={e => {
+                          const b = e.target.value;
+                          setAssignedBrand(b);
+                          if (!b) setReadyKey(null);
+                        }}
+                        className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none font-semibold text-xs bg-white text-slate-800 focus:border-[#3B50DF]"
+                      >
+                        <option value="">{`Select ${serviceLabel(serviceName)} vaccine brand`}</option>
+                        {allOptions.map(item => {
+                          const a = brandAvailability(item, today);
+                          return <option key={item.id} value={item.name} disabled={a.disabled} data-badge={a.badge} data-badge-tone={a.tone}>{item.name}</option>;
+                        })}
+                      </Select>
+
+                      <div className="mt-2.5">
+                        <label htmlFor="tracker-dose-ml" className="block text-[11px] font-semibold text-slate-500 mb-1">
+                          Amount Given (mL) <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0.01"
+                            id="tracker-dose-ml"
+                            placeholder="e.g. 0.5"
+                            value={assignedMl}
+                            onChange={e => setAssignedMl(e.target.value)}
+                            className="w-full py-2 pl-3 pr-10 border border-slate-300 rounded-xl outline-none font-semibold text-xs bg-white text-slate-800 focus:border-[#3B50DF]"
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">
+                            mL
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   </section>
 
+                  {/* Two small cards side-by-side: RIG and Anti-Tetanus for Category III only */}
+                  {isCategoryIII(p) && (() => {
+                    const existingRig = p.rigTreatment || (Array.isArray(p.treatments) ? p.treatments.find(isRigEntry) : null);
+                    const existingTetanus = p.antiTetanusTreatment || (Array.isArray(p.treatments) ? p.treatments.find(t => !isRigEntry(t)) : null);
+                    const rigItems = inventoryItems.filter(isRigItem).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+                    return (
+                      <div className="grid grid-cols-1 gap-2.5">
+                        {/* RIG Card */}
+                        <div className={`p-3 rounded-2xl border transition-all ${existingRig ? 'bg-emerald-50/60 border-emerald-200' : rigDraftOpen ? 'bg-indigo-50/50 border-indigo-200' : 'bg-white border-slate-200'}`}>
+                          <div className="flex items-center justify-between gap-1.5">
+                            <label className="flex items-center gap-2 cursor-pointer select-none min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(existingRig || rigDraftOpen)}
+                                onChange={() => {
+                                  if (existingRig) {
+                                    setTreatmentRemoveAsk({ p, treatment: existingRig });
+                                  } else {
+                                    setRigDraftOpen(o => !o);
+                                  }
+                                }}
+                                className="w-4 h-4 rounded accent-[#3B50DF] cursor-pointer shrink-0"
+                              />
+                              <span className="text-xs font-bold text-slate-900 truncate">RIG</span>
+                            </label>
+                            <span className="text-[10px] font-semibold text-slate-400 shrink-0">Rabies immunoglobulin</span>
+                          </div>
+
+                          {existingRig ? (
+                            <div className="mt-2 text-[11px] text-emerald-800 bg-emerald-100/70 rounded-lg px-2 py-1.5">
+                              <div className="font-bold text-emerald-900 truncate">{existingRig.product} · {existingRig.ml ?? existingRig.mg} mL</div>
+                              <div className="text-[10px] text-emerald-700 mt-0.5">{fmtDate(existingRig.date)}{existingRig.recordedByName ? ` · ${existingRig.recordedByName}` : ''}</div>
+                            </div>
+                          ) : rigDraftOpen ? (
+                            <div className="mt-2.5 space-y-2 pt-2 border-t border-indigo-100">
+                              <div>
+                                <label htmlFor="tracker-rig-product" className="block text-[10px] font-semibold text-slate-500 mb-0.5">RIG vaccine</label>
+                                {/* Inventory items in the RIG category; the one chosen is the stock deducted. */}
+                                <Select
+                                  id="tracker-rig-product"
+                                  aria-label="RIG product"
+                                  value={rigItemId}
+                                  onChange={e => setRigItemId(e.target.value)}
+                                  className="w-full py-1.5 px-2.5 border border-slate-300 rounded-lg outline-none text-[11px] font-semibold bg-white text-slate-800 focus:border-[#3B50DF]"
+                                >
+                                  <option value="">{rigItems.length ? 'Select RIG product' : 'No RIG item in Inventory'}</option>
+                                  {rigItems.map(it => {
+                                    const a = brandAvailability(it, today);
+                                    return <option key={it.id} value={it.id} disabled={a.disabled} data-badge={a.badge || `${getItemStockMl(it) ?? 0} mL`} data-badge-tone={a.tone}>{it.name}</option>;
+                                  })}
+                                </Select>
+                                {!rigItems.length && <p className="mt-1 text-[10px] text-amber-700">Add the RIG product in Inventory (category: RIG) first.</p>}
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Amount (mL)</label>
+                                <div className="relative">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0.01"
+                                    placeholder="e.g. 5.0"
+                                    value={rigMl}
+                                    onChange={e => setRigMl(e.target.value)}
+                                    className="w-full py-1.5 pl-2.5 pr-8 border border-slate-300 rounded-lg outline-none text-xs font-semibold bg-white text-slate-800 focus:border-[#3B50DF]"
+                                  />
+                                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 pointer-events-none">mL</span>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                disabled={rigBusy || !rigItemId}
+                                onClick={() => handleSaveRig(p)}
+                                className="w-full py-1.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] rounded-lg shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+                              >
+                                {rigBusy ? 'Saving…' : 'Save RIG'}
+                              </button>
+                            </div>
+                          ) : (
+                            <p className="text-[10px] text-slate-400 mt-1">Optional Day 0</p>
+                          )}
+                        </div>
+
+                        {/* Anti-Tetanus Card */}
+                        <div className={`p-3 rounded-2xl border transition-all ${existingTetanus ? 'bg-emerald-50/60 border-emerald-200' : tetanusDraftOpen ? 'bg-indigo-50/50 border-indigo-200' : 'bg-white border-slate-200'}`}>
+                          <div className="flex items-center justify-between gap-1.5">
+                            <label className="flex items-center gap-2 cursor-pointer select-none min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(existingTetanus || tetanusDraftOpen)}
+                                onChange={() => {
+                                  if (existingTetanus) {
+                                    setTreatmentRemoveAsk({ p, treatment: existingTetanus });
+                                  } else {
+                                    setTetanusDraftOpen(o => !o);
+                                  }
+                                }}
+                                className="w-4 h-4 rounded accent-[#3B50DF] cursor-pointer shrink-0"
+                              />
+                              <span className="text-xs font-bold text-slate-900 truncate">Anti-Tetanus</span>
+                            </label>
+                            <span className="text-[10px] font-semibold text-slate-400 shrink-0">TT / Serum</span>
+                          </div>
+
+                          {existingTetanus ? (
+                            <div className="mt-2 text-[11px] text-emerald-800 bg-emerald-100/70 rounded-lg px-2 py-1.5">
+                              <div className="font-bold text-emerald-900 truncate">{existingTetanus.product}</div>
+                              <div className="flex justify-between text-[10px] text-emerald-700 mt-0.5">
+                                <span>{existingTetanus.ml ?? existingTetanus.mg} mL</span>
+                                <span>{fmtDate(existingTetanus.date)}{existingTetanus.recordedByName ? ` · ${existingTetanus.recordedByName}` : ''}</span>
+                              </div>
+                            </div>
+                          ) : tetanusDraftOpen ? (
+                            <div className="mt-2.5 space-y-2 pt-2 border-t border-indigo-100">
+                              <div>
+                                <label htmlFor="tracker-at-product" className="block text-[10px] font-semibold text-slate-500 mb-0.5">Product</label>
+                                {/* Shared Select: its list is portalled to <body> above the
+                                    modal, so it is never clipped by the card. No default. */}
+                                <Select
+                                  id="tracker-at-product"
+                                  aria-label="Anti-Tetanus product"
+                                  value={tetanusProduct}
+                                  onChange={e => setTetanusProduct(e.target.value)}
+                                  className="w-full py-1.5 px-2.5 border border-slate-300 rounded-lg outline-none text-[11px] font-semibold bg-white text-slate-800 focus:border-[#3B50DF]"
+                                >
+                                  <option value="">Select product</option>
+                                  {ANTI_TETANUS_PRODUCTS.map(name => {
+                                    const it = findMatchingInventoryItem(name, inventoryItems);
+                                    const a = it ? brandAvailability(it, today) : { disabled: false, badge: 'Not in Inventory', tone: 'amber' };
+                                    return <option key={name} value={name} disabled={a.disabled} data-badge={a.badge} data-badge-tone={a.tone}>{name}</option>;
+                                  })}
+                                </Select>
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Amount (mL)</label>
+                                <div className="relative">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0.01"
+                                    placeholder="e.g. 0.5"
+                                    value={tetanusMl}
+                                    onChange={e => setTetanusMl(e.target.value)}
+                                    className="w-full py-1.5 pl-2.5 pr-8 border border-slate-300 rounded-lg outline-none text-xs font-semibold bg-white text-slate-800 focus:border-[#3B50DF]"
+                                  />
+                                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 pointer-events-none">mL</span>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                disabled={tetanusBusy}
+                                onClick={() => handleSaveAntiTetanus(p)}
+                                className="w-full py-1.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] rounded-lg shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+                              >
+                                {tetanusBusy ? 'Saving…' : 'Save Anti-Tetanus'}
+                              </button>
+                            </div>
+                          ) : (
+                            <p className="text-[10px] text-slate-400 mt-1">Optional Day 0</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Dose Checklist Card */}
                   <section className={cardCls}>
                     <div className="px-4 pt-3 pb-2">
                       <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Dose Checklist</h4>
@@ -1218,8 +1521,6 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                         const isDone = st === 'given';
                         const isNext = di === nextIndex;
                         const isReady = isNext && readyKey === d.key;
-                        // Given doses are read-only (green check); only the next dose
-                        // can be ticked. The latest given dose keeps an Undo action.
                         const canTick = isNext && !!assignedBrand;
                         const canUndo = isDone && di === lastDoneIndex && !readyKey;
                         const usedBrand = d.brand || (isDone ? (d.vaccineBrand || p.vaccineBrand || '') : '');
@@ -1238,21 +1539,21 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                                   {isDone ? (
                                     <>
                                       <CheckCircle size={12} className="text-emerald-600 shrink-0" aria-hidden="true" />
-                                      <span className="truncate"><span className="text-emerald-700 font-semibold">Given</span>{usedBrand ? ` · ${usedBrand}` : ''} · {fmtDate(d.date)}</span>
+                                      <span className="truncate"><span className="text-emerald-700 font-semibold">Given</span>{usedBrand ? ` · ${usedBrand}` : ''}{d.ml ? ` · ${d.ml} mL` : ''} · {fmtDate(d.date)}</span>
                                     </>
                                   ) : (
                                     <>
                                       <span className="shrink-0">{fmtDate(d.date)}</span>
                                       {st === 'overdue' && <StatusBadge status="overdue" />}
                                       {st === 'today' && <StatusBadge status="due_today" />}
-                                      {isNext && assignedBrand && <span className="truncate text-slate-700">· {assignedBrand}</span>}
+                                      {isNext && assignedBrand && <span className="truncate text-slate-700">· {assignedBrand}{assignedMl ? ` (${assignedMl} mL)` : ''}</span>}
                                     </>
                                   )}
                                 </div>
                               </div>
                               {canUndo && (
                                 <button type="button" disabled={busy}
-                                  onClick={e => { e.preventDefault(); setUndoTarget({ p, key: d.key, label: d.label, brand: usedBrand, date: d.date }); }}
+                                  onClick={e => { e.preventDefault(); setUndoTarget({ p, key: d.key, label: d.label, brand: usedBrand, date: d.date, ml: d.ml, deducted: d.stockDeducted !== false }); }}
                                   className="inline-flex items-center gap-1 h-7 px-2 rounded-lg text-[11px] font-semibold text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer disabled:opacity-50 shrink-0"
                                   title="Undo this dose (recorded by mistake)">
                                   <RotateCcw size={12} aria-hidden="true" /> Undo
@@ -1279,89 +1580,6 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                       })}
                     </ol>
                   </section>
-
-                  {/* ERIG: Category III only, below the checklist. */}
-                  {isPepRecord && erig.required && (
-                    <section className={cardCls} aria-labelledby="erig-head">
-                      <div className="px-4 pt-3 pb-2 flex items-start justify-between gap-2">
-                        <div>
-                          <h4 id="erig-head" className="text-[11px] font-bold uppercase tracking-wider text-slate-500">ERIG</h4>
-                          <p className="text-[11px] text-slate-400 mt-0.5">Equine rabies immunoglobulin, with the first dose.</p>
-                        </div>
-                        {!erig.given && !erigDraft.checked && (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 shrink-0">
-                            <AlertTriangle size={11} aria-hidden="true" /> ERIG required for Category III
-                          </span>
-                        )}
-                      </div>
-                      <div className="border-t border-slate-100 px-4 py-2.5">
-                        <label className={`flex items-center gap-3 ${erigBusy ? 'cursor-default' : 'cursor-pointer'}`}>
-                          <input
-                            type="checkbox"
-                            checked={erig.given || erigDraft.checked}
-                            disabled={erigBusy}
-                            onChange={() => {
-                              if (erig.given) setErigRemoveAsk(p);
-                              else setErigDraft(d => (d.checked ? blankErig() : { ...d, checked: true, itemId: d.itemId || (erigItems.find(i => !brandAvailability(i, today).disabled)?.id || ''), error: '' }));
-                            }}
-                            className="w-[18px] h-[18px] rounded accent-[#3B50DF] shrink-0 cursor-pointer"
-                          />
-                          <span className="min-w-0 flex-1">
-                            <span className="block text-xs font-semibold text-slate-900">ERIG given</span>
-                            {erig.given && (
-                              <span className="block text-[11px] text-slate-500 truncate">
-                                <span className="text-emerald-700 font-semibold">Given</span>
-                                {erig.vials ? ` · ${erig.vials} vial${erig.vials === 1 ? '' : 's'}` : ''}
-                                {erig.date ? ` · ${fmtDate(erig.date)}` : ''}
-                                {erig.itemName ? ` · ${erig.itemName}` : ''}
-                                {erig.legacy ? ' · recorded at registration' : ''}
-                              </span>
-                            )}
-                          </span>
-                        </label>
-
-                        {!erig.given && erigDraft.checked && (
-                          <div className="mt-3 space-y-2.5">
-                            {erigItems.length > 0 && (
-                              <div>
-                                <label htmlFor="erig-item" className="block text-[11px] font-semibold text-slate-500 mb-1">Stock</label>
-                                <Select id="erig-item" value={erigDraft.itemId} onChange={e => setErigDraft(d => ({ ...d, itemId: e.target.value, error: '' }))}
-                                  className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none font-semibold text-xs bg-white text-slate-800 focus:border-[#3B50DF]">
-                                  <option value="">Select ERIG stock</option>
-                                  {erigItems.map(item => {
-                                    const a = brandAvailability(item, today);
-                                    return <option key={item.id} value={item.id} disabled={a.disabled} data-badge={a.badge} data-badge-tone={a.tone}>{`${item.name} (${parseInt(item.stock, 10) || 0} left)`}</option>;
-                                  })}
-                                </Select>
-                              </div>
-                            )}
-                            <div className="grid grid-cols-[96px_minmax(0,1fr)] gap-2.5">
-                              <div>
-                                <label htmlFor="erig-vials" className="block text-[11px] font-semibold text-slate-500 mb-1">Vials used</label>
-                                <input id="erig-vials" type="text" inputMode="numeric" value={erigDraft.vials}
-                                  onChange={e => setErigDraft(d => ({ ...d, vials: e.target.value.replace(/\D/g, '').slice(0, 2), error: '' }))}
-                                  className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none font-semibold text-xs bg-white text-slate-800 focus:border-[#3B50DF]" />
-                              </div>
-                              <div>
-                                <label htmlFor="erig-date" className="block text-[11px] font-semibold text-slate-500 mb-1">Date given</label>
-                                <DatePicker id="erig-date" value={erigDraft.date} max={today}
-                                  onChange={e => setErigDraft(d => ({ ...d, date: e.target.value, error: '' }))}
-                                  className="w-full py-2 pl-3 pr-9 border border-slate-300 rounded-xl outline-none font-semibold text-xs bg-white text-slate-800 focus:border-[#3B50DF]" />
-                              </div>
-                            </div>
-                            {!erigItems.length && <p className="text-[11px] text-slate-500">No ERIG item in Inventory: it will be saved without a stock deduction.</p>}
-                            {erigDraft.error && <p className="text-[11px] font-semibold text-rose-600" role="alert">{erigDraft.error}</p>}
-                            <div className="flex justify-end gap-2">
-                              <button type="button" onClick={() => setErigDraft(blankErig())} disabled={erigBusy} className={BTN.outline}>Cancel</button>
-                              <button type="button" onClick={() => saveErig(p, erigItems)} disabled={erigBusy} className={BTN.primary}>
-                                {erigBusy ? 'Saving…' : 'Save ERIG'}
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </section>
-                  )}
                 </div>
               </div>
 
@@ -1370,8 +1588,8 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                 <button type="button" onClick={requestCloseModal} className={BTN.outline}>Close Record</button>
                 <button
                   type="button"
-                  disabled={!readyDose || !assignedBrand || confirmBusy}
-                  title={readyDose ? `Save ${readyDose.label} with ${assignedBrand} and deduct 1 vial` : 'Tick the next dose first'}
+                  disabled={!readyDose || !assignedBrand || !assignedMl || confirmBusy}
+                  title={readyDose ? `Save ${readyDose.label} with ${assignedBrand} (${assignedMl || 0} mL) and deduct stock` : 'Tick the next dose first'}
                   onClick={async () => {
                     const key = readyDose.key;
                     setConfirmBusy(true);
@@ -1400,13 +1618,14 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
             variant="danger"
             icon={AlertTriangle}
             size="compact"
-            title={readyKey ? "Discard unconfirmed dose?" : "Discard unsaved ERIG entry?"}
+            title={readyKey ? "Discard unconfirmed dose?" : "Discard unsaved entry?"}
             subtitle={[detailPt ? titleCaseWords(getName(detailPt)) : '', doseName].filter(Boolean).join(' · ')}
             message={<>It wasn't saved. <strong>No stock</strong> was deducted.</>}
             details={[
               ['Brand', readyKey ? assignedBrand : ''],
               ['Due', i === -1 ? '' : fmtDate(ds[i].date)],
-              ['ERIG', erigDraft.checked ? 'Entry not saved' : ''],
+              ['RIG', rigDraftOpen ? 'Entry not saved' : ''],
+              ['Anti-Tetanus', tetanusDraftOpen ? 'Entry not saved' : ''],
             ]}
             confirmLabel="Discard"
             cancelLabel="Keep editing"
@@ -1427,7 +1646,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
             ['Patient', titleCaseWords(getName(undoTarget.p))],
             ['Given', undoTarget.date ? fmtDate(undoTarget.date) : ''],
             ['Brand', undoTarget.brand],
-            ['Stock', undoTarget.brand ? '+1 vial returned' : ''],
+            ['Stock', undoTarget.ml && undoTarget.deducted ? `+${undoTarget.ml} mL returned to ${undoTarget.brand || 'Inventory'}` : 'No stock was deducted for it'],
           ]}
           note="Use this only when the dose was recorded by mistake."
           confirmLabel="Undo dose"
@@ -1442,29 +1661,28 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
         />
       )}
 
-      {erigRemoveAsk && (() => {
-        const s = erigStatus(erigRemoveAsk);
-        return (
-          <ConfirmDialog
-            variant="warning"
-            icon={RotateCcw}
-            title="Remove ERIG?"
-            subtitle="Vaccination record"
-            message={<>ERIG goes back to <strong>not given</strong> for this Category III patient.</>}
-            details={[
-              ['Patient', titleCaseWords(getName(erigRemoveAsk))],
-              ['Given', s.date ? fmtDate(s.date) : ''],
-              ['Stock', s.vials && s.itemName ? `+${s.vials} vial${s.vials === 1 ? '' : 's'} returned to ${s.itemName}` : ''],
-            ]}
-            note="Use this only when ERIG was recorded by mistake."
-            confirmLabel="Remove ERIG"
-            busy={erigBusy}
-            busyLabel="Removing…"
-            onConfirm={() => removeErig(erigRemoveAsk)}
-            onCancel={() => setErigRemoveAsk(null)}
-          />
-        );
-      })()}
+      {treatmentRemoveAsk && (
+        <ConfirmDialog
+          variant="warning"
+          icon={RotateCcw}
+          title="Remove treatment?"
+          subtitle="Category III Treatment"
+          message={<><strong>{treatmentRemoveAsk.treatment.product}</strong> goes back to <strong>not given</strong>.</>}
+          details={[
+            ['Patient', titleCaseWords(getName(treatmentRemoveAsk.p))],
+            ['Product', treatmentRemoveAsk.treatment.product],
+            ['Amount', `${treatmentRemoveAsk.treatment.ml ?? treatmentRemoveAsk.treatment.mg} mL`],
+            ['Date', treatmentRemoveAsk.treatment.date ? fmtDate(treatmentRemoveAsk.treatment.date) : ''],
+            ['Stock', treatmentRemoveAsk.treatment.stockDeducted ? `+${treatmentRemoveAsk.treatment.ml ?? treatmentRemoveAsk.treatment.mg} mL returned to ${treatmentRemoveAsk.treatment.itemName || 'Inventory'}` : 'No stock was deducted for it'],
+          ]}
+          note="Use this only when this treatment was recorded by mistake."
+          confirmLabel="Remove treatment"
+          busy={treatmentBusy}
+          busyLabel="Removing…"
+          onConfirm={() => removeTreatment(treatmentRemoveAsk.p, treatmentRemoveAsk.treatment)}
+          onCancel={() => setTreatmentRemoveAsk(null)}
+        />
+      )}
 
       {/* ── Toast notification banner ── */}
       <Toast
