@@ -30,6 +30,7 @@ import { auth, db } from '../../lib/firebase';
 import { peekLiveCollection, useLiveCollection } from '../../lib/liveStore';
 import Toast from '../../components/Toast';
 import { authedPostJson } from '../../lib/adminSession';
+import { actionLabel, diffFields, logActivity } from '../../lib/activityLog';
 import { getTodayDateString, formatDateLong, formatDateMedium, formatServiceType } from '../../lib/formatters';
 import Modal from '../../components/Modal';
 import useDiscardGuard from '../../components/useDiscardGuard';
@@ -864,8 +865,10 @@ const releaseSlot = async (date, time) => {
 };
 
 
+// Stored as-is in `type`. "PEP" was "PEP Follow-up" before 1.0.5; older
+// bookings keep that value and display as "PEP" (formatServiceType).
 const SERVICE_TYPES = [
-  "PEP Follow-up",
+  "PEP",
   "PrEP Consultation",
   "Anti-Tetanus Vaccine",
   "Pneumococcal Vaccine",
@@ -906,7 +909,7 @@ function ServicePill({ type }) {
 //          (negative first, primary below) — or, on read-only cards, a
 //          chevron. On narrow widths the actions drop under the details.
 // The whole card opens the appointment preview.
-function QueueCard({ apt, reason, actions, badge, onOpen }) {
+function QueueCard({ apt, reason, reasonLabel = 'Reason', actions, badge, onOpen }) {
   const [expanded, setExpanded] = useState(false);
   const [overflows, setOverflows] = useState(false);
   const reasonRef = useRef(null);
@@ -936,7 +939,7 @@ function QueueCard({ apt, reason, actions, badge, onOpen }) {
         {reason && (
           <div className={`mt-0.5 text-xs leading-5 text-slate-500 ${expanded ? 'whitespace-pre-wrap break-words' : 'flex items-center gap-1 min-w-0'}`}>
             <span ref={reasonRef} className={expanded ? '' : 'truncate min-w-0'}>
-              <span className="font-semibold text-slate-600">Reason:</span> {reason}
+              <span className="font-semibold text-slate-600">{reasonLabel}:</span> {reason}
             </span>
             {(overflows || expanded) && (
               <button type="button" onClick={e => { stop(e); setExpanded(v => !v); }} onKeyDown={stop}
@@ -1090,6 +1093,9 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
         updatedAt: Date.now(),
       });
       await releaseSlot(prevDate, prevTime);
+      logActivity({ action: 'appointment.decline', collection: 'appointments', docId: aptId, mrn: declineTargetApt.patientId || '',
+        summary: `Declined ${formatServiceType(declineTargetApt.type)} on ${prevDate} ${prevTime || ''} for ${declineTargetApt.name}`.trim(),
+        changes: [{ field: 'status', before: declineTargetApt.status || 'pending', after: 'cancelled' }, { field: 'declineReason', before: null, after: finalReason }] });
       await notifyAppointmentDeclined(declineTargetApt, finalReason);
       trackEvent('appointment_declined');
       showToast(`Appointment for ${declineTargetApt.name} declined`);
@@ -1234,6 +1240,16 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
     try {
       const target = appointments.find(a => a.id === id);
       await updateDoc(doc(db, 'appointments', id), { status: newStatus, updatedAt: Date.now() });
+      if (target) {
+        const wasCancelReq = target.status === 'cancellation_pending';
+        const action = wasCancelReq
+          ? (newStatus === 'cancelled' ? 'appointment.cancel_approve' : 'appointment.cancel_reject')
+          : newStatus === 'confirmed' || newStatus === 'accepted' ? 'appointment.confirm'
+          : newStatus === 'cancelled' ? 'appointment.cancel' : 'appointment.update';
+        logActivity({ action, collection: 'appointments', docId: id, mrn: target.patientId || '',
+          summary: `${actionLabel(action)}: ${formatServiceType(target.type)} on ${target.date} ${target.time || ''} for ${target.name}`.trim(),
+          changes: [{ field: 'status', before: target.status || 'pending', after: newStatus }] });
+      }
       if (newStatus === 'cancelled' && target) {
         await releaseSlot(target.date, target.time);
       }
@@ -1268,7 +1284,10 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
     };
     setSaving(true);
     try {
-      await addDoc(collection(db, 'appointments'), newApt);
+      const created = await addDoc(collection(db, 'appointments'), newApt);
+      logActivity({ action: 'appointment.create', collection: 'appointments', docId: created.id,
+        summary: `Booked ${formatServiceType(newApt.type)} on ${newApt.date} ${newApt.time} for ${newApt.name} (${sourceLabel(newApt.source)})`,
+        changes: diffFields({}, newApt, ['name', 'date', 'time', 'type', 'notes', 'status']) });
       try {
         await setDoc(doc(db, 'appointmentSlots', slotId(newApt.date, newApt.time)), {
           date:      newApt.date,
@@ -1487,7 +1506,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                   if (cancellationRequests.length === 0) return empty(CheckCircle2, 'No cancel requests', 'When a patient asks to cancel a confirmed visit, it appears here.');
                   return cancellationRequests.map(apt => (
                     <QueueCard key={apt.id} apt={apt} onOpen={openEditModal}
-                      reason={apt.cancellationReason || apt.notes || 'No reason given'}
+                      reason={apt.cancellationReason || 'No reason given'}
                       actions={<>
                         <button type="button" className={BTN_SM.outline} onClick={() => promptQuickAction(apt, 'confirmed')} title="Keep this appointment (the request is declined)">
                           <RotateCcw size={BTN_SM_ICON} /> Keep appointment
@@ -1552,6 +1571,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                 if (pendingOnlineRequests.length === 0) return empty(CheckCircle2, 'All caught up', 'No booking requests are waiting.');
                 return pendingOnlineRequests.map(apt => (
                   <QueueCard key={apt.id} apt={apt} onOpen={openEditModal}
+                    reason={apt.notes} reasonLabel="Patient note"
                     actions={<>
                       <button type="button" className={BTN_SM.decline} onClick={() => promptDecline(apt)} title="Decline appointment">
                         <X size={BTN_SM_ICON} /> Decline
@@ -1886,7 +1906,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                   <Field label="Date" value={formatDateLong(apt.date) || apt.date} />
                   <Field label="Time Slot" value={apt.time} />
                   <Field label="Purpose / Service" value={formatServiceType(apt.type, '')} />
-                  <Field label="Patient Notes" value={apt.notes} />
+                  <Field label="Patient Notes" value={apt.notes} span />
                   {isCancelReq && apt.cancellationReason && <Field label="Reason for cancelling" value={apt.cancellationReason} span />}
                   {apt.status === 'cancelled' && reason && <Field label="Cancellation Reason" value={reason} span />}
                 </dl>
@@ -1959,7 +1979,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
               ['Date', formatDateLong(apt.date) || apt.date],
               ['Time slot', apt.time],
               ['Service', formatServiceType(apt.type)],
-              ['Notes', apt.notes],
+              ['Patient notes', apt.notes],
               ['Patient reason', isCancelReq ? apt.cancellationReason : ''],
             ]}
             confirmLabel={actionLabel}

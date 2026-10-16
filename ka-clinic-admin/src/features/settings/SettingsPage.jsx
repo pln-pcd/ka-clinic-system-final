@@ -45,6 +45,7 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { auth, db, listen } from '../../lib/firebase';
 import { authedPostJson } from '../../lib/adminSession';
+import { diffFields, logActivity } from '../../lib/activityLog';
 import Toast from '../../components/Toast';
 import Avatar from '../../components/Avatar';
 import ConfirmDialog from '../../components/ConfirmDialog';
@@ -348,6 +349,8 @@ export default function SettingsPage({ onLogout }) {
       await setDoc(doc(db, 'settings', 'config'), {
         account: { adminName: nextName, adminEmail: nextEmail, updatedAt: Date.now() },
       }, { merge: true });
+      logActivity({ action: 'settings.update', collection: 'settings', docId: 'config',
+        summary: 'Updated own staff profile', changes: diffFields({ name: user.displayName, email: user.email }, { name: nextName, email: nextEmail }) });
       showToast('Profile updated.');
       setEditingProfile(false);
     } catch (err) {

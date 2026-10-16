@@ -143,7 +143,12 @@ async function seed() {
   d.chatThreads.forEach(x => put('chatThreads', x.id, x.data));
   d.chatMessages.forEach(x => put('chatMessages', x.id, x.data));
   d.patientNotifications.forEach(x => put('patientNotifications', x.id, x.data));
-  ops.push(b => b.set(db.collection('settings').doc('counters'), d.counters));
+  // The MRN counter only moves forward: a live counter already past the
+  // sample's last MRN is kept, so no issued MRN can be handed out again.
+  const liveCounter = (await db.collection('settings').doc('counters').get()).data();
+  const counters = liveCounter && liveCounter.currentYear === d.counters.currentYear && (liveCounter.lastSequence || 0) > d.counters.lastSequence
+    ? { ...d.counters, lastSequence: liveCounter.lastSequence } : d.counters;
+  ops.push(b => b.set(db.collection('settings').doc('counters'), counters));
   for (let i = 0; i < ops.length; i += 400) {
     const batch = db.batch();
     ops.slice(i, i + 400).forEach(op => op(batch));

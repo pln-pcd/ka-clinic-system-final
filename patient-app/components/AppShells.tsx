@@ -3,7 +3,7 @@
 // shown on desktop web.
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { InteractionManager, View, StyleSheet, Text } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { usePatientAuth } from '../context/PatientAuthContext';
@@ -19,7 +19,7 @@ import { resetTo } from '../utils/navigation';
 const PUBLIC_ROUTES = ['auth', 'onboarding', 'onboarding1', 'onboarding2', 'onboarding3', 'onboarding4'];
 
 export function MobileApp() {
-  const { user, loading } = usePatientAuth();
+  const { user, loading, seenOnboarding } = usePatientAuth();
   const router = useRouter();
   const segments = useSegments();
 
@@ -33,10 +33,18 @@ export function MobileApp() {
   }, []);
 
   // The native splash stays up while the saved sign-in is resolved (see
-  // PatientAuthContext), then the first real screen replaces it directly;
-  // there is no separate loading screen in between.
+  // PatientAuthContext). A returning patient then goes straight to Home or
+  // sign-in; only a first install sees the animated intro (app/index.tsx).
+  // The splash is hidden a frame after that screen is chosen, so the first
+  // thing on screen is the real screen, never the intro flashing past.
+  const launched = useRef(false);
   useEffect(() => {
-    if (loading) return;
+    if (loading || launched.current) return;
+    launched.current = true;
+    const segs = segments as string[];
+    const atRoot = segs.length === 0 || segs[0] === 'index';
+    // app/index.tsx redirects these and hides the splash itself.
+    if (atRoot && (user || seenOnboarding)) return;
     SplashScreen.hideAsync().catch(() => {});
   }, [loading]);
 

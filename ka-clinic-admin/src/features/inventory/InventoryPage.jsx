@@ -21,17 +21,16 @@ const invRules = (others) => ({
   unit: f => (f.unit ? '' : 'Choose a unit'),
   minStock: f => (!String(f.minStock || '').trim() ? 'Enter the low-stock threshold'
     : !/^[1-9]\d*$/.test(String(f.minStock).trim()) ? 'Use a whole number, 1 or more' : ''),
-  mlPerVial: f => (!String(f.mlPerVial || '').trim() ? 'Enter mL per vial'
-    : !Number.isFinite(Number(f.mlPerVial)) || toHund(f.mlPerVial) <= 0 ? 'Use a number greater than 0 (up to 2 decimals)' : ''),
 });
-const INV_FIELDS = ['name', 'category', 'unit', 'stock', 'minStock', 'mlPerVial'];
+const INV_FIELDS = ['name', 'category', 'unit', 'stock', 'minStock'];
 // A new item starts blank (grey placeholders); nothing is pre-chosen.
-const EMPTY_ITEM = () => ({ name: '', category: '', unit: '', stock: '', minStock: '', expiry: '', mlPerVial: '' });
+const EMPTY_ITEM = () => ({ name: '', category: '', unit: '', stock: '', minStock: '', expiry: '' });
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '../../lib/firebase';
+import { diffFields, logActivity } from '../../lib/activityLog';
 import { peekLiveCollection, useLiveCollection } from '../../lib/liveStore';
 import Toast from '../../components/Toast';
-import { EXPIRED_NOTE, deriveStockLabel, deriveStockStatus, fmtUnit, formatStockVials, fromHund, getItemStockMl, isExpired, toHund } from '../../lib/inventoryStock';
+import { EXPIRED_NOTE, deriveStockLabel, deriveStockStatus, fmtUnit, formatVials, isExpired, vialsOf } from '../../lib/inventoryStock';
 import { lazyModal } from '../../components/LazyModal';
 import { INVENTORY_CATEGORIES, inventoryCategoryLabel, inventoryCategoryOf } from '../../lib/inventoryCategories';
 import Pager, { paginate, useTableReserve } from '../../components/Pager';
@@ -283,25 +282,22 @@ export default function VaccineInventoryPage() {
       const minStockNum = Number(formData.minStock) || 10;
       const selectedCapitalizedUnit = fmtUnit(formData.unit);
       const expirationDate = formData.expiry || '';
-      // Rounded to 2 decimals; the pool is kept in whole hundredths.
-      const mlPerVialNum = fromHund(toHund(formData.mlPerVial));
-      const stockMl = fromHund(stockNum * toHund(mlPerVialNum));
 
       const newItem = {
         name: formData.name.trim(),
         category: formData.category,
         stock: stockNum,
-        stockMl,
-        mlPerVial: mlPerVialNum,
         minStock: minStockNum,
         unit: selectedCapitalizedUnit,
         expiry: expirationDate,
         expiryDate: expirationDate,
-        status: deriveStockStatus({ stock: stockNum, stockMl, mlPerVial: mlPerVialNum, minStock: minStockNum }),
+        status: deriveStockStatus({ stock: stockNum, minStock: minStockNum }),
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
-      await addDoc(collection(db, 'inventory'), newItem);
+      const created = await addDoc(collection(db, 'inventory'), newItem);
+      logActivity({ action: 'inventory.create', collection: 'inventory', docId: created.id,
+        summary: `Added ${newItem.name} (${newItem.stock} vials)`, changes: diffFields({}, newItem, ['name', 'category', 'stock', 'minStock', 'unit', 'expiry']) });
       setShowAddModal(false);
       setFormData(EMPTY_ITEM());
       showToast(`${newItem.name} added to inventory`, 'success');
@@ -314,15 +310,10 @@ export default function VaccineInventoryPage() {
   };
 
   /* ── Edit Item ── */
-  // The form opens with the item's current values. "Vials in stock" is the
-  // whole vials of the current pool; the leftover mL of an opened vial stays
-  // in the total mL and is carried over unchanged.
+  // The form opens with the item's current values.
   const openEditModal = (item) => {
-    const mlPerVial = parseFloat(item.mlPerVial || item.mgPerVial) || 0;
-    const poolH = toHund(getItemStockMl(item) ?? 0);
-    const vialH = toHund(mlPerVial);
-    const vials = vialH > 0 ? Math.floor(poolH / vialH) : (parseInt(item.stock, 10) || 0);
-    setSelectedItem({ ...item, _openVials: vials, _openMlPerVial: mlPerVial, _openPoolMl: fromHund(poolH) });
+    const vials = vialsOf(item);
+    setSelectedItem({ ...item, _openVials: vials });
     setEditFormData({
       name: item.name || '',
       category: inventoryCategoryOf(item),
@@ -330,25 +321,14 @@ export default function VaccineInventoryPage() {
       stock: String(vials),
       minStock: String(item.minStock ?? 10),
       expiry: item.expiry || item.expiryDate || '',
-      mlPerVial: mlPerVial ? String(mlPerVial) : '',
     });
     editV.clear();
     setShowEditModal(true);
   };
 
-  // New pool, in whole hundredths of a mL:
-  //   current pool + (typed vials × new mL per vial) − (vials shown × old mL per vial)
-  // Unchanged fields leave the pool exactly as it is; adding vials adds
-  // whole vials (stock-in); changing mL per vial re-sizes the sealed vials
-  // and keeps the opened vial's loose mL. It reads the item inside a
-  // transaction, so a dose given while the form was open is not lost.
-  const editedPoolHund = (freshPoolH, form, open) => {
-    const newVialH = toHund(form.mlPerVial);
-    const vials = parseInt(form.stock, 10) || 0;
-    if (!open._openMlPerVial) return vials * newVialH; // item had no mL per vial yet
-    return freshPoolH + vials * newVialH - open._openVials * toHund(open._openMlPerVial);
-  };
-
+  // Saved in a transaction as a change from what the form opened with:
+  // new vials = current vials + (typed − shown), so a dose given while the
+  // form was open is not lost. Typing more vials is a stock-in.
   const handleEditSave = async () => {
     if (!selectedItem || !editV.validate(INV_FIELDS)) return;
     setSaving(true);
@@ -358,37 +338,34 @@ export default function VaccineInventoryPage() {
         const ref = doc(db, 'inventory', open.id);
         const snap = await tx.get(ref);
         if (!snap.exists()) throw new Error('This item no longer exists.');
-        const fresh = snap.data();
-        const freshPoolH = toHund(getItemStockMl(fresh) ?? 0);
-        const newPoolH = editedPoolHund(freshPoolH, editFormData, open);
-        if (newPoolH < 0) {
-          const err = new Error(`That leaves ${fromHund(newPoolH)} mL. Stock can't go below 0 mL.`);
+        const before = vialsOf(snap.data());
+        const after = before + ((parseInt(editFormData.stock, 10) || 0) - open._openVials);
+        if (after < 0) {
+          const err = new Error(`That leaves ${after} vials. Stock can't go below 0.`);
           err.code = 'negative';
           throw err;
         }
-        const mlPerVialNum = fromHund(toHund(editFormData.mlPerVial));
-        const vialH = toHund(mlPerVialNum);
         const minStockNum = parseInt(editFormData.minStock, 10) || 10;
-        const stockMl = fromHund(newPoolH);
         const data = {
           name: editFormData.name.trim(),
           category: editFormData.category,
           unit: fmtUnit(editFormData.unit),
-          stock: Math.floor(newPoolH / vialH),
-          stockMl,
-          mlPerVial: mlPerVialNum,
+          stock: after,
           minStock: minStockNum,
           expiry: editFormData.expiry || '',
           expiryDate: editFormData.expiry || '',
-          status: deriveStockStatus({ stockMl, mlPerVial: mlPerVialNum, minStock: minStockNum }),
+          status: deriveStockStatus({ stock: after, minStock: minStockNum }),
           updatedAt: Date.now(),
         };
         tx.update(ref, data);
-        return { ...data, before: fromHund(freshPoolH) };
+        return { ...data, before, prev: snap.data() };
       });
+      logActivity({ action: 'inventory.update', collection: 'inventory', docId: open.id,
+        summary: `Updated ${updated.name}: stock ${updated.before} → ${updated.stock} vials`,
+        changes: diffFields(updated.prev, updated, ['name', 'category', 'unit', 'stock', 'minStock', 'expiry']) });
       setShowEditModal(false);
       setSelectedItem(null);
-      showToast(`${updated.name} updated. Stock: ${updated.before} mL → ${updated.stockMl} mL (${formatStockVials(updated)}).`, 'success');
+      showToast(`${updated.name} updated. Stock: ${updated.before} → ${updated.stock} vials.`, 'success');
     } catch (err) {
       if (err?.code === 'negative') showToast(err.message, 'error');
       else { console.error('Inventory edit error:', err); showToast('Could not save the changes. Nothing was changed. Please try again.', 'error'); }
@@ -569,12 +546,11 @@ export default function VaccineInventoryPage() {
           <table className="kna-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '.8125rem', tableLayout: 'fixed' }}>
             <thead>
               <tr style={{ background: '#FAFAFA', borderBottom: '1px solid #E2E8F0', color: '#64748B', fontSize: '.6875rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.5px', whiteSpace: 'nowrap' }}>
-                <th style={{ padding: '16px 12px 16px 20px', width: '30%', fontWeight: 600, color: '#64748B' }}>Item Name</th>
-                <th style={{ padding: '16px 12px', width: '14%', fontWeight: 600, color: '#64748B' }}>Category</th>
-                <th style={{ padding: '16px 12px', width: '11%', fontWeight: 600, color: '#64748B' }}>mL per Vial</th>
+                <th style={{ padding: '16px 12px 16px 20px', width: '33%', fontWeight: 600, color: '#64748B' }}>Item Name</th>
+                <th style={{ padding: '16px 12px', width: '16%', fontWeight: 600, color: '#64748B' }}>Category</th>
                 <th style={{ padding: '16px 12px', width: '14%', fontWeight: 600, color: '#64748B' }}>Stock</th>
-                <th style={{ padding: '16px 12px', width: '12%', fontWeight: 600, color: '#64748B' }}>Expiry</th>
-                <th style={{ padding: '16px 12px', width: '12%', fontWeight: 600, color: '#64748B' }}>Status</th>
+                <th style={{ padding: '16px 12px', width: '15%', fontWeight: 600, color: '#64748B' }}>Expiry</th>
+                <th style={{ padding: '16px 12px', width: '14%', fontWeight: 600, color: '#64748B' }}>Status</th>
                 <th style={{ padding: '16px 20px 16px 12px', width: '96px', textAlign: 'center', fontWeight: 600, color: '#64748B' }}>Actions</th>
               </tr>
             </thead>
@@ -592,33 +568,10 @@ export default function VaccineInventoryPage() {
                   <td style={{ padding: '16px 12px', color: '#475569', fontWeight: 500 }}>
                     {inventoryCategoryLabel(item, { short: true })}
                   </td>
-                  <td style={{ padding: '16px 12px', color: '#475569', fontWeight: 600 }}>
-                    {item.mlPerVial ? (
-                      `${item.mlPerVial} mL`
-                    ) : (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200">
-                        Set mL per vial
-                      </span>
-                    )}
-                  </td>
                   <td style={{ padding: '16px 12px' }}>
-                    {item.mlPerVial ? (
-                      <>
-                        {/* Whole vials on top; total mL below (it includes an opened vial's leftover). */}
-                        <div style={{ fontWeight: 500, color: deriveStockStatus(item) === 'out-of-stock' ? '#DC2626' : '#0F172A', fontSize: '.875rem', lineHeight: 1.3 }}>
-                          {formatStockVials(item)}
-                        </div>
-                        <div style={{ fontSize: '.75rem', color: '#64748B', fontWeight: 400, marginTop: 2 }}>
-                          {getItemStockMl(item)} mL total
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <span style={{ fontWeight: 500, color: deriveStockStatus(item) === 'out-of-stock' ? '#DC2626' : '#0F172A', fontSize: '.875rem' }}>{parseInt(item.stock, 10) || 0}</span>
-                        <span style={{ fontSize: '.8125rem', color: '#64748B', fontWeight: 600, marginLeft: 4 }}>{fmtUnit(item.unit)}</span>
-                        <div style={{ fontSize: '.75rem', color: '#D97706', fontWeight: 600, marginTop: 3 }}>Set mL per vial</div>
-                      </>
-                    )}
+                    <span style={{ fontWeight: 500, color: deriveStockStatus(item) === 'out-of-stock' ? '#DC2626' : '#0F172A', fontSize: '.875rem' }}>
+                      {formatVials(item)}
+                    </span>
                   </td>
                   <td style={{ padding: '16px 12px', color: '#64748B', fontWeight: 400 }}>
                     {item.expiry || '—'}
@@ -659,7 +612,7 @@ export default function VaccineInventoryPage() {
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={7} style={{ padding: 0 }}>
+                  <td colSpan={6} style={{ padding: 0 }}>
                     <EmptyState icon={Package} title="No items found" text="Try a different search or filter, or add a new item." />
                   </td>
                 </tr>
@@ -769,25 +722,6 @@ export default function VaccineInventoryPage() {
                     className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 focus:border-[#3B50DF] outline-none"
                   />
                 </div>
-              </div>
-              <div>
-                <label htmlFor="inv-mlPerVial" className="text-[13px] font-semibold text-slate-600 block mb-1.5">mL per vial <span className="text-red-500">*</span></label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  {...addV.field('mlPerVial')}
-                  placeholder="e.g. 0.5 or 1.0"
-                  value={formData.mlPerVial || ''}
-                  onChange={e => setFormData(f => ({ ...f, mlPerVial: e.target.value }))}
-                  className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 focus:border-[#3B50DF] outline-none"
-                />
-                <FieldError v={addV} name="mlPerVial" />
-                <span className="text-[11px] text-slate-400 mt-1 block">
-                  {toHund(formData.mlPerVial) > 0 && /^\d+$/.test(String(formData.stock).trim())
-                    ? `Stock pool: ${formData.stock} vials × ${fromHund(toHund(formData.mlPerVial))} mL = ${fromHund(parseInt(formData.stock, 10) * toHund(formData.mlPerVial))} mL`
-                    : 'Vials pool into total mL (e.g. 10 vials × 0.5 mL = 5 mL)'}
-                </span>
               </div>
             </div>
 
@@ -909,29 +843,6 @@ export default function VaccineInventoryPage() {
                     className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 focus:border-[#3B50DF] outline-none"
                   />
                 </div>
-              </div>
-              <div>
-                <label htmlFor="invedit-mlPerVial" className="text-[13px] font-semibold text-slate-600 block mb-1.5">mL per vial <span className="text-red-500">*</span></label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  {...editV.field('mlPerVial')}
-                  placeholder="e.g. 0.5 or 1.0"
-                  value={editFormData.mlPerVial || ''}
-                  onChange={e => setEditFormData(f => ({ ...f, mlPerVial: e.target.value }))}
-                  className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 focus:border-[#3B50DF] outline-none"
-                />
-                <FieldError v={editV} name="mlPerVial" />
-                {/* What saving will do to the pool, from the same formula the save uses. */}
-                <span className="text-[11px] text-slate-500 mt-1 block">
-                  Now: {selectedItem._openPoolMl} mL{selectedItem._openMlPerVial ? ` (${formatStockVials(selectedItem)})` : ''}
-                  {(() => {
-                    if (!/^\d+$/.test(String(editFormData.stock).trim()) || toHund(editFormData.mlPerVial) <= 0) return null;
-                    const h = editedPoolHund(toHund(selectedItem._openPoolMl), editFormData, selectedItem);
-                    return h < 0 ? <span className="text-red-600"> · would go below 0 mL</span> : <> · after saving: <strong>{fromHund(h)} mL</strong></>;
-                  })()}
-                </span>
               </div>
             </div>
 

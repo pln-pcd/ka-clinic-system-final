@@ -12,7 +12,7 @@ import * as XLSX from 'xlsx';
 import { CLINIC_LOGO_BASE64 } from '../../assets/clinicLogoBase64';
 import { clinicLogoBase64Cache, drawReportHeader, getClinicLogoBase64 } from '../../lib/pdfReport';
 import { pdfToBytes, reportGeneratedOn, sendReportInBackground, warmReportMailer } from '../../lib/reportMailer';
-import { deriveStockLabel, deriveStockStatus, fmtUnit, formatStockVials, getItemStockMl } from '../../lib/inventoryStock';
+import { deriveStockLabel, deriveStockStatus, fmtUnit, formatVials, vialsOf } from '../../lib/inventoryStock';
 import PreviewViewer from '../../components/PreviewViewer';
 import { inventoryCategoryLabel } from '../../lib/inventoryCategories';
 
@@ -23,17 +23,9 @@ const vaccineTypeOf = (item) => inventoryCategoryLabel(item);
 // Closing summary of an inventory report: totals, per vaccine type counts,
 // and every low or out-of-stock item. Out-of-stock items are always listed,
 // so a vaccine at zero never drops out of the report.
-// Whole vials of an item, from its mL pool (the same rule as the list);
-// items without mL per vial keep their plain count.
-function wholeVials(item) {
-  const mlPerVial = parseFloat(item.mlPerVial || item.mgPerVial);
-  if (!(mlPerVial > 0)) return parseInt(item.stock, 10) || 0;
-  return Math.floor(Math.round((getItemStockMl(item) ?? 0) * 100) / Math.round(mlPerVial * 100));
-}
-// Stock as the list shows it: "2.6 mL (2 vials)".
-const stockText = item => ((item.mlPerVial || item.mgPerVial)
-  ? `${getItemStockMl(item)} mL (${formatStockVials(item)})`
-  : String(parseInt(item.stock, 10) || 0));
+// Stock as the list shows it: whole vials.
+const wholeVials = item => vialsOf(item);
+const stockText = item => formatVials(item);
 
 function buildInventorySummary(rows) {
   const count = { 'in-stock': 0, 'low-stock': 0, 'out-of-stock': 0 };
@@ -53,7 +45,7 @@ function buildInventorySummary(rows) {
   return {
     totals: [
       ['Total items', rows.length],
-      ['Whole vials in stock', units],
+      ['Vials in stock', units],
       ['In stock', count['in-stock']],
       ['Low stock', count['low-stock']],
       ['Out of stock', count['out-of-stock']],
@@ -62,12 +54,12 @@ function buildInventorySummary(rows) {
       .map(([t, c]) => [t, c.items, c.units, c['in-stock'], c['low-stock'], c['out-of-stock']]),
     flags: rows
       .filter(i => deriveStockStatus(i) !== 'in-stock')
-      .sort((a, b) => (getItemStockMl(a) ?? 0) - (getItemStockMl(b) ?? 0))
+      .sort((a, b) => vialsOf(a) - vialsOf(b))
       .map(i => [i.name || '—', vaccineTypeOf(i), stockText(i), String(parseInt(i.minStock, 10) || 10), deriveStockLabel(i)]),
   };
 }
 
-const SUMMARY_TYPE_HEAD = ['Vaccine type', 'Items', 'Whole vials', 'In stock', 'Low', 'Out'];
+const SUMMARY_TYPE_HEAD = ['Vaccine type', 'Items', 'Vials', 'In stock', 'Low', 'Out'];
 
 const SUMMARY_FLAG_HEAD = ['Needs restocking', 'Type', 'Stock', 'Min', 'Status'];
 
@@ -254,7 +246,7 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
             <td style="text-align:center;">${idx + 1}</td>
             <td style="font-weight:bold;color:#0F172A;">${item.name || '—'}</td>
             <td style="text-align:center;">${inventoryCategoryLabel(item)}</td>
-            <td style="text-align:center;font-weight:bold;">${(item.mlPerVial || item.mgPerVial) ? `${getItemStockMl(item)} mL (${formatStockVials(item)})` : (item.stock !== undefined && item.stock !== null ? item.stock : 0)}</td>
+            <td style="text-align:center;font-weight:bold;">${vialsOf(item)}</td>
             <td style="text-align:center;">${fmtUnit(item.unit) || 'Vials'}</td>
             <td style="text-align:center;">${item.minStock !== undefined && item.minStock !== null ? item.minStock : 10}</td>
             <td style="text-align:center;">${item.expiry || item.expiryDate || '—'}</td>
@@ -380,7 +372,7 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
               <td class="col-center">${startNum + i + 1}</td>
               <td class="col-left" style="font-weight:700;">${item.name || '—'}</td>
               <td class="col-center">${inventoryCategoryLabel(item)}</td>
-              <td class="col-center" style="font-weight:700;">${(item.mlPerVial || item.mgPerVial) ? `${getItemStockMl(item)} mL<br><span style="font-size:8px;color:#64748B;font-weight:600;">${formatStockVials(item)}</span>` : (item.stock !== undefined && item.stock !== null ? item.stock : 0)}</td>
+              <td class="col-center" style="font-weight:700;">${vialsOf(item)}</td>
               <td class="col-center">${fmtUnit(item.unit) || 'Vials'}</td>
               <td class="col-center">${item.minStock !== undefined && item.minStock !== null ? item.minStock : 10}</td>
               <td class="col-center">${item.expiry || item.expiryDate || '—'}</td>
@@ -579,7 +571,7 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
         startNum + i + 1,
         item.name || '—',
         inventoryCategoryLabel(item),
-        (item.mlPerVial || item.mgPerVial) ? `${getItemStockMl(item)} mL (${formatStockVials(item)})` : (item.stock !== undefined && item.stock !== null ? String(item.stock) : '0'),
+        String(vialsOf(item)),
         fmtUnit(item.unit) || 'Vials',
         item.minStock !== undefined && item.minStock !== null ? String(item.minStock) : '10',
         item.expiry || item.expiryDate || '—',
@@ -734,7 +726,7 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
         idx + 1,
         item.name || '—',
         inventoryCategoryLabel(item),
-        (item.mlPerVial || item.mgPerVial) ? `${getItemStockMl(item)} mL (${formatStockVials(item)})` : (item.stock !== undefined && item.stock !== null ? Number(item.stock) : 0),
+        vialsOf(item),
         fmtUnit(item.unit) || 'Vials',
         item.minStock !== undefined && item.minStock !== null ? Number(item.minStock) : 10,
         item.expiry || item.expiryDate || '—',

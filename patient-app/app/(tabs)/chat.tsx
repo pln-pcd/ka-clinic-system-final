@@ -565,13 +565,6 @@ export default function ChatScreen() {
         keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
       >
         <Animated.View style={[{ flex: 1 }, keyboardLift]}>
-          {/* One persistent disclaimer in every assistant conversation. */}
-          {mode === 'bot' && (
-            <View style={s.disclaimer} accessibilityRole="text">
-              <Ionicons name="information-circle-outline" size={16} color="#1E3A8A" style={{ marginTop: 1 }} />
-              <Text style={s.disclaimerTxt}>{KAI_DISCLAIMER}</Text>
-            </View>
-          )}
           {chatError ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), padding: scale(14), backgroundColor: C.redLight }}>
               <Ionicons name="alert-circle-outline" size={16} color={C.red} />
@@ -595,6 +588,14 @@ export default function ChatScreen() {
                     ? 'Send a message and clinic staff will reply here'
                     : "I'm the K&A Clinic virtual assistant. Ask about office hours, the clinic's location and contact details, booking an appointment, or finding your way around the app."}
                 </Text>
+                {/* KAI's disclaimer: one quiet line in the welcome, and the
+                    first line of every conversation (never under the input). */}
+                {mode === 'bot' && (
+                  <View style={s.disclaimerLine} accessibilityRole="text">
+                    <Ionicons name="information-circle-outline" size={13} color="#64748B" />
+                    <Text style={s.disclaimerTxt}>{KAI_DISCLAIMER}</Text>
+                  </View>
+                )}
               </View>
               {mode === 'bot' && (
                 <View style={s.grid}>
@@ -611,6 +612,12 @@ export default function ChatScreen() {
             </ScrollView>
           ) : (
             <ScrollView ref={scrollRef} contentContainerStyle={s.chatScroll} keyboardShouldPersistTaps="handled">
+              {mode === 'bot' && (
+                <View style={[s.disclaimerLine, s.disclaimerTop]} accessibilityRole="text">
+                  <Ionicons name="information-circle-outline" size={13} color="#64748B" />
+                  <Text style={s.disclaimerTxt}>{KAI_DISCLAIMER}</Text>
+                </View>
+              )}
               {messages.map((m) => {
                 const isPatient = m.sender === 'patient';
                 const senderLabel = m.sender === 'bot'
@@ -1113,12 +1120,13 @@ const s = StyleSheet.create({
     color: C.red,
   },
 
-  disclaimer: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: scale(8),
-    paddingHorizontal: scale(14), paddingVertical: verticalScale(9),
-    backgroundColor: '#EFF6FF', borderBottomWidth: 1, borderBottomColor: '#DBEAFE',
+  // Plain text, no container: visible but quiet.
+  disclaimerLine: {
+    flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', gap: scale(5),
+    marginTop: verticalScale(14), paddingHorizontal: scale(8), maxWidth: scale(360), alignSelf: 'center',
   },
-  disclaimerTxt: { flex: 1, fontSize: moderateScale(12), lineHeight: moderateScale(17), color: '#1E3A8A', fontWeight: '500' },
+  disclaimerTop: { marginTop: 0, marginBottom: verticalScale(14) },
+  disclaimerTxt: { flexShrink: 1, fontSize: moderateScale(11.5), lineHeight: moderateScale(16), color: '#64748B', fontWeight: '500', textAlign: 'center' },
 
   inputContainer: {
     paddingHorizontal: scale(12),

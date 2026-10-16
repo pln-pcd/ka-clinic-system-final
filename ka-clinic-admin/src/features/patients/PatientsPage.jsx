@@ -1,9 +1,10 @@
 // Patients page: the registry list and the flows it opens.
 import { formatTitleCase, formatDateMedium, getTodayDateString, today } from "../../lib/formatters";
 import { MAP_STUDY_MODE } from '../../lib/studyMode';
-import { arrayUnion, collection, deleteField, doc, getDocs, limit, query, runTransaction, serverTimestamp, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
+import { arrayUnion, collection, deleteField, doc, getDoc, getDocs, limit, query, runTransaction, serverTimestamp, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { db } from "../../lib/firebase";
+import { auth, db } from "../../lib/firebase";
+import { diffFields, logActivity } from "../../lib/activityLog";
 import { peekLiveCollection, useLiveCollection } from '../../lib/liveStore';
 import { buildDoses, buildInitialDoses } from "../../lib/doseSchedules";
 import { getArchiveDueDate, getCompletionDate, getCompletionYear, getRegistrationYear, showsRestoredLabel } from "../../lib/patientArchive";
@@ -14,7 +15,7 @@ import { useTableReserve } from "../../components/Pager";
 import EmptyState from "../../components/EmptyState";
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye, Pencil, Plus, Users } from "lucide-react";
 import { trackEvent } from "../../lib/analytics";
-import { geocodeLibonAddress } from '../../lib/libonGeo';
+import { geocodeLibonAddress, recordBarangay } from '../../lib/libonGeo';
 import { ExportReportModal, ServiceBadge, derivePatientStatus, globalCSS } from "./shared";
 import { AddPatientModal, DuplicatePatientModal, EditPatientModal, PinMapConfirmModal, findSimilarPatients, isValidPHPhone } from "./PatientForms";
 import { FollowUpModal, MedicalRecordDetail } from "./PatientRecordView";
@@ -32,7 +33,8 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
   const [selected, setSelected] = useState(null);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
-  const [showModal, setModal] = useState(initialOpenAddModal);
+  // An archived record never opens the Register pop-up (restore first).
+  const [showModal, setModal] = useState(() => Boolean(initialOpenAddModal) && !initialPatientForAdd?.isArchived);
   const [addPatientInitial, setAddPatientInitial] = useState(initialPatientForAdd);
   const [editPatient, setEditPatient] = useState(null);
   const [toast, setToast] = useState({ msg: '', type: '' });
@@ -41,10 +43,20 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
   const [exportModal, setExportModal] = useState(false);
   const [followUpTarget, setFollowUpTarget] = useState(null);
 
+  // A new service is only for records that are not archived (restore first).
+  const openAddService = (p) => {
+    if (p?.isArchived) {
+      showToast('This record is archived. Restore it first, then add the new service.', 'error');
+      if (onAddModalClosed) onAddModalClosed();
+      return;
+    }
+    setAddPatientInitial(p);
+    setModal(true);
+  };
+
   useEffect(() => {
     if (initialPatientForAdd) {
-      setAddPatientInitial(initialPatientForAdd);
-      setModal(true);
+      openAddService(initialPatientForAdd);
     } else if (initialOpenAddModal) {
       setModal(true);
     }
@@ -52,8 +64,8 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
 
   useEffect(() => {
     const handleOpenAddEvent = (e) => {
-      setAddPatientInitial(e?.detail || null);
-      setModal(true);
+      if (e?.detail) openAddService(e.detail);
+      else { setAddPatientInitial(null); setModal(true); }
     };
     window.addEventListener('open-add-patient-modal', handleOpenAddEvent);
     return () => window.removeEventListener('open-add-patient-modal', handleOpenAddEvent);
@@ -119,6 +131,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
       // anonymous; it lets the pin leave the map once the case completes.
       batch.update(doc(db, 'vaccinations', patientToPin.firestoreId), { incidentIds: arrayUnion(incidentRef.id) });
       await batch.commit();
+      logActivity({ action: 'patient.map_pin', collection: 'incidents', docId: incidentRef.id, mrn: patientToPin.firestoreId, summary: `Pinned an incident to the map for MRN ${patientToPin.firestoreId}` });
 
       showToast('Incident pinned to the map.', 'success');
       setPinTarget(null);
@@ -148,58 +161,40 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
     setTimeout(() => setToast({ msg: '', type: '' }), 2800);
   }
 
+  // One MRN belongs to one patient for life. The counter only moves forward
+  // (a deleted or purged record never gives its number back), and every MRN
+  // handed out is recorded in mrnRegistry, which nothing ever deletes. A
+  // number that is already registered or already has a record is skipped, so
+  // a counter that was rewound by hand still cannot hand out a used MRN. If
+  // the transaction fails nothing is guessed: the caller saves nothing.
   async function getAndIncrementNextMRN() {
     const year = new Date().getFullYear();
     const counterRef = doc(db, 'settings', 'counters');
-    let nextSeq = 1;
+    // Only used when the counter doc does not exist yet (a brand-new project).
+    const highestLoaded = () => patients.reduce((hi, p) => {
+      const m = String(p.id || p.mrn || p.firestoreId || '').match(/^(\d{4})-(\d+)$/);
+      return m && Number(m[1]) === year ? Math.max(hi, parseInt(m[2], 10)) : hi;
+    }, 0);
 
-    try {
-      await runTransaction(db, async (transaction) => {
-        const snap = await transaction.get(counterRef);
-        if (!snap.exists()) {
-          let highest = 0;
-          patients.forEach(p => {
-            if (p.id || p.mrn) {
-              const raw = String(p.id || p.mrn || '');
-              const match = raw.match(/(\d+)$/);
-              if (match) {
-                const num = parseInt(match[1], 10);
-                if (!isNaN(num) && num > highest) highest = num;
-              }
-            }
-          });
-          nextSeq = highest + 1;
-          transaction.set(counterRef, { currentYear: year, lastSequence: nextSeq });
-        } else {
-          const data = snap.data();
-          let curYear = data.currentYear || year;
-          let lastSeq = data.lastSequence || 0;
-          if (curYear !== year) {
-            curYear = year;
-            lastSeq = 0;
-          }
-          nextSeq = lastSeq + 1;
-          transaction.update(counterRef, { currentYear: curYear, lastSequence: nextSeq });
-        }
-      });
-    } catch (err) {
-      console.warn('Counter transaction failed, using local sequence fallback:', err);
-      let highest = 0;
-      patients.forEach(p => {
-        if (p.id || p.mrn) {
-          const raw = String(p.id || p.mrn || '');
-          const match = raw.match(/(\d+)$/);
-          if (match) {
-            const num = parseInt(match[1], 10);
-            if (!isNaN(num) && num > highest) highest = num;
-          }
-        }
-      });
-      nextSeq = highest + 1;
-    }
-
-    const seqStr = String(nextSeq).padStart(3, '0');
-    return `${year}-${seqStr}`;
+    return runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(counterRef);
+      const data = snap.exists() ? snap.data() : null;
+      let seq = data ? (data.currentYear === year ? (data.lastSequence || 0) : 0) : highestLoaded();
+      for (let tries = 0; tries < 50; tries++) {
+        seq += 1;
+        const candidate = `${year}-${String(seq).padStart(3, '0')}`;
+        const [reg, vax, authz] = await Promise.all([
+          transaction.get(doc(db, 'mrnRegistry', candidate)),
+          transaction.get(doc(db, 'vaccinations', candidate)),
+          transaction.get(doc(db, 'authorizedPatients', candidate)),
+        ]);
+        if (reg.exists() || vax.exists() || authz.exists()) continue;
+        transaction.set(counterRef, { currentYear: year, lastSequence: seq }, { merge: true });
+        transaction.set(doc(db, 'mrnRegistry', candidate), { mrn: candidate, issuedAt: serverTimestamp(), issuedBy: auth.currentUser?.uid || '' });
+        return candidate;
+      }
+      throw new Error('Could not find a free MRN. Please try again.');
+    });
   }
 
   function formatE164(phone) {
@@ -260,6 +255,24 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
     }
 
     if (typeof setSaving === 'function') setSaving(true);
+
+    // Checked on the saved record, not the copy on screen: a record that is
+    // (still or again) archived must be restored before a new service.
+    if (isReturning) {
+      try {
+        const live = await getDoc(doc(db, 'vaccinations', returningMrn));
+        if (live.exists() && live.data().isArchived === true) {
+          showToast('This record is archived. Restore it first, then add the new service.', 'error');
+          if (typeof setSaving === 'function') setSaving(false);
+          return;
+        }
+      } catch (err) {
+        console.error('Archive check failed:', err);
+        showToast('Could not check this record. Nothing was saved. Please try again.', 'error');
+        if (typeof setSaving === 'function') setSaving(false);
+        return;
+      }
+    }
 
     try {
       // Query authorizedPatients in Firestore to ensure uniqueness across entire database
@@ -407,16 +420,21 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
         lastServiceStartedAt: serverTimestamp(),
       };
 
+      // A returning patient keeps their app sign-in link: uid and registered
+      // live only on authorizedPatients (the vaccinations row shown here does
+      // not carry them), so they are left out of this merge instead of being
+      // overwritten with null/false, which unlinked the patient's account
+      // from their own MRN.
       const authDoc = {
         mrn: caseNo,
         name: fullName,
         email: normalEmail,
         contact: formattedContact,
         authorized: true,
-        registered: isReturning ? (returningPatient.registered ?? false) : false,
-        uid: isReturning ? (returningPatient.uid ?? null) : null,
       };
       if (!isReturning) {
+        authDoc.registered = false;
+        authDoc.uid = null;
         authDoc.createdAt = serverTimestamp();
       }
 
@@ -425,6 +443,15 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
         setDoc(doc(db, 'authorizedPatients', caseNo), authDoc, { merge: true }),
       ]);
 
+      logActivity(isReturning ? {
+        action: 'patient.service_add', collection: 'vaccinations', docId: caseNo, mrn: caseNo,
+        summary: `New ${vaxDoc.service} service started for ${fullName} (previous: ${returningPatient.service || 'PEP'})`,
+        changes: diffFields(returningPatient, vaxDoc, ['service', 'date', 'status', 'dose', 'doses', 'cat', 'animal', 'woundLocation', 'woundDepth', 'pastVaccines', 'allergies', 'notes']),
+      } : {
+        action: 'patient.create', collection: 'vaccinations', docId: caseNo, mrn: caseNo,
+        summary: `Registered ${fullName} for ${vaxDoc.service}`,
+        changes: diffFields({}, vaxDoc, ['name', 'email', 'contact', 'age', 'sex', 'service', 'date', 'cat', 'animal', 'woundLocation', 'woundDepth', 'dose']),
+      });
       trackEvent(isReturning ? 'patient_service_added' : 'patient_registered');
       showToast(isReturning
         ? `New service (${form.service || 'PEP'}) added for ${fullName} under MRN ${caseNo}`
@@ -494,7 +521,15 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
     setEditPatient(null);
     showToast('Patient info updated', 'success');
     const mrnKey = editPatient.id || editPatient.mrn || targetId;
-    updateDoc(doc(db, 'vaccinations', targetId), updatedData).catch(err => {
+    const editedFields = diffFields(editPatient, updatedData);
+    updateDoc(doc(db, 'vaccinations', targetId), updatedData).then(() => {
+      if (!editedFields.length) return;
+      logActivity({
+        action: 'patient.update', collection: 'vaccinations', docId: targetId, mrn: mrnKey,
+        summary: `Edited ${newName}: ${editedFields.map(c => c.field).join(', ')}`,
+        changes: editedFields,
+      });
+    }).catch(err => {
       console.error('Edit patient error:', err);
       showToast('Failed to update patient.', 'error');
     });
@@ -519,9 +554,14 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
       const alreadyLinked = new Set(authSnap.docs.map(d => d.id));
       const mrnPattern = /^\d{4}-\d{3,}$/;
 
+      // An email already linked to another MRN is never linked again: one
+      // login email belongs to one patient (one MRN).
+      const linkedEmails = new Map(authSnap.docs.map(d => [String(d.data().email || '').toLowerCase().trim(), d.id]));
+
       let created = 0;
       let skippedNoEmail = 0;
       let skippedIrregularId = 0;
+      let skippedEmailTaken = 0;
 
       for (const p of patients) {
         const mrn = p.firestoreId;
@@ -529,6 +569,8 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
         if (!mrnPattern.test(mrn)) { skippedIrregularId++; continue; }
         const email = (p.email || '').toLowerCase().trim();
         if (!email) { skippedNoEmail++; continue; }
+        if (linkedEmails.has(email) && linkedEmails.get(email) !== mrn) { skippedEmailTaken++; continue; }
+        linkedEmails.set(email, mrn);
 
         await setDoc(doc(db, 'authorizedPatients', mrn), {
           mrn,
@@ -541,10 +583,12 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
           createdAt: serverTimestamp(),
         });
         created++;
+        logActivity({ action: 'patient.update', collection: 'authorizedPatients', docId: mrn, mrn, summary: `Linked ${getName(p)} for app sign-in`, changes: [{ field: 'authorizedPatients', before: null, after: 'created' }] });
       }
 
       const parts = [`${created} patient(s) linked for app login`];
       if (skippedNoEmail) parts.push(`${skippedNoEmail} skipped (no email on file)`);
+      if (skippedEmailTaken) parts.push(`${skippedEmailTaken} skipped (email already linked to another MRN)`);
       if (skippedIrregularId) parts.push(`${skippedIrregularId} skipped (irregular record ID, needs manual review)`);
       showToast(parts.join(' — '), created > 0 ? 'success' : 'info');
     } catch (err) {
@@ -674,10 +718,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
           onPinMap={p => setPinTarget(p)}
           onExport={p => setExportModal(p)}
           onEdit={p => setEditPatient(p)}
-          onAddAnotherService={p => {
-            setAddPatientInitial(p);
-            setModal(true);
-          }}
+          onAddAnotherService={openAddService}
         />
         {showModal && (
           <AddPatientModal
@@ -1016,19 +1057,23 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
                 ~76px wide at laptop sizes. It now uses the compact
                 "Sep 5, 2026" form in a wider column, and the table scrolls
                 sideways below 1040px instead of crushing any column. */}
-            <table className="kna-table" style={{ width: '100%', minWidth: 860, borderCollapse: 'collapse', textAlign: 'left', fontSize: '.8125rem', tableLayout: 'fixed' }}>
+            {/* Seven columns sized so nothing clips at laptop widths; below
+                980px the table scrolls sideways instead of crushing a column. */}
+            <table className="kna-table" style={{ width: '100%', minWidth: 980, borderCollapse: 'collapse', textAlign: 'left', fontSize: '.8125rem', tableLayout: 'fixed' }}>
               <colgroup>
-                <col style={{ width: '12%' }} />
-                <col style={{ width: '26%' }} />
-                <col style={{ width: '14%' }} />
+                <col style={{ width: '11%' }} />
                 <col style={{ width: '19%' }} />
-                <col style={{ width: '15%' }} />
+                <col style={{ width: '12%' }} />
                 <col style={{ width: '14%' }} />
+                <col style={{ width: '18%' }} />
+                <col style={{ width: '13%' }} />
+                <col style={{ width: '13%' }} />
               </colgroup>
               <thead>
                 <tr style={{ background: '#FAFAFA', borderBottom: '1px solid #E2E8F0', color: '#64748B', fontSize: '.6875rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.5px' }}>
                   <th style={{ padding: '14px 16px 14px 20px', fontWeight: 600, color: '#64748B' }}>Patient ID</th>
                   <th style={{ padding: '14px 16px', fontWeight: 600, color: '#64748B' }}>Name</th>
+                  <th style={{ padding: '14px 16px', fontWeight: 600, color: '#64748B' }}>Barangay</th>
                   <th style={{ padding: '14px 16px', fontWeight: 600, color: '#64748B' }}>Service</th>
                   <th style={{ padding: '14px 16px', fontWeight: 600, color: '#64748B' }}>Status</th>
                   <th style={{ padding: '14px 16px', fontWeight: 600, color: '#64748B', whiteSpace: 'nowrap' }}>Submitted On</th>
@@ -1037,9 +1082,9 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={6} style={{ padding: 0 }}><SkeletonRows rows={8} /></td></tr>
+                  <tr><td colSpan={7} style={{ padding: 0 }}><SkeletonRows rows={8} /></td></tr>
                 ) : paginatedPatients.length === 0 ? (
-                  <tr><td colSpan={6} style={{ padding: 0 }}><EmptyState icon={Users} title="No patient records found" text="Try a different search, filter or year." /></td></tr>
+                  <tr><td colSpan={7} style={{ padding: 0 }}><EmptyState icon={Users} title="No patient records found" text="Try a different search, filter or year." /></td></tr>
                 ) : (
                   paginatedPatients.map(p => {
                     const rowId = p.firestoreId || p.id;
@@ -1070,8 +1115,19 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
                         <td style={{ padding: '14px 16px 14px 20px', fontWeight: 500, color: '#64748B', fontSize: '.8125rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {p.id || p.mrn}
                         </td>
-                        <td style={{ padding: '14px 16px', fontWeight: 600, color: '#0F172A', fontSize: '.8125rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={formattedName}>
-                          {formattedName}
+                        {/* Name, with the email under it (cut off with "…", full on hover). */}
+                        <td style={{ padding: '8px 16px', overflow: 'hidden' }}>
+                          <div style={{ fontWeight: 600, color: '#0F172A', fontSize: '.8125rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={formattedName}>
+                            {formattedName}
+                          </div>
+                          {p.email && (
+                            <div style={{ fontWeight: 400, color: '#94A3B8', fontSize: '.6875rem', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={p.email}>
+                              {p.email}
+                            </div>
+                          )}
+                        </td>
+                        <td style={{ padding: '14px 16px', color: '#475569', fontSize: '.8125rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={recordBarangay(p) || undefined}>
+                          {recordBarangay(p) || '—'}
                         </td>
                         <td style={{ padding: '14px 16px' }}>
                           <ServiceBadge service={p.service} />

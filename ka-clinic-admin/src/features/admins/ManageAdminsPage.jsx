@@ -1,4 +1,4 @@
-// Batch 6 — manager-only. Reachability is enforced two layers deep:
+// Manage Staff (route id 'manage-admins', unchanged). Batch 6 — manager-only. Reachability is enforced two layers deep:
 // AdminDashboard only mounts this when useAuth().role === 'manager', and
 // Firestore rules independently reject a staff account's list/get calls
 // against admins/{uid} regardless of what the client does.
@@ -34,6 +34,7 @@ import { postJson } from '../../lib/adminSession';
 import Avatar from '../../components/Avatar';
 import { useAdminAvatars } from '../../lib/adminAvatars';
 import Toast from '../../components/Toast';
+import ActivityLogPanel from './ActivityLogPanel';
 import { FieldError, useFieldErrors } from '../../components/FormValidation';
 
 import { SkeletonRows } from '../../components/Skeleton';
@@ -75,6 +76,7 @@ export default function ManageAdmins() {
   const [confirmDelete, setConfirmDelete] = useState(null);
   const avatars = useAdminAvatars();
   const [activeTab, setActiveTab] = useState('all'); // 'all' | 'invited' | 'revoked'
+  const [section, setSection] = useState('staff'); // 'staff' | 'log'
   const [page, setPage] = useState(1);
   // A new tab or search starts again from the first page.
   useEffect(() => { setPage(1); }, [activeTab, searchTerm]);
@@ -235,18 +237,30 @@ export default function ManageAdmins() {
         {/* ── Page Title Header ── */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-extrabold tracking-tight text-slate-900">Manage Admins</h2>
+            <h2 className="text-2xl font-extrabold tracking-tight text-slate-900">Manage Staff</h2>
             <p className="text-sm text-slate-500 mt-1">Invite staff members, assign roles, and manage system access.</p>
           </div>
-          <button
+          {section === 'staff' && <button
             onClick={() => { setInviteEmail(''); inviteV.clear(); setInviteOpen(true); }}
             className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#3B50DF] hover:bg-[#2F40B5] text-white text-sm font-bold rounded-xl shadow-xs transition-all cursor-pointer shrink-0"
           >
             <UserPlus size={16} /> Invite Nurses
-          </button>
+          </button>}
         </div>
 
-        {/* ── Main Active / Team Members Table Card ── */}
+        <SegmentedTabs
+          label="Manage Staff section"
+          className="w-fit"
+          value={section}
+          onChange={setSection}
+          tabs={[
+            { key: 'staff', label: 'Staff Accounts' },
+            { key: 'log', label: 'Activity Log' },
+          ]}
+        />
+
+        {section === 'log' ? <ActivityLogPanel staff={admins} /> : (
+        /* ── Main Active / Team Members Table Card ── */
         <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xs overflow-hidden">
           
           {/* Table Header with Tabs & Search */}
@@ -269,7 +283,7 @@ export default function ManageAdmins() {
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
-                placeholder="Search admins by name or email…"
+                placeholder="Search staff by name or email…"
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 className="w-full bg-white border border-slate-300 pl-9 pr-8 py-2 rounded-xl text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#3B50DF] focus:ring-1 focus:ring-[#3B50DF] transition-all shadow-xs"
@@ -289,7 +303,7 @@ export default function ManageAdmins() {
             <EmptyState
               icon={Users}
               title="No accounts found"
-              text={searchTerm ? `No accounts match "${searchTerm}".` : activeTab === 'invited' ? 'No pending invitations.' : activeTab === 'revoked' ? 'No revoked accounts.' : 'No admin accounts registered yet.'}
+              text={searchTerm ? `No accounts match "${searchTerm}".` : activeTab === 'invited' ? 'No pending invitations.' : activeTab === 'revoked' ? 'No revoked accounts.' : 'No staff accounts registered yet.'}
               action={searchTerm ? (
                 <button onClick={() => setSearchTerm('')} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-700 rounded-lg transition-all cursor-pointer">
                   Clear search
@@ -301,7 +315,7 @@ export default function ManageAdmins() {
               <table className="kna-table w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200">
-                    <th className="px-6 py-3.5 text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Administrator</th>
+                    <th className="px-6 py-3.5 text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Staff Member</th>
                     <th className="px-6 py-3.5 text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Email Address</th>
                     <th className="px-6 py-3.5 text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Role</th>
                     <th className="px-6 py-3.5 text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Status</th>
@@ -399,6 +413,7 @@ export default function ManageAdmins() {
           </div>
           <Pager page={safePage} pages={pages} total={filtered.length} onPage={setPage} />
         </div>
+        )}
       </div>
 
       {/* ── Invite a Nurse modal (portaled to body to blur sidebar + header) ── */}
@@ -472,8 +487,8 @@ export default function ManageAdmins() {
           variant="danger"
           icon={UserX}
           title="Revoke access?"
-          subtitle="Administrator account"
-          message={<>This account loses <strong>admin portal access</strong> right away.</>}
+          subtitle="Staff account"
+          message={<>This account loses <strong>portal access</strong> right away.</>}
           details={[
             ['Name', confirmRevoke.name],
             ['Email', confirmRevoke.email],
@@ -493,7 +508,7 @@ export default function ManageAdmins() {
           variant="danger"
           icon={ShieldAlert}
           title="Revoke this invitation?"
-          subtitle="Pending admin setup"
+          subtitle="Pending staff setup"
           message={<>The <strong>invitation link</strong> stops working immediately.</>}
           details={[
             ['Email', confirmCancel.email || confirmCancel.name],
@@ -515,7 +530,7 @@ export default function ManageAdmins() {
           <ConfirmDialog
             variant="danger"
             title={who ? 'Delete this account?' : 'Delete this pending invite?'}
-            subtitle="Revoked admin"
+            subtitle="Revoked staff account"
             message={who
               ? <>The account and its sign-in are <strong>deleted permanently</strong>.</>
               : <>This pending invite and its link are <strong>deleted permanently</strong>.</>}

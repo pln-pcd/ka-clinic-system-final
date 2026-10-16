@@ -28,6 +28,8 @@ async function login(req, res) {
   if (!patient || patient.authorized === false || await isPatientRecordArchived(mrn)) return deny(res, { status: 401, error: GENERIC_LOGIN_ERROR });
   const credential = await verifyPassword(patient.email, password);
   if (!credential || (await db.collection('admins').doc(credential.localId).get()).exists) return deny(res, { status: 401, error: GENERIC_LOGIN_ERROR });
+  // The MRN typed must be the one this account is linked to (one MRN per patient).
+  if (patient.uid && patient.uid !== credential.localId) return deny(res, { status: 401, error: GENERIC_LOGIN_ERROR });
   await bucket.ref.delete();
   res.status(200).json({ success: true, customToken: await auth.createCustomToken(credential.localId) });
 }
@@ -79,7 +81,7 @@ async function sendOtp(req, res) {
     if (action === 'login-check') {
       const trusted = await isDeviceTrusted({ uid: caller.uid, deviceId, trustToken: req.body?.trustToken });
       if (trusted) { await touchTrustedDevice({ uid: caller.uid, deviceId }); await grantSecuritySession(caller.decoded, 'patient', { mrn: caller.mrn, deviceId }); }
-      return res.status(200).json({ success: true, trusted });
+      return res.status(200).json({ success: true, trusted, ...(trusted ? { mrn: caller.mrn } : {}) });
     }
     const result = await mailOtp(db.collection('patientLoginOtps').doc(caller.uid), caller.email, 'Your K&A Clinic sign-in code', { uid: caller.uid, authTime: caller.decoded.auth_time });
     if (result.error) return deny(res, result);
@@ -138,7 +140,7 @@ async function verifyOtp(req, res) {
     let trustToken = null;
     if (req.body?.rememberDevice === true) trustToken = (await trustDevice({ uid: caller.uid, deviceId, deviceLabel: req.body?.deviceLabel })).token;
     await grantSecuritySession(caller.decoded, 'patient', { mrn: caller.mrn, deviceId });
-    return res.status(200).json({ success: true, trustToken });
+    return res.status(200).json({ success: true, trustToken, mrn: caller.mrn });
   }
   const mrn = normalizeMRN(req.body?.mrn), code = String(req.body?.enteredCode || '');
   if (!validMrn(mrn) || !/^\d{6}$/.test(code)) return deny(res, { error: 'Invalid verification details.' });

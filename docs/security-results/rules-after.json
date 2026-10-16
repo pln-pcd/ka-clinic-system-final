@@ -1,5 +1,5 @@
 {
-  "date": "2026-10-08T00:10:00.538Z",
+  "date": "2026-10-16T02:55:13.128Z",
   "results": [
     {
       "id": "RULE-vaccinations-anonymous-read",
@@ -5378,6 +5378,230 @@
       "status": "PASS"
     },
     {
+      "id": "RULE-mrnRegistry-anonymous-read",
+      "description": "anonymous: read mrnRegistry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-mrnRegistry-anonymous-create",
+      "description": "anonymous: create mrnRegistry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-mrnRegistry-anonymous-update",
+      "description": "anonymous: update mrnRegistry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-mrnRegistry-anonymous-delete",
+      "description": "anonymous: delete mrnRegistry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-mrnRegistry-patient-own-read",
+      "description": "patient-own: read mrnRegistry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-mrnRegistry-patient-own-create",
+      "description": "patient-own: create mrnRegistry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-mrnRegistry-patient-own-update",
+      "description": "patient-own: update mrnRegistry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-mrnRegistry-patient-own-delete",
+      "description": "patient-own: delete mrnRegistry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-mrnRegistry-patient-other-read",
+      "description": "patient-other: read mrnRegistry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-mrnRegistry-patient-other-create",
+      "description": "patient-other: create mrnRegistry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-mrnRegistry-patient-other-update",
+      "description": "patient-other: update mrnRegistry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-mrnRegistry-patient-other-delete",
+      "description": "patient-other: delete mrnRegistry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-mrnRegistry-staff-read",
+      "description": "staff: read mrnRegistry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-mrnRegistry-staff-create",
+      "description": "staff: create mrnRegistry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-mrnRegistry-staff-update",
+      "description": "staff: update mrnRegistry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-mrnRegistry-staff-delete",
+      "description": "staff: delete mrnRegistry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-mrnRegistry-manager-read",
+      "description": "manager: read mrnRegistry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-mrnRegistry-manager-create",
+      "description": "manager: create mrnRegistry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-mrnRegistry-manager-update",
+      "description": "manager: update mrnRegistry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-mrnRegistry-manager-delete",
+      "description": "manager: delete mrnRegistry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-mrnRegistry-revoked-read",
+      "description": "revoked: read mrnRegistry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-mrnRegistry-revoked-create",
+      "description": "revoked: create mrnRegistry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-mrnRegistry-revoked-update",
+      "description": "revoked: update mrnRegistry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-mrnRegistry-revoked-delete",
+      "description": "revoked: delete mrnRegistry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-mrnRegistry-pending-read",
+      "description": "pending: read mrnRegistry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-mrnRegistry-pending-create",
+      "description": "pending: create mrnRegistry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-mrnRegistry-pending-update",
+      "description": "pending: update mrnRegistry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-mrnRegistry-pending-delete",
+      "description": "pending: delete mrnRegistry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
       "id": "RULE-attack-authorizedPatients-patient UID takeover",
       "description": "patient UID takeover",
       "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
@@ -5444,6 +5668,190 @@
     {
       "id": "RULE-pending-own",
       "description": "Patient without OTP cannot read their own record",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-mrn-other-by-email",
+      "description": "Patient cannot read another MRN that carries their email",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-mrn-other-patient",
+      "description": "Patient cannot read another patient's record or history",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-history-own",
+      "description": "Patient reads own record including caseHistory",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-counter-forward",
+      "description": "Staff can move the MRN counter forward",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-counter-rewind",
+      "description": "MRN counter cannot be rewound",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-counter-delete",
+      "description": "MRN counter cannot be deleted",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-registry-delete",
+      "description": "Issued MRN cannot be removed from the registry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-log-staff-create",
+      "description": "Nurse writes a log entry as themselves",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-log-forge-actor",
+      "description": "Nurse cannot write an entry as someone else",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-log-forge-role",
+      "description": "Nurse cannot claim the manager role",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-log-forge-time",
+      "description": "Entry must carry the server time",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-log-patient-create",
+      "description": "Patient cannot write log entries",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-log-staff-read",
+      "description": "Nurse cannot read a log entry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-log-staff-list",
+      "description": "Nurse cannot list the log",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-log-patient-read",
+      "description": "Patient cannot read the log",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-log-manager-read",
+      "description": "Manager reads the log",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-log-manager-list",
+      "description": "Manager lists the log newest first",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-log-manager-update",
+      "description": "Manager cannot edit a log entry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-log-manager-delete",
+      "description": "Manager cannot delete a log entry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-log-staff-delete",
+      "description": "Nurse cannot delete a log entry",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-appt-note-ok",
+      "description": "Patient books with a 300-character note",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-appt-no-note",
+      "description": "Patient books without a note",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-appt-note-long",
+      "description": "A note over 300 characters is refused",
       "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
       "expected": "PERMISSION_DENIED",
       "actual": "permission-denied",

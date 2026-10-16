@@ -1,13 +1,13 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, setLogLevel } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, setLogLevel, serverTimestamp, query, limit, orderBy } from 'firebase/firestore';
 
 // Never accept a live project or remote host. All test data is fictional.
 const projectId = 'demo-ka-security';
 const host = '127.0.0.1';
 setLogLevel('silent');
 const env = await initializeTestEnvironment({ projectId, firestore: {
-  host, port: 8080, rules: readFileSync('ka-clinic-admin/firestore.rules', 'utf8'),
+  host, port: 8080, rules: readFileSync(process.env.RULES_PATH || 'ka-clinic-admin/firestore.rules', 'utf8'),
 } });
 const authTime = Math.floor(Date.now() / 1000);
 const roles = ['anonymous', 'patient-own', 'patient-other', 'staff', 'manager', 'revoked', 'pending'];
@@ -40,6 +40,7 @@ const fixtures = {
   appointmentSlots: ['2026-12-12_0800', { date: '2026-12-12', time: '08:00', heldBy: 'security-a', createdAt: Date.now() }],
   invites: ['simulated-unguessable-invite', { email: 'invite@example.test', status: 'pending' }],
   patientChatState: ['security-a', { messageCount: 1 }],
+  mrnRegistry: ['2026-050', { mrn: '2026-050', issuedAt: Date.now(), issuedBy: 'security-staff' }],
 };
 async function seed() {
   await env.withSecurityRulesDisabled(async ctx => {
@@ -61,6 +62,7 @@ function expected(collection, role, op) {
   const admin = adminRoles.includes(role), own = role === 'patient-own';
   if (collection === 'appointmentSlots') return op === 'read' || admin || (own && op === 'create');
   if (collection === 'invites') return op === 'read';
+  if (collection === 'mrnRegistry') return admin && ['read', 'create'].includes(op);
   if (collection === 'patientChatState') return ['read', 'delete'].includes(op) && (admin || own);
   if (['securitySessions', 'patientTrustedDevices', 'otpVerifications', 'patientLoginOtps', 'otps', 'passwordResets', 'loginAttempts'].includes(collection)) return false;
   if (collection === 'admins') return op === 'read' && role === 'manager';
@@ -120,11 +122,45 @@ try {
   await env.withSecurityRulesDisabled(ctx => updateDoc(doc(ctx.firestore(), 'vaccinations', '2026-001'), { isArchived: true }));
   await check('RULE-archived-read', 'Archived patient cannot read clinical record', false, () => getDoc(doc(clients['patient-own'], 'vaccinations', '2026-001')));
   await seed();
-  await env.withSecurityRulesDisabled(ctx => updateDoc(doc(ctx.firestore(), 'securitySessions', `security-manager_${authTime}`), { expiresAt: Date.now() - 60000 }));
+  await env.withSecurityRulesDisabled(ctx => updateDoc(doc(ctx.firestore(), 'securitySessions', `security-manager_${authTime}`), { expiresAt: Date.now() - 3600000 }));
   await check('RULE-idle-expired', 'Expired admin session cannot read clinical records', false, () => getDoc(doc(clients.manager, 'vaccinations', '2026-001')));
   await seed();
   await env.withSecurityRulesDisabled(ctx => deleteDoc(doc(ctx.firestore(), 'securitySessions', `security-a_${authTime}`)));
   await check('RULE-pending-own', 'Patient without OTP cannot read their own record', false, () => getDoc(doc(clients['patient-own'], 'vaccinations', '2026-001')));
+  await seed();
+  // ── 1.0.5: one MRN per patient, history, Activity Log, booking notes ──
+  // A record carrying the patient's email under ANOTHER MRN is still not
+  // theirs: reads follow the MRN of the verified session only.
+  await env.withSecurityRulesDisabled(ctx => setDoc(doc(ctx.firestore(), 'vaccinations', '2026-003'), { email: 'security-a@example.test', isArchived: false, caseHistory: [{ service: 'PEP' }] }));
+  await check('RULE-mrn-other-by-email', 'Patient cannot read another MRN that carries their email', false, () => getDoc(doc(clients['patient-own'], 'vaccinations', '2026-003')));
+  await check('RULE-mrn-other-patient', "Patient cannot read another patient's record or history", false, () => getDoc(doc(clients['patient-own'], 'vaccinations', '2026-002')));
+  await check('RULE-history-own', 'Patient reads own record including caseHistory', true, () => getDoc(doc(clients['patient-own'], 'vaccinations', '2026-001')));
+  // MRN counter never rewinds; registry is permanent.
+  await env.withSecurityRulesDisabled(ctx => setDoc(doc(ctx.firestore(), 'settings', 'counters'), { currentYear: 2026, lastSequence: 53 }));
+  await check('RULE-counter-forward', 'Staff can move the MRN counter forward', true, () => setDoc(doc(clients.staff, 'settings', 'counters'), { currentYear: 2026, lastSequence: 54 }, { merge: true }));
+  await check('RULE-counter-rewind', 'MRN counter cannot be rewound', false, () => setDoc(doc(clients.manager, 'settings', 'counters'), { currentYear: 2026, lastSequence: 10 }, { merge: true }));
+  await check('RULE-counter-delete', 'MRN counter cannot be deleted', false, () => deleteDoc(doc(clients.manager, 'settings', 'counters')));
+  await check('RULE-registry-delete', 'Issued MRN cannot be removed from the registry', false, () => deleteDoc(doc(clients.manager, 'mrnRegistry', '2026-050')));
+  // Activity Log: append-only, own uid and live role, managers read.
+  const entry = (who, role, extra = {}) => ({ actorUid: uid[who], actorName: 'Test', actorRole: role, action: 'patient.update', collection: 'vaccinations', docId: '2026-001', mrn: '2026-001', summary: 'Edited test', changes: [{ field: 'name', before: 'A', after: 'B' }], createdAt: serverTimestamp(), ...extra });
+  await check('RULE-log-staff-create', 'Nurse writes a log entry as themselves', true, () => setDoc(doc(clients.staff, 'activityLog', 'log-1'), entry('staff', 'staff')));
+  await check('RULE-log-forge-actor', 'Nurse cannot write an entry as someone else', false, () => setDoc(doc(clients.staff, 'activityLog', 'log-2'), entry('manager', 'manager')));
+  await check('RULE-log-forge-role', 'Nurse cannot claim the manager role', false, () => setDoc(doc(clients.staff, 'activityLog', 'log-3'), entry('staff', 'manager')));
+  await check('RULE-log-forge-time', 'Entry must carry the server time', false, () => setDoc(doc(clients.staff, 'activityLog', 'log-4'), entry('staff', 'staff', { createdAt: new Date('2020-01-01') })));
+  await check('RULE-log-patient-create', 'Patient cannot write log entries', false, () => setDoc(doc(clients['patient-own'], 'activityLog', 'log-5'), entry('patient-own', '')));
+  await check('RULE-log-staff-read', 'Nurse cannot read a log entry', false, () => getDoc(doc(clients.staff, 'activityLog', 'log-1')));
+  await check('RULE-log-staff-list', 'Nurse cannot list the log', false, () => getDocs(query(collection(clients.staff, 'activityLog'), orderBy('createdAt', 'desc'), limit(5))));
+  await check('RULE-log-patient-read', 'Patient cannot read the log', false, () => getDoc(doc(clients['patient-own'], 'activityLog', 'log-1')));
+  await check('RULE-log-manager-read', 'Manager reads the log', true, () => getDoc(doc(clients.manager, 'activityLog', 'log-1')));
+  await check('RULE-log-manager-list', 'Manager lists the log newest first', true, () => getDocs(query(collection(clients.manager, 'activityLog'), orderBy('createdAt', 'desc'), limit(5))));
+  await check('RULE-log-manager-update', 'Manager cannot edit a log entry', false, () => updateDoc(doc(clients.manager, 'activityLog', 'log-1'), { summary: 'changed' }));
+  await check('RULE-log-manager-delete', 'Manager cannot delete a log entry', false, () => deleteDoc(doc(clients.manager, 'activityLog', 'log-1')));
+  await check('RULE-log-staff-delete', 'Nurse cannot delete a log entry', false, () => deleteDoc(doc(clients.staff, 'activityLog', 'log-1')));
+  // Booking notes: optional, at most 300 characters.
+  const booking = (extra) => ({ status: 'pending', patientUid: uid['patient-own'], userId: uid['patient-own'], patientId: '2026-001', name: 'Simulated A', contactNumber: '0000000000', date: '2026-12-19', time: '9:00 AM - 10:00 AM', type: 'PEP', ...extra });
+  await check('RULE-appt-note-ok', 'Patient books with a 300-character note', true, () => setDoc(doc(clients['patient-own'], 'appointments', 'note-ok'), booking({ notes: 'x'.repeat(300) })));
+  await check('RULE-appt-no-note', 'Patient books without a note', true, () => setDoc(doc(clients['patient-own'], 'appointments', 'note-none'), booking({})));
+  await check('RULE-appt-note-long', 'A note over 300 characters is refused', false, () => setDoc(doc(clients['patient-own'], 'appointments', 'note-long'), booking({ notes: 'x'.repeat(301) })));
   await seed();
   const passwordClient = env.authenticatedContext('security-a', { email: 'security-a@example.test', auth_time: authTime, firebase: { sign_in_provider: 'password' } }).firestore();
   await check('RULE-password-provider', 'Password-only SDK sign-in cannot bypass the gateway', false, () => getDoc(doc(passwordClient, 'vaccinations', '2026-001')));

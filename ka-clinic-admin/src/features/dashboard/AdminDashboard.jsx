@@ -38,7 +38,7 @@ import { addDaysToDateString, formatDateShort as fmtDate, formatServiceType, get
 import StatusBadge from '../../components/StatusBadge';
 import { useLiveCollection } from '../../lib/liveStore';
 import ConfirmDialog from '../../components/ConfirmDialog';
-import { deriveStockStatus, formatStockVials, getItemStockMl } from '../../lib/inventoryStock';
+import { deriveStockStatus, formatVials } from '../../lib/inventoryStock';
 import ReportSendToasts from '../../components/ReportSendToasts';
 import { NotFoundPage, PageErrorBoundary } from '../../components/ErrorPages';
 
@@ -296,7 +296,7 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
   const [addModalInitialPatient, setAddModalInitialPatient] = useState(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
-  // Batch 5/6 — role drives the Manage Admins sidebar item + route guard
+  // Batch 5/6 — role drives the Manage Staff sidebar item + route guard
   // below. Also: if a manager revokes this session's account while it's
   // still open on a device (or the invite/OTP flow never granted access
   // in the first place), status flips away from "active" in real time —
@@ -412,7 +412,12 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
     const handleOpenPatientRecord = () => {
       setActivePage('patients');
     };
-    const handleOpenAddPatientModal = () => {
+    // Add Another Service from outside the Patients page (e.g. a record
+    // restored on the Archive page): open the Register pop-up there with
+    // that patient's details.
+    const handleOpenAddPatientModal = (e) => {
+      setAddModalInitialPatient(e?.detail || null);
+      setOpenAddPatientModal(true);
       setActivePage('patients');
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -462,7 +467,7 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
     allAppointments.forEach(a => {
       const name = a.name || a.patient || '';
       const phone = a.contactNumber || a.contact || '';
-      const purpose = a.type || a.purpose || '';
+      const purpose = formatServiceType(a.type || a.purpose, '');
       if (name.toLowerCase().includes(q) || phone.includes(q) || purpose.toLowerCase().includes(q) || (a.date && a.date.includes(q))) {
         results.push({
           type: 'appointment',
@@ -482,8 +487,8 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
         results.push({
           type: 'inventory',
           title: `Stock: ${name}`,
-          // Same numbers as the Inventory list: the mL pool and its whole vials.
-          sub: `Category: ${cat || 'Supplies'} · ${(i.mlPerVial || i.mgPerVial) ? `${getItemStockMl(i)} mL (${formatStockVials(i)})` : `${i.quantity ?? i.stock ?? 0} units`} remaining`,
+          // Same number as the Inventory list: whole vials.
+          sub: `Category: ${cat || 'Supplies'} · ${formatVials(i)} remaining`,
           page: 'inventory',
           item: i
         });
@@ -653,7 +658,7 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
           id: `inv-${d.id}`,
           type: isOut ? 'critical' : 'warning',
           title: isOut ? 'Out of Stock' : 'Low Stock Warning',
-          message: `${d.name || 'Vaccine'} ${isOut ? 'is out of stock' : 'is running low'} (${(d.mlPerVial || d.mgPerVial) ? `${getItemStockMl(d)} mL, ${formatStockVials(d)}` : `${d.stock} vials`})`,
+          message: `${d.name || 'Vaccine'} ${isOut ? 'is out of stock' : 'is running low'} (${formatVials(d)})`,
           time: 'Inventory',
           ts: d.updatedAt || d.createdAt || Date.now(),
           day: getTodayDateString(new Date(d.updatedAt || d.createdAt || Date.now())),
@@ -841,9 +846,17 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
     // Only a manager ever sees this item — role comes from Firestore via
     // useAuth(), never a hardcoded email/string check. Ordered before
     // Settings so admin-management sits with the rest of clinic management.
-    ...(role === 'manager' ? [{ id: 'manage-admins', label: 'Manage Admins', icon: Shield }] : []),
+    // Label only: the route id stays 'manage-admins' and stored roles are
+    // unchanged ("Manage Staff" because nurses are on it too).
+    ...(role === 'manager' ? [{ id: 'manage-admins', label: 'Manage Staff', icon: Shield }] : []),
     { id: 'settings',   label: 'Settings',            icon: Settings },
   ];
+
+  // Browser tab title follows the open section.
+  const activeLabel = activePage === 'not-found' ? 'Page not found' : (menuItems.find(m => m.id === activePage)?.label || 'Dashboard');
+  useEffect(() => {
+    document.title = `${activeLabel} · K&A Clinic Admin`;
+  }, [activeLabel]);
 
   // Sidebar nav item. Every state — default, hover, active — has the exact
   // same box: same padding, margin, width and font weight. The hover pill,
@@ -1106,7 +1119,7 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
           <div className="flex items-center gap-3 shrink-0">
             <div className="h-6 w-1 rounded-full bg-[#1D4ED8]"/>
             <div>
-              <h1 className="text-lg font-bold leading-none tracking-tight text-[#0a1d47]">{activePage === 'not-found' ? 'Page not found' : (menuItems.find(m => m.id === activePage)?.label || 'Dashboard')}</h1>
+              <h1 className="text-lg font-bold leading-none tracking-tight text-[#0a1d47]">{activeLabel}</h1>
               <p className="text-xs leading-none mt-1.5 text-slate-500 font-normal flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
                 K&A Anti-Rabies Vaccination Clinic

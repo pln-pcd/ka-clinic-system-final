@@ -2,6 +2,7 @@
 // counts as completed, when it is due to be archived (365 days after
 // completion or the latest restore), and the Archive page's restore and
 // delete writes.
+import { logActivity } from './activityLog.js';
 import { addDaysToDateString, getTodayDateString } from './formatters.js';
 import {
   arrayUnion,
@@ -164,6 +165,8 @@ export async function restorePatientRecord(patient) {
       previousArchivedAt: toMillis(patient.archivedAt),
     }),
   });
+  logActivity({ action: 'patient.restore', collection: 'vaccinations', docId: id, mrn: id,
+    summary: `Restored archived record MRN ${id}`, changes: [{ field: 'isArchived', before: 'true', after: 'false' }] });
   return restoredAt;
 }
 
@@ -177,4 +180,6 @@ export async function deleteArchivedConversation(threadId) {
     refs.slice(i, i + 450).forEach(r => batch.delete(r));
     await batch.commit();
   }
+  logActivity({ action: 'message.thread', collection: 'chatThreads', docId: threadId,
+    summary: `Deleted an archived conversation and its ${refs.length - 1} message(s)` });
 }

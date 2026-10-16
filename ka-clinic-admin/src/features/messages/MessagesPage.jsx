@@ -4,6 +4,7 @@ import { Archive, AlertCircle, CheckCheck, Clock, Inbox, MessageSquare, RotateCc
 import { useEffect, useRef, useState } from 'react';
 import { db, listen } from '../../lib/firebase';
 import { deleteArchivedConversation } from '../../lib/patientArchive';
+import { logActivity } from '../../lib/activityLog';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import EmptyState from '../../components/EmptyState';
 
@@ -208,6 +209,8 @@ export default function MessagesPage() {
         // their attribution rather than being reattributed to staff.
         ...(selectedThread.resolved ? {} : { closedBy: 'staff', closedAt: now }),
       });
+      logActivity({ action: 'message.thread', collection: 'chatThreads', docId: selectedThread.id, mrn: selectedThread.patientMrn || '',
+        summary: `Archived the conversation with ${selectedThread.patientName || 'a patient'}`, changes: [{ field: 'archived', before: 'false', after: 'true' }] });
       // It has just left the Active list — drop the selection so the pane
       // does not keep showing a conversation that is no longer there.
       setSelectedThread(null);
@@ -227,6 +230,8 @@ export default function MessagesPage() {
     setResolving(true);
     try {
       await updateDoc(doc(db, 'chatThreads', selectedThread.id), { archived: false, archivedAt: deleteField() });
+      logActivity({ action: 'message.thread', collection: 'chatThreads', docId: selectedThread.id, mrn: selectedThread.patientMrn || '',
+        summary: `Restored the conversation with ${selectedThread.patientName || 'a patient'}`, changes: [{ field: 'archived', before: 'true', after: 'false' }] });
       setSelectedThread(null);
       setConfirmAction(null);
     } catch (err) {
@@ -275,6 +280,9 @@ export default function MessagesPage() {
         status: 'replied',
         unread: false,
       });
+      // The message text stays out of the log; it can hold medical details.
+      logActivity({ action: 'message.reply', collection: 'chatMessages', docId: selectedThread.id, mrn: selectedThread.patientMrn || '',
+        summary: `Replied to ${selectedThread.patientName || 'a patient'}` });
     } catch (err) {
       console.error('Send reply error:', err);
       alert('Failed to send reply. Please try again.');

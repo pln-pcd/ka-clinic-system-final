@@ -335,7 +335,7 @@ export function buildSampleData(today = getTodayDateString()) {
     { r: byState('completed')[2], status: 'cancelled', source: 'online', date: weekend(2), time: '10:00 AM - 11:00 AM', declineReason: 'Duplicate appointment booking' },
     { r: byState('ongoing')[4], status: 'cancellation_pending', source: 'app', date: weekend(1), time: '3:00 PM - 4:00 PM', cancellationReason: 'Out of town for a family emergency.' },
   ];
-  const svcType = r => r.spec.service === 'PEP' ? 'PEP Follow-up' : r.spec.service === 'PrEP' ? 'Vaccination – Anti-Rabies (PrEP)' : r.spec.service === 'Tetanus' ? 'Anti-Tetanus Vaccine' : 'Pneumococcal Vaccine';
+  const svcType = r => r.spec.service === 'PEP' ? 'PEP' : r.spec.service === 'PrEP' ? 'Vaccination – Anti-Rabies (PrEP)' : r.spec.service === 'Tetanus' ? 'Anti-Tetanus Vaccine' : 'Pneumococcal Vaccine';
   const appointments = A.map((a, k) => {
     const d = new Date(`${a.date}T12:00:00Z`).getUTCDay();
     if (d !== 0 && d !== 6) throw new Error(`appointment on a weekday: ${a.date}`);

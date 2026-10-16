@@ -29,9 +29,10 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Toast from '../../components/Toast';
 import { authedPostJson } from '../../lib/adminSession';
+import { logActivity } from '../../lib/activityLog';
 import { auth, db, listen } from '../../lib/firebase';
 import { peekLiveCollection, useLiveCollection } from '../../lib/liveStore';
-import { brandAvailability, recordDoseChange, recordTreatmentChange, getItemStockMl, parseDoseMl, isRigEntry, isExpired, expiryOf } from '../../lib/inventoryStock';
+import { amountText, brandAvailability, formatVials, recordDoseChange, recordTreatmentChange, vialsOf, isRigEntry, isExpired, expiryOf } from '../../lib/inventoryStock';
 import { isRigItem } from '../../lib/inventoryCategories';
 import { erigStatus, isCategoryIII } from '../../lib/erig';
 import DatePicker from '../../components/DatePicker';
@@ -154,7 +155,6 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
   const [undoBusy, setUndoBusy] = useState(false);
   const [saving,       setSaving]       = useState({});
   const [assignedBrand, setAssignedBrand] = useState('');
-  const [assignedMl, setAssignedMl] = useState('');
   const [treatmentDate, setTreatmentDate] = useState(() => getTodayDateString());
   const itemsPerPage = 10;
 
@@ -166,9 +166,8 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
   const [reminderCache, setReminderCache] = useState({});
   const reminderFetches = useRef(new Set());
 
-  // Category III treatments (RIG and Anti-Tetanus) with mL tracking
+  // Category III treatments (RIG and Anti-Tetanus): 1 vial each
   const [rigDraftOpen, setRigDraftOpen] = useState(false);
-  const [rigMl, setRigMl] = useState('');
   // The RIG product given: an Inventory item in the RIG category. No default.
   const [rigItemId, setRigItemId] = useState('');
   const [rigDate, setRigDate] = useState(() => getTodayDateString());
@@ -176,7 +175,6 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
 
   const [tetanusDraftOpen, setTetanusDraftOpen] = useState(false);
   const [tetanusProduct, setTetanusProduct] = useState('');
-  const [tetanusMl, setTetanusMl] = useState('');
   const [tetanusDate, setTetanusDate] = useState(() => getTodayDateString());
   const [tetanusBusy, setTetanusBusy] = useState(false);
 
@@ -186,15 +184,12 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
   const closeModal = () => {
     setDetailPt(null);
     setAssignedBrand('');
-    setAssignedMl('');
     setReadyKey(null);
     setRigDraftOpen(false);
-    setRigMl('');
     setRigItemId('');
     setRigDate(getTodayDateString());
     setTetanusDraftOpen(false);
     setTetanusProduct('');
-    setTetanusMl('');
     setTetanusDate(getTodayDateString());
     autoOpenedRef.current = null;
     if (onClearSelectedPatient) onClearSelectedPatient();
@@ -397,6 +392,8 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
         notifiedDoses: updatedNotified,
         lastFollowupSentAt: new Date().toISOString(),
       });
+      logActivity({ action: 'notification.send', collection: 'patientNotifications', mrn: p.firestoreId, docId: p.firestoreId,
+        summary: `Sent a ${overdue ? 'missed-dose' : 'follow-up'} reminder for ${doseLabel} to MRN ${p.firestoreId}` });
 
       showToast(`Follow-up reminder sent to ${name}!`, 'success');
     } catch (err) {
@@ -419,6 +416,8 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
     }
     try {
       await updateDoc(doc(db, 'vaccinations', p.firestoreId), { vaccineBrand: brandName });
+      logActivity({ action: 'case.update', collection: 'vaccinations', docId: p.firestoreId, mrn: p.firestoreId,
+        summary: `Set vaccine brand for MRN ${p.firestoreId}`, changes: [{ field: 'vaccineBrand', before: p.vaccineBrand || null, after: brandName || null }] });
       showToast(`Vaccine brand updated to "${brandName || 'None'}"`, 'success');
     } catch (err) {
       console.error('Failed to update vaccine brand:', err);
@@ -461,20 +460,12 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
     const brandToUse = brandOverride || assignedBrand;
 
     // ── STRICT SEQUENTIAL DOSE ENFORCEMENT & VACCINE BRAND CHECK ──
-    let doseMlToUse = 0;
     if (!isCurrentlyDone) {
       // The nurse cannot check if they still haven't chosen the vaccine brand
       if (!brandToUse) {
         showToast(`Please select an assigned Vaccine Brand for ${cur.label} first before checking.`, 'warning');
         return;
       }
-
-      const parsedMl = parseDoseMl(assignedMl);
-      if (parsedMl === null) {
-        showToast('Please enter a valid amount in mL (e.g. 0.5 mL) before confirming dose.', 'error');
-        return;
-      }
-      doseMlToUse = parsedMl;
 
       // User wants to check Dose di -> ALL previous doses (0 .. di - 1) MUST be 'done'
       for (let k = 0; k < di; k++) {
@@ -511,12 +502,9 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
         showToast(`${item.name} expired on ${expiryOf(item)} and cannot be used. Choose another brand.`, 'error');
         return;
       }
-      if (item) {
-        const poolMl = getItemStockMl(item) ?? 0;
-        if (poolMl < doseMlToUse) {
-          showToast(`${brandToUse} has only ${poolMl} mL remaining in Inventory (requested ${doseMlToUse} mL).`, 'error');
-          return;
-        }
+      if (item && vialsOf(item) < 1) {
+        showToast(`${brandToUse} is out of stock in Inventory. Restock it or choose another brand.`, 'error');
+        return;
       }
     }
 
@@ -528,7 +516,6 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
             status: nextStatus,
             s: nextStatus,
             brand: nextStatus === 'done' ? brandToUse : '',
-            ml: nextStatus === 'done' ? doseMlToUse : null,
             autoMissed: false,
           }
         : d
@@ -569,9 +556,8 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
         : prev
     );
 
-    // Reset assignedBrand and assignedMl for next dose
+    // Reset assignedBrand for next dose
     setAssignedBrand('');
-    setAssignedMl('');
 
     let outcome;
     try {
@@ -581,7 +567,6 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
         give: nextStatus === 'done',
         brand: brandToUse,
         stockItemId,
-        ml: doseMlToUse,
         byUid: auth.currentUser?.uid || null,
         byName: auth.currentUser?.displayName || auth.currentUser?.email || '',
         readDoses: saved => buildDoses(saved),
@@ -602,31 +587,31 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
 
     if (outcome.allDone !== outcome.wasDone) syncIncidentPinsForCompletion(fresh, outcome.allDone);
 
-    if (outcome.before === null) {
+    // A dose given while stock was counted in mL took part of a vial.
+    const mlEraUndo = nextStatus !== 'done' && storedCur?.ml != null && storedCur?.stockDeducted !== false;
+    if (mlEraUndo) {
+      showToast('Dose undone. It was recorded in mL, so no vial was returned; adjust the stock in Inventory if needed.', 'info');
+    } else if (outcome.before === null || !outcome.moved) {
       showToast(nextStatus === 'done'
         ? `Dose saved. "${brandToUse}" is not in Inventory, so no stock was deducted.`
-        : 'Dose undone. No stock was deducted for it, so none was restored.', 'warning');
-    } else if (!outcome.moved) {
-      showToast('Dose undone. No stock was deducted for it, so none was restored.', 'info');
+        : 'Dose undone. No stock was deducted for it, so none was restored.', nextStatus === 'done' ? 'warning' : 'info');
     } else if (nextStatus === 'done') {
-      showToast(`Dose ${di + 1} saved. ${outcome.itemName} stock: ${outcome.before} mL → ${outcome.after} mL.`, 'success');
+      showToast(`Dose ${di + 1} saved. ${outcome.itemName}: ${outcome.before} → ${outcome.after} vials.`, 'success');
     } else {
-      showToast(`Dose ${di + 1} undone. ${outcome.itemName} stock restored to ${outcome.after} mL.`, 'info');
+      showToast(`Dose ${di + 1} undone. 1 vial returned to ${outcome.itemName} (${outcome.before} → ${outcome.after} vials).`, 'info');
     }
   };
 
-  // Saves a RIG or Anti-Tetanus entry: deducts exactly the typed mL from
-  // the product's Inventory item in one transaction with the record
+  // Saves a RIG or Anti-Tetanus entry: takes 1 vial from the product's
+  // Inventory item in one transaction with the record
   // (lib/inventoryStock.js recordTreatmentChange). The entry is its own
   // field on the record, never a dose, and nothing is ticked or saved for
   // the nurse. A second click while saving does nothing; the transaction
   // also refuses a second entry of the same kind.
   const treatmentInFlight = useRef(false);
-  const saveTreatment = async (p, { kind, product, mlRaw, date, setBusy, onSaved, item: chosenItem = null }) => {
+  const saveTreatment = async (p, { kind, product, date, setBusy, onSaved, item: chosenItem = null }) => {
     if (treatmentInFlight.current) return;
     if (!product) { showToast(`Choose the ${kind} product first.`, 'error'); return; }
-    const ml = parseDoseMl(mlRaw);
-    if (ml === null) { showToast(`Enter the ${kind} amount in mL (more than 0).`, 'error'); return; }
     const dateToUse = date || getTodayStr();
     if (dateToUse > getTodayStr()) { showToast(`The ${kind} date can't be in the future.`, 'error'); return; }
     const item = chosenItem || findMatchingInventoryItem(product, inventoryItems);
@@ -634,12 +619,9 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
       showToast(`${item.name} expired on ${expiryOf(item)} and cannot be used. Nothing was saved.`, 'error');
       return;
     }
-    if (item) {
-      const poolMl = getItemStockMl(item) ?? 0;
-      if (poolMl < ml) {
-        showToast(`${item.name} has only ${poolMl} mL left in Inventory (needed ${ml} mL). Nothing was saved.`, 'error');
-        return;
-      }
+    if (item && vialsOf(item) < 1) {
+      showToast(`${item.name} is out of stock in Inventory. Nothing was saved.`, 'error');
+      return;
     }
     treatmentInFlight.current = true;
     setBusy(true);
@@ -651,7 +633,6 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
         today: getTodayStr(),
         product,
         stockItemId: item?.id || null,
-        ml,
         date: dateToUse,
         byUid: auth.currentUser?.uid || null,
         byName: auth.currentUser?.displayName || auth.currentUser?.email || '',
@@ -667,10 +648,10 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
       setDetailPt(prev => (prev && prev.firestoreId === p.firestoreId ? apply(prev) : prev));
       setPatients(prev => prev.map(x => (x.firestoreId === p.firestoreId ? apply(x) : x)));
       onSaved();
-      if (out.moved) showToast(`${product} (${ml} mL) saved. ${out.itemName} stock: ${out.before} mL → ${out.after} mL.`, 'success');
-      else showToast(`${product} (${ml} mL) saved. No matching item in Inventory, so no stock was deducted.`, 'warning');
+      if (out.moved) showToast(`${product} saved. 1 vial deducted: ${out.itemName} ${out.before} → ${out.after} vials.`, 'success');
+      else showToast(`${product} saved. No matching item in Inventory, so no stock was deducted.`, 'warning');
     } catch (err) {
-      if (['stale', 'out-of-stock', 'expired', 'no-ml', 'invalid-dose'].includes(err?.code)) {
+      if (['stale', 'out-of-stock', 'expired'].includes(err?.code)) {
         showToast(`${err.message} Nothing was saved.`, 'error');
       } else {
         console.error(`Save ${kind} error:`, err);
@@ -687,14 +668,14 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
     const item = inventoryItems.find(i => i.id === rigItemId);
     if (!item) { showToast('Choose the RIG product first.', 'error'); return; }
     return saveTreatment(p, {
-      kind: 'RIG', product: item.name, item, mlRaw: rigMl, date: rigDate, setBusy: setRigBusy,
-      onSaved: () => { setRigDraftOpen(false); setRigMl(''); setRigItemId(''); setRigDate(getTodayDateString()); },
+      kind: 'RIG', product: item.name, item, date: rigDate, setBusy: setRigBusy,
+      onSaved: () => { setRigDraftOpen(false); setRigItemId(''); setRigDate(getTodayDateString()); },
     });
   };
 
   const handleSaveAntiTetanus = (p) => saveTreatment(p, {
-    kind: 'Anti-Tetanus', product: tetanusProduct, mlRaw: tetanusMl, date: tetanusDate, setBusy: setTetanusBusy,
-    onSaved: () => { setTetanusDraftOpen(false); setTetanusProduct(''); setTetanusMl(''); setTetanusDate(getTodayDateString()); },
+    kind: 'Anti-Tetanus', product: tetanusProduct, date: tetanusDate, setBusy: setTetanusBusy,
+    onSaved: () => { setTetanusDraftOpen(false); setTetanusProduct(''); setTetanusDate(getTodayDateString()); },
   });
 
   const removeTreatment = async (p, treatment) => {
@@ -724,7 +705,9 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
         ...(isRig ? { rigTreatment: null, rigGiven: 'No' } : { antiTetanusTreatment: null }),
       } : x));
       showToast(out.moved
-        ? `${treatment.product} removed. ${out.itemName} stock restored: ${out.before} mL → ${out.after} mL.`
+        ? `${treatment.product} removed. 1 vial returned to ${out.itemName} (${out.before} → ${out.after} vials).`
+        : treatment.ml != null && treatment.stockDeducted
+        ? `${treatment.product} removed. It was recorded in mL, so no vial was returned; adjust the stock in Inventory if needed.`
         : `${treatment.product} removed. No stock was deducted for it, so none was restored.`, 'info');
     } catch (e) {
       if (e?.code === 'stale') showToast(`${e.message} The record has been refreshed.`, 'warning');
@@ -1296,7 +1279,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                 <div className="w-[440px] shrink-0 px-6 py-5 flex flex-col gap-4 self-start">
                   <section className={cardCls}>
                     <div className="flex items-center justify-between pr-4">
-                      <h4 className={cardHead}>Vaccine Brand &amp; Amount</h4>
+                      <h4 className={cardHead}>Vaccine Brand</h4>
                       <span className="text-[11px] font-semibold text-slate-500">{serviceLabel(serviceName)}</span>
                     </div>
                     <div className="px-4 pb-4">
@@ -1321,26 +1304,6 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                         })}
                       </Select>
 
-                      <div className="mt-2.5">
-                        <label htmlFor="tracker-dose-ml" className="block text-[11px] font-semibold text-slate-500 mb-1">
-                          Amount Given (mL) <span className="text-rose-500">*</span>
-                        </label>
-                        <div className="relative">
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0.01"
-                            id="tracker-dose-ml"
-                            placeholder="e.g. 0.5"
-                            value={assignedMl}
-                            onChange={e => setAssignedMl(e.target.value)}
-                            className="w-full py-2 pl-3 pr-10 border border-slate-300 rounded-xl outline-none font-semibold text-xs bg-white text-slate-800 focus:border-[#3B50DF]"
-                          />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">
-                            mL
-                          </span>
-                        </div>
-                      </div>
                     </div>
                   </section>
 
@@ -1375,7 +1338,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
 
                           {existingRig ? (
                             <div className="mt-2 text-[11px] text-emerald-800 bg-emerald-100/70 rounded-lg px-2 py-1.5">
-                              <div className="font-bold text-emerald-900 truncate">{existingRig.product} · {existingRig.ml ?? existingRig.mg} mL</div>
+                              <div className="font-bold text-emerald-900 truncate">{existingRig.product}{amountText(existingRig) ? ` · ${amountText(existingRig)}` : ''}</div>
                               <div className="text-[10px] text-emerald-700 mt-0.5">{fmtDate(existingRig.date)}{existingRig.recordedByName ? ` · ${existingRig.recordedByName}` : ''}</div>
                             </div>
                           ) : rigDraftOpen ? (
@@ -1393,25 +1356,10 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                                   <option value="">{rigItems.length ? 'Select RIG product' : 'No RIG item in Inventory'}</option>
                                   {rigItems.map(it => {
                                     const a = brandAvailability(it, today);
-                                    return <option key={it.id} value={it.id} disabled={a.disabled} data-badge={a.badge || `${getItemStockMl(it) ?? 0} mL`} data-badge-tone={a.tone}>{it.name}</option>;
+                                    return <option key={it.id} value={it.id} disabled={a.disabled} data-badge={a.badge || formatVials(it)} data-badge-tone={a.tone}>{it.name}</option>;
                                   })}
                                 </Select>
                                 {!rigItems.length && <p className="mt-1 text-[10px] text-amber-700">Add the RIG product in Inventory (category: RIG) first.</p>}
-                              </div>
-                              <div>
-                                <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Amount (mL)</label>
-                                <div className="relative">
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    min="0.01"
-                                    placeholder="e.g. 5.0"
-                                    value={rigMl}
-                                    onChange={e => setRigMl(e.target.value)}
-                                    className="w-full py-1.5 pl-2.5 pr-8 border border-slate-300 rounded-lg outline-none text-xs font-semibold bg-white text-slate-800 focus:border-[#3B50DF]"
-                                  />
-                                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 pointer-events-none">mL</span>
-                                </div>
                               </div>
                               <button
                                 type="button"
@@ -1452,7 +1400,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                             <div className="mt-2 text-[11px] text-emerald-800 bg-emerald-100/70 rounded-lg px-2 py-1.5">
                               <div className="font-bold text-emerald-900 truncate">{existingTetanus.product}</div>
                               <div className="flex justify-between text-[10px] text-emerald-700 mt-0.5">
-                                <span>{existingTetanus.ml ?? existingTetanus.mg} mL</span>
+                                <span>{amountText(existingTetanus) || '—'}</span>
                                 <span>{fmtDate(existingTetanus.date)}{existingTetanus.recordedByName ? ` · ${existingTetanus.recordedByName}` : ''}</span>
                               </div>
                             </div>
@@ -1473,28 +1421,13 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                                   {ANTI_TETANUS_PRODUCTS.map(name => {
                                     const it = findMatchingInventoryItem(name, inventoryItems);
                                     const a = it ? brandAvailability(it, today) : { disabled: false, badge: 'Not in Inventory', tone: 'amber' };
-                                    return <option key={name} value={name} disabled={a.disabled} data-badge={a.badge} data-badge-tone={a.tone}>{name}</option>;
+                                    return <option key={name} value={name} disabled={a.disabled} data-badge={a.badge || (it ? formatVials(it) : '')} data-badge-tone={a.tone}>{name}</option>;
                                   })}
                                 </Select>
                               </div>
-                              <div>
-                                <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Amount (mL)</label>
-                                <div className="relative">
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    min="0.01"
-                                    placeholder="e.g. 0.5"
-                                    value={tetanusMl}
-                                    onChange={e => setTetanusMl(e.target.value)}
-                                    className="w-full py-1.5 pl-2.5 pr-8 border border-slate-300 rounded-lg outline-none text-xs font-semibold bg-white text-slate-800 focus:border-[#3B50DF]"
-                                  />
-                                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 pointer-events-none">mL</span>
-                                </div>
-                              </div>
                               <button
                                 type="button"
-                                disabled={tetanusBusy}
+                                disabled={tetanusBusy || !tetanusProduct}
                                 onClick={() => handleSaveAntiTetanus(p)}
                                 className="w-full py-1.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] rounded-lg shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
                               >
@@ -1546,7 +1479,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                                       <span className="shrink-0">{fmtDate(d.date)}</span>
                                       {st === 'overdue' && <StatusBadge status="overdue" />}
                                       {st === 'today' && <StatusBadge status="due_today" />}
-                                      {isNext && assignedBrand && <span className="truncate text-slate-700">· {assignedBrand}{assignedMl ? ` (${assignedMl} mL)` : ''}</span>}
+                                      {isNext && assignedBrand && <span className="truncate text-slate-700">· {assignedBrand}</span>}
                                     </>
                                   )}
                                 </div>
@@ -1588,8 +1521,8 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                 <button type="button" onClick={requestCloseModal} className={BTN.outline}>Close Record</button>
                 <button
                   type="button"
-                  disabled={!readyDose || !assignedBrand || !assignedMl || confirmBusy}
-                  title={readyDose ? `Save ${readyDose.label} with ${assignedBrand} (${assignedMl || 0} mL) and deduct stock` : 'Tick the next dose first'}
+                  disabled={!readyDose || !assignedBrand || confirmBusy}
+                  title={readyDose ? `Save ${readyDose.label} with ${assignedBrand} and deduct 1 vial` : 'Tick the next dose first'}
                   onClick={async () => {
                     const key = readyDose.key;
                     setConfirmBusy(true);
@@ -1646,7 +1579,8 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
             ['Patient', titleCaseWords(getName(undoTarget.p))],
             ['Given', undoTarget.date ? fmtDate(undoTarget.date) : ''],
             ['Brand', undoTarget.brand],
-            ['Stock', undoTarget.ml && undoTarget.deducted ? `+${undoTarget.ml} mL returned to ${undoTarget.brand || 'Inventory'}` : 'No stock was deducted for it'],
+            ['Stock', !undoTarget.deducted ? 'No stock was deducted for it'
+              : undoTarget.ml != null ? 'Recorded in mL: no vial returned' : `+1 vial returned to ${undoTarget.brand || 'Inventory'}`],
           ]}
           note="Use this only when the dose was recorded by mistake."
           confirmLabel="Undo dose"
@@ -1671,9 +1605,11 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
           details={[
             ['Patient', titleCaseWords(getName(treatmentRemoveAsk.p))],
             ['Product', treatmentRemoveAsk.treatment.product],
-            ['Amount', `${treatmentRemoveAsk.treatment.ml ?? treatmentRemoveAsk.treatment.mg} mL`],
+            ['Amount', amountText(treatmentRemoveAsk.treatment)],
             ['Date', treatmentRemoveAsk.treatment.date ? fmtDate(treatmentRemoveAsk.treatment.date) : ''],
-            ['Stock', treatmentRemoveAsk.treatment.stockDeducted ? `+${treatmentRemoveAsk.treatment.ml ?? treatmentRemoveAsk.treatment.mg} mL returned to ${treatmentRemoveAsk.treatment.itemName || 'Inventory'}` : 'No stock was deducted for it'],
+            ['Stock', !treatmentRemoveAsk.treatment.stockDeducted ? 'No stock was deducted for it'
+              : treatmentRemoveAsk.treatment.ml != null ? 'Recorded in mL: no vial returned'
+              : `+1 vial returned to ${treatmentRemoveAsk.treatment.itemName || 'Inventory'}`],
           ]}
           note="Use this only when this treatment was recorded by mistake."
           confirmLabel="Remove treatment"

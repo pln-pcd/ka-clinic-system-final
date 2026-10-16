@@ -1,6 +1,8 @@
+
 // One patient's medical record: the record view, dose reports (add, confirm,
 // view) and the follow-up notification modal.
 import { authedPostJson } from "../../lib/adminSession";
+import { logActivity } from "../../lib/activityLog";
 import Modal from '../../components/Modal';
 import useDiscardGuard from '../../components/useDiscardGuard';
 import IconButton from '../../components/IconButton';
@@ -15,8 +17,9 @@ import { FieldError, FormErrorNote, useFieldErrors } from "../../components/Form
 import { BTN } from "../../lib/buttons";
 import { db, listen } from "../../lib/firebase";
 import { buildDoses } from "../../lib/doseSchedules";
-import { getCompletionDate, getRestoreDate, restorePatientRecord, showsRestoredLabel } from "../../lib/patientArchive";
+import { getCompletionDate, getRestoreDate, showsRestoredLabel } from "../../lib/patientArchive";
 import { serviceFields, serviceFieldRows, showsTreatments } from "../../lib/serviceFields";
+import { amountText } from "../../lib/inventoryStock";
 import { erigStatus, erigStatusLabel } from "../../lib/erig";
 import { MAP_STUDY_MODE } from "../../lib/studyMode";
 import { ExportReportModal, ServiceBadge, X, derivePatientStatus } from "./shared";
@@ -156,6 +159,8 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
     try {
       const updatedReports = [newReport, ...reportsList];
       await updateDoc(doc(db, 'vaccinations', patient.firestoreId), { reports: updatedReports });
+      logActivity({ action: 'patient.report', collection: 'vaccinations', docId: patient.firestoreId, mrn: patient.firestoreId,
+        summary: `Added a clinical report for MRN ${patient.firestoreId}`, changes: [{ field: 'reports', before: String(reportsList.length), after: String(updatedReports.length) }] });
       onToast('Clinical report saved successfully', 'success');
       setShowAddReportModal(false);
     } catch (err) {
@@ -170,6 +175,8 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
     try {
       const updatedReports = reportsList.filter(rep => rep.id !== reportId);
       await updateDoc(doc(db, 'vaccinations', patient.firestoreId), { reports: updatedReports });
+      logActivity({ action: 'patient.report', collection: 'vaccinations', docId: patient.firestoreId, mrn: patient.firestoreId,
+        summary: `Deleted a clinical report for MRN ${patient.firestoreId}`, changes: [{ field: 'reports', before: String(reportsList.length), after: String(updatedReports.length) }] });
       onToast('Report deleted', 'success');
     } catch (err) {
       console.error(err);
@@ -239,25 +246,23 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
             Export Patient Record
           </button>
+          {/* An archived record must be restored first (Restore is its own
+              step); Add Another Service shows disabled until then. */}
           {(isCompletedOrArchived || readOnly) && (
             <button
-              className="px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors cursor-pointer flex items-center gap-1.5"
-              onClick={async () => {
-                try {
-                  if (patient.isArchived) {
-                    await restorePatientRecord(patient);
-                    onToast?.('Record restored from archive', 'success');
-                  }
-                } catch (e) {
-                  console.warn('Auto restore error:', e);
-                }
+              className={`px-3.5 py-2 rounded-xl text-xs font-semibold text-white flex items-center gap-1.5 transition-colors ${
+                patient.isArchived ? 'bg-slate-300 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 cursor-pointer'}`}
+              disabled={patient.isArchived === true}
+              aria-disabled={patient.isArchived === true}
+              onClick={() => {
+                if (patient.isArchived) { onToast?.('Restore this record first, then add the new service.', 'error'); return; }
                 if (onAddAnotherService) {
                   onAddAnotherService(patient);
                 } else {
                   window.dispatchEvent(new CustomEvent('open-add-patient-modal', { detail: patient }));
                 }
               }}
-              title="Add another vaccination service for this patient (reuses MRN)"
+              title={patient.isArchived ? 'Restore this record first' : 'Add another vaccination service for this patient (reuses MRN)'}
             >
               <Plus size={14} />
               Add Another Service
@@ -288,7 +293,7 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
 
       {patient.isArchived && (
         <p className="mb-4 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[11px] text-slate-600">
-          Archived record: read-only, and patient app sign-in is off. Restore it to bring it back to the Patients list.
+          Archived record: read-only, and patient app sign-in is off. Restore it to bring it back to the Patients list; then you can add another service.
         </p>
       )}
 
@@ -372,7 +377,7 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
                             {treatments.map((t, idx) => (
                               <span key={t.id || idx} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-100 text-xs font-semibold text-slate-800">
                                 <span className="text-[#3B50DF] font-bold">{t.product}</span>
-                                <span className="text-slate-500">· {t.ml ?? t.mg ?? 0} mL</span>
+                                {amountText(t) && <span className="text-slate-500">· {amountText(t)}</span>}
                                 <span className="text-slate-400">· {formatDateMedium(t.date)}</span>
                               </span>
                             ))}
@@ -686,7 +691,7 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
                         <td className="px-3.5 py-3">
                           {hTreatments.length ? (
                             <span className="font-medium text-slate-800">
-                              {hTreatments.map(t => `${t.product} (${t.ml ?? t.mg ?? 0} mL)`).join(', ')}
+                              {hTreatments.map(t => `${t.product}${amountText(t) ? ` (${amountText(t)})` : ''}`).join(', ')}
                             </span>
                           ) : showsTreatments(hist) ? (
                             <span className="text-slate-400">None</span>
@@ -820,7 +825,8 @@ export function historicalCaseRecord(patient, caseData, index) {
 // older entries may carry administeredBy or staff.
 const doseStaff = d => d?.givenByName || d?.administeredBy || d?.staff || '';
 const treatmentStaff = t => t?.recordedByName || t?.staff || t?.administeredBy || '';
-const amountMl = x => (x?.ml ?? x?.mg) != null && (x?.ml ?? x?.mg) !== '' ? `${x.ml ?? x.mg} mL` : '';
+// mL saved on older doses / entries, "1 vial" on vial-based entries, '' if none.
+const amountMl = x => amountText(x);
 
 /* ─────────────────────────── VIEW PREVIOUS CASE MODAL ─────────────────────────── */
 function ViewPreviousCaseModal({ caseData, index, patientName, mrn, onClose, onExport }) {
@@ -1557,6 +1563,8 @@ export function FollowUpModal({ patient, onClose, onToast }) {
       const parts = [];
       if (result.pushSent > 0) parts.push('app notification');
       if (result.emailed) parts.push('email');
+      logActivity({ action: 'notification.send', collection: 'patientNotifications', docId: result.notificationId || '', mrn: patient.firestoreId || patient.id,
+        summary: `Sent a follow-up to MRN ${patient.firestoreId || patient.id}` });
       
       setSentSuccess({
         message: parts.length

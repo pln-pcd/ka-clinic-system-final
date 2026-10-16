@@ -19,7 +19,6 @@ import {
   InteractionManager,
   Animated as RNAnimated,
   Dimensions,
-  Image,
   Modal,
   PanResponder,
   Platform,
@@ -33,15 +32,12 @@ import {
 } from 'react-native';
 import Tap from '../../components/Tap';
 import DoseTimeline from '../../components/DoseTimeline';
+import ServiceHistory from '../../components/ServiceHistory';
+import VaccinationCard, { CardData } from '../../components/VaccinationCard';
+import { buildCardData } from '../../utils/cardData';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { formatDoseDate, protocolLabel as buildProtocolLabel, serviceCopy, EMPTY, doseStatus, isPepService, clinicToday, displayPatientId, doseBrand, doseState, exposureCategory, exposureTypeLabel, splitName } from '../../utils/patientRecord';
-import Animated, {
-  Easing,
-  interpolate,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
+import { formatDoseDate, protocolLabel as buildProtocolLabel, serviceCopy, EMPTY, doseStatus, isPepService, clinicToday, doseState, exposureCategory } from '../../utils/patientRecord';
+import { GUEST_PLACEHOLDER_DOSES } from '../../utils/cardData';
 import { saveImageToGallery } from '../../utils/saveImage';
 import ViewShot from 'react-native-view-shot';
 import { db } from '../../config/backend';
@@ -50,7 +46,7 @@ import {
   ensureNotificationPermission,
 } from '../../config/notifications';
 import { usePatientAuth } from '../../context/PatientAuthContext';
-import { moderateScale, scale, verticalScale } from '../../utils/scale';
+import { GUTTER, moderateScale, scale, verticalScale } from '../../utils/scale';
 import { cacheKeys, peekCache, writeCache } from '../../utils/localCache';
 import CustomAlertModal, { CustomAlertConfig } from '../../components/CustomAlertModal';
 
@@ -123,6 +119,12 @@ type ApptUpdate = {
 
 const CONFIRMED_STATUSES = ['confirmed', 'accepted'];
 
+// Bookings made before 1.0.5 say "PEP Follow-up"; they read "PEP" now.
+const apptTypeText = (type?: string) => {
+  const t = String(type || '').trim();
+  return /^pep\s*follow[- ]?up$/i.test(t) ? 'PEP' : (t || 'appointment');
+};
+
 // "2026-08-08" → "Sat, Aug 8" for notification copy; falls back to the raw
 // string if the date is missing or malformed rather than rendering "Invalid Date".
 function formatApptDate(ds?: string | null): string {
@@ -134,18 +136,6 @@ function formatApptDate(ds?: string | null): string {
   if (isNaN(date.getTime())) return String(ds);
   return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
-
-// Guests get the standard PEP schedule's shape (Day 0, 3, 7, 28, the same
-// labels the dashboard generates) — dose labels only, no brand,
-// dosage, lot or date — so the card and tracker show the real row structure
-// while making it obvious nothing has been administered yet. `blankRow: true`
-// tells the renderers to print '—' instead of falling back to sample values.
-const GUEST_PLACEHOLDER_DOSES = [
-  { id: 'g1', label: 'Session 1 (Day 0)',  done: false, blankRow: true },
-  { id: 'g2', label: 'Session 2 (Day 3)',  done: false, blankRow: true },
-  { id: 'g3', label: 'Session 3 (Day 7)',  done: false, blankRow: true },
-  { id: 'g4', label: 'Session 4 (Day 28)', done: false, blankRow: true },
-];
 
 // The vaccination record → the dose rows and next-dose summary Home shows.
 // Pure, so it can seed state on the first render from the cached record.
@@ -245,7 +235,7 @@ const NotifSwipeToDeleteRow = ({ children, onDelete }: { children: React.ReactNo
 export default function RabiesRecoveryApp() {
   const router = useRouter();
   const params = useLocalSearchParams<{ tab?: string; t?: string }>();
-  const { user, mrn, isGuest, mrnLoading, loading: authLoading } = usePatientAuth();
+  const { user, mrn, isGuest, mrnLoading, mrnError, loading: authLoading } = usePatientAuth();
   const insets = useSafeAreaInsets();
 
   const [activeTab, setActiveTab] = useState<'Home' | 'Records'>('Home');
@@ -318,8 +308,8 @@ export default function RabiesRecoveryApp() {
   const [nextDoseNotif, setNextDoseNotif] = useState<NextDoseNotif | null>(initialDerived.next);
   const [showProgressModal, setShowProgressModal] = useState(false);
 
-  // 3D Landscape Card Flip State
-  const flipAnim = useSharedValue(0);
+  // Vaccination card: which face is showing (components/VaccinationCard.tsx
+  // keeps both faces the same size and animates the flip).
   const [isFlippedState, setIsFlippedState] = useState(false);
   const [showEnlargeModal, setShowEnlargeModal] = useState(false);
   const [enlargeFlipped, setEnlargeFlipped] = useState(false);
@@ -329,44 +319,7 @@ export default function RabiesRecoveryApp() {
   const modalCardBackShotRef = useRef<React.ComponentRef<typeof ViewShot>>(null);
   const [exportingCard, setExportingCard] = useState(false);
 
-  const toggleCardFlip = () => {
-    const nextVal = isFlippedState ? 0 : 1;
-    setIsFlippedState(!isFlippedState);
-    flipAnim.value = withTiming(nextVal, {
-      duration: 450,
-      easing: Easing.bezier(0.4, 0.0, 0.2, 1),
-    });
-  };
-
-  const frontAnimatedStyle = useAnimatedStyle(() => {
-    const rotateY = interpolate(flipAnim.value, [0, 1], [0, 180]);
-    return {
-      transform: [{ perspective: 1200 }, { rotateY: `${rotateY}deg` }],
-      backfaceVisibility: 'hidden',
-    };
-  });
-
-  const backAnimatedStyle = useAnimatedStyle(() => {
-    const rotateY = interpolate(flipAnim.value, [0, 1], [180, 360]);
-    return {
-      transform: [{ perspective: 1200 }, { rotateY: `${rotateY}deg` }],
-      backfaceVisibility: 'hidden',
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-    };
-  });
-
-  // Measure natural content inside each face, then give BOTH faces the
-  // larger height. Flipping never shifts the content below the card.
-  const frontH = useSharedValue(0);
-  const backH = useSharedValue(0);
-  const cardHeightStyle = useAnimatedStyle(() => {
-    const f = frontH.value, b = backH.value;
-    if (!f) return { opacity: 0 };
-    return { opacity: 1, height: Math.max(f, b) };
-  });
+  const toggleCardFlip = () => setIsFlippedState(f => !f);
 
   const handleExportFrontCard = async () => {
     if (exportingCard) return;
@@ -407,7 +360,7 @@ export default function RabiesRecoveryApp() {
       showAlert({
         type: 'success',
         title: 'Card Saved',
-        message: `${isBack ? 'History of Exposure Record Card' : 'Anti-Rabies Vaccination Record Card'} saved to your photo gallery.`,
+        message: `${isBack ? `${backShort} card (back)` : `${cardTitle.charAt(0)}${cardTitle.slice(1).toLowerCase()} (front)`} saved to your photo gallery.`,
         primaryButtonText: 'OK',
         onPrimaryPress: hideAlert,
       });
@@ -570,7 +523,7 @@ export default function RabiesRecoveryApp() {
       list.push({
         id: `appt-${a.id}`,
         title: 'Appointment Confirmed',
-        message: `K&A Clinic accepted your ${a.type || 'appointment'} on ${formatApptDate(a.date)}${a.time ? ` at ${a.time}` : ''}.${a.note ? ` Clinic: ${a.note}` : ''}`,
+        message: `K&A Clinic accepted your ${apptTypeText(a.type)} on ${formatApptDate(a.date)}${a.time ? ` at ${a.time}` : ''}.${a.note ? ` Clinic: ${a.note}` : ''}`,
         time: formatApptDate(a.date),
         unread: true,
         type: 'appointment',
@@ -581,7 +534,7 @@ export default function RabiesRecoveryApp() {
       list.push({
         id: `declined-${a.id}`,
         title: 'Appointment Declined',
-        message: `Your ${a.type || 'appointment'} on ${formatApptDate(a.date)} was declined.${reason ? ` Reason: ${reason}` : ''}`,
+        message: `Your ${apptTypeText(a.type)} on ${formatApptDate(a.date)} was declined.${reason ? ` Reason: ${reason}` : ''}`,
         time: formatApptDate(a.date),
         unread: true,
         type: 'appointment',
@@ -633,7 +586,6 @@ export default function RabiesRecoveryApp() {
 
   const completedDoses = vaccineSchedule.filter(d => d.done).length;
   const progress = vaccineSchedule.length > 0 ? (completedDoses / vaccineSchedule.length) * 100 : 0;
-  const vaccineType = vaccineSchedule[0]?.vaccineType ?? serviceCopy(patientRecord?.service).short;
 
   // Real regimen label — derived from the same `service`/dose-count data the
   // Admin Dashboard's Vaccination Tracker uses, not a hardcoded placeholder.
@@ -642,34 +594,18 @@ export default function RabiesRecoveryApp() {
 
   const displayedNotifications = notifFilter === 'unread' ? notifications.filter(n => n.unread) : notifications;
 
-  // Real patient-record fields for the Vaccination Card — mirrors the exact
-  // field names ka-clinic-admin/src/features/patients/PatientsPage.jsx writes to `vaccinations/{mrn}`.
-  // Guests have no clinic record at all, so the card shows blanks rather than
-  // the sample-data placeholders used while a real patient's record is loading.
+  // The clinic's record, or nothing (guests have none). Every field shows
+  // the clinic's recorded value or "—", never a sample value; the card itself
+  // is built by utils/cardData.ts.
   const pr = patientRecord || {};
-  // Guests have no clinical record — show a dash instead of the sample-data
-  // placeholder a loading real patient record would otherwise fall back to.
-  // Every field is the clinic's recorded value or "—" — never a sample value.
-  const blank = (val: any) => val || EMPTY;
   const catValue = exposureCategory(pr.cat, pr.animal || pr.sourceOfExposure);
   // Exposure details (date, type, animal, category) exist only on PEP records;
   // other services hide them instead of showing dashes. Guests see the PEP
   // card shape.
   const showExposure = isGuest ? !pr.service : isPepService(pr.service);
-  // Rabies courses (PEP, PrEP) keep the anti-rabies card title; other services
-  // get a plain vaccination record title.
   const svcKey = serviceCopy(pr.service).short;
   const cardTitle = (isGuest && !pr.service) || svcKey === 'PEP' || svcKey === 'PrEP'
     ? 'ANTI-RABIES VACCINATION RECORD CARD' : 'VACCINATION RECORD CARD';
-
-  const nameSplit = splitName(pr.name || (isGuest ? '' : user?.displayName || ''));
-  const lastNameVal = pr.lastName || nameSplit.last || EMPTY;
-  const firstNameVal = pr.firstName || nameSplit.first || EMPTY;
-  const middleNameVal = pr.middleName || nameSplit.middle;
-  const miVal = middleNameVal ? middleNameVal.charAt(0).toUpperCase() + '.' : EMPTY;
-  const dobVal = pr.dob ? formatDoseDate(pr.dob) : EMPTY;
-  const mrnVal = isGuest && !mrn ? 'No Patient ID (Guest)' : displayPatientId(mrn, pr);
-  const purposeVal = pr.service ? serviceCopy(pr.service).long : EMPTY;
   const catVal = catValue ? `Category ${catValue}` : EMPTY;
   // A real patient with no doses yet sees one empty row, never demo doses.
   const NO_DOSES_ROW = [{ id: 'none', label: 'No doses recorded yet', blankRow: true }];
@@ -677,6 +613,14 @@ export default function RabiesRecoveryApp() {
     ? pr.doses
     : (isGuest ? GUEST_PLACEHOLDER_DOSES : NO_DOSES_ROW);
   const today = clinicToday();
+
+  // Everything the card shows, from the same record and the same
+  // service-to-fields rules as the dashboard (utils/serviceFields.ts). Only
+  // PEP has exposure fields; wound location and depth are clinic-only and
+  // never shown; the clinic's internal remarks are not shown either.
+  const isPep = isGuest && !pr.service ? true : isPepService(pr.service);
+  const backShort = isPep ? 'Exposure Record' : 'Clinical Record';
+  const cardData: CardData = buildCardData({ record: patientRecord, mrn, isGuest, displayName: user?.displayName, today });
 
   // Progress tracker shows the same placeholder rows for guests, all unchecked.
   const trackerDoses: any[] = vaccineSchedule.length > 0
@@ -745,7 +689,7 @@ export default function RabiesRecoveryApp() {
                     </View>
                   )}
                   <Text style={s.nextDoseNavyDose}>
-                    {nextDoseNotif?.doseLabel ?? (isGuest ? 'No Dose Record' : 'No doses scheduled yet')}
+                    {nextDoseNotif?.doseLabel ?? (isGuest ? 'No Dose Record' : mrnError ? 'Record unavailable' : 'No doses scheduled yet')}
                   </Text>
                   {nextDoseNotif && (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(5), marginTop: verticalScale(2) }}>
@@ -755,10 +699,12 @@ export default function RabiesRecoveryApp() {
                       </Text>
                     </View>
                   )}
-                  <Text style={[s.tapProgressHintNavy, { marginTop: verticalScale(5), flexShrink: 1 }]}>
-                    {isGuest ? 'Sign up to track your doses' : 'Tap to view protocol tracker'}{' '}
-                    <Ionicons name="arrow-forward" size={12} color="#475569" />
-                  </Text>
+                  <View style={s.tapHintRow}>
+                    <Text style={[s.tapProgressHintNavy, s.tapHintText]}>
+                      {isGuest ? 'Sign up to track your doses' : mrnError || 'Tap to view protocol tracker'}
+                    </Text>
+                    <Ionicons name="arrow-forward" size={moderateScale(12)} color={MEDICAL_RED} />
+                  </View>
                 </View>
                 )}
 
@@ -768,183 +714,16 @@ export default function RabiesRecoveryApp() {
               </Tap>
 
               {/* ── OFFICIAL VACCINATION RECORD CARD (3D FLIP) ── */}
-              <Animated.View style={[s.cdcOfficialCardContainer, cardHeightStyle]}>
-                <Tap activeOpacity={0.96} onPress={toggleCardFlip} style={{ width: '100%', height: '100%', borderRadius: scale(14) }}
-                  accessibilityRole="button" accessibilityLabel={isFlippedState ? 'Vaccination card, back side. Tap to show the front.' : 'Vaccination card, front side. Tap to show the back.'}>
-
-                  {/* FRONT SIDE (LANDSCAPE) */}
-                  <Animated.View style={[s.cdcOfficialCardPaper, frontAnimatedStyle]}>
-                    <ViewShot ref={cardFrontShotRef} options={{ format: 'png', quality: 1 }} style={{ backgroundColor: '#FFFFFF' }}
-                      onLayout={e => frontH.set(e.nativeEvent.layout.height + scale(20) + 2)}>
-                    <View style={s.cdcHeaderBlock}>
-                      <View style={s.cdcHeaderTitleRow}>
-                        <Image source={require('../../assets/logo-white-nobg.png')} style={s.knAClinicLogoHeader} resizeMode="contain" />
-                        <View style={{ justifyContent: 'center', alignItems: 'center' }}>
-                          <Text style={s.cdcClinicHeaderTitle}>K&A ANIMAL BITE CENTER & CLINIC</Text>
-                          <Text style={s.cdcCardTitle}>{cardTitle}</Text>
-                          <Text style={s.cdcCardSubtext}>Official Prophylaxis & Immunization Record</Text>
-                        </View>
-                      </View>
-                    </View>
-
-                    <View style={s.cdcRuleDivider} />
-
-                    {/* Patient Demographics */}
-                    <View style={s.cdcFieldsRow}>
-                      <View style={[s.cdcFieldBox, { flex: 1.2 }]}>
-                        <Text style={s.cdcFieldLabel}>Last Name</Text>
-                        <Text style={s.cdcFieldValue}>{lastNameVal}</Text>
-                      </View>
-                      <View style={[s.cdcFieldBox, { flex: 1.2 }]}>
-                        <Text style={s.cdcFieldLabel}>First Name</Text>
-                        <Text style={s.cdcFieldValue}>{firstNameVal}</Text>
-                      </View>
-                      <View style={[s.cdcFieldBox, { flex: 0.6 }]}>
-                        <Text style={s.cdcFieldLabel}>MI</Text>
-                        <Text style={s.cdcFieldValue}>{miVal}</Text>
-                      </View>
-                    </View>
-
-                    <View style={s.cdcFieldsRow}>
-                      <View style={[s.cdcFieldBox, { flex: 1 }]}>
-                        <Text style={s.cdcFieldLabel}>Date of birth</Text>
-                        <Text style={s.cdcFieldValue}>{dobVal}</Text>
-                      </View>
-                      <View style={[s.cdcFieldBox, { flex: 2 }]}>
-                        <Text style={s.cdcFieldLabel}>Patient number (MRN)</Text>
-                        <Text style={s.cdcFieldValue}>{mrnVal}</Text>
-                      </View>
-                    </View>
-
-                    <View style={s.cdcFieldsRow}>
-                      <View style={[s.cdcFieldBox, { flex: 1.5 }]}>
-                        <Text style={s.cdcFieldLabel}>Vaccination Purpose</Text>
-                        <Text style={s.cdcFieldValue}>{purposeVal}</Text>
-                      </View>
-                      {showExposure && (
-                        <View style={[s.cdcFieldBox, { flex: 1.5 }]}>
-                          <Text style={s.cdcFieldLabel}>Exposure Category</Text>
-                          <Text style={[s.cdcFieldValue, { color: MEDICAL_RED }]}>{catVal}</Text>
-                        </View>
-                      )}
-                    </View>
-
-                    {/* Official Vaccination Schedule Table (3 Columns: Dose, Vaccine/Dosage, Date) */}
-                    <View style={s.cdcTableContainer}>
-                      <View style={s.cdcTableHeaderRow}>
-                        <Text style={[s.cdcTableCellHeader, { flex: 1.1 }]}>Dose</Text>
-                        <Text style={[s.cdcTableCellHeader, { flex: 2.1 }]}>Vaccine / Dosage</Text>
-                        <Text style={[s.cdcTableCellHeader, { flex: 1.1, borderRightWidth: 0 }]}>Date</Text>
-                      </View>
-
-                      {doseList.map((d: any, idx: number) => {
-                        // Placeholder rows carry a label but no clinical data. A
-                        // real row shows only what the clinic recorded: the brand
-                        // given for that dose, plus route and lot when present.
-                        const state = doseState(d, today);
-                        const brandStr = doseBrand(d, pr, state);
-                        const extras = [d.dosage || pr.route, d.lot].filter(Boolean).join(' · ');
-                        const vaccineCell = d.blankRow || brandStr === EMPTY ? EMPTY : (extras ? `${brandStr} (${extras})` : brandStr);
-                        const dateCell = d.blankRow ? EMPTY : (d.date ? formatDoseDate(d.date) : EMPTY);
-                        return (
-                          <View key={d.id || d.key || idx} style={[s.cdcTableRow, idx % 2 === 1 && s.cdcTableRowAlt]}>
-                            <Text style={[s.cdcTableCell, { flex: 1.1, fontWeight: '700', color: '#0F172A' }]}>
-                              {d.label || d.n || d.name || `Dose ${idx + 1}`}
-                            </Text>
-                            <Text style={[s.cdcTableCell, { flex: 2.1, fontWeight: '600' }]}>
-                              {vaccineCell}
-                            </Text>
-                            <Text style={[s.cdcTableCell, { flex: 1.1, borderRightWidth: 0 }]}>
-                              {dateCell}
-                            </Text>
-                          </View>
-                        );
-                      })}
-                    </View>
-
-                    </ViewShot>
-                  </Animated.View>
-
-                  {/* BACK SIDE (LANDSCAPE) */}
-                  <Animated.View style={[s.cdcOfficialCardPaper, backAnimatedStyle]}>
-                    <ViewShot ref={cardBackShotRef} options={{ format: 'png', quality: 1 }} style={{ backgroundColor: '#FFFFFF' }}
-                      onLayout={e => backH.set(e.nativeEvent.layout.height + scale(20) + 2)}>
-                    <View style={s.cdcHeaderBlock}>
-                      <View style={s.cdcHeaderTitleRow}>
-                        <Image source={require('../../assets/logo-white-nobg.png')} style={s.knAClinicLogoHeader} resizeMode="contain" />
-                        <View style={{ justifyContent: 'center', alignItems: 'center' }}>
-                          <Text style={s.cdcClinicHeaderTitle}>K&A ANIMAL BITE CENTER & CLINIC</Text>
-                          <Text style={s.cdcCardTitle}>HISTORY OF EXPOSURE & CLINICAL RECORD</Text>
-                          <Text style={s.cdcCardSubtext}>Clinical Exposure History & Medical Profile</Text>
-                        </View>
-                      </View>
-                    </View>
-
-                    <View style={s.cdcRuleDivider} />
-
-                    {/* Incident & Exposure Profile Fields (PEP only) */}
-                    {showExposure && (
-                    <>
-                    <View style={s.cdcFieldsRow}>
-                      <View style={[s.cdcFieldBox, { flex: 1 }]}>
-                        <Text style={s.cdcFieldLabel}>Exposure Date</Text>
-                        <Text style={s.cdcFieldValue}>{pr.date ? formatDoseDate(pr.date) : EMPTY}</Text>
-                      </View>
-                      <View style={[s.cdcFieldBox, { flex: 1 }]}>
-                        <Text style={s.cdcFieldLabel}>Exposure Type</Text>
-                        <Text style={[s.cdcFieldValue, { color: MEDICAL_RED }]}>{exposureTypeLabel(pr.typeOfExposure)}</Text>
-                      </View>
-                      <View style={[s.cdcFieldBox, { flex: 1.2 }]}>
-                        <Text style={s.cdcFieldLabel}>Source Animal</Text>
-                        <Text style={s.cdcFieldValue}>{blank(pr.sourceOfExposure || pr.animal)}</Text>
-                      </View>
-                    </View>
-                    <View style={s.cdcFieldsRow}>
-                      <View style={[s.cdcFieldBox, { flex: 1 }]}>
-                        <Text style={s.cdcFieldLabel}>Exposure Category</Text>
-                        <Text style={[s.cdcFieldValue, { color: MEDICAL_RED }]}>{catVal}</Text>
-                      </View>
-                    </View>
-                    </>
-                    )}
-
-                    {/* Patient Clinical Profile Fields */}
-                    <View style={s.cdcFieldsRow}>
-                      <View style={[s.cdcFieldBox, { flex: 1 }]}>
-                        <Text style={s.cdcFieldLabel}>Age / Sex</Text>
-                        <Text style={s.cdcFieldValue}>{pr.age ? `${pr.age} yrs • ${pr.sex || EMPTY}` : EMPTY}</Text>
-                      </View>
-                      <View style={[s.cdcFieldBox, { flex: 1.2 }]}>
-                        <Text style={s.cdcFieldLabel}>Tetanus History</Text>
-                        <Text style={s.cdcFieldValue}>{blank(pr.lastTetanus || pr.tetanusStatus)}</Text>
-                      </View>
-                      <View style={[s.cdcFieldBox, { flex: 1.2 }]}>
-                        <Text style={s.cdcFieldLabel}>Known Allergies</Text>
-                        <Text style={s.cdcFieldValue}>{blank(pr.allergies)}</Text>
-                      </View>
-                      <View style={[s.cdcFieldBox, { flex: 1 }]}>
-                        <Text style={s.cdcFieldLabel}>Contact Number</Text>
-                        <Text style={s.cdcFieldValue}>{blank(pr.contact)}</Text>
-                      </View>
-                    </View>
-
-                    {/* Attending Notes Sub-Box */}
-                    <View style={s.attendingNotesBox}>
-                      <Text style={s.cdcFieldLabel}>Attending Physician / Clinical Protocol Notes</Text>
-                      <Text style={s.attendingNotesTxt}>
-                        {blank(pr.notes || pr.clinicalNotes)}
-                      </Text>
-                    </View>
-                    </ViewShot>
-                  </Animated.View>
-                </Tap>
-              </Animated.View>
+              <Tap activeOpacity={0.96} onPress={toggleCardFlip} clip={false} style={{ width: '100%' }}
+                accessibilityRole="button" accessibilityLabel={isFlippedState ? 'Vaccination card, back side. Tap to show the front.' : 'Vaccination card, front side. Tap to show the back.'}>
+                <VaccinationCard variant="inline" data={cardData} flipped={isFlippedState} frontRef={cardFrontShotRef} backRef={cardBackShotRef} />
+              </Tap>
 
               {/* Standalone Plain Text & Enlarge Button BELOW Card (NO CARD BOX ON TEXT) */}
               <View style={s.cardExternalControlsRow}>
                 <Tap onPress={toggleCardFlip} activeOpacity={0.7} style={{ paddingVertical: verticalScale(4) }}>
                   <Text style={s.plainHintTxt}>
-                    {isFlippedState ? 'Showing Back (Exposure Record) · Tap to Flip' : 'Showing Front (Vaccination Card) · Tap to Flip'}
+                    {isFlippedState ? `Showing Back (${backShort}) · Tap to Flip` : 'Showing Front (Vaccination Card) · Tap to Flip'}
                   </Text>
                 </Tap>
 
@@ -1005,6 +784,9 @@ export default function RabiesRecoveryApp() {
 
                 <DoseTimeline doses={doseList} record={pr} today={today} />
               </View>
+
+              {/* Earlier services under this MRN; nothing renders without one. */}
+              {!isGuest && <ServiceHistory history={pr.caseHistory} />}
           </>
         </View>
 
@@ -1240,164 +1022,10 @@ export default function RabiesRecoveryApp() {
               <View style={s.enlargeModalCard}>
             
             {/* Enlarged Card Display Container (90° Rotated Landscape Card matching reference photo) */}
-            <View style={s.enlargeCardContainer}>
-              <Tap activeOpacity={0.96} onPress={() => setEnlargeFlipped(!enlargeFlipped)} style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-                {enlargeFlipped ? (
-                  /* Back side rotated landscape card */
-                  <ViewShot ref={modalCardBackShotRef} options={{ format: 'png', quality: 1 }} style={s.cdcOfficialCardPaperPopup}>
-                    <View style={s.cdcHeaderBlock}>
-                      <View style={s.cdcHeaderTitleRow}>
-                        <Image source={require('../../assets/logo-white-nobg.png')} style={s.knAClinicLogoHeaderPopupBack} resizeMode="contain" />
-                        <View style={{ justifyContent: 'center', alignItems: 'center' }}>
-                          <Text style={s.cdcClinicHeaderTitlePopupBack}>K&A ANIMAL BITE CENTER & CLINIC</Text>
-                          <Text style={s.cdcCardTitlePopupBack}>HISTORY OF EXPOSURE & CLINICAL RECORD</Text>
-                          <Text style={s.cdcCardSubtextPopupBack}>Clinical Exposure History & Medical Profile</Text>
-                        </View>
-                      </View>
-                    </View>
-
-                    <View style={s.cdcRuleDividerPopupBack} />
-
-                    {/* Incident & Exposure Profile Fields */}
-                    <View style={{ gap: scale(3), marginTop: verticalScale(-4) }}>
-                      {showExposure && (
-                      <>
-                      <View style={s.cdcFieldsRowPopup}>
-                        <View style={[s.cdcFieldBox, { flex: 1 }]}>
-                          <Text style={s.cdcFieldLabelPopup}>Exposure Date</Text>
-                          <Text style={s.cdcFieldValuePopup}>{pr.date ? formatDoseDate(pr.date) : EMPTY}</Text>
-                        </View>
-                        <View style={[s.cdcFieldBox, { flex: 1 }]}>
-                          <Text style={s.cdcFieldLabelPopup}>Exposure Type</Text>
-                          <Text style={[s.cdcFieldValuePopup, { color: MEDICAL_RED }]}>{exposureTypeLabel(pr.typeOfExposure)}</Text>
-                        </View>
-                        <View style={[s.cdcFieldBox, { flex: 1.2 }]}>
-                          <Text style={s.cdcFieldLabelPopup}>Source Animal</Text>
-                          <Text style={s.cdcFieldValuePopup}>{blank(pr.sourceOfExposure || pr.animal)}</Text>
-                        </View>
-                      </View>
-                      <View style={s.cdcFieldsRowPopup}>
-                        <View style={[s.cdcFieldBox, { flex: 1 }]}>
-                          <Text style={s.cdcFieldLabelPopup}>Exposure Category</Text>
-                          <Text style={[s.cdcFieldValuePopup, { color: MEDICAL_RED }]}>{catVal}</Text>
-                        </View>
-                      </View>
-                      </>
-                      )}
-
-                      {/* Patient Clinical Profile Fields */}
-                      <View style={s.cdcFieldsRowPopup}>
-                        <View style={[s.cdcFieldBox, { flex: 1 }]}>
-                          <Text style={s.cdcFieldLabelPopup}>Age / Sex</Text>
-                          <Text style={s.cdcFieldValuePopup}>{pr.age ? `${pr.age} yrs • ${pr.sex || EMPTY}` : EMPTY}</Text>
-                        </View>
-                        <View style={[s.cdcFieldBox, { flex: 1.2 }]}>
-                          <Text style={s.cdcFieldLabelPopup}>Tetanus History</Text>
-                          <Text style={s.cdcFieldValuePopup}>{blank(pr.lastTetanus || pr.tetanusStatus)}</Text>
-                        </View>
-                        <View style={[s.cdcFieldBox, { flex: 1.2 }]}>
-                          <Text style={s.cdcFieldLabelPopup}>Known Allergies</Text>
-                          <Text style={s.cdcFieldValuePopup}>{blank(pr.allergies)}</Text>
-                        </View>
-                        <View style={[s.cdcFieldBox, { flex: 1 }]}>
-                          <Text style={s.cdcFieldLabelPopup}>Contact Number</Text>
-                          <Text style={s.cdcFieldValuePopup}>{blank(pr.contact)}</Text>
-                        </View>
-                      </View>
-                    </View>
-
-                    {/* Attending Notes Sub-Box */}
-                    <View style={s.attendingNotesBox}>
-                      <Text style={s.cdcFieldLabelPopup}>Attending Physician / Clinical Protocol Notes</Text>
-                      <Text style={s.attendingNotesTxtPopup}>
-                        {blank(pr.notes || pr.clinicalNotes)}
-                      </Text>
-                    </View>
-                  </ViewShot>
-                ) : (
-                  /* Front side rotated landscape card */
-                  <ViewShot ref={modalCardFrontShotRef} options={{ format: 'png', quality: 1 }} style={s.cdcOfficialCardPaperPopup}>
-                    <View style={s.cdcHeaderBlock}>
-                      <View style={s.cdcHeaderTitleRow}>
-                        <Image source={require('../../assets/logo-white-nobg.png')} style={s.knAClinicLogoHeaderPopup} resizeMode="contain" />
-                        <View style={{ justifyContent: 'center', alignItems: 'center' }}>
-                          <Text style={s.cdcClinicHeaderTitlePopup}>K&A ANIMAL BITE CENTER & CLINIC</Text>
-                          <Text style={s.cdcCardTitlePopup}>{cardTitle}</Text>
-                          <Text style={s.cdcCardSubtextPopup}>Official Prophylaxis & Immunization Record</Text>
-                        </View>
-                      </View>
-                    </View>
-                    <View style={s.cdcRuleDividerPopup} />
-                    <View style={s.cdcFieldsRowPopup}>
-                      <View style={[s.cdcFieldBox, { flex: 1.2 }]}>
-                        <Text style={s.cdcFieldLabelPopup}>Last Name</Text>
-                        <Text style={s.cdcFieldValuePopup}>{lastNameVal}</Text>
-                      </View>
-                      <View style={[s.cdcFieldBox, { flex: 1.2 }]}>
-                        <Text style={s.cdcFieldLabelPopup}>First Name</Text>
-                        <Text style={s.cdcFieldValuePopup}>{firstNameVal}</Text>
-                      </View>
-                      <View style={[s.cdcFieldBox, { flex: 0.6 }]}>
-                        <Text style={s.cdcFieldLabelPopup}>MI</Text>
-                        <Text style={s.cdcFieldValuePopup}>{miVal}</Text>
-                      </View>
-                    </View>
-                    <View style={s.cdcFieldsRowPopup}>
-                      <View style={[s.cdcFieldBox, { flex: 1 }]}>
-                        <Text style={s.cdcFieldLabelPopup}>Date of birth</Text>
-                        <Text style={s.cdcFieldValuePopup}>{dobVal}</Text>
-                      </View>
-                      <View style={[s.cdcFieldBox, { flex: 2 }]}>
-                        <Text style={s.cdcFieldLabelPopup}>Patient number (MRN)</Text>
-                        <Text style={s.cdcFieldValuePopup}>{mrnVal}</Text>
-                      </View>
-                    </View>
-                    <View style={s.cdcFieldsRowPopup}>
-                      <View style={[s.cdcFieldBox, { flex: 1.5 }]}>
-                        <Text style={s.cdcFieldLabelPopup}>Vaccination Purpose</Text>
-                        <Text style={s.cdcFieldValuePopup}>{purposeVal}</Text>
-                      </View>
-                      {showExposure && (
-                        <View style={[s.cdcFieldBox, { flex: 1.5 }]}>
-                          <Text style={s.cdcFieldLabelPopup}>Exposure Category</Text>
-                          <Text style={[s.cdcFieldValuePopup, { color: MEDICAL_RED }]}>{catVal}</Text>
-                        </View>
-                      )}
-                    </View>
-                    <View style={s.cdcTableContainerPopup}>
-                      <View style={s.cdcTableHeaderRow}>
-                        <Text style={[s.cdcTableCellHeaderPopup, { flex: 1.1 }]}>Dose</Text>
-                        <Text style={[s.cdcTableCellHeaderPopup, { flex: 2.1 }]}>Vaccine / Dosage</Text>
-                        <Text style={[s.cdcTableCellHeaderPopup, { flex: 1.1, borderRightWidth: 0 }]}>Date</Text>
-                      </View>
-                      {doseList.map((d: any, idx: number) => {
-                        // Placeholder rows carry a label but no clinical data. A
-                        // real row shows only what the clinic recorded: the brand
-                        // given for that dose, plus route and lot when present.
-                        const state = doseState(d, today);
-                        const brandStr = doseBrand(d, pr, state);
-                        const extras = [d.dosage || pr.route, d.lot].filter(Boolean).join(' · ');
-                        const vaccineCell = d.blankRow || brandStr === EMPTY ? EMPTY : (extras ? `${brandStr} (${extras})` : brandStr);
-                        const dateCell = d.blankRow ? EMPTY : (d.date ? formatDoseDate(d.date) : EMPTY);
-                        return (
-                          <View key={d.id || d.key || idx} style={[s.cdcTableRow, idx % 2 === 1 && s.cdcTableRowAlt]}>
-                            <Text style={[s.cdcTableCellPopup, { flex: 1.1, fontWeight: '700', color: '#0F172A' }]}>
-                              {d.label || d.n || d.name || `Dose ${idx + 1}`}
-                            </Text>
-                            <Text style={[s.cdcTableCellPopup, { flex: 2.1, fontWeight: '600' }]}>
-                              {vaccineCell}
-                            </Text>
-                            <Text style={[s.cdcTableCellPopup, { flex: 1.1, borderRightWidth: 0 }]}>
-                              {dateCell}
-                            </Text>
-                          </View>
-                        );
-                      })}
-                    </View>
-                  </ViewShot>
-                )}
-              </Tap>
-            </View>
+            <Tap activeOpacity={0.96} onPress={() => setEnlargeFlipped(!enlargeFlipped)} clip={false} style={{ width: '100%' }}
+              accessibilityRole="button" accessibilityLabel={enlargeFlipped ? 'Enlarged card, back side. Tap to show the front.' : 'Enlarged card, front side. Tap to show the back.'}>
+              <VaccinationCard variant="popup" data={cardData} flipped={enlargeFlipped} frontRef={modalCardFrontShotRef} backRef={modalCardBackShotRef} />
+            </Tap>
 
             {/* Action Buttons Row matching user screenshot */}
             <View style={s.enlargeModalActionsRow}>
@@ -1517,7 +1145,7 @@ const s = StyleSheet.create({
   root:   { flex: 1, backgroundColor: SOFT_GRAY_BG },
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: SOFT_GRAY_BG },
   mainContentContainer: {
-    paddingHorizontal: scale(20),
+    paddingHorizontal: GUTTER,
     marginTop: verticalScale(-52),
     zIndex: 10,
   },
@@ -1652,6 +1280,10 @@ const s = StyleSheet.create({
     color: '#64748B',
     fontWeight: '500',
   },
+  // Text and arrow centred on one line (the arrow is not an inline glyph, so
+  // it no longer sits on the text baseline below the letters' middle).
+  tapHintRow: { flexDirection: 'row', alignItems: 'center', gap: scale(4), marginTop: verticalScale(5) },
+  tapHintText: { marginTop: 0, flexShrink: 1, lineHeight: moderateScale(15) },
   tapProgressHintNavy: {
     fontSize: moderateScale(11),
     fontWeight: '700',

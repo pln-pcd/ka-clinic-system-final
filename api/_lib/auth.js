@@ -123,14 +123,22 @@ export async function requireAuthenticatedPatient(req, { allowPendingSecondFacto
   if (decoded.firebase?.sign_in_provider !== 'custom') return { error: 'Please sign in through the clinic application.', status: 401 };
   if ((await db.collection('admins').doc(decoded.uid).get()).exists) return { error: 'Not authorized.', status: 403 };
 
-  let snap = await db.collection('authorizedPatients').where('uid', '==', decoded.uid).limit(1).get();
-  if (snap.empty && decoded.email) {
-    snap = await db.collection('authorizedPatients').where('email', '==', decoded.email.toLowerCase()).limit(1).get();
+  // One account resolves to exactly one MRN. The email fallback only covers
+  // records whose uid was never written, and never one linked to another
+  // account. Two matches is a data problem staff must fix, so sign-in stops
+  // instead of picking one.
+  let snap = await db.collection('authorizedPatients').where('uid', '==', decoded.uid).limit(2).get();
+  let docs = snap.docs;
+  if (!docs.length && decoded.email) {
+    snap = await db.collection('authorizedPatients').where('email', '==', decoded.email.toLowerCase()).limit(2).get();
+    docs = snap.docs.filter(d => !d.data().uid || d.data().uid === decoded.uid);
+    if (docs.length !== snap.docs.length) return { error: 'This account is linked to another patient record. Please contact the clinic.', status: 409 };
   }
-  if (snap.empty) return { error: 'No patient record is linked to this account.', status: 403 };
+  if (!docs.length) return { error: 'No patient record is linked to this account.', status: 403 };
+  if (docs.length > 1) return { error: 'This account is linked to more than one patient record. Please contact the clinic.', status: 409 };
 
-  const data = snap.docs[0].data();
-  const mrn = data.mrn || snap.docs[0].id;
+  const data = docs[0].data();
+  const mrn = docs[0].id;
   if (data.authorized === false || await isPatientRecordArchived(mrn)) return { error: 'Account unavailable. Please contact the clinic.', status: 403 };
   if (!allowPendingSecondFactor && !await hasSecuritySession(decoded, 'patient')) return { error: 'Please complete sign-in again.', status: 401 };
   const email = (data.email || decoded.email || '').toLowerCase().trim();

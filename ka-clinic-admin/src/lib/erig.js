@@ -2,8 +2,9 @@
 //
 // Category III exposures need ERIG with the first vaccine dose. It is recorded
 // in the Vaccination Tracker's RIG card (recordTreatmentChange in
-// inventoryStock.js) as an mL entry in `treatments` and `rigTreatment`
-// ({ product, ml, date, stockItemId, itemName, stockDeducted, recordedByName }).
+// inventoryStock.js) as an entry in `treatments` and `rigTreatment`
+// ({ kind, product, vials: 1, date, stockItemId, itemName, stockDeducted,
+// recordedByName }). Entries saved while stock was counted in mL carry `ml`.
 // Older records may hold `erig: { given, vials, date, ... }` from the
 // vial-based entry this replaced; it is still read. Records before that kept a yes/no answer from the Add Patient
 // form in `rigGiven` ("Yes (ERIG)" / "No"); it is still read so their status

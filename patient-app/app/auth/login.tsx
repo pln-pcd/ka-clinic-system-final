@@ -3,7 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { goBackOr, resetTo } from '../../utils/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Dimensions,
   Image,
@@ -16,15 +16,18 @@ import {
   View,
 } from 'react-native';
 import Tap from '../../components/Tap';
-import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
+import Animated, { Easing, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { auth, checkLoginTrust, getAuthErrorMessage, sendLoginOTP, signInAsGuest, signInWithMRN, signOut } from '../../config/backend';
+import { auth, checkLoginTrust, getAuthErrorMessage, sendLoginOTP, signInAsGuest, signInWithMRN, signOut, warmAuthApi } from '../../config/backend';
 import { markOnboardingSeen, setKeepSignedIn } from '../../config/appPrefs';
 import { usePatientAuth } from '../../context/PatientAuthContext';
 import { moderateScale, scale, verticalScale } from '../../utils/scale';
 import CustomAlertModal from '../../components/CustomAlertModal';
 
 const { height } = Dimensions.get('window');
+// Short, gentle rise shared by both blocks. A new builder per block:
+// Reanimated's builders are mutable, so one shared instance would share delay.
+const enter = (delay: number) => FadeInDown.delay(delay).duration(420).easing(Easing.out(Easing.cubic)).withInitialValues({ opacity: 0, transform: [{ translateY: 14 }] });
 const NAVY_BLUE = '#1E3A8A';
 const SOFT_GRAY_BG = '#F8FAFC';
 const BORDER_INACTIVE = '#E2E8F0';
@@ -44,6 +47,10 @@ export default function LoginScreen() {
   // Defaults off: this is a medical record, and the phone may be shared.
   const [keepSignedIn, setKeepSignedInState] = useState(false);
   const { completeSecondFactor } = usePatientAuth();
+
+  // Wake the sign-in server while the patient types, so pressing Sign In
+  // does not also pay for a cold start.
+  useEffect(() => { warmAuthApi(); }, []);
 
   const handleLogin = async () => {
     setError('');
@@ -69,9 +76,9 @@ export default function LoginScreen() {
       // held as "pending" by PatientAuthContext until either the server vouches
       // for THIS device (trust token from an earlier OTP + "keep me signed in")
       // or the patient enters the emailed code.
-      const trusted = await checkLoginTrust();
+      const { trusted, mrn } = await checkLoginTrust();
       if (trusted) {
-        completeSecondFactor();
+        completeSecondFactor(mrn);
         resetTo(router, '/(tabs)');
         return;
       }
@@ -153,7 +160,12 @@ export default function LoginScreen() {
         >
 
           {/* BRANDING HEADER */}
-          <Animated.View entering={FadeInUp.duration(800)} style={styles.header}>
+          {/* One entrance, top to bottom: the background is there from the
+              first frame, then the brand, then the card with everything in
+              it. Each block fades as one flattened layer
+              (renderToHardwareTextureAndroid), so Android cannot draw the
+              button's or card's elevation shadow before the block itself. */}
+          <Animated.View entering={enter(0)} renderToHardwareTextureAndroid needsOffscreenAlphaCompositing style={styles.header}>
             <View style={styles.logoCircleBadge}>
               <Image source={require('../../assets/logo-white-nobg.png')} style={styles.logo} resizeMode="contain" />
             </View>
@@ -164,7 +176,7 @@ export default function LoginScreen() {
           </Animated.View>
 
           {/* LOGIN CARD */}
-          <Animated.View entering={FadeInDown.delay(150).duration(800)} style={styles.formCard}>
+          <Animated.View entering={enter(90)} renderToHardwareTextureAndroid needsOffscreenAlphaCompositing style={styles.formCard}>
             <Text style={styles.title}>Sign in to Your Account</Text>
             <Text style={styles.subtitle}>Enter your details below to access your medical records.</Text>
 

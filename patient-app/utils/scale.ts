@@ -22,3 +22,7 @@ export const moderateScale = (size: number, factor = 0.45) =>
 
 export const moderateVerticalScale = (size: number, factor = 0.45) =>
   size + (verticalScale(size) - size) * factor;
+
+// Side padding for screen content. Never under 16dp, so text keeps clear of
+// the screen edge on small phones (scale(20) alone is ~14dp at 320dp wide).
+export const GUTTER = Math.max(16, scale(20));

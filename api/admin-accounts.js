@@ -17,6 +17,7 @@ import { buildInviteEmailHtml, buildInviteEmailText } from './_lib/mail/template
 import { logoAttachment } from './_lib/mail/logo.js';
 import { dispatch } from './_lib/router.js';
 import { passwordPolicyError } from './_lib/passwordPolicy.js';
+import { logStaffActivity } from './_lib/activityLog.js';
 
 // ══════════════════════════════════════════════════════════════════════════
 // Roster management (manager only): /api/admin-invites
@@ -114,6 +115,11 @@ async function invite(req, res, caller) {
     adminUid: userRecord.uid,
     expiresAt: Date.now() + INVITE_TTL_MS,
     used: false,
+  });
+  await logStaffActivity(caller, {
+    action: 'staff.invite', docId: userRecord.uid,
+    summary: `${existing.exists ? 'Re-invited' : 'Invited'} ${email} as staff`,
+    changes: [{ field: 'status', before: existing.exists ? (existing.data().status || null) : null, after: 'invited' }, { field: 'role', before: existing.exists ? (existing.data().role || null) : null, after: existing.exists ? (existing.data().role || 'staff') : 'staff' }],
   });
   // Derive app URL from request origin (matches caller's current environment) or configured public URL
   const requestOrigin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : '');
@@ -229,6 +235,11 @@ async function revoke(req, res, caller) {
   await targetRef.update({ status: 'revoked' });
   await auth.updateUser(targetUid, { disabled: true });
   await auth.revokeRefreshTokens(targetUid);
+  await logStaffActivity(caller, {
+    action: 'staff.revoke', docId: targetUid,
+    summary: `Revoked access for ${target.name || target.email} (${target.role || 'staff'})`,
+    changes: [{ field: 'status', before: target.status || null, after: 'revoked' }],
+  });
 
   res.status(200).json({ success: true, message: `${target.name || target.email} has been revoked.` });
 }
@@ -260,6 +271,11 @@ async function cancel(req, res, caller) {
 
   // Delete the unaccepted admin doc
   await targetRef.delete();
+  await logStaffActivity(caller, {
+    action: 'staff.invite_cancel', docId: targetUid,
+    summary: `Revoked the invitation for ${target.email || 'a pending account'}`,
+    changes: [{ field: 'status', before: target.status || null, after: null }],
+  });
 
   // Also remove from Firebase Auth if the account was just an unactivated invite
   try {
@@ -314,6 +330,11 @@ async function deleteRevoked(req, res, caller) {
   }
 
   await targetRef.delete();
+  await logStaffActivity(caller, {
+    action: 'staff.delete', docId: targetUid,
+    summary: `Deleted the revoked account ${target.name || target.email || targetUid}`,
+    changes: [{ field: 'status', before: 'revoked', after: null }],
+  });
   try {
     await auth.deleteUser(targetUid);
   } catch (err) {

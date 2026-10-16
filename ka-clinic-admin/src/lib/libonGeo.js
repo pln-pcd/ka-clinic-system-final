@@ -12,6 +12,21 @@ export const LIBON_BARANGAYS = [
   'Zone 4', 'Zone 5', 'Zone 6', 'Zone 7', 'Zone 8', 'Zone 9', 'Zone 10', 'Zone 11'
 ];
 
+/**
+ * The barangay of a patient record for lists: the `barangay` saved at
+ * registration; for older records without it, the barangay named in the
+ * registration address ("Zone 4, Brgy. San Rafael, Libon, Albay") when that
+ * is exactly one of Libon's barangays. Otherwise '' (shown as "—"); it is
+ * never guessed from other free text.
+ */
+export function recordBarangay(p) {
+  const known = (name) => LIBON_BARANGAYS.find(b => b.toLowerCase() === String(name || '').trim().toLowerCase()) || '';
+  const saved = String(p?.barangay || '').trim();
+  if (saved) return known(saved) || saved;
+  const m = String(p?.address || '').match(/\bBrgy\.?\s+([^,]+)/i);
+  return m ? known(m[1]) : '';
+}
+
 export const LIBON_BARANGAY_COORDS = {
   'San Juan':       { lat: 13.3000, lng: 123.4350 },
   'San Rafael':     { lat: 13.2920, lng: 123.4280 },

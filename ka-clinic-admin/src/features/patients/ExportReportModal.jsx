@@ -8,6 +8,7 @@ import { auth } from "../../lib/firebase";
 import { buildDoses, getSchedule } from "../../lib/doseSchedules";
 import { erigStatus, erigStatusLabel } from "../../lib/erig";
 import { serviceFieldRows, showsTreatments } from "../../lib/serviceFields";
+import { amountText } from "../../lib/inventoryStock";
 import { LIBON_SEAL_BASE64 } from "../../assets/libonSealBase64";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
@@ -982,7 +983,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
 
     // Only the fields this service asks (lib/serviceFields.js). The
     // patient-safe copy drops wound location and depth, as before.
-    const treatmentText = t => `${t.product || 'Treatment'} (${t.ml ?? t.mg ?? 0} mL${t.date ? ` · ${formatDateShort(t.date) || t.date}` : ''}${(t.recordedByName || t.staff) ? ` · by ${t.recordedByName || t.staff}` : ''})`;
+    const treatmentText = t => `${t.product || 'Treatment'} (${[amountText(t), t.date ? (formatDateShort(t.date) || t.date) : '', (t.recordedByName || t.staff) ? `by ${t.recordedByName || t.staff}` : ''].filter(Boolean).join(' · ')})`;
     const hasTreatments = Array.isArray(p.treatments) && p.treatments.length > 0;
     const exposureRows = serviceFieldRows(p, 'exposure', { audience, exclude: ['cat'] }).map(r => [r.label, r.value || '—']);
     const woundWithheld = !showWoundDetail && serviceFieldRows(p, 'exposure').some(r => r.key === 'woundLocation' || r.key === 'woundDepth');
@@ -1070,7 +1071,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
           const hDoses = Array.isArray(h.doses) ? h.doses : [];
           const hDone = hDoses.filter(d => d.s === 'done' || d.status === 'done' || d.done).length;
           const hTreat = Array.isArray(h.treatments) && h.treatments.length
-            ? h.treatments.map(t => `${t.product} (${t.ml ?? t.mg ?? 0} mL)`).join(', ')
+            ? h.treatments.map(t => `${t.product}${amountText(t) ? ` (${amountText(t)})` : ''}`).join(', ')
             : showsTreatments(h) ? 'None' : '';
           return {
             caseNo: `Case #${i + 1}`,

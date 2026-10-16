@@ -152,19 +152,22 @@ async function main() {
   console.log('\n--- Settings / Counters Status ---');
   console.log('Current counter data:', currentCounter || '(none)');
 
+  // One MRN per patient for life: the counter is never rewound, even after
+  // every record is wiped, so no MRN that was ever issued is issued again.
+  // (Pass --rewind-counter only for a throwaway test project.)
   const currentYear = new Date().getFullYear();
+  const keepSeq = currentCounter && currentCounter.currentYear === currentYear ? (currentCounter.lastSequence || 0) : 0;
+  const rewind = process.argv.includes('--rewind-counter');
+  const nextSeq = rewind ? 0 : keepSeq;
   if (dryRun) {
-    console.log(`Would reset settings/counters to: { currentYear: ${currentYear}, lastSequence: 0 }`);
-    console.log(`Next patient added will start with MRN: ${currentYear}-001`);
+    console.log(`Would ${rewind ? 'reset' : 'keep'} settings/counters at: { currentYear: ${currentYear}, lastSequence: ${nextSeq} }`);
+  } else if (rewind) {
+    await counterRef.set({ currentYear, lastSequence: 0, updatedAt: new Date().toISOString() });
+    console.log('settings/counters REWOUND to 0 (--rewind-counter). Never do this on a live clinic project.');
   } else {
-    await counterRef.set({
-      currentYear,
-      lastSequence: 0,
-      updatedAt: new Date().toISOString(),
-    });
-    console.log(`Successfully reset settings/counters to: { currentYear: ${currentYear}, lastSequence: 0 }`);
-    console.log(`Next patient added will start with MRN: ${currentYear}-001`);
+    console.log(`settings/counters kept at ${currentYear}-${String(keepSeq).padStart(3, '0')} (MRNs are never reused).`);
   }
+  console.log(`Next patient added will get MRN: ${currentYear}-${String(nextSeq + 1).padStart(3, '0')}`);
 
   console.log(`\nDone! Total Firestore records ${dryRun ? 'inspected' : 'removed'}: ${grandTotal}`);
 }
@@ -832,6 +835,14 @@ async function main() {
     return;
   }
 
+  // Seeding numbers patients from 001. On a project that has already issued
+  // MRNs this would give new people MRNs that belonged to someone else, so
+  // it is refused unless explicitly forced for a throwaway test project.
+  const issued = (await db.collection('settings').doc('counters').get()).data();
+  if (issued && (issued.lastSequence || 0) > 0 && !process.argv.includes('--rewind-counter')) {
+    throw new Error(`settings/counters shows MRNs up to ${issued.currentYear}-${String(issued.lastSequence).padStart(3, '0')} were issued. Seeding from 001 would reuse them. Use a fresh test project (or --rewind-counter on a throwaway one).`);
+  }
+
   console.log('\nWiping existing patient records, authorizations, and incidents...');
   for (const colName of ['vaccinations', 'authorizedPatients', 'incidents']) {
     const snap = await db.collection(colName).get();
@@ -895,11 +906,14 @@ async function main() {
   }
   console.log(`  Inventory items added: ${invAdded} (existing preserved: ${existingNames.size})`);
 
-  // 3. Update settings/counters to 350 so next real patient is 2026-351
+  // 3. Move settings/counters past the seeded MRNs. It only ever moves
+  // forward, so a counter already higher is left as it is.
   const counterRef = db.collection('settings').doc('counters');
+  const existingCounter = (await counterRef.get()).data();
+  const keptSeq = existingCounter && existingCounter.currentYear === year ? (existingCounter.lastSequence || 0) : 0;
   batch.set(counterRef, {
     currentYear: year,
-    lastSequence: TOTAL_COUNT,
+    lastSequence: Math.max(TOTAL_COUNT, keptSeq),
     updatedAt: new Date().toISOString(),
   });
   await commitBatchIfNeeded();

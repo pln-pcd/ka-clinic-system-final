@@ -145,16 +145,23 @@ export const lookupAuthorizedPatient = async (mrn: string): Promise<AuthorizedPa
   return snap.data() as AuthorizedPatient;
 };
 
-// Resolves the signed-in Firebase user back to their clinic MRN, by uid first
-// (fast, indexed-by-doc-id would be nicer, but authorizedPatients is keyed by
-// MRN not uid) then falling back to email match for accounts created before
-// `uid` was backfilled.
+// Fallback only: the server already returns the session's MRN with the
+// second factor (checkLoginTrust / verifyLoginOTP), so this runs only when that
+// was not available. Resolves the signed-in user to exactly ONE MRN: by uid,
+// else by email for a record whose uid was never written. Two matches is a
+// data problem staff must fix, so nothing is shown rather than guessing.
+export class AmbiguousPatientError extends Error {
+  constructor() { super('This account is linked to more than one patient record. Please contact the clinic.'); this.name = 'AmbiguousPatientError'; }
+}
 export const resolveMRNForUser = async (uid: string, email: string | null): Promise<AuthorizedPatient | null> => {
-  const byUid = await getDocs(query(collection(db, 'authorizedPatients'), where('uid', '==', uid), limit(1)));
-  if (!byUid.empty) return byUid.docs[0].data() as AuthorizedPatient;
+  const byUid = await getDocs(query(collection(db, 'authorizedPatients'), where('uid', '==', uid), limit(2)));
+  if (byUid.size > 1) throw new AmbiguousPatientError();
+  if (!byUid.empty) return { ...(byUid.docs[0].data() as AuthorizedPatient), mrn: byUid.docs[0].id };
   if (email) {
-    const byEmail = await getDocs(query(collection(db, 'authorizedPatients'), where('email', '==', email), limit(1)));
-    if (!byEmail.empty) return byEmail.docs[0].data() as AuthorizedPatient;
+    const byEmail = await getDocs(query(collection(db, 'authorizedPatients'), where('email', '==', email.toLowerCase()), limit(2)));
+    const own = byEmail.docs.filter(d => !d.data().uid || d.data().uid === uid);
+    if (own.length > 1 || own.length !== byEmail.size) throw new AmbiguousPatientError();
+    if (own.length === 1) return { ...(own[0].data() as AuthorizedPatient), mrn: own[0].id };
   }
   return null;
 };
@@ -295,23 +302,33 @@ const currentIdToken = async (): Promise<string> => {
 };
 
 /** Server-side answer to "is THIS install trusted?". Never sends mail. Any
- *  failure (network, missing token, bad token) resolves to false. */
-export const checkLoginTrust = async (): Promise<boolean> => {
+ *  failure (network, missing token, bad token) resolves to not trusted. When
+ *  trusted, the server also returns the one MRN this session is for. The
+ *  keystore reads and the ID token are fetched in parallel. */
+export type TrustResult = { trusted: boolean; mrn: string | null };
+export const checkLoginTrust = async (): Promise<TrustResult> => {
   try {
-    const trustToken = await getTrustToken();
-    if (!trustToken) return false;
-    const deviceId = await getDeviceId();
-    const data = await postToApi<{ trusted: boolean }>('/api/send-otp', { action: 'login-check', deviceId, trustToken }, await currentIdToken());
+    const [trustToken, deviceId, idToken] = await Promise.all([getTrustToken(), getDeviceId(), currentIdToken()]);
+    if (!trustToken) return { trusted: false, mrn: null };
+    const data = await postToApi<{ trusted: boolean; mrn?: string }>('/api/send-otp', { action: 'login-check', deviceId, trustToken }, idToken);
     if (data.trusted !== true) {
       // Server rejected it (expired / revoked / reinstall mismatch): drop it so
       // we stop presenting a dead token.
       await setTrustToken(null);
-      return false;
+      return { trusted: false, mrn: null };
     }
-    return true;
+    return { trusted: true, mrn: data.mrn || null };
   } catch {
-    return false;
+    return { trusted: false, mrn: null };
   }
+};
+
+/** Wakes the sign-in function (a serverless cold start is the slowest part
+ *  of signing in) while the patient is still typing. No MRN, no side effects:
+ *  the server answers its generic reply without touching any record. */
+export const warmAuthApi = (): void => {
+  if (!API_BASE_URL) return;
+  fetch(`${API_BASE_URL}/api/send-otp`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {});
 };
 
 export const sendLoginOTP = async (): Promise<SendOtpResult> => {
@@ -321,16 +338,17 @@ export const sendLoginOTP = async (): Promise<SendOtpResult> => {
 
 /** Verifies the emailed code. With rememberDevice the server mints a trust
  *  token for this install, which is stored in the keystore. */
-export const verifyLoginOTP = async (code: string, rememberDevice: boolean): Promise<void> => {
-  const deviceId = await getDeviceId();
-  const data = await postToApi<{ trustToken: string | null }>('/api/verify-otp', {
+export const verifyLoginOTP = async (code: string, rememberDevice: boolean): Promise<string | null> => {
+  const [deviceId, idToken] = await Promise.all([getDeviceId(), currentIdToken()]);
+  const data = await postToApi<{ trustToken: string | null; mrn?: string }>('/api/verify-otp', {
     action: 'login-verify',
     code,
     rememberDevice,
     deviceId,
     deviceLabel: describeDevice(),
-  }, await currentIdToken());
+  }, idToken);
   await setTrustToken(rememberDevice && data.trustToken ? data.trustToken : null);
+  return data.mrn || null;
 };
 
 /** Explicit sign-out forgets this device on both sides. Best effort. */

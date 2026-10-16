@@ -18,7 +18,7 @@
 import type { User } from 'firebase/auth';
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { auth, checkLoginTrust, onAuthStateChanged, resolveMRNForUser, signOut } from '../config/backend';
-import { getKeepSignedIn } from '../config/appPrefs';
+import { getKeepSignedIn, hasSeenOnboarding } from '../config/appPrefs';
 import { clearThisDeviceSession, registerThisDevice, watchOwnSession } from '../config/deviceSessions';
 import { cacheKeys, clearCache, peekCache, primeCache, writeCache } from '../utils/localCache';
 
@@ -31,8 +31,13 @@ type PatientAuthState = {
   deviceId: string | null;
   /** Firebase session that exists but has not passed the second factor yet. */
   pendingUser: User | null;
-  /** Mark the current Firebase session as second-factor verified. */
-  completeSecondFactor: () => void;
+  /** Mark the current Firebase session as second-factor verified, with the
+   *  one MRN the server issued that session for. */
+  completeSecondFactor: (mrn?: string | null) => void;
+  /** Read once at launch, so routing never waits on storage. */
+  seenOnboarding: boolean;
+  /** Set when the account resolves to no single MRN (shown on Home). */
+  mrnError: string | null;
 };
 
 const PatientAuthContext = createContext<PatientAuthState>({
@@ -44,6 +49,8 @@ const PatientAuthContext = createContext<PatientAuthState>({
   deviceId: null,
   pendingUser: null,
   completeSecondFactor: () => {},
+  seenOnboarding: true,
+  mrnError: null,
 });
 
 export function PatientAuthProvider({ children }: { children: React.ReactNode }) {
@@ -55,6 +62,10 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
   const [mrn, setMrn] = useState<string | null>(null);
   const [mrnLoading, setMrnLoading] = useState(false);
   const [deviceId, setDeviceId] = useState<string | null>(null);
+  const [seenOnboarding, setSeenOnboarding] = useState(true);
+  const [mrnError, setMrnError] = useState<string | null>(null);
+  // MRN the server issued with the second factor, keyed by uid.
+  const serverMrn = useRef<{ uid: string; mrn: string } | null>(null);
 
   // True once the first auth callback has been evaluated. The "keep me signed
   // in" check must only run against a session restored from storage at launch,
@@ -74,14 +85,19 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
       if (!fbUser) {
         clearCache();
         setVerifiedUid(null);
+        serverMrn.current = null;
       }
       // Firebase always persists to AsyncStorage on React Native, so opting out
       // of "keep me signed in" cannot be a persistence mode — it is enforced
       // here, by discarding a restored session before the app renders.
       if (!launchHandled.current) {
         launchHandled.current = true;
+        // Both local reads at once; the onboarding flag lets the first
+        // screen be chosen without another wait.
+        const restored = !!fbUser && !fbUser.isAnonymous;
+        const [seen, keep] = await Promise.all([hasSeenOnboarding(), restored ? getKeepSignedIn() : Promise.resolve(false)]);
+        setSeenOnboarding(seen);
         if (fbUser && !fbUser.isAnonymous) {
-          const keep = await getKeepSignedIn();
           if (!keep) {
             try { await clearThisDeviceSession(fbUser.uid); } catch {}
             await signOut(auth);
@@ -94,7 +110,7 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
           // Anything short of an explicit yes (no token, expired, revoked,
           // reinstall, offline) signs the restored session out. The cache is
           // read in parallel with it.
-          const [trusted] = await Promise.all([checkLoginTrust(), primeLaunchCache(fbUser.uid)]);
+          const [{ trusted, mrn: issued }] = await Promise.all([checkLoginTrust(), primeLaunchCache(fbUser.uid)]);
           if (!trusted) {
             try { await clearThisDeviceSession(fbUser.uid); } catch {}
             await signOut(auth);
@@ -102,8 +118,14 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
             setLoading(false);
             return;
           }
-          const cachedMrn = peekCache<string>(cacheKeys.mrnForUid(fbUser.uid));
-          if (cachedMrn) setMrn(cachedMrn);
+          if (issued) {
+            serverMrn.current = { uid: fbUser.uid, mrn: issued };
+            setMrn(issued);
+            writeCache(cacheKeys.mrnForUid(fbUser.uid), issued);
+          } else {
+            const cachedMrn = peekCache<string>(cacheKeys.mrnForUid(fbUser.uid));
+            if (cachedMrn) setMrn(cachedMrn);
+          }
           setVerifiedUid(fbUser.uid);
         }
       }
@@ -119,19 +141,32 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
     authUser && (authUser.isAnonymous || verifiedUid === authUser.uid) ? authUser : null;
   const pendingUser: User | null = authUser && !user ? authUser : null;
 
-  const completeSecondFactor = () => {
+  const completeSecondFactor = (issued?: string | null) => {
     const u = auth.currentUser;
-    if (u) setVerifiedUid(u.uid);
+    if (!u) return;
+    if (issued) {
+      serverMrn.current = { uid: u.uid, mrn: issued };
+      setMrn(issued);
+      writeCache(cacheKeys.mrnForUid(u.uid), issued);
+    }
+    setVerifiedUid(u.uid);
   };
 
+  // Exactly one MRN per signed-in patient. The server issues it with the
+  // second factor (the same MRN its security session — and so firestore.rules
+  // — allow); the client lookup below only runs when that is missing.
   useEffect(() => {
+    setMrnError(null);
     if (!user || user.isAnonymous) {
       setMrn(null);
       return;
     }
+    if (serverMrn.current?.uid === user.uid) {
+      setMrn(serverMrn.current.mrn);
+      setMrnLoading(false);
+      return;
+    }
     let cancelled = false;
-    // A cached MRN (set at launch) is shown straight away; the lookup below
-    // confirms or corrects it in the background.
     const cached = peekCache<string>(cacheKeys.mrnForUid(user.uid));
     if (cached) setMrn(cached);
     else setMrnLoading(true);
@@ -142,7 +177,11 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
         setMrn(next);
         writeCache(cacheKeys.mrnForUid(user.uid), next);
       })
-      .catch(() => { if (!cancelled && !cached) setMrn(null); })
+      .catch((e: any) => {
+        if (cancelled) return;
+        if (e?.name === 'AmbiguousPatientError') { setMrn(null); setMrnError(e.message); writeCache(cacheKeys.mrnForUid(user.uid), null); }
+        else if (!cached) setMrn(null);
+      })
       .finally(() => { if (!cancelled) setMrnLoading(false); });
     return () => { cancelled = true; };
   }, [user?.uid]);
@@ -170,7 +209,7 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
 
   return (
     <PatientAuthContext.Provider
-      value={{ user, mrn, isGuest: !!user?.isAnonymous, loading, mrnLoading, deviceId, pendingUser, completeSecondFactor }}
+      value={{ user, mrn, isGuest: !!user?.isAnonymous, loading, mrnLoading, deviceId, pendingUser, completeSecondFactor, seenOnboarding, mrnError }}
     >
       {children}
     </PatientAuthContext.Provider>

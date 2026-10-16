@@ -52,6 +52,10 @@ function ArchivedPatients({ canAct, onToast }) {
   const [openId, setOpenId] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const [busy, setBusy] = useState(false);
+  // Records restored from this page in this visit: their open view keeps
+  // showing (now from the live Patients data) instead of closing.
+  const [restored, setRestored] = useState({});
+  const vaxLive = useLiveCollection('vaccinations');
 
 
   const years = useMemo(() => {
@@ -86,10 +90,11 @@ function ArchivedPatients({ canAct, onToast }) {
     const p = confirm.patient;
     setBusy(true);
     try {
-      await restorePatientRecord(p);
-      onToast(`${getName(p)} was restored to the Patients list.`, 'success');
+      const restoredAt = await restorePatientRecord(p);
+      onToast(`${getName(p)} was restored to the Patients list. You can now add another service.`, 'success');
       setConfirm(null);
-      setOpenId(null);
+      // Keep the open view (now restored); from the table, nothing is open.
+      setRestored(r => ({ ...r, [p.firestoreId]: { ...p, isArchived: false, archivedAt: null, restoredAt } }));
     } catch (err) {
       console.error('Restore failed:', err);
       onToast('Could not restore this record. Please try again.', 'error');
@@ -123,7 +128,8 @@ function ArchivedPatients({ canAct, onToast }) {
     />
   );
 
-  const open = openId && rows.find(p => p.firestoreId === openId);
+  const open = openId && (rows.find(p => p.firestoreId === openId)
+    || (restored[openId] && (vaxLive.rows.find(p => p.firestoreId === openId) || restored[openId])));
   if (open) {
     return (
       <>
@@ -136,7 +142,7 @@ function ArchivedPatients({ canAct, onToast }) {
             onBack={() => setOpenId(null)}
             onToast={onToast}
             readOnly
-            onRestore={canAct ? () => askRestore(open) : undefined}
+            onRestore={canAct && open.isArchived ? () => askRestore(open) : undefined}
             restoring={busy}
             backLabel="Back to Archive"
           />
@@ -238,7 +244,13 @@ function ArchivedPatients({ canAct, onToast }) {
                   return (
                     <tr key={p.firestoreId} onClick={() => setOpenId(p.firestoreId)} className="cursor-pointer hover:bg-slate-50 transition-colors" style={{ borderBottom: '1px solid #F1F5F9' }}>
                       <td style={{ padding: '14px 16px 14px 20px', color: '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.id || p.firestoreId}</td>
-                      <td style={{ padding: '14px 16px', color: '#0F172A', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={getName(p)}>{getName(p)}</td>
+                      {/* Name with the email under it, as on the Patients table. */}
+                      <td style={{ padding: '8px 16px', overflow: 'hidden' }}>
+                        <div style={{ color: '#0F172A', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={getName(p)}>{getName(p)}</div>
+                        {p.email && (
+                          <div style={{ fontWeight: 400, color: '#94A3B8', fontSize: '.6875rem', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={p.email}>{p.email}</div>
+                        )}
+                      </td>
                       <td style={{ padding: '14px 16px' }}><ServiceBadge service={p.service} /></td>
                       <td style={{ padding: '14px 16px', color: '#334155', whiteSpace: 'nowrap' }}>{registeredOn(p) ? formatDateMedium(registeredOn(p)) : '—'}</td>
                       <td style={{ padding: '14px 16px', color: '#334155', whiteSpace: 'nowrap' }}>{getCompletionDate(p) ? formatDateMedium(getCompletionDate(p)) : '—'}</td>

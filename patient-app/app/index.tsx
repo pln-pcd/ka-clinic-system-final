@@ -1,5 +1,6 @@
 // app/index.tsx
 import { LinearGradient } from 'expo-linear-gradient';
+import * as SplashScreen from 'expo-splash-screen';
 import { useRouter } from 'expo-router';
 import { resetTo } from '../utils/navigation';
 import React, { useEffect, useRef } from 'react';
@@ -21,14 +22,26 @@ import { usePatientAuth } from '../context/PatientAuthContext';
 const { width, height } = Dimensions.get('window');
 const NAVY_BLUE = '#1E3A8A';
 
-// Long enough for the entrance animation to land, short enough not to feel like
-// a loading screen. Returning patients spend this once per launch either way.
-const SPLASH_MS = 2600;
+// First install only: returning patients skip this screen entirely
+// (components/AppShells.tsx routes them before the native splash hides).
+// Long enough for the entrance to land, short enough not to feel like loading.
+const SPLASH_MS = 1700;
 
 export default function LuxuryEntrance() {
   const router = useRouter();
-  const { user, loading: authLoading } = usePatientAuth();
+  const { user, loading: authLoading, seenOnboarding } = usePatientAuth();
   const navigated = useRef(false);
+  // Returning patients (signed in, or onboarding already seen) skip the
+  // intro: they go straight to Home or sign-in while the native splash is
+  // still up, which is hidden one frame later.
+  const skipIntro = !authLoading && (!!user || seenOnboarding);
+  useEffect(() => {
+    if (!skipIntro || navigated.current) return undefined;
+    navigated.current = true;
+    resetTo(router, user ? '/(tabs)' : '/auth/login');
+    const t = setTimeout(() => SplashScreen.hideAsync().catch(() => {}), 60);
+    return () => clearTimeout(t);
+  }, [skipIntro]);
 
   // Animation values
   const logoOpacity = useSharedValue(0);
@@ -38,14 +51,14 @@ export default function LuxuryEntrance() {
 
   useEffect(() => {
     // 1. Logo Entrance
-    logoOpacity.value = withTiming(1, { duration: 1500 });
+    logoOpacity.value = withTiming(1, { duration: 900 });
     logoScale.value = withTiming(1, {
-      duration: 1500,
+      duration: 1000,
       easing: Easing.out(Easing.exp),
     });
 
     // 2. Text Stagger
-    textOpacity.value = withDelay(1000, withTiming(1, { duration: 1200 }));
+    textOpacity.value = withDelay(500, withTiming(1, { duration: 700 }));
 
     // 3. Background Animation
     bgMovement.value = withRepeat(
@@ -76,7 +89,7 @@ export default function LuxuryEntrance() {
       if (user) resetTo(router, '/(tabs)');
       else if (seen) resetTo(router, '/auth/login');
       else router.replace('/onboarding1');
-    }, SPLASH_MS);
+    }, skipIntro ? 0 : SPLASH_MS);
 
     return () => { cancelled = true; clearTimeout(timer); };
   }, [authLoading, user]);
@@ -99,6 +112,9 @@ export default function LuxuryEntrance() {
       { rotate: `${interpolate(bgMovement.value, [0, 1], [-2, 2])}deg` },
     ],
   }));
+
+  // Behind the native splash for the moment it takes to redirect.
+  if (skipIntro) return <View style={[styles.container, { backgroundColor: '#FFFFFF' }]} />;
 
   return (
     <View style={styles.container}>

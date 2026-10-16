@@ -58,6 +58,19 @@ export function doseStatus(d: any, today: string = clinicToday()): { status: Dos
   return { status: 'upcoming', label: 'Upcoming' };
 }
 
+/**
+ * Case status as the dashboard derives it (features/patients/shared.jsx
+ * derivePatientStatus): Completed once archived/completed or every dose is
+ * given, otherwise the stored status (Ongoing by default).
+ */
+export function caseStatusLabel(record: any): string {
+  if (!record) return EMPTY;
+  const doses: any[] = Array.isArray(record.doses) ? record.doses : [];
+  const allDone = doses.length > 0 && doses.every(d => doseState(d) === 'done');
+  const raw = String(record.isArchived || record.status === 'archived' || record.status === 'completed' || allDone ? 'completed' : record.status || 'ongoing').toLowerCase();
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
 /** PEP is the only service with exposure details (animal, category, wound, date). */
 export function isPepService(service?: string | null): boolean {
   return normalizeService(service) === 'PEP';

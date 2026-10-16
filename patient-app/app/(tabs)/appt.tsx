@@ -35,9 +35,10 @@ import {
 import Tap from '../../components/Tap';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { db } from '../../config/backend';
-import { moderateScale, scale, verticalScale } from '../../utils/scale';
+import { GUTTER, moderateScale, scale, verticalScale } from '../../utils/scale';
 import { usePatientAuth } from '../../context/PatientAuthContext';
 import CustomAlertModal, { CustomAlertConfig } from '../../components/CustomAlertModal';
+import Dropdown from '../../components/Dropdown';
 const { width } = Dimensions.get('window');
 
 const C = {
@@ -133,6 +134,7 @@ type FirestoreAppt = {
   status: 'pending' | 'confirmed' | 'accepted' | 'done' | 'cancelled' | 'declined' | 'cancellation_pending';
   declinedBy?: string;
   note?: string;
+  notes?: string;
   cancellationReason?: string;
   declineReason?: string;
   declinedAt?: number;
@@ -181,13 +183,28 @@ const StatusBadge = ({ status, declined = false }: { status: string; declined?: 
 // (ka-clinic-admin/src/features/appointments/AppointmentsPage.jsx
 // SERVICE_TYPES), saved as-is in `type`, so a booking made here reads the same
 // in the clinic's list. "Walk-in Emergency" is staff-only and not offered.
+// "PEP" was stored as "PEP Follow-up" before 1.0.5; apptTypeLabel shows those
+// older bookings as "PEP" too.
 const APPT_SERVICES = [
-  { value: 'PEP Follow-up',        label: 'PEP Follow-up',  desc: 'Anti-rabies dose after a bite or scratch', icon: 'medkit-outline' },
+  { value: 'PEP',                  label: 'PEP',            desc: 'Anti-rabies dose after a bite or scratch', icon: 'medkit-outline' },
   { value: 'Anti-Tetanus Vaccine', label: 'Anti-Tetanus',   desc: 'Tetanus vaccine for a wound',              icon: 'bandage-outline' },
   { value: 'PrEP Consultation',    label: 'PrEP',           desc: 'Pre-exposure rabies protection',           icon: 'shield-checkmark-outline' },
   { value: 'Pneumococcal Vaccine', label: 'Pneumonia',      desc: 'Pneumococcal vaccine',                     icon: 'fitness-outline' },
   { value: 'General Consultation', label: 'Check-up',       desc: 'General consultation',                     icon: 'pulse-outline' },
 ] as const;
+
+// What a booking was for, as shown to the patient: the option's label, or
+// the stored value for anything else (older "PEP Follow-up" reads "PEP").
+const LEGACY_TYPES: Record<string, string> = { 'pep follow-up': 'PEP', 'pep follow up': 'PEP', 'pep followup': 'PEP' };
+const apptTypeLabel = (type?: string) => {
+  const raw = String(type || '').trim();
+  const v = LEGACY_TYPES[raw.toLowerCase()] || raw;
+  return APPT_SERVICES.find(o => o.value === v)?.label || v || 'Appointment';
+};
+
+// Optional note the patient adds at booking (stored as `notes`, shown in the
+// dashboard's Appointments view as "Patient Notes").
+const NOTE_MAX = 300;
 
 // Same Sex values as the clinic record (Male / Female).
 const SEX_OPTIONS = ['Male', 'Female'] as const;
@@ -300,6 +317,7 @@ export default function AppointmentsScreen() {
   }, [mrn, user?.displayName]);
   // What the visit is for: one of APPT_SERVICES. Nothing preselected.
   const [apptService, setApptService] = useState<string>('');
+  const [patientNote, setPatientNote] = useState('');
   const [typeError,   setTypeError]   = useState('');
 
   // Keyboard: the sheet's bottom edge rides on top of the keyboard (Android
@@ -484,6 +502,7 @@ export default function AppointmentsScreen() {
     setFormErrors({});
     setTypeError('');
     setApptService('');
+    setPatientNote('');
     setShowDetailsForm(true);
   };
 
@@ -567,6 +586,7 @@ export default function AppointmentsScreen() {
         // from the landing page's 'online' form — the dashboard groups on this.
         source:        'app',
         note:          '',
+        ...(patientNote.trim() ? { notes: patientNote.trim().slice(0, NOTE_MAX) } : {}),
         createdAt:     Date.now(),
       });
       setShowSuccess(true);
@@ -789,8 +809,10 @@ export default function AppointmentsScreen() {
           ) : (
             upcomingApts.map(appt => {
               const confirmedLike = appt.status === 'confirmed' || appt.status === 'accepted' || appt.status === 'done';
+              const canCancel = appt.status === 'pending' || appt.status === 'confirmed' || appt.status === 'accepted';
               return (
-              <Tap key={appt.id} style={s.apptCard} activeOpacity={0.85} onPress={() => setSelectedApptDetail(appt)}>
+              <Tap key={appt.id} style={[s.apptCard, s.apptCardTop]} activeOpacity={0.85} onPress={() => setSelectedApptDetail(appt)}
+                accessibilityLabel={`${apptTypeLabel(appt.type)} appointment, ${shortKeyWithDay(appt.date)}, ${appt.time}. Open details.`}>
                 <View style={[s.apptDateBox, confirmedLike && { backgroundColor: C.greenFaint }]}>
                   <Text style={[s.apptDateNum, confirmedLike && { color: C.green }]}>
                     {new Date(appt.date + 'T00:00:00').getDate()}
@@ -800,10 +822,27 @@ export default function AppointmentsScreen() {
                   </Text>
                 </View>
                 <View style={s.apptInfo}>
-                  <Text style={s.apptInfoTitle}>{shortKeyWithDay(appt.date)}</Text>
+                  <Text style={s.apptType}>{apptTypeLabel(appt.type)}</Text>
                   <View style={s.apptInfoRow}>
-                    <Ionicons name="time-outline" size={11} color={C.muted}/>
-                    <Text style={s.apptInfoSub}>{appt.time}</Text>
+                    <Ionicons name="time-outline" size={12} color={C.muted}/>
+                    <Text style={s.apptInfoSub}>{shortKeyWithDay(appt.date)} · {appt.time}</Text>
+                  </View>
+                  {/* Status and the cancel action share one line under the
+                      date, so neither is squeezed into the card's corner. */}
+                  <View style={s.apptMetaRow}>
+                    <StatusBadge status={appt.status} declined={isEnded(appt) && endedByClinic(appt)}/>
+                    {canCancel && (
+                      <Tap
+                        style={s.cancelChip}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        onPress={() => { setCancellationReasonInput(''); setSelectedApptDetail(appt); }}
+                        accessibilityRole="button"
+                        accessibilityLabel="Request cancellation"
+                      >
+                        <Ionicons name="close-circle-outline" size={14} color={C.navy}/>
+                        <Text style={s.cancelChipTxt}>Cancel</Text>
+                      </Tap>
+                    )}
                   </View>
                   {appt.note && appt.status === 'cancelled' && (
                     <View style={s.adminNoteBox}>
@@ -816,14 +855,6 @@ export default function AppointmentsScreen() {
                       <Ionicons name="chatbubble-ellipses-outline" size={11} color={C.green}/>
                       <Text style={[s.adminNoteTxt, { color: C.green }]}>Clinic: {appt.note}</Text>
                     </View>
-                  )}
-                </View>
-                <View style={s.apptRight}>
-                  <StatusBadge status={appt.status} declined={isEnded(appt) && endedByClinic(appt)}/>
-                  {appt.status === 'pending' && (
-                    <Tap style={s.cancelBtn} onPress={() => { setCancellationReasonInput(''); setSelectedApptDetail(appt); }}>
-                      <Ionicons name="close" size={12} color={C.muted}/>
-                    </Tap>
                   )}
                 </View>
               </Tap>
@@ -855,10 +886,10 @@ export default function AppointmentsScreen() {
                     <Text style={[s.apptDateMon, { color: C.green }]}>{new Date(appt.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short' })}</Text>
                   </View>
                   <View style={s.apptInfo}>
-                    <Text style={s.apptInfoTitle}>{shortKeyWithDay(appt.date)}</Text>
+                    <Text style={s.apptType}>{apptTypeLabel(appt.type)}</Text>
                     <View style={s.apptInfoRow}>
-                      <Ionicons name="time-outline" size={11} color={C.muted}/>
-                      <Text style={s.apptInfoSub}>{appt.time}</Text>
+                      <Ionicons name="time-outline" size={12} color={C.muted}/>
+                      <Text style={s.apptInfoSub}>{shortKeyWithDay(appt.date)} · {appt.time}</Text>
                     </View>
                   </View>
                   <View style={s.apptRight}>
@@ -896,10 +927,10 @@ export default function AppointmentsScreen() {
                       <Text style={[s.apptDateMon, { color: C.red }]}>{new Date(appt.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short' })}</Text>
                     </View>
                     <View style={s.apptInfo}>
-                      <Text style={s.apptInfoTitle}>{shortKeyWithDay(appt.date)}</Text>
+                      <Text style={s.apptType}>{apptTypeLabel(appt.type)}</Text>
                       <View style={s.apptInfoRow}>
-                        <Ionicons name="time-outline" size={11} color={C.muted}/>
-                        <Text style={s.apptInfoSub}>{appt.time}</Text>
+                        <Ionicons name="time-outline" size={12} color={C.muted}/>
+                        <Text style={s.apptInfoSub}>{shortKeyWithDay(appt.date)} · {appt.time}</Text>
                       </View>
                       {(appt.declineReason || appt.cancellationReason) ? (
                         <View style={[s.adminNoteBox, { backgroundColor: '#FEF2F2', borderColor: '#FECACA', borderWidth: 0.5, marginTop: 4 }]}>
@@ -1047,30 +1078,14 @@ export default function AppointmentsScreen() {
                 {/* Appointment for */}
                 <View style={df.section}>
                   <Text style={df.sectionLabel}>Appointment for <Text style={df.required}>*</Text></Text>
-                  <View style={{ gap: verticalScale(8) }} accessibilityRole="radiogroup">
-                    {APPT_SERVICES.map(opt => {
-                      const active = apptService === opt.value;
-                      return (
-                        <Pressable
-                          key={opt.value}
-                          onPress={() => { setApptService(opt.value); setTypeError(''); }}
-                          accessibilityRole="radio"
-                          accessibilityState={{ selected: active }}
-                          android_ripple={{ color: 'rgba(30,58,138,0.08)' }}
-                          style={({ pressed }) => [df.option, active && df.optionActive, pressed && Platform.OS === 'ios' && { opacity: 0.85 }]}
-                        >
-                          <View style={[df.optionIcon, active && df.optionIconActive]}>
-                            <Ionicons name={opt.icon as any} size={17} color={active ? C.white : C.navy} />
-                          </View>
-                          <View style={{ flex: 1 }}>
-                            <Text style={[df.optionLabel, active && { color: C.navy }]}>{opt.label}</Text>
-                            <Text style={df.optionDesc}>{opt.desc}</Text>
-                          </View>
-                          <Ionicons name={active ? 'radio-button-on' : 'radio-button-off'} size={20} color={active ? C.navy : '#94A3B8'} />
-                        </Pressable>
-                      );
-                    })}
-                  </View>
+                  <Dropdown
+                    value={apptService}
+                    options={APPT_SERVICES}
+                    onChange={v => { setApptService(v); setTypeError(''); }}
+                    placeholder="Choose appointment type"
+                    error={!!typeError}
+                    accessibilityLabel="Appointment type"
+                  />
                   {typeError ? <Text style={df.errorTxt}>{typeError}</Text> : null}
                 </View>
 
@@ -1153,6 +1168,23 @@ export default function AppointmentsScreen() {
                     />
                     {formErrors.contactNumber && <Text style={df.errorTxt}>{formErrors.contactNumber}</Text>}
                   </View>
+                </View>
+
+                {/* Optional note for the clinic */}
+                <View style={df.section}>
+                  <Text style={df.sectionLabel}>Patient notes <Text style={df.optional}>(optional)</Text></Text>
+                  <TextInput
+                    style={[df.input, df.inputMulti, df.noteInput]}
+                    placeholder="Anything the clinic should know?"
+                    placeholderTextColor="#94A3B8"
+                    multiline
+                    maxLength={NOTE_MAX}
+                    textAlignVertical="top"
+                    value={patientNote}
+                    onChangeText={setPatientNote}
+                    accessibilityLabel="Patient notes, optional"
+                  />
+                  <Text style={[df.counter, patientNote.length >= NOTE_MAX && { color: C.danger }]}>{patientNote.length}/{NOTE_MAX}</Text>
                 </View>
               </ScrollView>
 
@@ -1280,8 +1312,8 @@ export default function AppointmentsScreen() {
                         keyboardShouldPersistTaps="handled"
                         showsVerticalScrollIndicator={true}
                       >
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(16) }}>
-                          <Text style={{ fontSize: moderateScale(16), fontWeight: '800', color: C.charcoal }}>{selectedApptDetail.type}</Text>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: scale(10), marginBottom: verticalScale(16) }}>
+                          <Text style={{ flex: 1, minWidth: 0, fontSize: moderateScale(16), fontWeight: '800', color: C.charcoal }}>{apptTypeLabel(selectedApptDetail.type)}</Text>
                           <StatusBadge status={selectedApptDetail.status} declined={isEnded(selectedApptDetail) && endedByClinic(selectedApptDetail)} />
                         </View>
 
@@ -1329,6 +1361,16 @@ export default function AppointmentsScreen() {
                           </View>
                         ) : null}
 
+                        {selectedApptDetail.notes ? (
+                          <View style={[s.noteBox, s.patientNoteBox, { marginTop: verticalScale(12) }]}>
+                            <Ionicons name="create-outline" size={16} color={C.slate} />
+                            <View style={{ flex: 1, minWidth: 0 }}>
+                              <Text style={s.patientNoteLbl}>Your note</Text>
+                              <Text style={s.patientNoteTxt}>{selectedApptDetail.notes}</Text>
+                            </View>
+                          </View>
+                        ) : null}
+
                         {selectedApptDetail.note ? (
                           <View style={[s.noteBox, { marginTop: verticalScale(12) }]}>
                             <Ionicons name="chatbubble-ellipses-outline" size={16} color={C.navy} />
@@ -1364,7 +1406,10 @@ export default function AppointmentsScreen() {
                         </Tap>
                         {(selectedApptDetail.status === 'pending' || selectedApptDetail.status === 'confirmed' || selectedApptDetail.status === 'accepted') && (
                           <Tap
-                            style={[sm.confirmBtn, { backgroundColor: '#D97706' }, submittingCancellation && { opacity: 0.6 }]}
+                            style={[sm.confirmBtn, { backgroundColor: C.navy }, submittingCancellation && { opacity: 0.6 }]}
+                            activeOpacity={0.85}
+                            accessibilityRole="button"
+                            accessibilityState={{ disabled: submittingCancellation }}
                             onPress={handleRequestCancellation}
                             disabled={submittingCancellation}
                           >
@@ -1448,7 +1493,7 @@ const s = StyleSheet.create({
     position: 'relative',
     paddingTop: verticalScale(66),
     paddingBottom: verticalScale(22),
-    paddingHorizontal: scale(20),
+    paddingHorizontal: GUTTER,
     backgroundColor: C.white,
     borderBottomWidth: 1,
     borderBottomColor: '#F0F4FA',
@@ -1461,18 +1506,18 @@ const s = StyleSheet.create({
   headerPill:   { flexDirection: 'row', alignItems: 'center', gap: scale(5), backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: scale(10), paddingVertical: verticalScale(5), borderRadius: scale(20) },
   headerPillTxt:{ fontSize: moderateScale(11), color: 'rgba(255,255,255,0.9)', fontWeight: '700' },
 
-  sectionLabel:    { flexDirection: 'row', alignItems: 'center', gap: scale(8), paddingHorizontal: scale(20), marginBottom: verticalScale(14) },
+  sectionLabel:    { flexDirection: 'row', alignItems: 'center', gap: scale(8), paddingHorizontal: GUTTER, marginBottom: verticalScale(14) },
   sectionAccent:   { width: scale(4), height: verticalScale(18), borderRadius: scale(2), backgroundColor: C.red },
   sectionLabelTxt: { fontSize: moderateScale(18), fontWeight: '900', color: C.charcoal, flex: 1, letterSpacing: -0.3 },
   countBadge:      { minWidth: scale(22), height: verticalScale(22), borderRadius: scale(7), justifyContent: 'center', alignItems: 'center', paddingHorizontal: scale(6) },
   countTxt:        { fontSize: moderateScale(11), fontWeight: '900' },
 
-  section:   { paddingHorizontal: scale(20), marginBottom: verticalScale(6) },
+  section:   { paddingHorizontal: GUTTER, marginBottom: verticalScale(6) },
   rowBetween:{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: verticalScale(14) },
   rowGap:    { flexDirection: 'row', alignItems: 'center', gap: scale(7) },
   subHeading:{ fontSize: moderateScale(14), fontWeight: '800', color: C.charcoal },
 
-  hint:    { flexDirection: 'row', alignItems: 'flex-start', gap: scale(8), marginHorizontal: scale(20), marginVertical: verticalScale(12), padding: scale(14), backgroundColor: C.white, borderRadius: scale(14), borderWidth: 1, borderColor: C.border },
+  hint:    { flexDirection: 'row', alignItems: 'flex-start', gap: scale(10), marginHorizontal: GUTTER, marginVertical: verticalScale(12), paddingVertical: scale(14), paddingHorizontal: Math.max(14, scale(16)), backgroundColor: C.white, borderRadius: scale(14), borderWidth: 1, borderColor: C.border },
   hintTxt: { flex: 1, minWidth: 0, fontSize: moderateScale(12), lineHeight: moderateScale(18), color: C.slate, fontWeight: '500' },
   errorHint: { backgroundColor: C.navyFaint, borderColor: '#DBEAFE' },
 
@@ -1545,10 +1590,18 @@ const s = StyleSheet.create({
   apptDateBox:  { width: scale(48), height: verticalScale(54), borderRadius: scale(13), backgroundColor: C.redFaint, justifyContent: 'center', alignItems: 'center', marginRight: scale(14) },
   apptDateNum:  { fontSize: moderateScale(20), fontWeight: '900', color: C.red, lineHeight: moderateScale(22) },
   apptDateMon:  { fontSize: moderateScale(9), fontWeight: '700', color: C.red, textTransform: 'uppercase', letterSpacing: 0.3 },
-  apptInfo:     { flex: 1 },
+  apptInfo:     { flex: 1, minWidth: 0 },
+  apptCardTop:  { alignItems: 'flex-start' },
+  apptType:     { fontSize: moderateScale(14), fontWeight: '800', color: C.charcoal },
+  apptMetaRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: scale(8), marginTop: verticalScale(8) },
+  cancelChip:   { flexDirection: 'row', alignItems: 'center', gap: scale(4), minHeight: 32, paddingHorizontal: scale(10), borderRadius: scale(10), borderWidth: 1, borderColor: C.border, backgroundColor: C.white, overflow: 'hidden' },
+  cancelChipTxt:{ fontSize: moderateScale(12), fontWeight: '700', color: C.navy },
+  patientNoteBox: { backgroundColor: C.bg, borderColor: C.border },
+  patientNoteLbl: { fontSize: moderateScale(11), fontWeight: '800', color: C.slate, textTransform: 'uppercase', letterSpacing: 0.4 },
+  patientNoteTxt: { fontSize: moderateScale(13), color: C.charcoal, fontWeight: '500', lineHeight: moderateScale(19), marginTop: verticalScale(2) },
   apptInfoTitle:{ fontSize: moderateScale(13), fontWeight: '700', color: C.charcoal },
-  apptInfoRow:  { flexDirection: 'row', alignItems: 'center', gap: scale(4), marginTop: verticalScale(4) },
-  apptInfoSub:  { fontSize: moderateScale(12), color: C.muted, fontWeight: '500' },
+  apptInfoRow:  { flexDirection: 'row', alignItems: 'center', gap: scale(5), marginTop: verticalScale(4) },
+  apptInfoSub:  { flexShrink: 1, fontSize: moderateScale(12), lineHeight: moderateScale(17), color: C.slate, fontWeight: '500' },
   apptRight:    { alignItems: 'flex-end', gap: scale(6) },
 
   adminNoteBox: { flexDirection: 'row', alignItems: 'flex-start', gap: scale(5), backgroundColor: C.redFaint, borderRadius: scale(8), padding: scale(6), marginTop: verticalScale(5) },
@@ -1584,6 +1637,9 @@ const df = StyleSheet.create({
   required:    { color: C.red },
   input:       { backgroundColor: C.bg, borderWidth: 1.5, borderColor: C.border, borderRadius: scale(13), paddingHorizontal: scale(14), minHeight: verticalScale(48), paddingVertical: verticalScale(10), fontSize: moderateScale(15), color: C.charcoal, fontWeight: '500' },
   inputMulti:  { minHeight: verticalScale(64), textAlignVertical: 'top', paddingTop: verticalScale(12) },
+  noteInput:   { minHeight: verticalScale(96), maxHeight: verticalScale(180) },
+  optional:    { color: C.muted, fontWeight: '600', textTransform: 'none', letterSpacing: 0 },
+  counter:     { alignSelf: 'flex-end', fontSize: moderateScale(11), color: C.muted, fontWeight: '600', marginTop: verticalScale(5) },
   inputError:  { borderColor: C.danger, backgroundColor: C.dangerFaint },
   errorTxt:    { fontSize: moderateScale(11.5), color: C.danger, fontWeight: '600', marginTop: verticalScale(5) },
 

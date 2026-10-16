@@ -29,6 +29,14 @@ service cloud.firestore {
       return isPatient() && (d.get('authUid', '') == request.auth.uid || d.get('uid', '') == request.auth.uid
         || (request.auth.token.get('email', '') != '' && d.get('email', '').lower() == request.auth.token.email.lower()));
     }
+    // The settings/counters MRN counter only moves forward: a lower sequence
+    // in the same year (a rewind) is refused, and it can never be deleted.
+    function counterForward() {
+      return resource == null
+        || request.resource.data.currentYear > resource.data.currentYear
+        || (request.resource.data.currentYear == resource.data.currentYear
+          && request.resource.data.lastSequence > resource.data.lastSequence);
+    }
     function ownAppointment(d) {
       return isPatient() && (d.get('patientUid', '') == request.auth.uid || d.get('userId', '') == request.auth.uid);
     }
@@ -36,8 +44,12 @@ service cloud.firestore {
       allow read: if isAdmin() || owns(resource.data);
       allow write: if isAdmin();
     }
+    // A patient reads only the MRN their verified sign-in session was issued
+    // for (securitySessions, written by the server), never another MRN, even
+    // one that carries their email. The case history (caseHistory, earlier
+    // services) lives on this same doc, so the same rule covers it.
     match /vaccinations/{mrn} {
-      allow read: if isAdmin() || (owns(resource.data) && resource.data.get('isArchived', false) != true);
+      allow read: if isAdmin() || (owns(resource.data) && mrn == session().mrn && resource.data.get('isArchived', false) != true);
       allow create: if isAdmin() && request.resource.data.get('isArchived', false) != true;
       allow update: if isAdmin() && !(request.resource.data.get('isArchived', false) == true && resource.data.get('isArchived', false) != true);
       allow delete: if isAdmin();
@@ -51,7 +63,8 @@ service cloud.firestore {
         && request.resource.data.patientId == session().mrn
         && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() < 100
         && request.resource.data.contactNumber is string && request.resource.data.contactNumber.size() > 0 && request.resource.data.contactNumber.size() < 30
-        && request.resource.data.date is string && request.resource.data.date.size() > 0 && request.resource.data.date.size() < 60);
+        && request.resource.data.date is string && request.resource.data.date.size() > 0 && request.resource.data.date.size() < 60
+        && (!('notes' in request.resource.data) || (request.resource.data.notes is string && request.resource.data.notes.size() <= 300)));
       allow update: if isAdmin() || (ownAppointment(resource.data)
         && resource.data.status in ['pending', 'confirmed', 'accepted', 'cancellation_pending']
         && request.resource.data.status in ['cancelled', 'cancellation_pending']
@@ -128,7 +141,35 @@ service cloud.firestore {
       allow read, delete: if isAdmin() || (isPatient() && request.auth.uid == uid);
       allow create, update: if false;
     }
-    match /settings/{id} { allow read, write: if isAdmin(); }
+    match /settings/{id} {
+      allow read: if isAdmin();
+      allow create, update: if isAdmin() && (id != 'counters' || counterForward());
+      allow delete: if isAdmin() && id != 'counters';
+    }
+    // Every MRN ever issued. Never edited or deleted, so a deleted or purged
+    // patient's MRN can never be handed to someone else.
+    match /mrnRegistry/{mrn} {
+      allow read: if isAdmin();
+      allow create: if isAdmin() && request.resource.data.mrn == mrn
+        && request.resource.data.keys().hasOnly(['mrn', 'issuedAt', 'issuedBy']);
+      allow update, delete: if false;
+    }
+    // Activity Log: managers read it; staff append entries only as
+    // themselves, with their live role and the server time. No one can
+    // edit or delete an entry from a client.
+    match /activityLog/{id} {
+      allow read: if isManager();
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasOnly(['actorUid', 'actorName', 'actorRole', 'action', 'collection', 'docId', 'mrn', 'summary', 'changes', 'createdAt'])
+        && request.resource.data.keys().hasAll(['actorUid', 'actorRole', 'action', 'summary', 'createdAt'])
+        && request.resource.data.actorUid == request.auth.uid
+        && request.resource.data.actorRole == get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.action is string && request.resource.data.action.size() < 60
+        && request.resource.data.summary is string && request.resource.data.summary.size() <= 300
+        && (!('changes' in request.resource.data) || (request.resource.data.changes is list && request.resource.data.changes.size() <= 60));
+      allow update, delete: if false;
+    }
     // Bootstrap identity only; account mutations and trusted credentials are server-owned.
     match /admins/{uid} {
       allow get: if (signedIn() && request.auth.uid == uid && resource.data.status == 'active') || isManager();

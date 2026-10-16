@@ -216,8 +216,13 @@ const VACCINE_ID_LABELS = {
   'Anti-Tetano': 'Anti-Tetanus',
   Booster: 'Booster Dose',
 };
+// Bookings saved before "Follow-up" was dropped from the labels still read
+// "PEP Follow-up"; they show as "PEP", the same as new ones.
+const LEGACY_APPT_TYPES = { 'pep follow-up': 'PEP', 'pep follow up': 'PEP', 'pep followup': 'PEP' };
+export const normalizeApptType = (type) => LEGACY_APPT_TYPES[String(type || '').trim().toLowerCase()] || String(type || '').trim();
+
 export function formatServiceType(type, fallback = 'Consultation') {
-  const raw = String(type || '').trim();
+  const raw = normalizeApptType(type);
   if (!raw) return fallback;
   const [head, ...rest] = raw.split(/\s*[–—-]\s+|\s+[–—-]\s*/);
   const sub = rest.join(' – ').trim();

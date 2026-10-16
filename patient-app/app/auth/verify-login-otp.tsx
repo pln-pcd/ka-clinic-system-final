@@ -95,8 +95,8 @@ export default function VerifyLoginOtp() {
     setLoading(true);
     setError('');
     try {
-      await verifyLoginOTP(code, rememberDevice);
-      completeSecondFactor();
+      const issuedMrn = await verifyLoginOTP(code, rememberDevice);
+      completeSecondFactor(issuedMrn);
       resetTo(router, '/(tabs)');
     } catch (e: any) {
       const next = attempts + 1;

@@ -333,10 +333,10 @@ function buildAppointments(byKey) {
   const p = k => byKey[k];
   const A = [
     { id: 'demo-apt-01', who: 'n4', status: 'pending', source: 'app', date: weekend(1), time: '9:00 AM - 10:00 AM', type: 'Vaccination – Anti-Rabies (PEP)' },
-    { id: 'demo-apt-02', who: 'o2', status: 'pending', source: 'online', date: weekend(0, true), time: '10:00 AM - 11:00 AM', type: 'PEP Follow-up' },
+    { id: 'demo-apt-02', who: 'o2', status: 'pending', source: 'online', date: weekend(0, true), time: '10:00 AM - 11:00 AM', type: 'PEP', notes: 'Bitten again on the same hand last week; the wound is healing.' },
     { id: 'demo-apt-03', who: 'o1', status: 'confirmed', source: 'online', date: weekend(0), time: '8:00 AM - 9:00 AM', type: 'PEP Follow-up' },
     { id: 'demo-apt-04', who: 'o3', status: 'confirmed', source: 'online', date: weekend(1, true), time: '1:00 PM - 2:00 PM', type: 'Anti-Tetanus Vaccine' },
-    { id: 'demo-apt-05', who: 'c6', status: 'done', source: 'app', date: weekend(-1), time: '9:00 AM - 10:00 AM', type: 'PEP Follow-up' },
+    { id: 'demo-apt-05', who: 'c6', status: 'done', source: 'app', date: weekend(-1), time: '9:00 AM - 10:00 AM', type: 'PEP' },
     { id: 'demo-apt-06', who: 'c7', status: 'done', source: 'online', date: weekend(-2, true), time: '11:00 AM - 12:00 PM', type: 'Pneumococcal Vaccine' },
     { id: 'demo-apt-07', walkIn: 'Walk-in Patient Demo', status: 'confirmed', source: 'walk-in', date: weekend(0), time: '2:00 PM - 3:00 PM', type: 'Walk-in Emergency' },
     { id: 'demo-apt-08', walkIn: 'Walk-in Follow-up Demo', status: 'done', source: 'walk-in', date: weekend(-1, true), time: '10:00 AM - 11:00 AM', type: 'General Consultation' },
