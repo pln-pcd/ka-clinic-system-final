@@ -43,13 +43,33 @@ try {
       const pastHolders = Array.from({ length: spec.history }, (_, i) => [`past-front-${key}-${i}`, `past-back-${key}-${i}`]).flat();
       for (const holder of [`inline-front-${key}`, `inline-back-${key}`, `popup-${key}`, ...pastHolders]) {
         const variant = holder.startsWith('popup') ? 'popup' : 'inline';
-        // The front sets the height: the back's own content must fit inside it.
-        const natural = await page.getByTestId(holder).evaluate((el, v) => {
-          const h = side => el.querySelector(`[data-testid="shot-${v}-${side}"]`).parentElement.children[1].getBoundingClientRect();
-          const f = h('front'), b = h('back');
-          return { front: v === 'popup' ? f.width : f.height, back: v === 'popup' ? b.width : b.height };
+        // The front sets the height: the card is exactly the front's content
+        // plus padding (the back's notes box stretches to fill it).
+        const fit = await page.getByTestId(holder).evaluate((el, v) => {
+          const shot = el.querySelector(`[data-testid="shot-${v}-front"]`).parentElement;
+          const content = shot.children[1].getBoundingClientRect();
+          const r = shot.getBoundingClientRect();
+          return v === 'popup' ? { content: content.width, shot: r.width } : { content: content.height, shot: r.height };
         }, variant);
-        assert(natural.back <= natural.front + 1, `${width}px ${holder}: back content (${natural.back}) taller than front (${natural.front})`);
+        assert(Math.abs(fit.content - fit.shot) <= 2, `${width}px ${holder}: height not set by the front (${fit.content} vs ${fit.shot})`);
+        // The DOSE column keeps "Session N (Day N)" on one line (360 px and up).
+        if (width >= 360 && variant === 'inline' && holder.startsWith('inline-front')) {
+          const lines = await page.getByTestId(holder).getByTestId(`card-${variant}-front`).evaluate(face => {
+            return [...face.querySelectorAll('div[dir="auto"]')].filter(e => /^Session \d \(Day \d+\)$/.test(e.textContent))
+              .map(e => {
+                // One line when the text's own width fits the cell's content box
+                // (row height is set by the tallest cell, so height says nothing).
+                const c = e.cloneNode(true);
+                Object.assign(c.style, { whiteSpace: 'nowrap', position: 'absolute', width: 'auto', padding: '0' });
+                document.body.appendChild(c);
+                const need = c.getBoundingClientRect().width; c.remove();
+                const cs = getComputedStyle(e);
+                const room = e.getBoundingClientRect().width - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - parseFloat(cs.borderRightWidth || '0');
+                return need <= room + 0.5 ? 1 : 2;
+              });
+          });
+          assert(lines.every(n => n <= 1), `${width}px ${holder}: dose label wraps (${lines})`);
+        }
         const box = id => page.getByTestId(holder).getByTestId(id).evaluate(el => {
           const r = el.getBoundingClientRect(); return { w: Math.round(r.width * 10) / 10, h: Math.round(r.height * 10) / 10 };
         });
@@ -62,7 +82,7 @@ try {
             const fr = face.getBoundingClientRect();
             const out = [];
             face.querySelectorAll('div[dir="auto"], span').forEach(el => {
-              if (!el.textContent.trim() || el.children.length) return;
+              if (!el.textContent.trim() || el.children.length || el.dataset.testid === 'notes-text') return;
               const cs = getComputedStyle(el);
               if (cs.textOverflow === 'ellipsis' || el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1) out.push(`clipped: ${el.textContent}`);
               const r = el.getBoundingClientRect();
@@ -76,6 +96,10 @@ try {
       }
 
       const card = await page.getByTestId(`inline-front-${key}`).innerText();
+      const backTxt = await page.getByTestId(`inline-front-${key}`).getByTestId('card-inline-back').innerText();
+      assert(/CLINICAL NOTES/i.test(backTxt), `${key}: no Clinical Notes box`);
+      assert(!/DOSE SCHEDULE/i.test(backTxt), `${key}: Dose Schedule still on the back`);
+      if (key === 'tetanus') assert(/No clinical notes/.test(backTxt), 'empty note placeholder missing');
       const back = await page.getByTestId(`inline-front-${key}`).getByTestId('card-inline-back').innerText();
       // Service-to-fields rule, from the dashboard's own definitions.
       const record = { ...spec };
@@ -108,7 +132,7 @@ try {
             for (const f of ['EXPOSURE CATEGORY', 'BITING ANIMAL', 'POST-EXPOSURE', 'HISTORY OF EXPOSURE']) assert(!(past + pastBack).toUpperCase().includes(f), `${key} past PrEP shows ${f}`);
           } else {
             assert(/CATEGORY III/i.test(past), `${key} past PEP: category missing`);
-            assert(/4\/4/.test(pastBack), `${key} past PEP: doses given 4/4 missing`);
+            assert(/CLINICAL NOTES/i.test(pastBack), `${key} past PEP: notes box missing`);
           }
         }
       }

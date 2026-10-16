@@ -399,6 +399,12 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
                     {merged.notes || 'No clinical remarks recorded.'}
                   </p>
                 </div>
+                <div className="pt-3">
+                  <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wider block mb-1.5">Note for patient (on their card)</span>
+                  <p className="text-xs text-slate-700 leading-relaxed bg-slate-50 px-3 py-2.5 rounded-lg border border-slate-200 whitespace-pre-wrap break-words">
+                    {merged.patientNote || 'No note for the patient.'}
+                  </p>
+                </div>
               </>
             );
           })()}
@@ -794,7 +800,7 @@ const CASE_KEYS = [
   'service', 'date', 'status', 'completedAt', 'closedAt',
   'cat', 'animal', 'placeOfExposure', 'typeOfExposure', 'sourceOfExposure',
   'woundLocation', 'woundDepth', 'woundWashed', 'numberOfBites', 'vaccineBrand',
-  'erig', 'rigGiven', 'rigTreatment', 'antiTetanusTreatment', 'notes', 'pastVaccines', 'pastVaccinesOther', 'allergies',
+  'erig', 'rigGiven', 'rigTreatment', 'antiTetanusTreatment', 'notes', 'patientNote', 'pastVaccines', 'pastVaccinesOther', 'allergies',
   'woundType', 'lastTetanus', 'pneumoHistory', 'pneumoHistoryOther', 'riskCondition',
   'height', 'weight', 'bloodPressure', ...CASE_ARRAY_KEYS,
 ];

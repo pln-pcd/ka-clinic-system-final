@@ -48,6 +48,7 @@ export const FIXTURE_PATIENTS = [
       name: 'Juan Simulated Dela Cruz', dob: '1990-04-12', age: 36, sex: 'Male', contact: '+639170000001', service: 'PEP',
       date: '2026-09-16', typeOfExposure: 'Bite', animal: 'Dog', cat: 'III', numberOfBites: '2', woundWashed: 'Yes',
       woundLocation: 'SIMULATED-WOUND-LOCATION', woundDepth: 'SIMULATED-WOUND-DEPTH', notes: 'SIMULATED-INTERNAL-REMARK',
+      patientNote: 'Bring this card to every visit. Your next session is on the date shown on the front. If you cannot come on that day, message the clinic through the app so staff can help you choose another day. Keep the wound area clean and dry, as staff explained at your visit.',
       pastVaccines: 'None', allergies: 'Penicillin', status: 'ongoing', route: 'ID',
       doses: [
         { key: 'd1', n: 'Session 1 (Day 0)', date: '2026-09-16', status: 'done', brand: 'Speeda (PVRV Rabies Vaccine)' },
@@ -62,7 +63,7 @@ export const FIXTURE_PATIENTS = [
     key: 'prep', mrn: '2026-902',
     record: {
       name: 'Maria Simulated Santos', dob: '1999-01-30', age: 27, sex: 'Female', contact: '+639170000002', service: 'PrEP',
-      pastVaccines: 'Completed PEP (1–3 years ago)', allergies: '', status: 'ongoing',
+      pastVaccines: 'Completed PEP (1–3 years ago)', allergies: '', status: 'ongoing', patientNote: 'Second dose on Oct 10.',
       doses: [
         { key: 'p1', n: 'Dose 1 (Day 0)', date: '2026-10-03', status: 'done', brand: 'Rabipur (PCECV)' },
         { key: 'p2', n: 'Dose 2 (Day 7)', date: '2026-10-10', status: 'pending' },

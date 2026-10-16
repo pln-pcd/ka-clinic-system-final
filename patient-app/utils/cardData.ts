@@ -13,8 +13,8 @@
 import type { CardData, CardField, CardRow } from '../components/VaccinationCard';
 import { historyRows } from './serviceFields';
 import {
-  caseStatusLabel, clinicToday, displayPatientId, doseBrand, doseState, doseStatus, EMPTY,
-  exposureCategory, exposureTypeLabel, formatDoseDate, isPepService, protocolLabel, serviceCopy, splitName,
+  clinicToday, displayPatientId, doseBrand, doseState, doseStatus, EMPTY,
+  exposureCategory, exposureTypeLabel, formatDoseDate, isPepService, serviceCopy, splitName,
 } from './patientRecord';
 
 // Guests see the standard PEP shape with nothing filled in.
@@ -41,7 +41,7 @@ const CASE_KEYS = [
   'service', 'date', 'status', 'completedAt', 'closedAt',
   'cat', 'animal', 'typeOfExposure', 'sourceOfExposure', 'woundWashed', 'numberOfBites', 'vaccineBrand',
   'pastVaccines', 'pastVaccinesOther', 'allergies', 'woundType', 'lastTetanus',
-  'pneumoHistory', 'pneumoHistoryOther', 'riskCondition', 'doses', 'route',
+  'pneumoHistory', 'pneumoHistoryOther', 'riskCondition', 'doses', 'route', 'patientNote',
 ];
 export function historicalRecord(patient: any, entry: any): any {
   const p = patient || {};
@@ -87,7 +87,6 @@ export function buildCardData({ record, mrn, isGuest, displayName, today = clini
 
   const realDoses: any[] = Array.isArray(pr.doses) ? pr.doses : [];
   const doseList: any[] = realDoses.length ? realDoses : (isGuest ? GUEST_PLACEHOLDER_DOSES : NO_DOSES_ROW);
-  const given = realDoses.filter(d => doseState(d, today) === 'done').length;
 
   // Front: the original three field rows.
   const purpose: CardField = { label: 'Vaccination Purpose', value: pr.service ? serviceCopy(pr.service).long : EMPTY, flex: 1.5 };
@@ -123,11 +122,6 @@ export function buildCardData({ record, mrn, isGuest, displayName, today = clini
     { label: 'Contact Number', value: blank(pr.contact) },
     ...historyRows(pr).map(r => ({ label: r.label, value: r.value })),
   ];
-  const treatment: CardRow = [
-    { label: 'Dose Schedule', value: realDoses.length ? protocolLabel(pr.service, realDoses.length) : EMPTY, flex: 1.6 },
-    { label: 'Doses Given', value: realDoses.length ? `${given}/${realDoses.length}` : EMPTY, flex: 0.7 },
-    { label: 'Status', value: record ? caseStatusLabel(pr) : EMPTY, flex: 0.8, accent: true },
-  ];
 
   return {
     tag,
@@ -136,7 +130,11 @@ export function buildCardData({ record, mrn, isGuest, displayName, today = clini
     backTitle: isPep ? 'HISTORY OF EXPOSURE & CLINICAL RECORD' : 'CLINICAL RECORD & TREATMENT',
     backSubtitle: isPep ? 'Clinical Exposure History & Medical Profile' : 'Medical Profile & Treatment Status',
     frontRows,
-    backRows: [...exposure, ...chunk(profile, 3), treatment],
+    backRows: [...exposure, ...chunk(profile, 3)],
+    // The patient-facing note staff write for this treatment ("Note for
+    // patient" in the dashboard). The internal clinical remarks (`notes`)
+    // are never shown.
+    notes: String(pr.patientNote || '').trim(),
     doses: doseList.map((d: any, idx: number) => {
       const state = doseState(d, today);
       const brand = doseBrand(d, pr, state);

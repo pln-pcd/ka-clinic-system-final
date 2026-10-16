@@ -1119,14 +1119,16 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
   const aptLive = useLiveCollection('appointments');
   useEffect(() => { setAppointments(aptLive.rows); }, [aptLive]);
 
-  // Hours already spoken for on the date being added/edited. Derived from the
-  // appointments the dashboard already subscribes to, so it needs no extra
-  // read of appointmentSlots. Cancelled appointments still occupy their hour —
-  // the clinic frees those explicitly by deleting or rescheduling.
-  const takenTimesOn = (date, exceptId) =>
-    appointments
-      .filter(a => a.date === date && a.id !== exceptId && a.status !== 'cancelled')
-      .map(a => a.time);
+  // Hours already spoken for on a date: the same appointmentSlots holds the
+  // patient app reads (one per active booking, released on cancel/decline),
+  // plus any active appointment, so both apps show the same "Full" hours.
+  const slotLive = useLiveCollection('appointmentSlots');
+  const takenTimesOn = (date, exceptId) => Array.from(new Set([
+    ...slotLive.rows.filter(sl => sl.date === date).map(sl => sl.time),
+    ...appointments
+      .filter(a => a.date === date && a.id !== exceptId && !INACTIVE_STATUSES.includes(String(a.status || 'pending').toLowerCase()))
+      .map(a => a.time),
+  ]));
 
   // Calendar Generation
   // Always 6 full weeks (42 cells), so the calendar card is the same height

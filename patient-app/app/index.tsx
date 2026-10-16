@@ -38,9 +38,11 @@ export default function LuxuryEntrance() {
   useEffect(() => {
     if (!skipIntro || navigated.current) return undefined;
     navigated.current = true;
-    resetTo(router, user ? '/(tabs)' : '/auth/login');
-    const t = setTimeout(() => SplashScreen.hideAsync().catch(() => {}), 60);
-    return () => clearTimeout(t);
+    // components/AppShells.tsx hides the splash (it stays mounted); a
+    // navigation error here must not keep the app on the logo either.
+    try { resetTo(router, user ? '/(tabs)' : '/auth/login'); }
+    catch (e) { console.warn('Launch navigation failed:', e); SplashScreen.hideAsync().catch(() => {}); }
+    return undefined;
   }, [skipIntro]);
 
   // Animation values

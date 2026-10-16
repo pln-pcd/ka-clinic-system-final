@@ -17,6 +17,8 @@
 //     the server and signed out if this device is not trusted.
 import type { User } from 'firebase/auth';
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
+import { withTimeout } from '../utils/timeout';
 import { auth, checkLoginTrust, onAuthStateChanged, resolveMRNForUser, signOut } from '../config/backend';
 import { getKeepSignedIn, hasSeenOnboarding } from '../config/appPrefs';
 import { clearThisDeviceSession, registerThisDevice, watchOwnSession } from '../config/deviceSessions';
@@ -58,6 +60,8 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
   // uid of the session that passed the second factor. Compared against the
   // live Firebase uid so a new sign-in never inherits an older verification.
   const [verifiedUid, setVerifiedUid] = useState<string | null>(null);
+  const verifiedUidRef = useRef<string | null>(null);
+  useEffect(() => { verifiedUidRef.current = verifiedUid; }, [verifiedUid]);
   const [loading, setLoading] = useState(true);
   const [mrn, setMrn] = useState<string | null>(null);
   const [mrnLoading, setMrnLoading] = useState(false);
@@ -79,60 +83,105 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
   // screen needs (the MRN for this uid, the last-known vaccination record) is
   // read from the on-disk cache at the same time, so Home renders with data
   // the moment the check passes and Firestore refreshes it in the background.
+  // A session opened offline (trust token present, server unreachable). It
+  // is re-checked as soon as the app is active and online again; an explicit
+  // "not trusted" then signs it out.
+  const offlineSession = useRef(false);
+
+  const endRestoredSession = async (uid: string) => {
+    try { await withTimeout(clearThisDeviceSession(uid), 4000, 'Session clear'); } catch {}
+    try { await signOut(auth); } catch {}
+    setAuthUser(null);
+  };
+
   useEffect(() => {
+    // Last resort: whatever happens below, the splash never stays up longer
+    // than this; the app opens on sign-in (or Home from cache) instead.
+    const failSafe = setTimeout(() => setLoading(false), 15000);
     const unsub = onAuthStateChanged(auth, async (fbUser: User | null) => {
       // Signed out (or nobody signed in): drop the previous patient's cache.
       if (!fbUser) {
         clearCache();
         setVerifiedUid(null);
         serverMrn.current = null;
+        offlineSession.current = false;
       }
-      // Firebase always persists to AsyncStorage on React Native, so opting out
-      // of "keep me signed in" cannot be a persistence mode — it is enforced
-      // here, by discarding a restored session before the app renders.
-      if (!launchHandled.current) {
-        launchHandled.current = true;
-        // Both local reads at once; the onboarding flag lets the first
-        // screen be chosen without another wait.
-        const restored = !!fbUser && !fbUser.isAnonymous;
-        const [seen, keep] = await Promise.all([hasSeenOnboarding(), restored ? getKeepSignedIn() : Promise.resolve(false)]);
-        setSeenOnboarding(seen);
-        if (fbUser && !fbUser.isAnonymous) {
-          if (!keep) {
-            try { await clearThisDeviceSession(fbUser.uid); } catch {}
-            await signOut(auth);
-            setAuthUser(null);
-            setLoading(false);
-            return;
-          }
-          // "Keep me signed in" was ticked, but that alone is not enough: the
-          // server must confirm THIS install still holds a valid trust token.
-          // Anything short of an explicit yes (no token, expired, revoked,
-          // reinstall, offline) signs the restored session out. The cache is
-          // read in parallel with it.
-          const [{ trusted, mrn: issued }] = await Promise.all([checkLoginTrust(), primeLaunchCache(fbUser.uid)]);
-          if (!trusted) {
-            try { await clearThisDeviceSession(fbUser.uid); } catch {}
-            await signOut(auth);
-            setAuthUser(null);
-            setLoading(false);
-            return;
-          }
-          if (issued) {
-            serverMrn.current = { uid: fbUser.uid, mrn: issued };
-            setMrn(issued);
-            writeCache(cacheKeys.mrnForUid(fbUser.uid), issued);
-          } else {
+      try {
+        // Firebase always persists to AsyncStorage on React Native, so opting
+        // out of "keep me signed in" cannot be a persistence mode — it is
+        // enforced here, by discarding a restored session before the app renders.
+        if (!launchHandled.current) {
+          launchHandled.current = true;
+          // Local reads at once, each bounded; the onboarding flag lets the
+          // first screen be chosen without another wait.
+          const restored = !!fbUser && !fbUser.isAnonymous;
+          const [seen, keep] = await Promise.all([
+            withTimeout(hasSeenOnboarding(), 3000, 'Prefs', true),
+            restored ? withTimeout(getKeepSignedIn(), 3000, 'Prefs', false) : Promise.resolve(false),
+          ]);
+          setSeenOnboarding(seen);
+          if (fbUser && !fbUser.isAnonymous) {
+            if (!keep) {
+              await endRestoredSession(fbUser.uid);
+              return;
+            }
+            // "Keep me signed in" was ticked, but that alone is not enough:
+            // the server must confirm THIS install still holds a valid trust
+            // token (8 s at most). A "no" (expired, revoked, reinstall, no
+            // token) signs the session out. No answer at all (offline) with a
+            // token on this device opens Home from the cached record and
+            // re-checks once the app is back online. The cache is read at the
+            // same time.
+            const [trust] = await Promise.all([
+              checkLoginTrust(8000),
+              withTimeout(primeLaunchCache(fbUser.uid), 3000, 'Cache', undefined).catch(() => {}),
+            ]);
             const cachedMrn = peekCache<string>(cacheKeys.mrnForUid(fbUser.uid));
-            if (cachedMrn) setMrn(cachedMrn);
+            if (!trust.trusted && !(trust.offline && trust.hasToken && cachedMrn)) {
+              await endRestoredSession(fbUser.uid);
+              return;
+            }
+            offlineSession.current = !trust.trusted;
+            if (trust.mrn) {
+              serverMrn.current = { uid: fbUser.uid, mrn: trust.mrn };
+              setMrn(trust.mrn);
+              writeCache(cacheKeys.mrnForUid(fbUser.uid), trust.mrn);
+            } else if (cachedMrn) {
+              setMrn(cachedMrn);
+            }
+            setVerifiedUid(fbUser.uid);
           }
-          setVerifiedUid(fbUser.uid);
         }
+        setAuthUser(fbUser);
+      } catch (e) {
+        // Nothing here may keep the splash up: an unexpected failure opens
+        // the app signed out (sign-in screen) rather than hanging.
+        console.warn('Launch session check failed:', e);
+        if (fbUser && !fbUser.isAnonymous && !verifiedUidRef.current) await endRestoredSession(fbUser.uid);
+        else setAuthUser(fbUser);
+      } finally {
+        clearTimeout(failSafe);
+        setLoading(false);
       }
-      setAuthUser(fbUser);
-      setLoading(false);
     });
-    return unsub;
+    return () => { clearTimeout(failSafe); unsub(); };
+  }, []);
+
+  // Offline-opened session: re-check with the server whenever the app comes
+  // to the foreground, until it gets a real answer.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', async state => {
+      if (state !== 'active' || !offlineSession.current || !auth.currentUser) return;
+      const trust = await checkLoginTrust(8000);
+      if (trust.offline) return;
+      offlineSession.current = false;
+      if (!trust.trusted) await endRestoredSession(auth.currentUser.uid);
+      else if (trust.mrn) {
+        serverMrn.current = { uid: auth.currentUser.uid, mrn: trust.mrn };
+        setMrn(trust.mrn);
+      }
+    });
+    return () => sub.remove();
   }, []);
 
   // Guests have no second factor; everyone else must have passed it for the

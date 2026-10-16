@@ -18,6 +18,7 @@ import { auth, db, listen } from './firebase';
 const QUERIES = {
   vaccinations: () => query(collection(db, 'vaccinations'), orderBy('createdAt', 'desc')),
   appointments: () => query(collection(db, 'appointments'), orderBy('createdAt', 'desc')),
+  appointmentSlots: () => collection(db, 'appointmentSlots'),
   inventory: () => query(collection(db, 'inventory'), orderBy('name', 'asc')),
   admins: () => collection(db, 'admins'),
   archived: () => query(collection(db, 'vaccinations'), where('isArchived', '==', true)),

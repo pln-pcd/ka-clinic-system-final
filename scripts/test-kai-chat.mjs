@@ -13,16 +13,16 @@ import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 
 const DISCLAIMER = 'This chatbot does not provide medical advice. For urgent or medical concerns, contact the clinic or a licensed healthcare professional.';
+const MED = "can't answer medical questions";
+const MORE = 'Could you tell me a little more';
 const CASES = [
+  ['vaccine', MED], ['rabies', MED], ['Rabies', MED], ['medicine', MED], ['dose', MED],
+  ['booster', MED], ['can i take medicine', MED],
+  ['hello', MORE], ['help', MORE],
   ['what is my name', "can't look up your personal details"],
-  ['what is my MRN', "can't look up your personal details"],
-  ['vaccine', 'Could you tell me a little more'],
-  ['rabies', 'Could you tell me a little more'],
-  ['Rabies', 'Could you tell me a little more'],
-  ['what is rabies?', "can't answer medical questions"],
-  ['do I need a booster?', "can't answer medical questions"],
-  ['clinic hours?', 'Office Hours'],
-  ['how do I book?', 'Booking an Appointment'],
+  ['what is rabies?', MED],
+  ['clinic hours?', 'office hours'],
+  ['how do I book an appointment?', 'How to book an appointment'],
   ['where is the clinic?', 'K&A Animal Bite Center'],
 ];
 
@@ -50,6 +50,7 @@ try {
     await page.waitForTimeout(400);
     assert.equal(await popup.count(), 0, `"${prompt}" opened the staff pop-up`);
     console.log(`PASS "${prompt}" → ${expected}`);
+    if (prompt === 'can i take medicine') await page.screenshot({ path: '.tmp/ui-checks/kai-after-medical.png' });
   }
   const body = await page.locator('body').innerText();
   assert(!/I can't help with medical questions/.test(body), 'old refusal wording still shown');

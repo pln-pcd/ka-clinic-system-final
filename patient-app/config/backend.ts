@@ -19,6 +19,7 @@ import {
 // @ts-ignore — getReactNativePersistence exists at runtime in firebase/auth but is
 // missing from the published v10 type defs for React Native builds.
 import { getReactNativePersistence } from 'firebase/auth';
+import { withTimeout } from '../utils/timeout';
 import { Platform } from 'react-native';
 import { getDeviceId, getTrustToken, setTrustToken } from './appPrefs';
 import {
@@ -231,18 +232,33 @@ export type SendOtpResult = {
 // dev-server HTML, which is why an unconfigured API_BASE_URL surfaces as a
 // confusing "JSON Parse error: Unexpected character: <" instead of a clear
 // message). Fail fast with an actionable error instead.
-async function postToApi<T>(path: string, body: unknown, idToken?: string): Promise<T> {
+// Every call has a deadline (default 20 s): a request that never answers
+// (dead network, captive portal) fails instead of hanging the screen. A
+// failure that never reached the server is marked `offline`.
+async function postToApi<T>(path: string, body: unknown, idToken?: string, timeoutMs = 20000): Promise<T> {
   if (!API_BASE_URL) {
     throw new Error('The clinic server address is not configured for this app build (no EXPO_PUBLIC_API_BASE_URL and no app.json extra.apiBaseUrl). Contact the clinic if this keeps happening.');
   }
   if (!USE_EMULATOR && !API_BASE_URL.startsWith('https://')) throw new Error('Clinic server requires HTTPS.');
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (idToken) headers.Authorization = `Bearer ${idToken}`;
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch {
+    const err: any = new Error('Could not reach the clinic server. Please check your connection and try again.');
+    err.offline = true;
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
   let data: any;
   try {
     data = await res.json();
@@ -280,7 +296,8 @@ export const completeEmailSignup = async (record: AuthorizedPatient, password: s
   const data = await postToApi<{ uid: string; customToken: string }>('/api/verify-otp', { action: 'complete-signup', mrn: record.mrn, password, verificationToken: record.verificationToken });
   const credential = await signInWithCustomToken(auth, data.customToken);
   if (record.name && credential.user.displayName !== record.name) {
-    await _updateProfile(credential.user, { displayName: record.name }).catch(() => {});
+    // Not awaited: the display name is cosmetic and must not delay sign-up.
+    _updateProfile(credential.user, { displayName: record.name }).catch(() => {});
   }
   return credential.user;
 };
@@ -295,31 +312,37 @@ const describeDevice = () =>
   Platform.OS === 'android' ? `Android device · ${Platform.Version ?? ''}` :
   'Web browser';
 
+// Refreshing an expired ID token is a network call: bounded like the API.
 const currentIdToken = async (): Promise<string> => {
   const u = auth.currentUser;
   if (!u) throw new Error('Not signed in.');
-  return u.getIdToken();
+  return withTimeout(u.getIdToken(), 10000, 'Session refresh');
 };
 
 /** Server-side answer to "is THIS install trusted?". Never sends mail. Any
  *  failure (network, missing token, bad token) resolves to not trusted. When
  *  trusted, the server also returns the one MRN this session is for. The
  *  keystore reads and the ID token are fetched in parallel. */
-export type TrustResult = { trusted: boolean; mrn: string | null };
-export const checkLoginTrust = async (): Promise<TrustResult> => {
+export type TrustResult = { trusted: boolean; mrn: string | null; offline?: boolean; hasToken?: boolean };
+export const checkLoginTrust = async (timeoutMs = 20000): Promise<TrustResult> => {
+  let hasToken = false;
   try {
-    const [trustToken, deviceId, idToken] = await Promise.all([getTrustToken(), getDeviceId(), currentIdToken()]);
-    if (!trustToken) return { trusted: false, mrn: null };
-    const data = await postToApi<{ trusted: boolean; mrn?: string }>('/api/send-otp', { action: 'login-check', deviceId, trustToken }, idToken);
+    const trustToken = await getTrustToken();
+    hasToken = !!trustToken;
+    if (!trustToken) return { trusted: false, mrn: null, hasToken };
+    const [deviceId, idToken] = await Promise.all([getDeviceId(), currentIdToken()]);
+    const data = await postToApi<{ trusted: boolean; mrn?: string }>('/api/send-otp', { action: 'login-check', deviceId, trustToken }, idToken, timeoutMs);
     if (data.trusted !== true) {
       // Server rejected it (expired / revoked / reinstall mismatch): drop it so
       // we stop presenting a dead token.
       await setTrustToken(null);
-      return { trusted: false, mrn: null };
+      return { trusted: false, mrn: null, hasToken };
     }
-    return { trusted: true, mrn: data.mrn || null };
-  } catch {
-    return { trusted: false, mrn: null };
+    return { trusted: true, mrn: data.mrn || null, hasToken };
+  } catch (e: any) {
+    // No answer from the server (offline / timeout) is not a "no": the
+    // caller decides, with the token still in place.
+    return { trusted: false, mrn: null, offline: !!e?.offline, hasToken };
   }
 };
 

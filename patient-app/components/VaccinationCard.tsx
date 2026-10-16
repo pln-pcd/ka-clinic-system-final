@@ -33,6 +33,8 @@ export type CardData = {
   doses: CardDoseRow[];
   /** On both faces of a previous treatment's card, e.g. "PREVIOUS TREATMENT · Mar 2 – Mar 30, 2025". */
   tag?: string;
+  /** The clinic's note for the patient (patient-facing field), or '' for none. */
+  notes: string;
 };
 
 type ShotRef = React.RefObject<React.ComponentRef<typeof ViewShot> | null>;
@@ -128,8 +130,9 @@ function Rows({ v, rows }: { v: Sizes; rows: CardRow[] }) {
 }
 
 // Original columns: Dose 1.1 · Vaccine/Dosage 2.1 · Date 1.1. Status (kept
-// from 1.0.5) takes its width from Vaccine/Dosage.
-const COLS = [1.1, 1.6, 1.1, 1.0];
+// from 1.0.5) is only as wide as its short labels ("Given", "Upcoming"); the
+// width it frees goes to Dose so "Session 1 (Day 0)" stays on one line.
+const COLS = [1.75, 1.5, 1.1, 0.8];
 
 function Front({ v, d }: { v: Sizes; d: CardData }) {
   return (
@@ -154,11 +157,39 @@ function Front({ v, d }: { v: Sizes; d: CardData }) {
   );
 }
 
-function Back({ v, d }: { v: Sizes; d: CardData }) {
+// Clinical Notes: a bordered box under the profile rows that fills the rest
+// of the back. Long notes are cut at a fixed number of lines so they can never
+// change the card's size; the enlarged card shows more lines, and the hint
+// points there when a note is cut.
+function NotesBox({ v, text, variant, onContent }: { v: Sizes; text: string; variant: 'inline' | 'popup'; onContent: (h: number) => void }) {
+  const [cut, setCut] = useState(false);
+  const maxLines = variant === 'popup' ? 8 : 3;
   return (
-    <View>
-      <Header v={v} title={d.backTitle} subtitle={d.backSubtitle} tag={d.tag} />
-      <Rows v={v} rows={d.backRows} />
+    <View style={[st.notesBox, { marginTop: v.tableTop, padding: v.rowGap, borderRadius: v.tableRadius }]}>
+      <View onLayout={e => onContent(e.nativeEvent.layout.height)}>
+        <Text style={[st.fieldLabel, { fontSize: v.label, letterSpacing: v.labelSpacing }]}>Clinical Notes</Text>
+        <Text
+          testID="notes-text"
+          style={[st.notesTxt, { fontSize: v.value * 0.95, lineHeight: v.value * 1.35, marginTop: v.valueGap }, !text && st.notesEmpty]}
+          numberOfLines={maxLines}
+          onTextLayout={e => setCut(!!text && e.nativeEvent.lines.length >= maxLines && text.length > 40)}
+        >
+          {text || 'No clinical notes'}
+        </Text>
+        {cut && variant === 'inline' ? <Text style={[st.notesHint, { fontSize: v.label }]}>Tap Enlarge Card to read more.</Text> : null}
+      </View>
+    </View>
+  );
+}
+
+function Back({ v, d, variant, onTop, onNotes }: { v: Sizes; d: CardData; variant: 'inline' | 'popup'; onTop: (h: number) => void; onNotes: (h: number) => void }) {
+  return (
+    <View style={{ flex: 1 }}>
+      <View onLayout={e => onTop(e.nativeEvent.layout.height)}>
+        <Header v={v} title={d.backTitle} subtitle={d.backSubtitle} tag={d.tag} />
+        <Rows v={v} rows={d.backRows} />
+      </View>
+      <NotesBox v={v} text={d.notes} variant={variant} onContent={onNotes} />
     </View>
   );
 }
@@ -168,7 +199,12 @@ export default function VaccinationCard({ variant, data, flipped, frontRef, back
   const v = sizesFor(variant);
   const { width: winW, height: winH } = useWindowDimensions();
   const [frontH, setFrontH] = useState(0);
-  const [backH, setBackH] = useState(0);
+  // The back's natural height: header + rows, plus the notes box at its
+  // content height (the box then stretches to fill the shared height).
+  const [backTop, setBackTop] = useState(0);
+  const [notesContent, setNotesContent] = useState(0);
+  const notesChrome = v.tableTop + v.rowGap * 2 + 2;
+  const backH = backTop > 0 && notesContent > 0 ? backTop + notesContent + notesChrome : 0;
   const measured = frontH > 0 && backH > 0;
   // Inner (ViewShot) height shared by both faces: the front's, unless the
   // back would otherwise be clipped.
@@ -187,9 +223,9 @@ export default function VaccinationCard({ variant, data, flipped, frontRef, back
     ? { transform: [{ perspective: 1200 }, { rotateY: `${interpolate(flip.value, [0, 1], [180, 360])}deg` }], backfaceVisibility: 'hidden' as const }
     : { opacity: flip.value < 0.5 ? 0 : 1 }));
 
+  const keep = (set: React.Dispatch<React.SetStateAction<number>>) => (h: number) => set(p => (Math.abs(p - h) < 0.5 ? p : h));
   const face = (side: 'front' | 'back') => {
-    const set = side === 'front' ? setFrontH : setBackH;
-    const onBody = (e: LayoutChangeEvent) => { const h = e.nativeEvent.layout.height; set(p => (Math.abs(p - h) < 0.5 ? p : h)); };
+    const onBody = (e: LayoutChangeEvent) => keep(setFrontH)(e.nativeEvent.layout.height);
     const hidden = side === 'front' ? flipped : !flipped;
     return (
       <Animated.View
@@ -203,7 +239,9 @@ export default function VaccinationCard({ variant, data, flipped, frontRef, back
         <ViewShot ref={side === 'front' ? frontRef : backRef} options={{ format: 'png', quality: 1 }}
           style={[st.shot, measured && { height: inner }]}>
           <View testID={`shot-${variant}-${side}`} style={StyleSheet.absoluteFill} pointerEvents="none" />
-          <View onLayout={onBody}>{side === 'front' ? <Front v={v} d={data} /> : <Back v={v} d={data} />}</View>
+          {side === 'front'
+            ? <View onLayout={onBody}><Front v={v} d={data} /></View>
+            : <Back v={v} d={data} variant={variant} onTop={keep(setBackTop)} onNotes={keep(setNotesContent)} />}
         </ViewShot>
       </Animated.View>
     );
@@ -246,6 +284,10 @@ const st = StyleSheet.create({
     backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#CBD5E1', overflow: 'hidden',
   },
   shot: { backgroundColor: '#FFFFFF' },
+  notesBox: { flexGrow: 1, borderWidth: 1, borderColor: '#CBD5E1', backgroundColor: '#F8FAFC' },
+  notesTxt: { fontWeight: '600', color: '#0F172A' },
+  notesEmpty: { color: '#94A3B8', fontStyle: 'italic', fontWeight: '500' },
+  notesHint: { color: '#2563EB', fontWeight: '700', marginTop: verticalScale(2) },
   tag: { alignSelf: 'center', backgroundColor: '#FEF3C7', borderColor: '#FDE68A', borderWidth: 1, borderRadius: scale(6), paddingHorizontal: scale(8), paddingVertical: verticalScale(2), marginBottom: verticalScale(4) },
   tagTxt: { fontWeight: '800', color: '#92400E', letterSpacing: 0.3, textAlign: 'center' },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },

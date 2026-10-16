@@ -325,7 +325,7 @@ function HistoryFields({ form, set, v, variant = 'wizard' }) {
   );
   const label = (k, htmlFor, required) => (
     <label htmlFor={htmlFor} className={isEdit ? EDIT_LABEL : undefined}>
-      {k === 'notes' ? 'Clinical notes' : fieldLabel(k).replace('Known Allergies', 'Allergies')}
+      {k === 'notes' ? 'Clinical notes (staff only)' : fieldLabel(k).replace('Known Allergies', 'Allergies')}
       {required && (isEdit ? <span style={{ color: '#C8151A' }}> *</span> : <Req />)}
     </label>
   );
@@ -351,7 +351,22 @@ function HistoryFields({ form, set, v, variant = 'wizard' }) {
   );
   const invalidIfOneOf = k => (cfg.oneOf.includes(k) && oneOfError ? { 'aria-invalid': true } : {});
 
-  return cfg.history.map(k => {
+  // The one note the patient sees: shown under "Clinical Notes" on the back
+  // of their vaccination card in the app. Clinical notes above stay internal.
+  const patientNoteField = wrap('patientNote', true, <>
+    <label htmlFor={`${p}-patientNote`} className={isEdit ? EDIT_LABEL : undefined}>Note for patient (shown on their vaccination card)</label>
+    <textarea id={`${p}-patientNote`} value={form.patientNote || ''} maxLength={PATIENT_NOTE_MAX}
+      onChange={e => set('patientNote', e.target.value)}
+      placeholder="e.g. Bring this card to every visit. No medical details staff would not share with the patient."
+      rows={isEdit ? 2 : 3}
+      className={isEdit ? `${EDIT_INPUT} resize-y` : undefined}
+      style={isEdit ? undefined : { resize: 'none', height: 84, overflowY: 'auto' }} />
+    <span className={isEdit ? 'block mt-1 text-[11px] text-slate-400' : 'apw-help'}>
+      Visible to the patient in the app. {(form.patientNote || '').length}/{PATIENT_NOTE_MAX} characters
+    </span>
+  </>);
+
+  return [...cfg.history.map(k => {
     switch (k) {
       case 'pastVaccines':
         return wrap(k, false, <>
@@ -403,8 +418,11 @@ function HistoryFields({ form, set, v, variant = 'wizard' }) {
       default:
         return null;
     }
-  });
+  }), patientNoteField];
 }
+
+// Long enough for a short instruction; the card shows 3 lines (8 enlarged).
+export const PATIENT_NOTE_MAX = 300;
 
 /* ─────────────────────────── ADD PATIENT MODAL (MULTI-STEP WIZARD) ─────────────────────────── */
 export function AddPatientModal({ onClose, onAdd, initialPatient = null }) {
@@ -450,6 +468,7 @@ export function AddPatientModal({ onClose, onAdd, initialPatient = null }) {
     pastVaccinesOther: '',
     allergies: '',
     notes: '',
+    patientNote: '',
     /* Tetanus */
     woundType: '',
     lastTetanus: '',
@@ -1000,7 +1019,7 @@ export function EditPatientModal({ patient, onClose, onSave, inventoryItems = []
     date: patient.date || today(),
     woundLocation: patient.woundLocation || '', woundDepth: patient.woundDepth || '', numberOfBites: patient.numberOfBites || '',
     pastVaccines: patient.pastVaccines || '', pastVaccinesOther: patient.pastVaccinesOther || '',
-    allergies: patient.allergies || '', notes: patient.notes || '',
+    allergies: patient.allergies || '', notes: patient.notes || '', patientNote: patient.patientNote || '',
     woundType: patient.woundType || '', lastTetanus: patient.lastTetanus || '',
     pneumoHistory: patient.pneumoHistory || '', pneumoHistoryOther: patient.pneumoHistoryOther || '',
     riskCondition: patient.riskCondition || '',

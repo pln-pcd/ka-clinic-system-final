@@ -3,9 +3,13 @@ import { clinicToday, doseBrand, doseState, doseStatus, EMPTY, formatDoseDate } 
 import { moderateScale, scale, verticalScale } from '../utils/scale';
 
 // The dose timeline table: one row per dose of the CURRENT treatment, with
-// the original (pre-1.0.4) design — dark header, Dose · Vaccine · Dosage ·
-// Date · Status, alternating rows, status badges. Cells wrap onto extra lines
-// instead of cutting text off with "…", so every value shows in full.
+// the original (pre-1.0.4) design — dark header, Dose · Vaccine · Date ·
+// Status, alternating rows, status badges (the Dosage column was removed in
+// 1.0.7). Cells wrap onto extra lines instead of cutting text off with "…",
+// so every value shows in full.
+
+// Column widths, shared by the header and the rows.
+const COL = { dose: 1.35, vaccine: 1.6, date: 1.15, status: 0.95 };
 
 type Props = { doses: any[]; record: any; today?: string };
 
@@ -13,26 +17,23 @@ export default function DoseTable({ doses, record, today = clinicToday() }: Prop
   return (
     <View style={s.card}>
       <View style={s.headRow}>
-        <Text style={[s.headCell, { flex: 1.1 }]}>DOSE</Text>
-        <Text style={[s.headCell, { flex: 1.4 }]}>VACCINE</Text>
-        <Text style={[s.headCell, { flex: 1.1 }]}>DOSAGE</Text>
-        <Text style={[s.headCell, { flex: 1.0 }]}>DATE</Text>
-        <Text style={[s.headCell, { flex: 0.9, textAlign: 'center' }]}>STATUS</Text>
+        <Text style={[s.headCell, { flex: COL.dose }]}>DOSE</Text>
+        <Text style={[s.headCell, { flex: COL.vaccine }]}>VACCINE</Text>
+        <Text style={[s.headCell, { flex: COL.date }]}>DATE</Text>
+        <Text style={[s.headCell, { flex: COL.status, textAlign: 'center' }]}>STATUS</Text>
       </View>
       {doses.map((d: any, idx: number) => {
         const st = doseStatus(d, today);
         const vaccine = d.blankRow ? EMPTY : doseBrand(d, record, doseState(d, today));
-        const dosage = d.blankRow ? EMPTY : (d.dosage || record?.route || EMPTY);
         const tone = st.status === 'given' ? 'done' : st.status === 'overdue' ? 'missed' : st.status === 'due_today' ? 'today' : 'pending';
         const badge = { done: s.badge_done, missed: s.badge_missed, today: s.badge_today, pending: s.badge_pending }[tone];
         const badgeTxt = { done: s.badgeTxt_done, missed: s.badgeTxt_missed, today: s.badgeTxt_today, pending: s.badgeTxt_pending }[tone];
         return (
           <View key={d.id || d.key || idx} style={[s.row, idx % 2 === 1 && s.rowAlt, idx === doses.length - 1 && { borderBottomWidth: 0 }]}>
-            <Text style={[s.value, { flex: 1.1, fontWeight: '700', color: '#1E293B' }]}>{d.label || d.n || `Dose ${idx + 1}`}</Text>
-            <Text style={[s.value, { flex: 1.4 }]}>{vaccine}</Text>
-            <Text style={[s.value, { flex: 1.1 }]}>{dosage}</Text>
-            <Text style={[s.value, { flex: 1.0 }]}>{d.date ? formatDoseDate(d.date) : EMPTY}</Text>
-            <View style={{ flex: 0.9, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={[s.value, { flex: COL.dose, fontWeight: '700', color: '#1E293B' }]}>{d.label || d.n || `Dose ${idx + 1}`}</Text>
+            <Text style={[s.value, { flex: COL.vaccine }]}>{vaccine}</Text>
+            <Text style={[s.value, { flex: COL.date }]}>{d.date ? formatDoseDate(d.date) : EMPTY}</Text>
+            <View style={{ flex: COL.status, alignItems: 'center', justifyContent: 'center' }}>
               <View style={[s.badge, badge]}>
                 <Text style={[s.badgeTxt, badgeTxt]}>{d.blankRow ? EMPTY : st.label}</Text>
               </View>

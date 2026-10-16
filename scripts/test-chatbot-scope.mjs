@@ -10,7 +10,7 @@
 //
 // Categories: in_scope (answered) · personal_nav (navigation only, no dates)
 //             personal_info (own name / MRN / contact: says which screen)
-//             vague (bare topic word: asks what the user needs)
+//             vague (not medical, not in scope: asks what the user needs)
 //             clinical (blocked, refusal + disclaimer) · out_of_scope
 import * as server from '../api/_lib/chatbotRules.js';
 
@@ -25,9 +25,21 @@ export const CASES = [
   // ── 1.0.5 reply types (out of scope / vague / medical) ──
   ['what is my name', 'personal_info'],
   ['what is my MRN', 'personal_info'],
-  ['vaccine', 'vague'],
-  ['rabies', 'vague'],
-  ['Rabies', 'vague'],
+  ['vaccine', 'clinical'],
+  ['rabies', 'clinical'],
+  ['Rabies', 'clinical'],
+  ['medicine', 'clinical'],
+  ['dose', 'clinical'],
+  ['booster', 'clinical'],
+  ['bite', 'clinical'],
+  ['PEP', 'clinical'],
+  ['PrEP', 'clinical'],
+  ['wound', 'clinical'],
+  ['can i take medicine', 'clinical'],
+  ['hello', 'vague'],
+  ['help', 'vague'],
+  ['?', 'vague'],
+  ['hmm', 'vague'],
   ['what is rabies?', 'clinical'],
   ['do I need a booster?', 'clinical'],
   ['clinic hours?', 'in_scope'],
@@ -59,7 +71,7 @@ export const CASES = [
   ['How do I reset my password?', 'in_scope'],
   ['How do I change my profile photo?', 'in_scope'],
   ['How do I talk to staff?', 'in_scope'],
-  ['hello', 'in_scope'],
+  ['hello there', 'vague'],
   ['salamat', 'in_scope'],
   // ── Personal schedule: navigation only, never dates ──
   ['When is my next dose?', 'personal_nav'],
@@ -108,7 +120,7 @@ export const CASES = [
 
 // Fixed replies must never carry medical content or emergency instructions.
 const NO_MEDICAL = /\b(day\s*0|day\s*3|day\s*7|day\s*28|regimen|wound|first\s*aid|emergency\s+room|nearest\s+(animal\s+bite|hospital|abtc)|category\s*(ii|iii|2|3)|₱)\b/i;
-const REPLIES = ['BLOCKED_REPLY', 'BLOCKED_REPLY_APP', 'VAGUE_REPLY', 'PERSONAL_INFO_REPLY_APP', 'PERSONAL_INFO_REPLY_PUBLIC', 'PERSONAL_NAV_REPLY_APP', 'PERSONAL_NAV_REPLY_PUBLIC', 'OUT_OF_SCOPE_REPLY', 'GREETING_REPLY', 'HOURS_REPLY', 'CONTACT_REPLY', 'SERVICES_REPLY', 'PRICE_REPLY', 'BOOKING_REPLY', 'APP_NAV_REPLY'];
+const REPLIES = ['BLOCKED_REPLY', 'BLOCKED_REPLY_APP', 'VAGUE_REPLY', 'PERSONAL_INFO_REPLY_APP', 'PERSONAL_INFO_REPLY_PUBLIC', 'PERSONAL_NAV_REPLY_APP', 'PERSONAL_NAV_REPLY_PUBLIC', 'OUT_OF_SCOPE_REPLY', 'HOURS_REPLY', 'CONTACT_REPLY', 'SERVICES_REPLY', 'PRICE_REPLY', 'BOOKING_REPLY', 'APP_NAV_REPLY'];
 
 let failures = 0;
 const rows = [];

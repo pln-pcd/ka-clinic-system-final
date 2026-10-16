@@ -80,41 +80,40 @@ const SUGGESTIONS = [
   { icon: 'phone-portrait', label: 'How do I use this app?' },
 ];
 
-function renderFormattedMessage(rawText: string, isPatient: boolean) {
-  if (!rawText) return null;
-  // 1. Normalize line bullets and remove markdown heading hashes
-  const cleaned = rawText
-    .replace(/^#{1,6}\s+/gm, '')
-    .replace(/^[\*\-\+]\s+/gm, '• ')
-    .replace(/\n[\*\-\+]\s+/g, '\n• ');
-
-  // 2. Parse bold blocks: **bold** or <b>bold</b>
-  const regex = /(\*\*.*?\*\*|<b>.*?<\/b>)/gs;
-  const parts = cleaned.split(regex);
-
-  return parts.map((part, idx) => {
+// **bold** / <b>bold</b> spans inside one line of text.
+function renderInline(line: string, isPatient: boolean) {
+  return line.split(/(\*\*.*?\*\*|<b>.*?<\/b>)/g).map((part, idx) => {
     if (!part) return null;
-    const isBold =
-      (part.startsWith('**') && part.endsWith('**')) ||
-      (part.startsWith('<b>') && part.endsWith('</b>'));
+    const isBold = (part.startsWith('**') && part.endsWith('**') && part.length > 4) || (part.startsWith('<b>') && part.endsWith('</b>'));
     if (isBold) {
-      const inner = part.startsWith('**') ? part.slice(2, -2) : part.slice(3, -4);
-      const cleanInner = inner.replace(/\*/g, '');
+      const inner = (part.startsWith('**') ? part.slice(2, -2) : part.slice(3, -4)).replace(/\*/g, '');
+      return <Text key={idx} style={{ fontWeight: '800', color: isPatient ? '#FFFFFF' : '#0F172A' }}>{inner}</Text>;
+    }
+    // Plain text: strip stray asterisks or markdown backticks.
+    return part.replace(/\*/g, '').replace(/`/g, '');
+  });
+}
+
+// A reply rendered line by line. Bullet ("• ", "- ", "* ") and numbered
+// ("1. ") lines get a fixed marker column, so a long item that wraps stays
+// indented under its own text instead of returning to the marker's edge.
+// Bold is parsed per line, so it can never run across lines.
+function renderFormattedMessage(rawText: string, isPatient: boolean, textStyle: any) {
+  if (!rawText) return null;
+  const lines = rawText.replace(/^#{1,6}\s+/gm, '').split('\n');
+  return lines.map((line, i) => {
+    if (!line.trim()) return <View key={i} style={{ height: verticalScale(8) }} />;
+    const bullet = line.match(/^\s*[•\-*+]\s+(.*)$/);
+    const numbered = line.match(/^\s*(\d+)[.)]\s+(.*)$/);
+    if (bullet || numbered) {
       return (
-        <Text
-          key={idx}
-          style={{
-            fontWeight: '800',
-            color: isPatient ? '#FFFFFF' : '#0F172A',
-          }}
-        >
-          {cleanInner}
-        </Text>
+        <View key={i} style={s.listRow}>
+          <Text style={[textStyle, s.listMarker]}>{bullet ? '•' : `${numbered![1]}.`}</Text>
+          <Text style={[textStyle, s.listText]}>{renderInline(bullet ? bullet[1] : numbered![2], isPatient)}</Text>
+        </View>
       );
     }
-    // Plain text: strip out any stray raw asterisks or markdown backticks
-    const plain = part.replace(/\*/g, '').replace(/`/g, '');
-    return plain;
+    return <Text key={i} style={textStyle}>{renderInline(line, isPatient)}</Text>;
   });
 }
 
@@ -657,9 +656,9 @@ export default function ChatScreen() {
                         <Text style={[s.senderLabel, isPatient && s.senderLabelOwn]}>{senderLabel}</Text>
                       )}
                       <View style={[s.bubble, isPatient ? s.bubbleUser : s.bubbleAi]}>
-                        <Text style={[s.msgText, isPatient && { color: '#fff' }]}>
-                          {renderFormattedMessage(m.text, isPatient)}
-                        </Text>
+                        <View>
+                          {renderFormattedMessage(m.text, isPatient, [s.msgText, isPatient && { color: '#fff' }])}
+                        </View>
                       </View>
                       {m.localStatus === 'sending' && (
                         <View style={s.msgStatusRow}><Text style={s.msgStatusTxt}>Sending…</Text></View>
@@ -697,12 +696,18 @@ export default function ChatScreen() {
               "Talk to clinic staff?" pop-up. Filled after a medical question. */}
           {mode === 'bot' && threadLoaded && !openThreadId && (
             <View style={s.actionRow}>
+              {/* key: each look is its own native view. Restyling one view in
+                  place (outlined → navy after a medical reply) left Android
+                  with a navy bar whose icon and label never redrew. */}
               <Tap
+                key={staffButtonUrgent ? 'staff-urgent' : 'staff-plain'}
                 style={staffButtonUrgent ? s.flexBtnPrimary : s.flexBtnSecondary}
+                rippleColor={staffButtonUrgent ? 'rgba(255,255,255,0.22)' : 'rgba(30,58,138,0.10)'}
                 onPress={onStaffButtonPress}
                 disabled={escalating}
                 activeOpacity={0.7}
                 accessibilityRole="button"
+                accessibilityLabel="Talk to clinic staff"
               >
                 {escalating ? (
                   <ActivityIndicator color={staffButtonUrgent ? '#fff' : C.red} size="small" />
@@ -1034,6 +1039,9 @@ const s = StyleSheet.create({
     lineHeight: moderateScale(22),
     color: C.text,
   },
+  listRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  listMarker: { width: scale(20), fontWeight: '700' },
+  listText: { flex: 1, minWidth: 0 },
 
   botActions: {
     marginHorizontal: scale(16),

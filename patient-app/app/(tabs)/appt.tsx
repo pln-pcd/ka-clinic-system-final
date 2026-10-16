@@ -5,7 +5,6 @@ import { useRouter } from 'expo-router';
 import { resetTo } from '../../utils/navigation';
 import { clinicToday } from '../../utils/patientRecord';
 import {
-  addDoc,
   collection,
   doc,
   onSnapshot,
@@ -545,12 +544,14 @@ export default function AppointmentsScreen() {
 
     setSaving(true);
     try {
-      // Claim the hour first, inside a transaction. Whoever creates the slot doc
-      // wins; a second patient racing for the same hour reads an existing doc and
-      // aborts here, before any appointment is written. The success toast is only
-      // shown after this resolves — announcing it earlier would tell the loser of
-      // a race that their booking succeeded.
+      // The hour and the appointment are written in ONE transaction: whoever
+      // creates the slot doc wins, a second patient racing for the same hour
+      // reads an existing doc and aborts before anything is written, and a
+      // booking that fails can never leave a slot marked "Full" with no
+      // appointment behind it (both are saved, or neither). The success
+      // toast is only shown after this resolves.
       const slotRef = doc(db, 'appointmentSlots', slotId(selectedKey, selectedTime));
+      const apptRef = doc(collection(db, 'appointments'));
       await runTransaction(db, async tx => {
         const existing = await tx.get(slotRef);
         if (existing.exists()) throw new Error('SLOT_TAKEN');
@@ -560,35 +561,34 @@ export default function AppointmentsScreen() {
           heldBy:    user.uid,
           createdAt: Date.now(),
         });
+        tx.set(apptRef, {
+          userId:        user.uid,
+          patientUid:    user.uid,
+          patientId:     mrn,
+          email:         user.email || '',
+          name:          patientForm.name.trim(),
+          age:           patientForm.age.trim(),
+          gender:        patientForm.gender,
+          address:       patientForm.address.trim(),
+          contactNumber: patientForm.contactNumber.trim(),
+          date:          selectedKey,
+          time:          selectedTime,
+          // The admin's own service value (APPT_SERVICES).
+          type:          apptService,
+          status:        'pending',
+          // Distinguishes an in-app booking from a walk-in the clinic keyed in and
+          // from the landing page's 'online' form — the dashboard groups on this.
+          source:        'app',
+          note:          '',
+          ...(patientNote.trim() ? { notes: patientNote.trim().slice(0, NOTE_MAX) } : {}),
+          createdAt:     Date.now(),
+        });
       });
 
       setShowDetailsForm(false);
       setApptService('');
       setShowToast(true);
       setTimeout(() => setShowToast(false), 4000);
-
-      await addDoc(collection(db, 'appointments'), {
-        userId:        user.uid,
-        patientUid:    user.uid,
-        patientId:     mrn,
-        email:         user.email || '',
-        name:          patientForm.name.trim(),
-        age:           patientForm.age.trim(),
-        gender:        patientForm.gender,
-        address:       patientForm.address.trim(),
-        contactNumber: patientForm.contactNumber.trim(),
-        date:          selectedKey,
-        time:          selectedTime,
-        // The admin's own service value (APPT_SERVICES).
-        type:          apptService,
-        status:        'pending',
-        // Distinguishes an in-app booking from a walk-in the clinic keyed in and
-        // from the landing page's 'online' form — the dashboard groups on this.
-        source:        'app',
-        note:          '',
-        ...(patientNote.trim() ? { notes: patientNote.trim().slice(0, NOTE_MAX) } : {}),
-        createdAt:     Date.now(),
-      });
       setShowSuccess(true);
     } catch (e: any) {
       console.error('Booking error:', e);

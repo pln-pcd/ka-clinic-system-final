@@ -43,9 +43,12 @@ export function MobileApp() {
     launched.current = true;
     const segs = segments as string[];
     const atRoot = segs.length === 0 || segs[0] === 'index';
-    // app/index.tsx redirects these and hides the splash itself.
-    if (atRoot && (user || seenOnboarding)) return;
-    SplashScreen.hideAsync().catch(() => {});
+    // Returning users are redirected by app/index.tsx; give that one frame,
+    // then hide. This shell never unmounts, so the timer always fires (in
+    // 1.0.5/1.0.6 the hide lived in index.tsx, whose own redirect unmounted
+    // it and cancelled the timer: the app stayed on the logo).
+    const delay = atRoot && (user || seenOnboarding) ? 150 : 0;
+    setTimeout(() => { SplashScreen.hideAsync().catch(() => {}); }, delay);
   }, [loading]);
 
   useEffect(() => {

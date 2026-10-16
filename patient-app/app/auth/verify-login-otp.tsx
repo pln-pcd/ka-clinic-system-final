@@ -11,6 +11,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { resetTo } from '../../utils/navigation';
 import { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   BackHandler,
   Dimensions,
   Image,
@@ -86,12 +87,21 @@ export default function VerifyLoginOtp() {
     return () => sub.remove();
   }, []);
 
-  const handleVerify = async () => {
-    const code = otpDigits.join('');
+  // One verification at a time: the 6th digit, a paste/autofill and a tap on
+  // the button can all arrive together, so a ref (not state) guards it.
+  const verifyingRef = useRef(false);
+  // The last code the server rejected is never sent again automatically.
+  const lastFailedRef = useRef('');
+
+  const handleVerify = async (override?: string, auto = false) => {
+    const code = override ?? otpDigits.join('');
+    if (verifyingRef.current) return;
     if (code.length !== 6) {
-      setError('Please enter the full 6-digit code.');
+      if (!auto) setError('Please enter the full 6-digit code.');
       return;
     }
+    if (auto && code === lastFailedRef.current) return;
+    verifyingRef.current = true;
     setLoading(true);
     setError('');
     try {
@@ -99,10 +109,11 @@ export default function VerifyLoginOtp() {
       completeSecondFactor(issuedMrn);
       resetTo(router, '/(tabs)');
     } catch (e: any) {
+      lastFailedRef.current = code;
       const next = attempts + 1;
       setAttempts(next);
       setOtpDigits(['', '', '', '', '', '']);
-      otpRefs.current[0]?.focus();
+      setTimeout(() => otpRefs.current[0]?.focus(), 50);
       if (next >= MAX_OTP_ATTEMPTS) {
         setError('Too many incorrect attempts. Please sign in again.');
         setTimeout(abandon, 1500);
@@ -110,6 +121,7 @@ export default function VerifyLoginOtp() {
         setError(e?.message || 'Incorrect code. Please try again.');
       }
     } finally {
+      verifyingRef.current = false;
       setLoading(false);
     }
   };
@@ -131,11 +143,32 @@ export default function VerifyLoginOtp() {
     }
   };
 
+  // Typing fills one box and moves on. A paste or keyboard autofill (several
+  // digits at once) fills the boxes from here. When all six are filled the
+  // code is verified straight away; the button stays as a fallback.
   const handleOtpChange = (value: string, index: number) => {
+    if (verifyingRef.current) return;
+    const typed = value.replace(/[^0-9]/g, '');
     const digits = [...otpDigits];
-    digits[index] = value.replace(/[^0-9]/g, '').slice(-1);
-    setOtpDigits(digits);
-    if (value && index < 5) otpRefs.current[index + 1]?.focus();
+    if (typed.length > 1) {
+      const chunk = typed.length >= 6 ? typed.slice(0, 6) : typed;
+      const start = typed.length >= 6 ? 0 : index;
+      chunk.split('').forEach((d, k) => { if (start + k < 6) digits[start + k] = d; });
+      setOtpDigits(digits);
+      const nextEmpty = digits.findIndex(d => !d);
+      if (nextEmpty === -1) otpRefs.current[5]?.blur();
+      else otpRefs.current[nextEmpty]?.focus();
+    } else {
+      digits[index] = typed;
+      setOtpDigits(digits);
+      if (typed && index < 5) otpRefs.current[index + 1]?.focus();
+    }
+    if (error) setError('');
+    const code = digits.join('');
+    if (code.length === 6 && digits.every(Boolean)) {
+      otpRefs.current.forEach(r => r?.blur());
+      handleVerify(code, true);
+    }
   };
 
   const handleOtpKeyPress = (key: string, index: number) => {
@@ -215,7 +248,13 @@ export default function VerifyLoginOtp() {
                   onFocus={() => setFocusedField(`otp${i}`)}
                   onBlur={() => setFocusedField(null)}
                   keyboardType="number-pad"
-                  maxLength={1}
+                  // 6, not 1: a pasted or autofilled code arrives in one box
+                  // and is spread across all six (handleOtpChange).
+                  maxLength={6}
+                  textContentType={i === 0 ? 'oneTimeCode' : 'none'}
+                  autoComplete={i === 0 ? 'sms-otp' : 'off'}
+                  editable={!loading}
+                  accessibilityLabel={`Digit ${i + 1} of 6`}
                   textAlign="center"
                   textAlignVertical="center"
                   selectionColor={NAVY_BLUE}
@@ -227,10 +266,12 @@ export default function VerifyLoginOtp() {
             <Tap
               style={[styles.primaryButton, loading && styles.buttonDisabled]}
               activeOpacity={0.85}
-              onPress={handleVerify}
+              onPress={() => handleVerify()}
               disabled={loading}
+              accessibilityState={{ disabled: loading, busy: loading }}
             >
               <LinearGradient colors={[NAVY_BLUE, '#172554']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.primaryGradient}>
+                {loading && <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: scale(8) }} />}
                 <Text style={styles.primaryButtonText}>{loading ? 'Verifying...' : 'Verify & Sign In'}</Text>
               </LinearGradient>
             </Tap>

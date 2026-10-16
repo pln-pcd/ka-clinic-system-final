@@ -84,6 +84,10 @@ export default function RootLayout() {
 
     // Desktop web never mounts MobileApp, which is what normally hides it.
     if (Platform.OS === 'web') SplashScreen.hideAsync().catch(() => {});
+    // Final safety net: the native splash never outlives 20 s, whatever the
+    // startup path (the auth check itself gives up after 15 s).
+    const t = setTimeout(() => SplashScreen.hideAsync().catch(() => {}), 20000);
+    return () => clearTimeout(t);
   }, []);
 
   return (
