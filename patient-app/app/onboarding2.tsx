@@ -63,10 +63,10 @@ export default function Onboarding2() {
         {/* ILLUSTRATION AREA - 54% SCREEN HEIGHT */}
         <View style={styles.illustrationWrapper}>
           <View style={styles.glassEffect} />
-          <EnterIllustration style={styles.image}>
+          <EnterIllustration>
             <Image
               source={require('../assets/onboarding2.png')}
-              style={StyleSheet.absoluteFill}
+              style={styles.image}
               resizeMode="contain"
             />
           </EnterIllustration>
