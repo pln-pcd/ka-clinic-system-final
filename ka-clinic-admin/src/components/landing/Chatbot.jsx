@@ -74,7 +74,7 @@ export default function Chatbot() {
       setBadge(false);
       setMessages(m => {
         if (m.length === 0) {
-          return [{ role: 'bot', text: "👋 Hello! I'm KAI, the K&A Clinic assistant. I can help with office hours, booking an appointment, how to reach us, and using the app. I don't give medical advice. How can I help?", time: now() }];
+          return [{ role: 'bot', text: "👋 Hello! I'm KAI, the K&A Clinic assistant. I can help with office hours, booking an appointment, how to reach us, and using the app. How can I help?", time: now() }];
         }
         return m;
       });

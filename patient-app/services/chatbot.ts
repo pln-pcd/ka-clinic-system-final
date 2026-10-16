@@ -14,7 +14,9 @@ import {
   BLOCKED_REPLY_APP,
   BOOKING_REPLY,
   OUT_OF_SCOPE_REPLY,
+  PERSONAL_INFO_REPLY_APP,
   PERSONAL_NAV_REPLY_APP,
+  VAGUE_REPLY,
   classifyMessage,
   fixedInScopeReply,
   type ScopeCategory,
@@ -27,7 +29,8 @@ export type ReplyAction = { label: string; target: 'card' | 'appointments' };
 
 export type AssistantReply = {
   text: string;
-  /** Offer "Talk to clinic staff" (blocked medical questions). */
+  /** A blocked medical question: the reply mentions "Talk to clinic staff"
+   *  and that button is highlighted. Never opens the staff pop-up by itself. */
   needsEscalation: boolean;
   category: ScopeCategory;
   action?: ReplyAction;
@@ -39,6 +42,8 @@ export async function askClinicAssistant(prompt: string, history: ChatTurn[] = [
   const category = classifyMessage(prompt);
   if (category === 'clinical') return { text: BLOCKED_REPLY_APP, needsEscalation: true, category };
   if (category === 'personal_nav') return { text: PERSONAL_NAV_REPLY_APP, needsEscalation: false, category, action: CARD_ACTION };
+  if (category === 'personal_info') return { text: PERSONAL_INFO_REPLY_APP, needsEscalation: false, category, action: CARD_ACTION };
+  if (category === 'vague') return { text: VAGUE_REPLY, needsEscalation: false, category };
   if (category === 'out_of_scope') return { text: OUT_OF_SCOPE_REPLY, needsEscalation: false, category };
 
   const fixed = fixedInScopeReply(prompt);
@@ -68,9 +73,9 @@ export async function askClinicAssistant(prompt: string, history: ChatTurn[] = [
   }
 
   // Server unreachable: the booking procedure is the one allowed topic left
-  // without a fixed reply; anything else gets the safe reply.
+  // without a fixed reply; anything else asks what the user needs.
   if (/\b(book|appointment|appt|reserv|cancel|reschedul|slot)/i.test(prompt)) {
     return { text: BOOKING_REPLY, needsEscalation: false, category: 'in_scope', action: { label: 'Open appointments', target: 'appointments' } };
   }
-  return { text: BLOCKED_REPLY_APP, needsEscalation: true, category: 'clinical' };
+  return { text: VAGUE_REPLY, needsEscalation: false, category: 'vague' };
 }

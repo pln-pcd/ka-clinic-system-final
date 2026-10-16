@@ -1,14 +1,16 @@
 // What the vaccination card (components/VaccinationCard.tsx) shows, built
-// from the patient's current record — the same `vaccinations/{mrn}` doc and
-// the same service-to-fields rules (utils/serviceFields.ts) the dashboard
-// uses. Pure, so Home and the layout fixture build it the same way.
+// from one treatment's record — the patient's current `vaccinations/{mrn}`
+// doc, or one previous treatment from its `caseHistory` — using the same
+// service-to-fields rules (utils/serviceFields.ts) the dashboard uses. Pure,
+// so Home, the previous-treatment viewer and the layout fixture all build it
+// the same way.
 //
-// Only PEP has exposure fields (date, type, source animal, category, number
-// of bites, wound washed — the dashboard's patient-visible set); every
-// other service hides them and never shows a PEP label or schedule. Wound
-// location and depth are clinic-only and never shown, and the clinic's
-// internal remarks are not shown either.
-import type { CardData } from '../components/VaccinationCard';
+// Only PEP has exposure fields (date, type, biting animal, category, number
+// of bites, wound washed — the dashboard's patient-visible set); every other
+// service hides them and never shows a PEP label or schedule. Wound location
+// and depth are clinic-only and never shown, and the clinic's internal
+// remarks are not shown either.
+import type { CardData, CardField, CardRow } from '../components/VaccinationCard';
 import { historyRows } from './serviceFields';
 import {
   caseStatusLabel, clinicToday, displayPatientId, doseBrand, doseState, doseStatus, EMPTY,
@@ -24,9 +26,54 @@ export const GUEST_PLACEHOLDER_DOSES = [
 ];
 const NO_DOSES_ROW = [{ id: 'none', label: 'No doses recorded yet', blankRow: true }];
 
-type Input = { record: any | null; mrn: string | null; isGuest: boolean; displayName?: string | null; today?: string };
+function chunk<T>(list: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
+  return out;
+}
 
-export function buildCardData({ record, mrn, isGuest, displayName, today = clinicToday() }: Input): CardData {
+// ── Previous treatments ───────────────────────────────────────────────────
+// Same split as the dashboard's historicalCaseRecord (ka-clinic-admin/src/
+// features/patients/PatientRecordView.jsx): identity from the patient, the
+// treatment only from its snapshot, so nothing of the current treatment can
+// leak into a past card.
+const CASE_KEYS = [
+  'service', 'date', 'status', 'completedAt', 'closedAt',
+  'cat', 'animal', 'typeOfExposure', 'sourceOfExposure', 'woundWashed', 'numberOfBites', 'vaccineBrand',
+  'pastVaccines', 'pastVaccinesOther', 'allergies', 'woundType', 'lastTetanus',
+  'pneumoHistory', 'pneumoHistoryOther', 'riskCondition', 'doses', 'route',
+];
+export function historicalRecord(patient: any, entry: any): any {
+  const p = patient || {};
+  const caseFields = Object.fromEntries(CASE_KEYS.map(k => [k, entry?.[k] ?? (k === 'doses' ? [] : '')]));
+  return {
+    name: p.name, firstName: p.firstName, middleName: p.middleName, lastName: p.lastName,
+    dob: p.dob, age: p.age, sex: p.sex, contact: p.contact, id: p.id, mrn: p.mrn,
+    ...caseFields,
+    service: entry?.service || 'PEP',
+    status: entry?.status || 'completed',
+    caseHistory: [],
+  };
+}
+
+// completedAt is a 'YYYY-MM-DD' clinic date; closedAt is epoch ms.
+export const toYmd = (v: any): string => {
+  if (typeof v === 'number') return clinicToday(new Date(v));
+  if (v && typeof v.toDate === 'function') return clinicToday(v.toDate());
+  return String(v || '').slice(0, 10);
+};
+
+/** "Mar 2, 2025 – Mar 30, 2025" for a previous treatment (start – completion). */
+export function treatmentRange(entry: any): string {
+  const start = entry?.date ? formatDoseDate(entry.date) : EMPTY;
+  const endRaw = entry?.completedAt || entry?.closedAt;
+  return `${start} – ${endRaw ? formatDoseDate(toYmd(endRaw)) : EMPTY}`;
+}
+
+// ── The card ──────────────────────────────────────────────────────────────
+type Input = { record: any | null; mrn: string | null; isGuest: boolean; displayName?: string | null; today?: string; tag?: string };
+
+export function buildCardData({ record, mrn, isGuest, displayName, today = clinicToday(), tag }: Input): CardData {
   const pr = record || {};
   const blank = (v: any) => (v === undefined || v === null || v === '' ? EMPTY : String(v));
   const svc = serviceCopy(pr.service).short;
@@ -42,17 +89,54 @@ export function buildCardData({ record, mrn, isGuest, displayName, today = clini
   const doseList: any[] = realDoses.length ? realDoses : (isGuest ? GUEST_PLACEHOLDER_DOSES : NO_DOSES_ROW);
   const given = realDoses.filter(d => doseState(d, today) === 'done').length;
 
+  // Front: the original three field rows.
+  const purpose: CardField = { label: 'Vaccination Purpose', value: pr.service ? serviceCopy(pr.service).long : EMPTY, flex: 1.5 };
+  const frontRows: CardRow[] = [
+    [
+      { label: 'Last Name', value: pr.lastName || name.last || EMPTY, flex: 1.2 },
+      { label: 'First Name', value: pr.firstName || name.first || EMPTY, flex: 1.2 },
+      { label: 'MI', value: middle ? `${middle.charAt(0).toUpperCase()}.` : EMPTY, flex: 0.6 },
+    ],
+    [
+      { label: 'Date of birth', value: pr.dob ? formatDoseDate(pr.dob) : EMPTY, flex: 1 },
+      { label: 'Patient number (MRN)', value: isGuest && !mrn ? 'No Patient ID (Guest)' : displayPatientId(mrn, pr), flex: 2 },
+    ],
+    isPep ? [purpose, { label: 'Exposure Category', value: catVal, flex: 1.5, accent: true }] : [purpose],
+  ];
+
+  // Back: three fields to a row so the back fits inside the front's height.
+  const exposure: CardRow[] = isPep ? [
+    [
+      { label: 'Exposure Date', value: pr.date ? formatDoseDate(pr.date) : EMPTY },
+      { label: 'Exposure Type', value: exposureTypeLabel(pr.typeOfExposure), accent: true },
+      { label: 'Biting Animal', value: blank(pr.animal || pr.sourceOfExposure) },
+    ],
+    [
+      { label: 'Exposure Category', value: catVal, accent: true },
+      { label: 'Number of Bites', value: blank(pr.numberOfBites) },
+      { label: 'Wound Washed', value: blank(pr.woundWashed) },
+    ],
+  ] : [];
+  const ageSex = [pr.age ? `${pr.age} yrs` : '', pr.sex || ''].filter(Boolean).join(' • ') || EMPTY;
+  const profile: CardField[] = [
+    { label: 'Age / Sex', value: ageSex },
+    { label: 'Contact Number', value: blank(pr.contact) },
+    ...historyRows(pr).map(r => ({ label: r.label, value: r.value })),
+  ];
+  const treatment: CardRow = [
+    { label: 'Dose Schedule', value: realDoses.length ? protocolLabel(pr.service, realDoses.length) : EMPTY, flex: 1.6 },
+    { label: 'Doses Given', value: realDoses.length ? `${given}/${realDoses.length}` : EMPTY, flex: 0.7 },
+    { label: 'Status', value: record ? caseStatusLabel(pr) : EMPTY, flex: 0.8, accent: true },
+  ];
+
   return {
+    tag,
     frontTitle: isRabies ? 'ANTI-RABIES VACCINATION RECORD CARD' : 'VACCINATION RECORD CARD',
+    frontSubtitle: 'Official Prophylaxis & Immunization Record',
     backTitle: isPep ? 'HISTORY OF EXPOSURE & CLINICAL RECORD' : 'CLINICAL RECORD & TREATMENT',
     backSubtitle: isPep ? 'Clinical Exposure History & Medical Profile' : 'Medical Profile & Treatment Status',
-    lastName: pr.lastName || name.last || EMPTY,
-    firstName: pr.firstName || name.first || EMPTY,
-    mi: middle ? `${middle.charAt(0).toUpperCase()}.` : EMPTY,
-    dob: pr.dob ? formatDoseDate(pr.dob) : EMPTY,
-    mrn: isGuest && !mrn ? 'No Patient ID (Guest)' : displayPatientId(mrn, pr),
-    purpose: pr.service ? serviceCopy(pr.service).long : EMPTY,
-    category: isPep ? catVal : null,
+    frontRows,
+    backRows: [...exposure, ...chunk(profile, 3), treatment],
     doses: doseList.map((d: any, idx: number) => {
       const state = doseState(d, today);
       const brand = doseBrand(d, pr, state);
@@ -65,24 +149,5 @@ export function buildCardData({ record, mrn, isGuest, displayName, today = clini
         status: d.blankRow ? EMPTY : doseStatus(d, today).label,
       };
     }),
-    exposure: isPep ? [
-      { label: 'Exposure Date', value: pr.date ? formatDoseDate(pr.date) : EMPTY },
-      { label: 'Exposure Type', value: exposureTypeLabel(pr.typeOfExposure), accent: true },
-      { label: 'Biting Animal', value: blank(pr.animal || pr.sourceOfExposure) },
-      { label: 'Exposure Category', value: catVal, accent: true },
-      { label: 'Number of Bites', value: blank(pr.numberOfBites) },
-      { label: 'Wound Washed', value: blank(pr.woundWashed) },
-    ] : [],
-    profile: [
-      { label: 'Age', value: pr.age ? `${pr.age} yrs` : EMPTY },
-      { label: 'Sex', value: blank(pr.sex) },
-      { label: 'Contact Number', value: blank(pr.contact), wide: true },
-      ...historyRows(pr).map(r => ({ label: r.label, value: r.value })),
-    ],
-    treatment: [
-      { label: 'Dose Schedule', value: realDoses.length ? protocolLabel(pr.service, realDoses.length) : EMPTY, wide: true },
-      { label: 'Doses Given', value: realDoses.length ? `${given}/${realDoses.length}` : EMPTY },
-      { label: 'Status', value: record ? caseStatusLabel(pr) : EMPTY, accent: true },
-    ],
   };
 }

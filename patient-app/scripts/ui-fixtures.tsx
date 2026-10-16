@@ -1,16 +1,17 @@
 // Standalone Metro entry for responsive UI checks. No backend or real data:
 // every record below is simulated.
-//   /ui-fixture                  dose timeline
+//   /ui-fixture                  dose timeline table
 //   /ui-fixture?fixture=cards    vaccination card (both faces, inline and
-//                                pop-up) and Previous Services for a PEP,
+//                                pop-up), Previous Treatments and each past
+//                                treatment's card for a PEP,
 //                                a PrEP and a new-service (Tetanus) patient
 import { registerRootComponent } from 'expo';
 import React, { createRef } from 'react';
 import { ScrollView, Text, View } from 'react-native';
-import DoseTimeline from '../components/DoseTimeline';
-import ServiceHistory from '../components/ServiceHistory';
+import DoseTable from '../components/DoseTable';
+import PreviousTreatments from '../components/PreviousTreatments';
 import VaccinationCard from '../components/VaccinationCard';
-import { buildCardData } from '../utils/cardData';
+import { buildCardData, historicalRecord, treatmentRange } from '../utils/cardData';
 
 const TODAY = '2026-10-10';
 
@@ -19,7 +20,7 @@ function TimelineFixture() {
     <ScrollView contentContainerStyle={{ padding: 20, backgroundColor: '#F4F6FA' }}>
       <Text style={{ fontSize: 22, fontWeight: '800', marginBottom: 20 }}>PEP Dose Timeline</Text>
       <View>
-        <DoseTimeline today={TODAY} record={{ route: 'ID' }} doses={[
+        <DoseTable today={TODAY} record={{ route: 'ID' }} doses={[
           { id: '1', label: 'Session 1 (Day 0)', brand: 'Speeda (PVRV Rabies Vaccine)', date: '2026-09-16', done: true },
           { id: '2', label: 'Session 2 (Day 3)', brand: 'Verorab (PVRV Rabies Vaccine)', date: '2026-09-19', done: true },
           { id: '3', label: 'Session 3 (Day 7)', date: '2026-10-10', done: false },
@@ -95,7 +96,16 @@ function CardsFixture() {
             <View testID={`inline-front-${p.key}`}><VaccinationCard variant="inline" data={data} flipped={false} frontRef={createRef()} backRef={createRef()} /></View>
             <View testID={`inline-back-${p.key}`}><VaccinationCard variant="inline" data={data} flipped frontRef={createRef()} backRef={createRef()} /></View>
             <View testID={`popup-${p.key}`}><VaccinationCard variant="popup" data={data} flipped={false} frontRef={createRef()} backRef={createRef()} /></View>
-            <View testID={`history-${p.key}`}><ServiceHistory history={p.record.caseHistory} /></View>
+            <View testID={`history-${p.key}`}><PreviousTreatments history={p.record.caseHistory} onOpen={() => {}} /></View>
+            {p.record.caseHistory.map((h: any, i: number) => {
+              const past = buildCardData({ record: historicalRecord({ ...p.record, mrn: p.mrn }, h), mrn: p.mrn, isGuest: false, today: TODAY, tag: `PREVIOUS TREATMENT · ${treatmentRange(h)}` });
+              return (
+                <View key={i} style={{ gap: 12 }}>
+                  <View testID={`past-front-${p.key}-${i}`}><VaccinationCard variant="inline" data={past} flipped={false} frontRef={createRef()} backRef={createRef()} /></View>
+                  <View testID={`past-back-${p.key}-${i}`}><VaccinationCard variant="inline" data={past} flipped frontRef={createRef()} backRef={createRef()} /></View>
+                </View>
+              );
+            })}
           </View>
         );
       })}

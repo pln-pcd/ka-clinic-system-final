@@ -1,5 +1,5 @@
 {
-  "date": "2026-10-16T02:55:13.128Z",
+  "date": "2026-10-16T06:26:25.983Z",
   "results": [
     {
       "id": "RULE-vaccinations-anonymous-read",
@@ -5852,6 +5852,78 @@
     {
       "id": "RULE-appt-note-long",
       "description": "A note over 300 characters is refused",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chat-send-message",
+      "description": "Patient sends a message in their own thread",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chat-send-bump",
+      "description": "Patient bumps their own thread after sending",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chat-status-replied",
+      "description": "Patient cannot mark their thread as replied",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chat-unread-false",
+      "description": "Patient cannot clear staff's unread flag",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chat-other-send",
+      "description": "Patient cannot send into another patient's thread",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chat-other-bump",
+      "description": "Patient cannot update another patient's thread",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chat-other-read",
+      "description": "Patient cannot read another patient's thread",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chat-staff-reply",
+      "description": "Staff reply in a patient thread",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chat-guest-thread",
+      "description": "Guest cannot open a staff thread",
       "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
       "expected": "PERMISSION_DENIED",
       "actual": "permission-denied",

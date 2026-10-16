@@ -22,8 +22,7 @@ import ViewShot from 'react-native-view-shot';
 import { saveImageToGallery } from '../../utils/saveImage';
 import { formatDoseDate, serviceCopy, EMPTY, doseStatus, isPepService, clinicToday, displayPatientId, doseBrand, doseState, exposureCategory, splitName } from '../../utils/patientRecord';
 import { historyRows } from '../../utils/serviceFields';
-import DoseTimeline from '../../components/DoseTimeline';
-import ServiceHistory from '../../components/ServiceHistory';
+import DoseTable from '../../components/DoseTable';
 
 // RIG / Anti-Tetanus amount: saved mL on older entries, "1 vial" on newer ones.
 const treatmentAmount = (t: any): string => {
@@ -264,11 +263,9 @@ export default function RecordsScreen() {
 
           {doseList.length === 0
             ? <Text style={s.recordTableCellLabel}>No doses recorded yet.</Text>
-            : <DoseTimeline doses={doseList} record={pr} today={today} />}
+            : <DoseTable doses={doseList} record={pr} today={today} />}
         </View>
 
-        {/* Earlier services under this MRN; nothing renders without one. */}
-        <ServiceHistory history={pr.caseHistory} />
 
       </ScrollView>
 

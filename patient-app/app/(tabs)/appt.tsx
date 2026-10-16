@@ -811,7 +811,7 @@ export default function AppointmentsScreen() {
               const confirmedLike = appt.status === 'confirmed' || appt.status === 'accepted' || appt.status === 'done';
               const canCancel = appt.status === 'pending' || appt.status === 'confirmed' || appt.status === 'accepted';
               return (
-              <Tap key={appt.id} style={[s.apptCard, s.apptCardTop]} activeOpacity={0.85} onPress={() => setSelectedApptDetail(appt)}
+              <Tap key={appt.id} style={s.apptCard} activeOpacity={0.85} onPress={() => setSelectedApptDetail(appt)}
                 accessibilityLabel={`${apptTypeLabel(appt.type)} appointment, ${shortKeyWithDay(appt.date)}, ${appt.time}. Open details.`}>
                 <View style={[s.apptDateBox, confirmedLike && { backgroundColor: C.greenFaint }]}>
                   <Text style={[s.apptDateNum, confirmedLike && { color: C.green }]}>
@@ -827,23 +827,6 @@ export default function AppointmentsScreen() {
                     <Ionicons name="time-outline" size={12} color={C.muted}/>
                     <Text style={s.apptInfoSub}>{shortKeyWithDay(appt.date)} · {appt.time}</Text>
                   </View>
-                  {/* Status and the cancel action share one line under the
-                      date, so neither is squeezed into the card's corner. */}
-                  <View style={s.apptMetaRow}>
-                    <StatusBadge status={appt.status} declined={isEnded(appt) && endedByClinic(appt)}/>
-                    {canCancel && (
-                      <Tap
-                        style={s.cancelChip}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        onPress={() => { setCancellationReasonInput(''); setSelectedApptDetail(appt); }}
-                        accessibilityRole="button"
-                        accessibilityLabel="Request cancellation"
-                      >
-                        <Ionicons name="close-circle-outline" size={14} color={C.navy}/>
-                        <Text style={s.cancelChipTxt}>Cancel</Text>
-                      </Tap>
-                    )}
-                  </View>
                   {appt.note && appt.status === 'cancelled' && (
                     <View style={s.adminNoteBox}>
                       <Ionicons name="chatbubble-ellipses-outline" size={11} color={C.red}/>
@@ -855,6 +838,25 @@ export default function AppointmentsScreen() {
                       <Ionicons name="chatbubble-ellipses-outline" size={11} color={C.green}/>
                       <Text style={[s.adminNoteTxt, { color: C.green }]}>Clinic: {appt.note}</Text>
                     </View>
+                  )}
+                </View>
+                {/* Status on top, the cancel (X) under it, right-aligned and
+                    centred against the date block. A same-size spacer keeps
+                    the status in place when the visit cannot be cancelled. */}
+                <View style={s.apptStack}>
+                  <StatusBadge status={appt.status} declined={isEnded(appt) && endedByClinic(appt)}/>
+                  {canCancel ? (
+                    <Tap
+                      style={s.cancelBtn}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      onPress={() => { setCancellationReasonInput(''); setSelectedApptDetail(appt); }}
+                      accessibilityRole="button"
+                      accessibilityLabel="Request cancellation"
+                    >
+                      <Ionicons name="close" size={16} color={C.slate}/>
+                    </Tap>
+                  ) : (
+                    <View style={s.cancelBtnSpace} />
                   )}
                 </View>
               </Tap>
@@ -1591,11 +1593,7 @@ const s = StyleSheet.create({
   apptDateNum:  { fontSize: moderateScale(20), fontWeight: '900', color: C.red, lineHeight: moderateScale(22) },
   apptDateMon:  { fontSize: moderateScale(9), fontWeight: '700', color: C.red, textTransform: 'uppercase', letterSpacing: 0.3 },
   apptInfo:     { flex: 1, minWidth: 0 },
-  apptCardTop:  { alignItems: 'flex-start' },
   apptType:     { fontSize: moderateScale(14), fontWeight: '800', color: C.charcoal },
-  apptMetaRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: scale(8), marginTop: verticalScale(8) },
-  cancelChip:   { flexDirection: 'row', alignItems: 'center', gap: scale(4), minHeight: 32, paddingHorizontal: scale(10), borderRadius: scale(10), borderWidth: 1, borderColor: C.border, backgroundColor: C.white, overflow: 'hidden' },
-  cancelChipTxt:{ fontSize: moderateScale(12), fontWeight: '700', color: C.navy },
   patientNoteBox: { backgroundColor: C.bg, borderColor: C.border },
   patientNoteLbl: { fontSize: moderateScale(11), fontWeight: '800', color: C.slate, textTransform: 'uppercase', letterSpacing: 0.4 },
   patientNoteTxt: { fontSize: moderateScale(13), color: C.charcoal, fontWeight: '500', lineHeight: moderateScale(19), marginTop: verticalScale(2) },
@@ -1607,7 +1605,10 @@ const s = StyleSheet.create({
   adminNoteBox: { flexDirection: 'row', alignItems: 'flex-start', gap: scale(5), backgroundColor: C.redFaint, borderRadius: scale(8), padding: scale(6), marginTop: verticalScale(5) },
   adminNoteTxt: { flex: 1, fontSize: moderateScale(10), color: C.red, fontWeight: '600', lineHeight: moderateScale(14) },
 
-  cancelBtn:  { width: scale(26), height: verticalScale(26), borderRadius: scale(8), backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
+  // 34dp button plus 6dp hitSlop: a 46dp tap target.
+  cancelBtn:  { width: 34, height: 34, borderRadius: 10, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: C.border, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  cancelBtnSpace: { width: 34, height: 34 },
+  apptStack:  { alignItems: 'flex-end', justifyContent: 'center', gap: verticalScale(8), marginLeft: scale(10) },
   doneBadge:  { flexDirection: 'row', alignItems: 'center', gap: scale(4), backgroundColor: C.greenFaint, paddingHorizontal: scale(8), paddingVertical: verticalScale(4), borderRadius: scale(8) },
   doneTxt:    { fontSize: moderateScale(10), fontWeight: '800', color: C.green },
 });

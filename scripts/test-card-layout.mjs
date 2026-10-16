@@ -40,8 +40,16 @@ try {
     await page.waitForTimeout(800);
 
     for (const [key, spec] of Object.entries(PATIENTS)) {
-      for (const holder of [`inline-front-${key}`, `inline-back-${key}`, `popup-${key}`]) {
+      const pastHolders = Array.from({ length: spec.history }, (_, i) => [`past-front-${key}-${i}`, `past-back-${key}-${i}`]).flat();
+      for (const holder of [`inline-front-${key}`, `inline-back-${key}`, `popup-${key}`, ...pastHolders]) {
         const variant = holder.startsWith('popup') ? 'popup' : 'inline';
+        // The front sets the height: the back's own content must fit inside it.
+        const natural = await page.getByTestId(holder).evaluate((el, v) => {
+          const h = side => el.querySelector(`[data-testid="shot-${v}-${side}"]`).parentElement.children[1].getBoundingClientRect();
+          const f = h('front'), b = h('back');
+          return { front: v === 'popup' ? f.width : f.height, back: v === 'popup' ? b.width : b.height };
+        }, variant);
+        assert(natural.back <= natural.front + 1, `${width}px ${holder}: back content (${natural.back}) taller than front (${natural.front})`);
         const box = id => page.getByTestId(holder).getByTestId(id).evaluate(el => {
           const r = el.getBoundingClientRect(); return { w: Math.round(r.width * 10) / 10, h: Math.round(r.height * 10) / 10 };
         });
@@ -87,9 +95,22 @@ try {
       const history = await page.getByTestId(`history-${key}`).innerText();
       if (spec.history === 0) assert.equal(history.trim(), '', `${key}: history should render nothing`);
       else {
-        assert(history.includes('Previous Services'));
-        assert.equal((history.match(/DOSES GIVEN/gi) || []).length, spec.history, `${key}: history rows`);
+        assert(history.includes('Previous Treatments'));
+        assert.equal(await page.getByTestId(`history-${key}`).getByRole('button').count(), spec.history, `${key}: history rows`);
         assert(!/wound/i.test(history), `${key}: wound data in history`);
+        for (let i = 0; i < spec.history; i++) {
+          const past = await page.getByTestId(`past-front-${key}-${i}`).innerText();
+          assert(/PREVIOUS TREATMENT/i.test(past), `${key} past ${i}: no previous-treatment tag`);
+          // A past PrEP card never shows exposure fields or a PEP schedule;
+          // a past PEP card shows its own category, not the current one.
+          const pastBack = await page.getByTestId(`past-front-${key}-${i}`).getByTestId('card-inline-back').innerText();
+          if (/Pre-Exposure Prophylaxis \(PrEP\)/.test(past)) {
+            for (const f of ['EXPOSURE CATEGORY', 'BITING ANIMAL', 'POST-EXPOSURE', 'HISTORY OF EXPOSURE']) assert(!(past + pastBack).toUpperCase().includes(f), `${key} past PrEP shows ${f}`);
+          } else {
+            assert(/CATEGORY III/i.test(past), `${key} past PEP: category missing`);
+            assert(/4\/4/.test(pastBack), `${key} past PEP: doses given 4/4 missing`);
+          }
+        }
       }
       results.push(`${width}px ${key}`);
     }

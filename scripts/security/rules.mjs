@@ -162,6 +162,19 @@ try {
   await check('RULE-appt-no-note', 'Patient books without a note', true, () => setDoc(doc(clients['patient-own'], 'appointments', 'note-none'), booking({})));
   await check('RULE-appt-note-long', 'A note over 300 characters is refused', false, () => setDoc(doc(clients['patient-own'], 'appointments', 'note-long'), booking({ notes: 'x'.repeat(301) })));
   await seed();
+  // Staff chat: a patient's send = message create + thread bump; both allowed
+  // for their own open thread only; status/unread only to pending/true.
+  await check('RULE-chat-send-message', 'Patient sends a message in their own thread', true, () => setDoc(doc(clients['patient-own'], 'chatMessages', 'send-1'), { threadId: 'security-thread', sender: 'patient', senderName: 'A', text: 'Hello', createdAt: Date.now() }));
+  await check('RULE-chat-send-bump', 'Patient bumps their own thread after sending', true, () => updateDoc(doc(clients['patient-own'], 'chatThreads', 'security-thread'), { lastMessage: 'Hello', lastMessageAt: Date.now(), status: 'pending', unread: true }));
+  await check('RULE-chat-status-replied', 'Patient cannot mark their thread as replied', false, () => updateDoc(doc(clients['patient-own'], 'chatThreads', 'security-thread'), { status: 'replied' }));
+  await check('RULE-chat-unread-false', "Patient cannot clear staff's unread flag", false, () => updateDoc(doc(clients['patient-own'], 'chatThreads', 'security-thread'), { unread: false }));
+  await check('RULE-chat-other-send', "Patient cannot send into another patient's thread", false, () => setDoc(doc(clients['patient-other'], 'chatMessages', 'send-2'), { threadId: 'security-thread', sender: 'patient', senderName: 'B', text: 'Hi', createdAt: Date.now() }));
+  await check('RULE-chat-other-bump', "Patient cannot update another patient's thread", false, () => updateDoc(doc(clients['patient-other'], 'chatThreads', 'security-thread'), { lastMessage: 'x', lastMessageAt: Date.now(), status: 'pending', unread: true }));
+  await check('RULE-chat-other-read', "Patient cannot read another patient's thread", false, () => getDoc(doc(clients['patient-other'], 'chatThreads', 'security-thread')));
+  await check('RULE-chat-staff-reply', 'Staff reply in a patient thread', true, () => setDoc(doc(clients.staff, 'chatMessages', 'reply-1'), { threadId: 'security-thread', sender: 'admin', senderName: 'K&A Clinic', text: 'Hi', createdAt: Date.now() }));
+  const guestClient = env.authenticatedContext('security-guest', { auth_time: authTime, firebase: { sign_in_provider: 'anonymous' } }).firestore();
+  await check('RULE-chat-guest-thread', 'Guest cannot open a staff thread', false, () => setDoc(doc(guestClient, 'chatThreads', 'guest-thread'), { patientUid: 'security-guest', resolved: false, archived: false }));
+  await seed();
   const passwordClient = env.authenticatedContext('security-a', { email: 'security-a@example.test', auth_time: authTime, firebase: { sign_in_provider: 'password' } }).firestore();
   await check('RULE-password-provider', 'Password-only SDK sign-in cannot bypass the gateway', false, () => getDoc(doc(passwordClient, 'vaccinations', '2026-001')));
 } finally {

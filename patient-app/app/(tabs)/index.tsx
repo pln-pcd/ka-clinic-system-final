@@ -31,10 +31,11 @@ import {
   View,
 } from 'react-native';
 import Tap from '../../components/Tap';
-import DoseTimeline from '../../components/DoseTimeline';
-import ServiceHistory from '../../components/ServiceHistory';
+import DoseTable from '../../components/DoseTable';
+import PreviousTreatments from '../../components/PreviousTreatments';
+import PastTreatmentCard from '../../components/PastTreatmentCard';
 import VaccinationCard, { CardData } from '../../components/VaccinationCard';
-import { buildCardData } from '../../utils/cardData';
+import { buildCardData, historicalRecord, treatmentRange } from '../../utils/cardData';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatDoseDate, protocolLabel as buildProtocolLabel, serviceCopy, EMPTY, doseStatus, isPepService, clinicToday, doseState, exposureCategory } from '../../utils/patientRecord';
 import { GUEST_PLACEHOLDER_DOSES } from '../../utils/cardData';
@@ -320,6 +321,17 @@ export default function RabiesRecoveryApp() {
   const [exportingCard, setExportingCard] = useState(false);
 
   const toggleCardFlip = () => setIsFlippedState(f => !f);
+
+  // Previous treatment whose card is open (index into caseHistory), or null.
+  const [pastIndex, setPastIndex] = useState<number | null>(null);
+  const exportPastCard = async (uri: string, side: 'front' | 'back') => {
+    try {
+      await saveImageToGallery(uri);
+      showAlert({ type: 'success', title: 'Card Saved', message: `Previous treatment card (${side}) saved to your photo gallery.`, primaryButtonText: 'OK', onPrimaryPress: hideAlert });
+    } catch (err: any) {
+      showAlert({ type: 'error', title: 'Export Failed', message: err?.message || 'Could not export record card.', primaryButtonText: 'OK', onPrimaryPress: hideAlert });
+    }
+  };
 
   const handleExportFrontCard = async () => {
     if (exportingCard) return;
@@ -621,6 +633,12 @@ export default function RabiesRecoveryApp() {
   const isPep = isGuest && !pr.service ? true : isPepService(pr.service);
   const backShort = isPep ? 'Exposure Record' : 'Clinical Record';
   const cardData: CardData = buildCardData({ record: patientRecord, mrn, isGuest, displayName: user?.displayName, today });
+  // A previous treatment's card: identity from the patient, the treatment
+  // only from its snapshot (as the dashboard's historicalCaseRecord does).
+  const pastEntry = pastIndex !== null && Array.isArray(pr.caseHistory) ? pr.caseHistory[pastIndex] ?? null : null;
+  const pastCardData: CardData | null = pastEntry
+    ? buildCardData({ record: historicalRecord({ ...pr, mrn }, pastEntry), mrn, isGuest: false, displayName: user?.displayName, today, tag: `PREVIOUS TREATMENT · ${treatmentRange(pastEntry)}` })
+    : null;
 
   // Progress tracker shows the same placeholder rows for guests, all unchecked.
   const trackerDoses: any[] = vaccineSchedule.length > 0
@@ -782,11 +800,12 @@ export default function RabiesRecoveryApp() {
                   <Text style={s.recordsSectionTitle}>{vaccineCopy.timelineTitle}</Text>
                 </View>
 
-                <DoseTimeline doses={doseList} record={pr} today={today} />
+                {/* Always the current treatment. */}
+                <DoseTable doses={doseList} record={pr} today={today} />
               </View>
 
-              {/* Earlier services under this MRN; nothing renders without one. */}
-              {!isGuest && <ServiceHistory history={pr.caseHistory} />}
+              {/* Earlier treatments under this MRN; nothing renders without one. */}
+              {!isGuest && <PreviousTreatments history={pr.caseHistory} onOpen={setPastIndex} />}
           </>
         </View>
 
@@ -1119,6 +1138,16 @@ export default function RabiesRecoveryApp() {
           <Text style={nav.label}>Account</Text>
         </Tap>
       </View>
+
+      {/* ── PREVIOUS TREATMENT CARD ── */}
+      <PastTreatmentCard
+        visible={pastEntry !== null}
+        data={pastCardData}
+        service={pastEntry?.service}
+        range={pastEntry ? treatmentRange(pastEntry) : ''}
+        onClose={() => setPastIndex(null)}
+        onExport={exportPastCard}
+      />
 
       {/* Custom Alert Modal */}
       <CustomAlertModal config={alertConfig} onClose={hideAlert} />

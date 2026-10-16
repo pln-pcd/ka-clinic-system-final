@@ -112,8 +112,16 @@ service cloud.firestore {
       allow read: if isAdmin() || (isPatient() && resource.data.patientUid == request.auth.uid);
       allow create: if isAdmin() || (isPatient() && request.resource.data.patientUid == request.auth.uid
         && request.resource.data.resolved == false && request.resource.data.get('archived', false) == false);
+      // A patient's message bumps their own thread in the clinic inbox:
+      // lastMessage/lastMessageAt, status back to 'pending' and unread for
+      // staff. (Before 1.0.5 status/unread were refused, so every send showed
+      // "You do not have permission to send messages" although the message
+      // itself was saved, and the inbox never showed it as new.)
       allow update: if isAdmin() || (isPatient() && resource.data.patientUid == request.auth.uid
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['resolved', 'closedBy', 'closedAt', 'lastMessage', 'lastMessageAt', 'updatedAt'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['resolved', 'closedBy', 'closedAt', 'lastMessage', 'lastMessageAt', 'updatedAt', 'status', 'unread'])
+        && (!('status' in request.resource.data.diff(resource.data).affectedKeys()) || request.resource.data.status == 'pending')
+        && (!('unread' in request.resource.data.diff(resource.data).affectedKeys()) || request.resource.data.unread == true)
+        && (!('lastMessage' in request.resource.data.diff(resource.data).affectedKeys()) || (request.resource.data.lastMessage is string && request.resource.data.lastMessage.size() <= 5000))
         && request.resource.data.get('closedBy', 'patient') == 'patient'
         && (resource.data.resolved == false || request.resource.data.resolved == true));
       allow delete: if isAdmin();

@@ -26,7 +26,13 @@ export const CLINIC = {
 //   'personal_nav' the patient's own schedule / doses / status: navigation only
 //   'clinical'     blocked medical topic: fixed neutral reply + staff option
 //   'out_of_scope' unrelated small talk: polite refusal, no staff option
-// Anything the rules cannot place is treated as 'clinical' (the safe side).
+//   'personal_info' the user's own name / MRN / contact details: KAI cannot
+//                  look them up; it says which screen shows them
+//   'vague'        a bare topic word ("vaccine", "rabies") or anything the
+//                  rules cannot place: KAI asks what the user needs and lists
+//                  what it can help with (no refusal, no medical content)
+// Only 'clinical' replies mention Talk to clinic staff; no reply ever opens
+// the staff pop-up by itself (the app opens it only when the user taps it).
 
 const norm = (t: unknown): string => String(t || '').toLowerCase().replace(/[’']/g, "'").replace(/\s+/g, ' ').trim();
 
@@ -47,6 +53,7 @@ export const BLOCKED_STRICT = [
   /\b(categor(y|ies)|cat\s*(i{1,3}|[123])\b|exposure|triage|risk|dangerous|delikado|peligro|observation\s+period|seryoso|serious)\b/,
   // Symptoms, diagnosis, treatment, medicine.
   /\b(symptom\w*|sintomas|sign\w*\s+of|fever|lagnat|kalintura|hilanat|swell\w*|namamaga|maga|redness|pus|nana|infect\w*|impeksyon|inflam\w*|rash|pain|painful|hurts?|hurting|sore|swollen|bruis\w*|sakit|masakit|makolog|numb|numbness|itch\w*|kati|makati|paralysis|seizure|vomit\w*|suka|headache)\b/,
+  /\b(feel\w*\s+(wrong|sick|bad|unwell|ill|dizzy|weak|off|strange|weird)|not\s+feeling\s+well|unwell|dizzy|nahihilo|masama\s+ang\s+pakiramdam)\b/,
   /\b(diagnos\w*|prognos\w*|gamutin|cure|therapy|medicine|medication|gamot|bulong|tableta|paracetamol|antibiotic\w*|antiseptic|betadine|povidone|alcohol|prescri\w*|reseta|drug|drugs|pill|pills)\b/,
   /\b(first\s*aid|wash\s+(the\s+)?wound|clean\s+(the\s+)?wound|hugasan|dressing|suture|stitch\w*|tahi)\b/,
   /\b(side\s*-?\s*effects?|adverse|reaction|allerg\w*|contraindicat\w*|pregnan\w*|buntis|breastfeed\w*|nagpapasuso)\b/,
@@ -87,6 +94,23 @@ export const PERSONAL_SCHEDULE_PATTERNS = [
   /\b(schedule|iskedyul|eskedyul)\s+(ko|ng\s+bakuna\s+ko)\b/,
 ];
 
+// The user's own name, MRN or contact details ("what is my name"). KAI does
+// not read records; it points to the screen that shows them.
+export const PERSONAL_INFO_PATTERNS = [
+  /\b(what('?s|\s+is|\s+are)|tell\s+me|give\s+me|show\s+me|do\s+you\s+know|ano\s+(ang|yung)|anong)\b.*\bmy\s+(name|full\s+name|first\s+name|last\s+name|surname|mrn|medical\s+record\s+number|patient\s+(id|number)|email|e-mail|address|contact\s*(number|details)?|phone(\s+number)?|birthday|birth\s*date|date\s+of\s+birth|age|details|info\w*|account)\b/,
+  /\bwho\s+am\s+i\b/,
+  /^my\s+(name|mrn|email|age|birthday|address|phone|contact\s+number)\??$/,
+  /\b(ano|anong)\s+(ang\s+)?(pangalan|mrn|edad|email|address)\s+ko\b/,
+];
+
+// Words that make a short message a real question ("what is rabies?"),
+// as opposed to a bare topic ("rabies").
+const QUESTION_WORDS_RE = /\b(what|how|why|when|where|who|which|do|does|did|is|are|was|can|could|should|would|will|need|needs|ano|anong|paano|bakit|kailan|saan|sino|ba|kailangan|pwede|puwede)\b/;
+export function isVague(q: string): boolean {
+  const words = q.replace(/[^a-z0-9\s-]/g, ' ').split(/\s+/).filter(Boolean);
+  return words.length > 0 && words.length <= 3 && !QUESTION_WORDS_RE.test(q);
+}
+
 // Allowed topics.
 export const GREETING_RE = /^(hi|hello|hey|good\s*(morning|afternoon|evening|day)|greetings?|kumusta|kamusta|maayong\s+(aga|hapon|banggi)|magandang\s+(umaga|hapon|gabi)|howdy|yo)\b/;
 export const THANKS_RE = /^(thanks?|thank\s+you|salamat|dios\s+mabalos|ok(ay)?|sige|bye|goodbye|paalam)\b[\s!.]*$/;
@@ -109,7 +133,7 @@ export const OUT_OF_SCOPE_PATTERNS = [
 ];
 
 /** 'in_scope' | 'personal_nav' | 'clinical' | 'out_of_scope' */
-export type ScopeCategory = 'in_scope' | 'personal_nav' | 'clinical' | 'out_of_scope';
+export type ScopeCategory = 'in_scope' | 'personal_nav' | 'personal_info' | 'vague' | 'clinical' | 'out_of_scope';
 
 export function classifyMessage(text: string): ScopeCategory {
   const q = norm(text);
@@ -119,11 +143,14 @@ export function classifyMessage(text: string): ScopeCategory {
   if (BLOCKED_STRICT.some(re => re.test(q))) return 'clinical';
   // 2. The patient's own schedule / doses / status: navigation only.
   if (PERSONAL_SCHEDULE_PATTERNS.some(re => re.test(q))) return 'personal_nav';
+  // 2b. The user's own name / MRN / contact details: say where they are shown.
+  if (PERSONAL_INFO_PATTERNS.some(re => re.test(q))) return 'personal_info';
   // 3. "Which services / vaccines do you offer?" names services only: allowed
   //    when nothing medical is left once the services phrase is set aside.
   if (SERVICES_RE.test(q) && !BLOCKED_DOMAIN.some(re => re.test(q.replace(SERVICES_RE, ' ')))) return 'in_scope';
-  // 4. Rabies, vaccines, doses, regimens: blocked.
-  if (BLOCKED_DOMAIN.some(re => re.test(q))) return 'clinical';
+  // 4. A bare topic word ("vaccine", "Rabies"): ask what the user needs.
+  //    A real question about rabies, vaccines, doses or regimens: blocked.
+  if (BLOCKED_DOMAIN.some(re => re.test(q))) return isVague(q) ? 'vague' : 'clinical';
   // 5. Allowed topics.
   if (GREETING_RE.test(q) || THANKS_RE.test(q)) return 'in_scope';
   if (HOURS_RE.test(q) || BOOKING_RE.test(q) || CONTACT_RE.test(q) || SERVICES_RE.test(q) || PRICE_RE.test(q) || APP_NAV_RE.test(q)) return 'in_scope';
@@ -131,18 +158,24 @@ export function classifyMessage(text: string): ScopeCategory {
   if (OUT_OF_SCOPE_PATTERNS.some(re => re.test(q))) return 'out_of_scope';
   // 7. A bare date is a scheduling question ("Sept 27?").
   if (/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}\b|\b\d{1,2}\/\d{1,2}\b|\b(today|tomorrow|bukas)\b/.test(q) && q.length <= 40) return 'in_scope';
-  // 8. Unsure: the blocked reply is the safe answer.
-  return 'clinical';
+  // 8. Unsure: ask what the user needs. The reply lists only allowed topics,
+  //    so nothing medical is said either way.
+  return 'vague';
 }
 
 // ── Fixed replies ───────────────────────────────────────────────────────────
+// The one disclaimer sentence, used wherever KAI states it.
+export const DISCLAIMER =
+  'This chatbot does not provide medical advice. For urgent or medical concerns, contact the clinic or a licensed healthcare professional.';
+
 // One neutral reply for every blocked topic: no medical content, no
 // emergency instructions, no advice. The app adds its "Talk to clinic staff"
 // button under it.
 export const BLOCKED_REPLY =
-  `I can't help with medical questions. Please contact K&A Clinic or a licensed healthcare professional. ` +
+  `I can't answer medical questions. ${DISCLAIMER} ` +
   `You can reach the clinic at **${CLINIC.phone}** or **${CLINIC.email}**.`;
-export const BLOCKED_REPLY_APP = `${BLOCKED_REPLY} You can also tap **Talk to clinic staff** below.`;
+export const BLOCKED_REPLY_APP =
+  `I can't answer medical questions. ${DISCLAIMER} If you'd like to reach the clinic, tap **Talk to clinic staff**.`;
 
 export const PERSONAL_NAV_REPLY_APP =
   'You can see your vaccination schedule on the **Home** screen under your vaccination card. ' +
@@ -151,8 +184,22 @@ export const PERSONAL_NAV_REPLY_PUBLIC =
   'Your vaccination schedule is in the K&A Clinic patient app: sign in, then look on the **Home** screen under your vaccination card.';
 
 export const OUT_OF_SCOPE_REPLY =
-  'That is outside what I can help with. I can help with K&A Clinic information: office hours, location and contact details, ' +
-  'how to book or cancel an appointment, and finding your way around the app.';
+  "That's outside what I can help with. I can help with clinic information, office hours, contact details, " +
+  'appointments, and using the app.';
+
+export const PERSONAL_INFO_REPLY_APP =
+  "I can't look up your personal details. I can help with clinic information, office hours, contact details, appointments, and using the app.\n\n" +
+  'Your **name, MRN and date of birth** are on your vaccination card on the **Home** screen, and your **contact details** are under **Account → Personal Information**.';
+export const PERSONAL_INFO_REPLY_PUBLIC =
+  "I can't look up your personal details. I can help with clinic information, office hours, contact details, appointments, and using the app. " +
+  'Your details are in the K&A Clinic patient app: sign in and check your vaccination card on the **Home** screen.';
+
+export const VAGUE_REPLY =
+  'Could you tell me a little more about what you need? I can help with:\n' +
+  '• **Clinic hours** and walk-in days\n' +
+  '• **Booking or cancelling an appointment**\n' +
+  '• **Clinic location and contact details**\n' +
+  '• **Finding something in the app**';
 
 export const GREETING_REPLY =
   "**Hello!** I'm **KAI**, the K&A Clinic virtual assistant.\n\n" +
@@ -161,7 +208,7 @@ export const GREETING_REPLY =
   '• **Booking or cancelling an appointment**\n' +
   '• **Clinic location and contact details**\n' +
   '• **Finding your way around the app**\n\n' +
-  'I do not give medical advice.';
+  DISCLAIMER;
 
 export const THANKS_REPLY = "You're welcome. Is there anything else about the clinic or the app I can help with?";
 

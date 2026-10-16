@@ -8,6 +8,9 @@ import {
   OUT_OF_SCOPE_REPLY,
   PERSONAL_NAV_REPLY_APP,
   PERSONAL_NAV_REPLY_PUBLIC,
+  PERSONAL_INFO_REPLY_APP,
+  PERSONAL_INFO_REPLY_PUBLIC,
+  VAGUE_REPLY,
   classifyMessage,
   fixedInScopeReply,
 } from './_lib/chatbotRules.js';
@@ -49,10 +52,12 @@ any patient's own appointment dates, dose dates, dose counts or treatment status
 
 For any of those, reply with exactly:
 "${BLOCKED_REPLY}"
-If you are not sure whether a question is allowed, use that same reply.
 
 For anything unrelated to the clinic, reply with exactly:
 "${OUT_OF_SCOPE_REPLY}"
+
+If a message is unclear, reply with exactly:
+"${VAGUE_REPLY}"
 
 FORMAT: answer only the latest message, briefly. Use **double asterisks** for emphasis and "•" bullets. No headings, no single asterisks.
 Do not greet unless greeted. Never mention Gemini or any AI model.
@@ -379,6 +384,17 @@ export default async function handler(req, res) {
       });
       return;
     }
+    if (category === 'personal_info') {
+      send(res, {
+        text: channel === 'public' ? PERSONAL_INFO_REPLY_PUBLIC : PERSONAL_INFO_REPLY_APP, source: 'classifier', category, needsEscalation: false,
+        ...(channel === 'app' ? { action: { label: 'Open my vaccination card', target: 'card' } } : {}),
+      });
+      return;
+    }
+    if (category === 'vague') {
+      send(res, { text: VAGUE_REPLY, source: 'classifier', category, needsEscalation: false });
+      return;
+    }
     if (category === 'out_of_scope') {
       send(res, { text: OUT_OF_SCOPE_REPLY, source: 'classifier', category, needsEscalation: false });
       return;
@@ -448,13 +464,16 @@ export default async function handler(req, res) {
     let needsEscalation = false;
     if (!text) {
       // No model answer: the booking procedure is the one allowed topic
-      // left without a fixed reply; anything else gets the safe reply.
-      text = /\b(book|appointment|appt|reserv|cancel|reschedul|slot)/i.test(prompt) ? BOOKING_REPLY : blockedReplyFor(channel);
-      if (text !== BOOKING_REPLY) { finalCategory = 'clinical'; needsEscalation = true; }
-    } else if (/can't help with medical questions/i.test(text) || MEDICAL_OUTPUT_RE.test(text)) {
+      // left without a fixed reply; anything else asks what the user needs.
+      text = /\b(book|appointment|appt|reserv|cancel|reschedul|slot)/i.test(prompt) ? BOOKING_REPLY : VAGUE_REPLY;
+      if (text !== BOOKING_REPLY) finalCategory = 'vague';
+    } else if (/can't (help with|answer) medical questions/i.test(text) || MEDICAL_OUTPUT_RE.test(text)) {
       text = blockedReplyFor(channel);
       finalCategory = 'clinical';
       needsEscalation = true;
+    } else if (/could you tell me a little more/i.test(text)) {
+      text = VAGUE_REPLY;
+      finalCategory = 'vague';
     } else if (/outside what i can help with/i.test(text)) {
       text = OUT_OF_SCOPE_REPLY;
       finalCategory = 'out_of_scope';

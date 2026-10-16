@@ -48,6 +48,8 @@ type BubbleMessage = {
   senderName?: string;
   /** Navigation replies carry a button (open the vaccination card / Appointments). */
   action?: ReplyAction;
+  /** Staff chat only: a message of the patient's still sending or not sent. */
+  localStatus?: 'sending' | 'failed';
 };
 type Mode = 'bot' | 'admin';
 
@@ -172,7 +174,11 @@ export default function ChatScreen() {
   const [adminMessagesLoaded, setAdminMessagesLoaded] = useState(false);
 
   const [showEscalationModal, setShowEscalationModal] = useState(false);
-  const [chatError, setChatError] = useState('');
+  // Staff chat could not be loaded (shown in place of the messages).
+  const [loadError, setLoadError] = useState('');
+  // The patient's own staff-chat messages not yet confirmed by Firestore.
+  const [pendingMessages, setPendingMessages] = useState<BubbleMessage[]>([]);
+  useEffect(() => { setPendingMessages([]); setLoadError(''); }, [openThreadId]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -304,16 +310,14 @@ export default function ChatScreen() {
     setAdminMessagesLoaded(false);
     const q = query(collection(db, 'chatMessages'), where('threadId', '==', openThreadId), orderBy('createdAt', 'asc'));
     return onSnapshot(q, (snap) => {
-      setChatError('');
+      setLoadError('');
       setAdminMessages(snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })));
       setAdminMessagesLoaded(true);
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
     }, (err) => {
       console.error('Admin chat messages listener error:', err);
       setAdminMessagesLoaded(true);
-      setChatError(err?.code === 'permission-denied'
-        ? 'You do not have permission to view this conversation.'
-        : 'Could not load messages. Please check your connection.');
+      setLoadError('Could not load this conversation. Please check your connection and try again.');
     });
   }, [mode, openThreadId]);
 
@@ -331,15 +335,30 @@ export default function ChatScreen() {
     // 'trigger' — always creates a NEW conversation document. A resolved or
     // archived thread is never reopened; it is excluded from the open-thread
     // query above, so this path is the only way back into staff chat.
-    // 'trigger' — confirm first, in the app's own popup.
+    // 'trigger' — confirm first, in the app's own popup. Opened only from
+    // this button, never by a KAI reply.
     if (!user || escalating) return;
+    if (user.isAnonymous) {
+      // Staff chat is for registered patients (firestore.rules); a guest is
+      // told why and offered sign-in instead of a failing request.
+      setAlertConfig({
+        visible: true,
+        type: 'guest',
+        title: 'Patient account needed',
+        message: 'Chatting with clinic staff needs a patient account. Sign in with your Medical Record Number (MRN), or contact the clinic directly.',
+        primaryButtonText: 'Sign In',
+        onPrimaryPress: () => { hideAlert(); router.push('/auth/login'); },
+        secondaryButtonText: 'Not now',
+        onSecondaryPress: hideAlert,
+      });
+      return;
+    }
     setShowEscalationModal(true);
   };
 
   const startEscalation = async () => {
     if (!user || escalating) return;
     setEscalating(true);
-    setChatError('');
     try {
       const patientName = user.displayName || (user.isAnonymous ? 'Guest Patient' : (user.email?.split('@')[0] ?? 'Patient'));
       await addDoc(collection(db, 'chatThreads'), {
@@ -361,9 +380,7 @@ export default function ChatScreen() {
       rememberPendingTrigger(false);
     } catch (e: any) {
       console.error('Escalation error:', e);
-      setChatError(e?.code === 'permission-denied'
-        ? 'You do not have permission to start a conversation with clinic staff.'
-        : 'Could not start a conversation with clinic staff. Please try again.');
+      showError('Could not start a chat', 'Could not start a conversation with clinic staff. Please check your connection and try again.');
     } finally {
       setEscalating(false);
     }
@@ -378,11 +395,12 @@ export default function ChatScreen() {
   // wording and styling match every other destructive step in the app.
   const [alertConfig, setAlertConfig] = useState<CustomAlertConfig>({ visible: false, title: '', message: '' });
   const hideAlert = () => setAlertConfig(prev => ({ ...prev, visible: false }));
+  const showError = (title: string, message: string) =>
+    setAlertConfig({ visible: true, type: 'error', title, message, primaryButtonText: 'OK', onPrimaryPress: hideAlert });
 
   const closeThread = async () => {
     if (!openThreadId) return;
     setEndingConversation(true);
-    setChatError('');
     try {
       // `unread` is deliberately left alone: it means "unread by an admin", so
       // the patient must not clear it on staff's behalf.
@@ -397,9 +415,7 @@ export default function ChatScreen() {
       rememberPendingTrigger(false);
     } catch (e: any) {
       console.error('End conversation error:', e);
-      setChatError(e?.code === 'permission-denied'
-        ? 'You do not have permission to close this conversation.'
-        : 'Could not end the conversation. Please try again.');
+      showError('Could not end the chat', 'Could not end the conversation. Please check your connection and try again.');
     } finally {
       setEndingConversation(false);
     }
@@ -444,7 +460,6 @@ export default function ChatScreen() {
         hideAlert();
         setBotMessages([]);
         setInput('');
-        setChatError('');
         rememberPendingTrigger(false);
       },
     });
@@ -476,45 +491,60 @@ export default function ChatScreen() {
       id: `b-${Date.now()}`, text: reply.text, sender: 'bot',
       createdAt: Date.now(), senderName: BOT_SENDER_LABEL, action: reply.action,
     }]);
-    // Drives the staff button's trigger state. Only the latest reply counts —
-    // a follow-up the bot *can* answer clears the offer again.
+    // Highlights the "Talk to clinic staff" button after a medical question.
+    // Only the latest reply counts. The staff pop-up itself opens only when
+    // the patient taps that button, never from a reply.
     rememberPendingTrigger(reply.needsEscalation);
-    if (reply.needsEscalation && !openThreadId) {
-      setShowEscalationModal(true);
-    }
   };
 
   // ── Admin mode: message the escalated thread ──
+  // The message shows at once as "Sending…". It leaves the local list when
+  // Firestore confirms it (the live listener then shows the saved copy); if
+  // it fails it stays, marked "Not sent", with a retry.
+  const deliver = async (local: BubbleMessage) => {
+    if (!openThreadId || !user) return;
+    setPendingMessages(list => list.map(m => (m.id === local.id ? { ...m, localStatus: 'sending' } : m)));
+    try {
+      await addDoc(collection(db, 'chatMessages'), {
+        threadId: openThreadId,
+        text: local.text,
+        sender: 'patient',
+        senderName: user.displayName || 'Patient',
+        createdAt: Date.now(),
+      });
+      setPendingMessages(list => list.filter(m => m.id !== local.id));
+    } catch (e: any) {
+      console.error('Send message error:', e?.code || e);
+      setPendingMessages(list => list.map(m => (m.id === local.id ? { ...m, localStatus: 'failed' } : m)));
+      return;
+    }
+    // Inbox order and the clinic's unread flag. The message is already saved,
+    // so a failure here only delays the inbox update; it is not shown as an
+    // unsent message.
+    updateDoc(doc(db, 'chatThreads', openThreadId), {
+      lastMessage: local.text,
+      lastMessageAt: Date.now(),
+      status: 'pending',
+      unread: true,
+    }).catch(err => console.warn('Thread update after send failed:', err?.code || err));
+  };
+
   const sendAdminMessage = async () => {
     const text = input.trim();
     if (!text || !openThreadId || !user || sendingRef.current) return;
     sendingRef.current = true;
     setInput('');
     setSending(true);
-    try {
-      await addDoc(collection(db, 'chatMessages'), {
-        threadId: openThreadId,
-        text,
-        sender: 'patient',
-        senderName: user.displayName || 'Patient',
-        createdAt: Date.now(),
-      });
-      await updateDoc(doc(db, 'chatThreads', openThreadId), {
-        lastMessage: text,
-        lastMessageAt: Date.now(),
-        status: 'pending',
-        unread: true,
-      });
-    } catch (e: any) {
-      console.error('Send message error:', e);
-      setChatError(e?.code === 'permission-denied'
-        ? 'You do not have permission to send messages.'
-        : 'Message failed to send. Please try again.');
-    } finally {
+    const local: BubbleMessage = { id: `local-${Date.now()}`, text, sender: 'patient', createdAt: Date.now(), localStatus: 'sending' };
+    setPendingMessages(list => [...list, local]);
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
+    try { await deliver(local); }
+    finally {
       setSending(false);
       sendingRef.current = false;
     }
   };
+  const retrySend = (m: BubbleMessage) => { if (m.localStatus === 'failed') deliver(m); };
 
   const send = (override?: string) => (mode === 'admin' ? sendAdminMessage() : sendBotMessage(override));
 
@@ -525,9 +555,9 @@ export default function ChatScreen() {
     else router.navigate({ pathname: '/', params: { tab: 'Records', t: String(Date.now()) } });
   };
 
-  const messages = mode === 'admin' ? adminMessages : botMessages;
+  const messages = mode === 'admin' ? [...adminMessages, ...pendingMessages] : botMessages;
   const messagesLoaded = mode === 'admin' ? adminMessagesLoaded : true;
-  const typing = mode === 'admin' ? sending : botTyping;
+  const typing = mode === 'admin' ? false : botTyping;
 
   return (
     <View style={{ flex: 1, backgroundColor: '#fff' }}>
@@ -565,14 +595,22 @@ export default function ChatScreen() {
         keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
       >
         <Animated.View style={[{ flex: 1 }, keyboardLift]}>
-          {chatError ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(8), padding: scale(14), backgroundColor: C.redLight }}>
-              <Ionicons name="alert-circle-outline" size={16} color={C.red} />
-              <Text style={{ color: C.red, fontSize: moderateScale(12.5), flex: 1 }}>{chatError}</Text>
+          {/* KAI's disclaimer: one quiet line pinned under the header, so it
+              stays in view while the conversation scrolls and is never
+              under the message input. */}
+          {mode === 'bot' && (
+            <View style={s.disclaimerBar} accessibilityRole="text">
+              <Ionicons name="information-circle-outline" size={13} color="#64748B" style={{ marginTop: 1 }} />
+              <Text style={s.disclaimerTxt}>{KAI_DISCLAIMER}</Text>
             </View>
-          ) : null}
+          )}
 
-          {!threadLoaded || !messagesLoaded ? (
+          {mode === 'admin' && loadError ? (
+            <View style={s.loadError}>
+              <Ionicons name="cloud-offline-outline" size={26} color={C.textSub} />
+              <Text style={s.loadErrorTxt}>{loadError}</Text>
+            </View>
+          ) : !threadLoaded || !messagesLoaded ? (
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
               <ActivityIndicator color={C.red} size="large" />
             </View>
@@ -588,14 +626,6 @@ export default function ChatScreen() {
                     ? 'Send a message and clinic staff will reply here'
                     : "I'm the K&A Clinic virtual assistant. Ask about office hours, the clinic's location and contact details, booking an appointment, or finding your way around the app."}
                 </Text>
-                {/* KAI's disclaimer: one quiet line in the welcome, and the
-                    first line of every conversation (never under the input). */}
-                {mode === 'bot' && (
-                  <View style={s.disclaimerLine} accessibilityRole="text">
-                    <Ionicons name="information-circle-outline" size={13} color="#64748B" />
-                    <Text style={s.disclaimerTxt}>{KAI_DISCLAIMER}</Text>
-                  </View>
-                )}
               </View>
               {mode === 'bot' && (
                 <View style={s.grid}>
@@ -612,12 +642,6 @@ export default function ChatScreen() {
             </ScrollView>
           ) : (
             <ScrollView ref={scrollRef} contentContainerStyle={s.chatScroll} keyboardShouldPersistTaps="handled">
-              {mode === 'bot' && (
-                <View style={[s.disclaimerLine, s.disclaimerTop]} accessibilityRole="text">
-                  <Ionicons name="information-circle-outline" size={13} color="#64748B" />
-                  <Text style={s.disclaimerTxt}>{KAI_DISCLAIMER}</Text>
-                </View>
-              )}
               {messages.map((m) => {
                 const isPatient = m.sender === 'patient';
                 const senderLabel = m.sender === 'bot'
@@ -637,6 +661,15 @@ export default function ChatScreen() {
                           {renderFormattedMessage(m.text, isPatient)}
                         </Text>
                       </View>
+                      {m.localStatus === 'sending' && (
+                        <View style={s.msgStatusRow}><Text style={s.msgStatusTxt}>Sending…</Text></View>
+                      )}
+                      {m.localStatus === 'failed' && (
+                        <Pressable onPress={() => retrySend(m)} accessibilityRole="button" accessibilityLabel="Message not sent. Tap to retry." hitSlop={8} style={s.msgStatusRow}>
+                          <Ionicons name="alert-circle" size={14} color="#DC2626" />
+                          <Text style={s.msgFailedTxt}>Not sent · Tap to retry</Text>
+                        </Pressable>
+                      )}
                       {m.action && (
                         <Pressable
                           onPress={() => openReplyAction(m.action!)}
@@ -658,6 +691,29 @@ export default function ChatScreen() {
                 <ActivityIndicator color={C.red} style={{ alignSelf: 'flex-start', marginLeft: scale(20) }} />
               )}
             </ScrollView>
+          )}
+
+          {/* KAI view, no open staff conversation: the only way to the
+              "Talk to clinic staff?" pop-up. Filled after a medical question. */}
+          {mode === 'bot' && threadLoaded && !openThreadId && (
+            <View style={s.actionRow}>
+              <Tap
+                style={staffButtonUrgent ? s.flexBtnPrimary : s.flexBtnSecondary}
+                onPress={onStaffButtonPress}
+                disabled={escalating}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+              >
+                {escalating ? (
+                  <ActivityIndicator color={staffButtonUrgent ? '#fff' : C.red} size="small" />
+                ) : (
+                  <>
+                    <Ionicons name="people-outline" size={15} color={staffButtonUrgent ? '#fff' : C.red} />
+                    <Text style={staffButtonUrgent ? s.flexBtnPrimaryTxt : s.flexBtnSecondaryTxt}>Talk to clinic staff</Text>
+                  </>
+                )}
+              </Tap>
+            </View>
           )}
 
           {/* Bot view controls */}
@@ -762,8 +818,8 @@ export default function ChatScreen() {
 
       <CustomAlertModal config={alertConfig} onClose={hideAlert} />
 
-      {/* Talk to clinic staff: shown after a clinical reply, confirms before a
-          new staff conversation is created. */}
+      {/* Talk to clinic staff: opened only by the patient tapping the button;
+          confirms before a new staff conversation is created. */}
       <CustomAlertModal
         config={{
           visible: showEscalationModal,
@@ -1121,6 +1177,16 @@ const s = StyleSheet.create({
   },
 
   // Plain text, no container: visible but quiet.
+  disclaimerBar: {
+    flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', gap: scale(5),
+    paddingHorizontal: scale(16), paddingVertical: verticalScale(7),
+    backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#F1F5F9',
+  },
+  loadError: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: verticalScale(8), paddingHorizontal: scale(32) },
+  loadErrorTxt: { fontSize: moderateScale(13), lineHeight: moderateScale(19), color: C.textSub, textAlign: 'center' },
+  msgStatusRow: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', gap: scale(4), marginTop: verticalScale(4), minHeight: 28, paddingHorizontal: scale(4) },
+  msgStatusTxt: { fontSize: moderateScale(11.5), color: C.textSub, fontWeight: '600' },
+  msgFailedTxt: { fontSize: moderateScale(11.5), color: '#DC2626', fontWeight: '700' },
   disclaimerLine: {
     flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', gap: scale(5),
     marginTop: verticalScale(14), paddingHorizontal: scale(8), maxWidth: scale(360), alignSelf: 'center',

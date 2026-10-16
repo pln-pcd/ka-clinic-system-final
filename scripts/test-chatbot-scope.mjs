@@ -9,7 +9,9 @@
 // any mismatch.
 //
 // Categories: in_scope (answered) · personal_nav (navigation only, no dates)
-//             clinical (blocked, fixed neutral reply) · out_of_scope
+//             personal_info (own name / MRN / contact: says which screen)
+//             vague (bare topic word: asks what the user needs)
+//             clinical (blocked, refusal + disclaimer) · out_of_scope
 import * as server from '../api/_lib/chatbotRules.js';
 
 let app = null;
@@ -20,6 +22,17 @@ try {
 }
 
 export const CASES = [
+  // ── 1.0.5 reply types (out of scope / vague / medical) ──
+  ['what is my name', 'personal_info'],
+  ['what is my MRN', 'personal_info'],
+  ['vaccine', 'vague'],
+  ['rabies', 'vague'],
+  ['Rabies', 'vague'],
+  ['what is rabies?', 'clinical'],
+  ['do I need a booster?', 'clinical'],
+  ['clinic hours?', 'in_scope'],
+  ['how do I book?', 'in_scope'],
+  ['where is the clinic?', 'in_scope'],
   // ── Allowed: office hours ──
   ['What are your clinic hours?', 'in_scope'],
   ['Are you open on Sunday?', 'in_scope'],
@@ -95,7 +108,7 @@ export const CASES = [
 
 // Fixed replies must never carry medical content or emergency instructions.
 const NO_MEDICAL = /\b(day\s*0|day\s*3|day\s*7|day\s*28|regimen|wound|first\s*aid|emergency\s+room|nearest\s+(animal\s+bite|hospital|abtc)|category\s*(ii|iii|2|3)|₱)\b/i;
-const REPLIES = ['BLOCKED_REPLY', 'BLOCKED_REPLY_APP', 'PERSONAL_NAV_REPLY_APP', 'PERSONAL_NAV_REPLY_PUBLIC', 'OUT_OF_SCOPE_REPLY', 'GREETING_REPLY', 'HOURS_REPLY', 'CONTACT_REPLY', 'SERVICES_REPLY', 'PRICE_REPLY', 'BOOKING_REPLY', 'APP_NAV_REPLY'];
+const REPLIES = ['BLOCKED_REPLY', 'BLOCKED_REPLY_APP', 'VAGUE_REPLY', 'PERSONAL_INFO_REPLY_APP', 'PERSONAL_INFO_REPLY_PUBLIC', 'PERSONAL_NAV_REPLY_APP', 'PERSONAL_NAV_REPLY_PUBLIC', 'OUT_OF_SCOPE_REPLY', 'GREETING_REPLY', 'HOURS_REPLY', 'CONTACT_REPLY', 'SERVICES_REPLY', 'PRICE_REPLY', 'BOOKING_REPLY', 'APP_NAV_REPLY'];
 
 let failures = 0;
 const rows = [];
