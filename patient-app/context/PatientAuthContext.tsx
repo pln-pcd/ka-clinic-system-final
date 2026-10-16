@@ -19,8 +19,10 @@ import type { User } from 'firebase/auth';
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { withTimeout } from '../utils/timeout';
-import { auth, checkLoginTrust, onAuthStateChanged, resolveMRNForUser, signOut } from '../config/backend';
-import { getKeepSignedIn, hasSeenOnboarding } from '../config/appPrefs';
+import { perfMark } from '../utils/perf';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { auth, checkLoginTrust, firebaseConfig, onAuthStateChanged, resolveMRNForUser, signOut } from '../config/backend';
+import { getKeepSignedIn, getTrustToken, hasSeenOnboarding } from '../config/appPrefs';
 import { clearThisDeviceSession, registerThisDevice, watchOwnSession } from '../config/deviceSessions';
 import { cacheKeys, clearCache, peekCache, primeCache, writeCache } from '../utils/localCache';
 
@@ -40,6 +42,9 @@ type PatientAuthState = {
   seenOnboarding: boolean;
   /** Set when the account resolves to no single MRN (shown on Home). */
   mrnError: string | null;
+  /** Bumped when a background trust check re-grants the server session, so
+   *  live listeners that started before it can subscribe again. */
+  sessionKey: number;
 };
 
 const PatientAuthContext = createContext<PatientAuthState>({
@@ -53,6 +58,7 @@ const PatientAuthContext = createContext<PatientAuthState>({
   completeSecondFactor: () => {},
   seenOnboarding: true,
   mrnError: null,
+  sessionKey: 0,
 });
 
 export function PatientAuthProvider({ children }: { children: React.ReactNode }) {
@@ -68,6 +74,7 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [seenOnboarding, setSeenOnboarding] = useState(true);
   const [mrnError, setMrnError] = useState<string | null>(null);
+  const [sessionKey, setSessionKey] = useState(0);
   // MRN the server issued with the second factor, keyed by uid.
   const serverMrn = useRef<{ uid: string; mrn: string } | null>(null);
 
@@ -93,6 +100,43 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
     try { await signOut(auth); } catch {}
     setAuthUser(null);
   };
+
+  // Fast first screen: Firebase restores the saved session only after a
+  // network round trip (it reloads the user from the server), about a second
+  // on a phone. The saved session itself is on disk, so it is read directly
+  // and the first screen shows at once: a guest straight away; a patient when
+  // "Keep me signed in", a trust token and a cached record are all on this
+  // device. The full checks below (Firebase restore, keep-signed-in, server
+  // trust check) still run and sign out anything that does not hold up.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const key = `firebase:authUser:${firebaseConfig.apiKey}:[DEFAULT]`;
+        const raw = await withTimeout(AsyncStorage.getItem(key), 1500, 'Saved session', null);
+        if (cancelled || launchHandled.current || !raw) return;
+        const saved = JSON.parse(raw);
+        if (!saved?.uid) return;
+        const early = { uid: saved.uid, isAnonymous: !!saved.isAnonymous, email: saved.email ?? null, displayName: saved.displayName ?? null } as unknown as User;
+        if (!saved.isAnonymous) {
+          const [keep, token] = await Promise.all([
+            withTimeout(getKeepSignedIn(), 1500, 'Prefs', false),
+            withTimeout(getTrustToken(), 1500, 'Keystore', null).catch(() => null),
+            withTimeout(primeLaunchCache(saved.uid), 1500, 'Cache', undefined).catch(() => {}),
+          ]);
+          const cachedMrn = peekCache<string>(cacheKeys.mrnForUid(saved.uid));
+          if (cancelled || launchHandled.current || !keep || !token || !cachedMrn) return;
+          setMrn(cachedMrn);
+          setVerifiedUid(saved.uid);
+        }
+        setSeenOnboarding(true);
+        setAuthUser(prev => prev ?? early);
+        perfMark('auth-ready-fast');
+        setLoading(false);
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     // Last resort: whatever happens below, the splash never stays up longer
@@ -127,29 +171,43 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
             }
             // "Keep me signed in" was ticked, but that alone is not enough:
             // the server must confirm THIS install still holds a valid trust
-            // token (8 s at most). A "no" (expired, revoked, reinstall, no
-            // token) signs the session out. No answer at all (offline) with a
-            // token on this device opens Home from the cached record and
-            // re-checks once the app is back online. The cache is read at the
-            // same time.
-            const [trust] = await Promise.all([
-              checkLoginTrust(8000),
+            // token. When this device has a token and a cached record, Home
+            // opens at once from the cache and the check runs in the
+            // background: a "no" (revoked, expired, reinstall) then signs the
+            // session out and returns to sign-in; no answer (offline) keeps
+            // Home and re-checks when the app is next active. Without a token
+            // or cache, the check (8 s at most) runs before anything shows.
+            const [token] = await Promise.all([
+              withTimeout(getTrustToken(), 3000, 'Keystore', null).catch(() => null),
               withTimeout(primeLaunchCache(fbUser.uid), 3000, 'Cache', undefined).catch(() => {}),
             ]);
             const cachedMrn = peekCache<string>(cacheKeys.mrnForUid(fbUser.uid));
-            if (!trust.trusted && !(trust.offline && trust.hasToken && cachedMrn)) {
-              await endRestoredSession(fbUser.uid);
-              return;
-            }
-            offlineSession.current = !trust.trusted;
-            if (trust.mrn) {
-              serverMrn.current = { uid: fbUser.uid, mrn: trust.mrn };
-              setMrn(trust.mrn);
-              writeCache(cacheKeys.mrnForUid(fbUser.uid), trust.mrn);
-            } else if (cachedMrn) {
+            const applyTrust = (trust: { trusted: boolean; mrn: string | null; offline?: boolean }) => {
+              offlineSession.current = !trust.trusted;
+              if (trust.mrn) {
+                serverMrn.current = { uid: fbUser.uid, mrn: trust.mrn };
+                setMrn(trust.mrn);
+                writeCache(cacheKeys.mrnForUid(fbUser.uid), trust.mrn);
+              }
+            };
+            if (token && cachedMrn) {
               setMrn(cachedMrn);
+              offlineSession.current = true; // until the server answers
+              setVerifiedUid(fbUser.uid);
+              checkLoginTrust(8000).then(async trust => {
+                if (trust.trusted) { applyTrust(trust); setSessionKey(k => k + 1); }
+                else if (!trust.offline) { offlineSession.current = false; await endRestoredSession(fbUser.uid); }
+              }).catch(() => {});
+            } else {
+              const trust = await checkLoginTrust(8000);
+              if (!trust.trusted && !(trust.offline && trust.hasToken && cachedMrn)) {
+                await endRestoredSession(fbUser.uid);
+                return;
+              }
+              applyTrust(trust);
+              if (!trust.mrn && cachedMrn) setMrn(cachedMrn);
+              setVerifiedUid(fbUser.uid);
             }
-            setVerifiedUid(fbUser.uid);
           }
         }
         setAuthUser(fbUser);
@@ -161,6 +219,7 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
         else setAuthUser(fbUser);
       } finally {
         clearTimeout(failSafe);
+        perfMark('auth-ready');
         setLoading(false);
       }
     });
@@ -258,7 +317,7 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
 
   return (
     <PatientAuthContext.Provider
-      value={{ user, mrn, isGuest: !!user?.isAnonymous, loading, mrnLoading, deviceId, pendingUser, completeSecondFactor, seenOnboarding, mrnError }}
+      value={{ user, mrn, isGuest: !!user?.isAnonymous, loading, mrnLoading, deviceId, pendingUser, completeSecondFactor, seenOnboarding, mrnError, sessionKey }}
     >
       {children}
     </PatientAuthContext.Provider>

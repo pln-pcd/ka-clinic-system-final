@@ -3,8 +3,8 @@
 // shown on desktop web.
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect, useRef } from 'react';
-import { InteractionManager, View, StyleSheet, Text } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { AccessibilityInfo, InteractionManager, View, StyleSheet, Text } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { usePatientAuth } from '../context/PatientAuthContext';
 import { setupNotificationChannelAsync } from '../config/notifications';
@@ -68,6 +68,21 @@ export function MobileApp() {
     }
   }, [user, loading, segments]);
 
+  // Onboarding pages: the native eased slide with a slight parallax of the
+  // page underneath (smoother than the plain linear slide), the same for
+  // Next, Back and swipe-back; just a quick fade when "reduce motion" is on.
+  const [reduceMotion, setReduceMotion] = useState(false);
+  useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion).catch(() => {});
+    const sub = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
+    return () => sub.remove();
+  }, []);
+  const onboardingTransition = {
+    animation: reduceMotion ? 'fade' : 'ios_from_right',
+    animationDuration: reduceMotion ? 150 : 320,
+    contentStyle: { backgroundColor: '#FFFFFF' },
+  } as const;
+
   // Still behind the native splash screen.
   if (loading) return null;
 
@@ -87,10 +102,10 @@ export function MobileApp() {
         {/* Leaving OTP must sign the pending session out — the on-screen back
             button (and Android back, handled in the screen) does that. */}
         <Stack.Screen name="auth/verify-login-otp" options={{ gestureEnabled: false }} />
-        <Stack.Screen name="onboarding1" options={{ animation: 'slide_from_right', animationDuration: 240, contentStyle: { backgroundColor: '#FFFFFF' } }} />
-        <Stack.Screen name="onboarding2" options={{ animation: 'slide_from_right', animationDuration: 240, contentStyle: { backgroundColor: '#FFFFFF' } }} />
-        <Stack.Screen name="onboarding3" options={{ animation: 'slide_from_right', animationDuration: 240, contentStyle: { backgroundColor: '#FFFFFF' } }} />
-        <Stack.Screen name="onboarding4" options={{ animation: 'slide_from_right', animationDuration: 240, contentStyle: { backgroundColor: '#FFFFFF' } }} />
+        <Stack.Screen name="onboarding1" options={onboardingTransition} />
+        <Stack.Screen name="onboarding2" options={onboardingTransition} />
+        <Stack.Screen name="onboarding3" options={onboardingTransition} />
+        <Stack.Screen name="onboarding4" options={onboardingTransition} />
       </Stack>
     </SafeAreaProvider>
   );

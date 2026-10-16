@@ -22,6 +22,11 @@ try {
 }
 
 export const CASES = [
+  // ── 1.0.8 broader medical detection ──
+  ['pneumonia', 'clinical'], ['pnuemonia', 'clinical'], ['PNEUMONIA', 'clinical'], ['fever', 'clinical'],
+  ['headache', 'clinical'], ['dengue', 'clinical'], ['paracetamol', 'clinical'], ['antibiotics', 'clinical'],
+  ['itchy wound', 'clinical'], ['covid', 'clinical'], ['my arm hurts', 'clinical'],
+  ['clinic hours', 'in_scope'], ['forgot my password', 'in_scope'], ['do you offer pneumonia vaccine?', 'in_scope'],
   // ── 1.0.5 reply types (out of scope / vague / medical) ──
   ['what is my name', 'personal_info'],
   ['what is my MRN', 'personal_info'],

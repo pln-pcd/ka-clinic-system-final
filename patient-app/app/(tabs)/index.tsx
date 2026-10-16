@@ -49,6 +49,7 @@ import {
 import { usePatientAuth } from '../../context/PatientAuthContext';
 import { GUTTER, moderateScale, scale, verticalScale } from '../../utils/scale';
 import { cacheKeys, peekCache, writeCache } from '../../utils/localCache';
+import { perfMark } from '../../utils/perf';
 import CustomAlertModal, { CustomAlertConfig } from '../../components/CustomAlertModal';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -236,7 +237,7 @@ const NotifSwipeToDeleteRow = ({ children, onDelete }: { children: React.ReactNo
 export default function RabiesRecoveryApp() {
   const router = useRouter();
   const params = useLocalSearchParams<{ tab?: string; t?: string }>();
-  const { user, mrn, isGuest, mrnLoading, mrnError, loading: authLoading } = usePatientAuth();
+  const { user, mrn, isGuest, mrnLoading, mrnError, sessionKey, loading: authLoading } = usePatientAuth();
   const insets = useSafeAreaInsets();
 
   const [activeTab, setActiveTab] = useState<'Home' | 'Records'>('Home');
@@ -392,11 +393,28 @@ export default function RabiesRecoveryApp() {
   // The vaccination card lives inline in this Home feed. Other screens (and
   // KAI's "Open my vaccination card" button) deep-link to it with
   // ?tab=Records, which scrolls it into view; t makes a repeat tap count.
+  //
+  // The target is the card's measured position (content container offset +
+  // the card's offset inside it), not a fixed number, so it stays right when
+  // the banner above changes height or is still loading. The request stays
+  // open for a moment and re-aims on every layout change in that time, which
+  // covers Home not yet laid out (opened from another tab) as well as Home
+  // already open and scrolled anywhere.
+  useEffect(() => { perfMark('home-shown'); }, []);
   const tabParam = params?.tab;
+  const contentY = useRef(0);
+  const cardY = useRef<number | null>(null);
+  const scrollRequest = useRef(0); // time the request expires (ms), 0 = none
+  const scrollToCard = () => {
+    if (!scrollRequest.current || Date.now() > scrollRequest.current || cardY.current === null) return;
+    // Room for the status bar so the card's header is fully visible.
+    const target = Math.max(0, contentY.current + cardY.current - insets.top - verticalScale(12));
+    mainScrollViewRef.current?.scrollTo({ y: target, animated: true });
+  };
   useEffect(() => {
-    if (tabParam === 'Records') {
-      mainScrollViewRef.current?.scrollTo({ y: 340, animated: true });
-    }
+    if (tabParam !== 'Records') return;
+    scrollRequest.current = Date.now() + 1500;
+    scrollToCard();
   }, [tabParam, params?.t]);
 
   useEffect(() => {
@@ -443,7 +461,7 @@ export default function RabiesRecoveryApp() {
       console.error('Vaccination listener error:', err);
       setRecordReady(true);
     });
-  }, [mrn]);
+  }, [mrn, sessionKey]);
 
   // Clinic-sent follow-ups (manual "Send Follow-up" from the dashboard, and
   // the automatic due-dose sweep). Delivered as push when the app is closed;
@@ -673,7 +691,7 @@ export default function RabiesRecoveryApp() {
         </View>
 
         {/* ── MAIN CONTENT CONTAINER ── */}
-        <View style={s.mainContentContainer}>
+        <View style={s.mainContentContainer} onLayout={e => { contentY.current = e.nativeEvent.layout.y; scrollToCard(); }}>
           <>
               {/* Harmonious Clean Next Dose Protocol Card */}
               <Tap
@@ -733,6 +751,7 @@ export default function RabiesRecoveryApp() {
 
               {/* ── OFFICIAL VACCINATION RECORD CARD (3D FLIP) ── */}
               <Tap activeOpacity={0.96} onPress={toggleCardFlip} clip={false} style={{ width: '100%' }}
+                onLayout={e => { cardY.current = e.nativeEvent.layout.y; scrollToCard(); }}
                 accessibilityRole="button" accessibilityLabel={isFlippedState ? 'Vaccination card, back side. Tap to show the front.' : 'Vaccination card, front side. Tap to show the back.'}>
                 <VaccinationCard variant="inline" data={cardData} flipped={isFlippedState} frontRef={cardFrontShotRef} backRef={cardBackShotRef} />
               </Tap>

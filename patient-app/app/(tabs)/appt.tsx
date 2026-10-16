@@ -845,18 +845,27 @@ export default function AppointmentsScreen() {
                     the status in place when the visit cannot be cancelled. */}
                 <View style={s.apptStack}>
                   <StatusBadge status={appt.status} declined={isEnded(appt) && endedByClinic(appt)}/>
+                  {/* The status (information, a tinted badge) sits above the
+                      cancel action (an outlined pill with a label), both
+                      right-aligned. A visit that cannot be cancelled keeps
+                      an invisible pill of the same size, so the badge never
+                      moves. Opens the same Request Cancellation flow. */}
                   {canCancel ? (
                     <Tap
-                      style={s.cancelBtn}
-                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      style={s.cancelPill}
+                      hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
                       onPress={() => { setCancellationReasonInput(''); setSelectedApptDetail(appt); }}
                       accessibilityRole="button"
                       accessibilityLabel="Request cancellation"
                     >
-                      <Ionicons name="close" size={16} color={C.slate}/>
+                      <Ionicons name="close-circle-outline" size={13} color={C.navy}/>
+                      <Text style={s.cancelPillTxt}>Cancel</Text>
                     </Tap>
                   ) : (
-                    <View style={s.cancelBtnSpace} />
+                    <View style={[s.cancelPill, s.cancelPillHidden]} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+                      <Ionicons name="close-circle-outline" size={13} color={C.navy}/>
+                      <Text style={s.cancelPillTxt}>Cancel</Text>
+                    </View>
                   )}
                 </View>
               </Tap>
@@ -1606,9 +1615,13 @@ const s = StyleSheet.create({
   adminNoteTxt: { flex: 1, fontSize: moderateScale(10), color: C.red, fontWeight: '600', lineHeight: moderateScale(14) },
 
   // 34dp button plus 6dp hitSlop: a 46dp tap target.
-  cancelBtn:  { width: 34, height: 34, borderRadius: 10, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: C.border, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
-  cancelBtnSpace: { width: 34, height: 34 },
-  apptStack:  { alignItems: 'flex-end', justifyContent: 'center', gap: verticalScale(8), marginLeft: scale(10) },
+  // Same height and corner radius as the status badge, so the two read as a
+  // pair; outlined with a label so it reads as an action. With hitSlop the
+  // tap area is about 44dp tall.
+  cancelPill: { flexDirection: 'row', alignItems: 'center', gap: scale(4), paddingHorizontal: scale(9), paddingVertical: verticalScale(4), borderRadius: scale(8), borderWidth: 1, borderColor: C.border, backgroundColor: C.white, overflow: 'hidden' },
+  cancelPillHidden: { opacity: 0 },
+  cancelPillTxt: { fontSize: moderateScale(11), fontWeight: '700', color: C.navy },
+  apptStack:  { alignItems: 'flex-end', justifyContent: 'center', gap: verticalScale(6), marginLeft: scale(10) },
   doneBadge:  { flexDirection: 'row', alignItems: 'center', gap: scale(4), backgroundColor: C.greenFaint, paddingHorizontal: scale(8), paddingVertical: verticalScale(4), borderRadius: scale(8) },
   doneTxt:    { fontSize: moderateScale(10), fontWeight: '800', color: C.green },
 });

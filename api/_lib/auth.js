@@ -178,12 +178,35 @@ export async function isDeviceTrusted({ uid, deviceId, trustToken }) {
   if (stored.length !== expected.length) return false;
   if (!crypto.timingSafeEqual(Buffer.from(stored), Buffer.from(expected))) return false;
 
+  // A one-time sign-up pass (issueSignupPass) is used before this device is
+  // registered, so it has no patientSessions doc yet.
+  if (entry.oneTime === true) return { oneTime: true };
+
   // Revoking a device from the "Logged-in devices" screen deletes or flags
   // its patientSessions doc; that must also kill the OTP bypass.
   const sessionSnap = await db.collection('patientSessions').doc(`${uid}_${deviceId}`).get();
   if (!sessionSnap.exists || sessionSnap.data()?.revoked === true) return false;
 
-  return true;
+  return { oneTime: false };
+}
+
+// Sign-up already proved the email address with a code, so the first
+// sign-in right after it, on the same phone, skips the second code: a
+// one-time pass valid for 15 minutes, used up by that sign-in (or turned
+// into the normal 30-day trust when the patient ticks "Keep me signed in").
+export const SIGNUP_PASS_TTL_MS = 15 * 60 * 1000;
+export async function issueSignupPass({ uid, deviceId }) {
+  const token = crypto.randomBytes(32).toString('hex');
+  const now = Date.now();
+  await db.collection('patientTrustedDevices').doc(uid).set({
+    devices: {
+      [fingerprintDeviceId(deviceId)]: {
+        deviceId, tokenHash: hashTrustToken(token), label: 'Sign-up', oneTime: true,
+        createdAt: now, lastActiveAt: now, expiresAt: now + SIGNUP_PASS_TTL_MS, revoked: false,
+      },
+    },
+  }, { merge: true });
+  return token;
 }
 
 export async function touchTrustedDevice({ uid, deviceId }) {

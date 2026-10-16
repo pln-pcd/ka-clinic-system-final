@@ -22,7 +22,6 @@ import {
   completeEmailSignup,
   getAuthErrorMessage,
   sendEmailOTP,
-  sendLoginOTP,
   signInAsGuest,
   verifyEmailOTP,
 } from '../../config/backend';
@@ -163,9 +162,11 @@ export default function PatientSignupScreen() {
 
     setLoading(true);
     try {
+      // Account created. The patient signs in next; on this phone that first
+      // sign-in skips the second code (the sign-up code already proved the
+      // email address).
       await completeEmailSignup(record, password);
-      const { maskedEmail } = await sendLoginOTP();
-      router.replace({ pathname: '/auth/verify-login-otp', params: { maskedEmail, remember: '0' } });
+      resetTo(router, { pathname: '/auth/login', params: { mrn: record.mrn, created: '1' } } as any);
     } catch (e: any) {
       setError(getAuthErrorMessage(e));
     } finally {

@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import React, { useEffect } from 'react';
 import { Dimensions, Image, Platform, StyleSheet, Text, View } from 'react-native';
 import Tap from '../components/Tap';
+import { EnterIllustration, EnterText, OnboardingDots } from '../components/OnboardingMotion';
 import { preloadOnboarding } from '../utils/preloadOnboarding';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { moderateScale, scale, verticalScale } from '../utils/scale';
@@ -44,29 +45,26 @@ export default function Onboarding1() {
         {/* ILLUSTRATION AREA - 54% SCREEN HEIGHT */}
         <View style={styles.illustrationWrapper}>
           <View style={styles.glassEffect} />
-          <Image
-            source={require('../assets/onboarding1.png')} 
-            style={styles.image}
-            resizeMode="contain"
-          />
+          <EnterIllustration style={styles.image}>
+            <Image
+              source={require('../assets/onboarding1.png')}
+              style={StyleSheet.absoluteFill}
+              resizeMode="contain"
+            />
+          </EnterIllustration>
         </View>
 
         {/* WHITE CARD - 46% SCREEN HEIGHT (BUTTON ELEVATED ABOVE NAV BAR) */}
         <View style={[styles.card, { paddingBottom: bottomPadding }]}>
           <View style={styles.cardContent}>
-            <View style={styles.indicatorContainer}>
-              <View style={[styles.indicator, styles.activeIndicator]} />
-              <View style={styles.indicator} />
-              <View style={styles.indicator} />
-              <View style={styles.indicator} />
-            </View>
+            <OnboardingDots active={0} />
 
-            <Text style={styles.tag}>PROTOCOL: DOSE TRACKING</Text>
-            <Text style={styles.title}>Strict Dose{"\n"}Protocol</Text>
+            <EnterText delay={60}><Text style={styles.tag}>PROTOCOL: DOSE TRACKING</Text></EnterText>
+            <EnterText delay={110}><Text style={styles.title}>Strict Dose{"\n"}Protocol</Text></EnterText>
             
-            <Text style={styles.description}>
+            <EnterText delay={160}><Text style={styles.description}>
               Your Day 0, 3, 7 and 28 doses are mapped out automatically from your exposure date. See what&apos;s done, what&apos;s next, and get a reminder before every visit so no dose is ever missed.
-            </Text>
+            </Text></EnterText>
           </View>
 
           <Tap

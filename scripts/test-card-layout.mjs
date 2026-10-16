@@ -138,6 +138,20 @@ try {
       }
       results.push(`${width}px ${key}`);
     }
+    // Dose timeline table: every session label on one line.
+    await page.goto('http://localhost:8084/ui-fixture');
+    await page.getByText('Session 4 (Day 28)', { exact: true }).waitFor({ timeout: 60000 });
+    const wraps = await page.evaluate(() => [...document.querySelectorAll('div[dir="auto"]')]
+      .filter(e => /^Session \d \(Day \d+\)$/.test(e.textContent))
+      .filter(e => {
+        const c = e.cloneNode(true);
+        Object.assign(c.style, { whiteSpace: 'nowrap', position: 'absolute', width: 'auto', padding: '0' });
+        document.body.appendChild(c); const need = c.getBoundingClientRect().width; c.remove();
+        const cs = getComputedStyle(e);
+        return need > e.getBoundingClientRect().width - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) + 0.5;
+      }).map(e => e.textContent));
+    assert.deepEqual(wraps, [], `${width}px timeline: ${wraps.join(', ')} wraps`);
+    await page.screenshot({ path: `.tmp/ui-checks/timeline-${width}.png`, fullPage: true });
     assert.deepEqual(errors, []);
     await page.screenshot({ path: `.tmp/ui-checks/cards-${width}.png`, fullPage: true });
     console.log(`PASS ${width}px: equal faces/exports, nothing clipped, fields match dashboard rules, history 0/1/2`);

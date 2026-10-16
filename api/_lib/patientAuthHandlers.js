@@ -1,5 +1,5 @@
 import { db, auth } from './firebaseAdmin.js';
-import { findAuthorizedPatient, normalizeMRN, isDeviceTrusted, isPatientRecordArchived,
+import { findAuthorizedPatient, normalizeMRN, isDeviceTrusted, isPatientRecordArchived, issueSignupPass,
   requireAuthenticatedPatient, touchTrustedDevice, untrustDevice, maskEmail,
   sendOtpEmailOrRollback, trustDevice } from './auth.js';
 import { issueOtp, consumeOtp, matchesSecret, grantSecuritySession,
@@ -79,9 +79,19 @@ async function sendOtp(req, res) {
       return res.status(200).json({ success: true });
     }
     if (action === 'login-check') {
-      const trusted = await isDeviceTrusted({ uid: caller.uid, deviceId, trustToken: req.body?.trustToken });
-      if (trusted) { await touchTrustedDevice({ uid: caller.uid, deviceId }); await grantSecuritySession(caller.decoded, 'patient', { mrn: caller.mrn, deviceId }); }
-      return res.status(200).json({ success: true, trusted, ...(trusted ? { mrn: caller.mrn } : {}) });
+      const entry = await isDeviceTrusted({ uid: caller.uid, deviceId, trustToken: req.body?.trustToken });
+      if (!entry) return res.status(200).json({ success: true, trusted: false });
+      await grantSecuritySession(caller.decoded, 'patient', { mrn: caller.mrn, deviceId });
+      // A one-time sign-up pass is used up here: replaced by the normal
+      // 30-day trust when "Keep me signed in" is ticked, otherwise revoked.
+      let trustToken;
+      if (entry.oneTime) {
+        if (req.body?.rememberDevice === true) trustToken = (await trustDevice({ uid: caller.uid, deviceId, deviceLabel: req.body?.deviceLabel })).token;
+        else { await untrustDevice({ uid: caller.uid, deviceId }); trustToken = null; }
+      } else {
+        await touchTrustedDevice({ uid: caller.uid, deviceId });
+      }
+      return res.status(200).json({ success: true, trusted: true, mrn: caller.mrn, ...(trustToken !== undefined ? { trustToken } : {}) });
     }
     const result = await mailOtp(db.collection('patientLoginOtps').doc(caller.uid), caller.email, 'Your K&A Clinic sign-in code', { uid: caller.uid, authTime: caller.decoded.auth_time });
     if (result.error) return deny(res, result);
@@ -121,7 +131,12 @@ async function completeSignup(req, res) {
   else user = await auth.createUser({ email: patient.email, password, displayName: patient.name });
   await db.collection('authorizedPatients').doc(mrn).set({ registered: true, uid: user.uid }, { merge: true });
   await db.collection('vaccinations').doc(mrn).set({ authUid: user.uid }, { merge: true });
-  res.status(200).json({ success: true, uid: user.uid, customToken: await auth.createCustomToken(user.uid) });
+  const deviceId = typeof req.body?.deviceId === 'string' && /^[A-Za-z0-9_-]{1,99}$/.test(req.body.deviceId) ? req.body.deviceId : '';
+  const signupPass = deviceId ? await issueSignupPass({ uid: user.uid, deviceId }) : null;
+  // customToken stays for app versions before 1.0.8, which sign in here and
+  // then ask for a second code; 1.0.8+ ignores it and sends the patient to
+  // the sign-in screen with the one-time pass instead.
+  res.status(200).json({ success: true, uid: user.uid, signupPass, customToken: await auth.createCustomToken(user.uid) });
 }
 async function verifyOtp(req, res) {
   if (req.method !== 'POST') return deny(res, { status: 405, error: 'Method not allowed.' });

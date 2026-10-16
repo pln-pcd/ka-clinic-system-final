@@ -287,19 +287,19 @@ export const verifyEmailOTP = async (mrnInput: string, enteredCode: string): Pro
 // just passed email OTP verification, then binds that uid to this MRN's
 // authorizedPatients record — this uid is now this patient's permanent
 // identity going forward.
-export const completeEmailSignup = async (record: AuthorizedPatient, password: string) => {
+// Creates the account; the patient then signs in normally. The server also
+// returns a one-time pass for this phone (stored like a trust token), so that
+// first sign-in skips the second emailed code: the sign-up code already proved
+// the email address. No sign-in happens here.
+export const completeEmailSignup = async (record: AuthorizedPatient, password: string): Promise<void> => {
   // The account is created (or adopted, when a previous attempt left an
   // orphaned Auth user behind) by /api/verify-otp's complete-signup action,
   // which has the Admin SDK and can tell "your own half-finished signup"
   // apart from "somebody else's account" — a distinction the client SDK
   // cannot make, and which used to lock patients out of their own email.
-  const data = await postToApi<{ uid: string; customToken: string }>('/api/verify-otp', { action: 'complete-signup', mrn: record.mrn, password, verificationToken: record.verificationToken });
-  const credential = await signInWithCustomToken(auth, data.customToken);
-  if (record.name && credential.user.displayName !== record.name) {
-    // Not awaited: the display name is cosmetic and must not delay sign-up.
-    _updateProfile(credential.user, { displayName: record.name }).catch(() => {});
-  }
-  return credential.user;
+  const deviceId = await getDeviceId();
+  const data = await postToApi<{ uid: string; signupPass?: string | null }>('/api/verify-otp', { action: 'complete-signup', mrn: record.mrn, password, verificationToken: record.verificationToken, deviceId });
+  if (data.signupPass) await setTrustToken(data.signupPass);
 };
 
 // ── Login second factor (OTP unless this device is trusted) ───────────
@@ -324,14 +324,17 @@ const currentIdToken = async (): Promise<string> => {
  *  trusted, the server also returns the one MRN this session is for. The
  *  keystore reads and the ID token are fetched in parallel. */
 export type TrustResult = { trusted: boolean; mrn: string | null; offline?: boolean; hasToken?: boolean };
-export const checkLoginTrust = async (timeoutMs = 20000): Promise<TrustResult> => {
+export const checkLoginTrust = async (timeoutMs = 20000, rememberDevice = false): Promise<TrustResult> => {
   let hasToken = false;
   try {
     const trustToken = await getTrustToken();
     hasToken = !!trustToken;
     if (!trustToken) return { trusted: false, mrn: null, hasToken };
     const [deviceId, idToken] = await Promise.all([getDeviceId(), currentIdToken()]);
-    const data = await postToApi<{ trusted: boolean; mrn?: string }>('/api/send-otp', { action: 'login-check', deviceId, trustToken }, idToken, timeoutMs);
+    const data = await postToApi<{ trusted: boolean; mrn?: string; trustToken?: string | null }>('/api/send-otp', { action: 'login-check', deviceId, trustToken, rememberDevice, deviceLabel: describeDevice() }, idToken, timeoutMs);
+    // A one-time sign-up pass comes back used up (null) or replaced by a
+    // 30-day trust token ("Keep me signed in").
+    if (data.trustToken !== undefined) await setTrustToken(data.trustToken || null);
     if (data.trusted !== true) {
       // Server rejected it (expired / revoked / reinstall mismatch): drop it so
       // we stop presenting a dead token.

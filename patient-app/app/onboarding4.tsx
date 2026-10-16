@@ -5,6 +5,7 @@ import { resetTo } from '../utils/navigation';
 import React, { useEffect } from 'react';
 import { Dimensions, Image, Platform, StyleSheet, Text, View } from 'react-native';
 import Tap from '../components/Tap';
+import { EnterIllustration, EnterText, OnboardingDots } from '../components/OnboardingMotion';
 import { preloadOnboarding } from '../utils/preloadOnboarding';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { markOnboardingSeen } from '../config/appPrefs';
@@ -71,29 +72,26 @@ export default function Onboarding4() {
         {/* ILLUSTRATION AREA - 54% SCREEN HEIGHT */}
         <View style={styles.illustrationWrapper}>
           <View style={styles.glassEffect} />
-          <Image
-            source={require('../assets/onboarding4.png')} 
-            style={styles.image}
-            resizeMode="contain"
-          />
+          <EnterIllustration style={styles.image}>
+            <Image
+              source={require('../assets/onboarding4.png')}
+              style={StyleSheet.absoluteFill}
+              resizeMode="contain"
+            />
+          </EnterIllustration>
         </View>
 
         {/* WHITE CARD - 46% SCREEN HEIGHT (BUTTON ELEVATED ABOVE NAV BAR) */}
         <View style={[styles.card, { paddingBottom: bottomPadding }]}>
           <View style={styles.cardContent}>
-            <View style={styles.indicatorContainer}>
-              <View style={styles.indicator} />
-              <View style={styles.indicator} />
-              <View style={styles.indicator} />
-              <View style={[styles.indicator, styles.activeIndicator]} />
-            </View>
+            <OnboardingDots active={3} />
 
-            <Text style={styles.tag}>ACCESS: APPOINTMENT BOOKING</Text>
-            <Text style={styles.title}>Book Appointments{"\n"}From Your Phone</Text>
+            <EnterText delay={60}><Text style={styles.tag}>ACCESS: APPOINTMENT BOOKING</Text></EnterText>
+            <EnterText delay={110}><Text style={styles.title}>Book Appointments{"\n"}From Your Phone</Text></EnterText>
             
-            <Text style={styles.description}>
+            <EnterText delay={160}><Text style={styles.description}>
               Request a weekend slot in the Appointments tab — taken slots are blocked automatically, so there are no double bookings — then track its status as the clinic confirms, and reschedule or cancel from the same place.
-            </Text>
+            </Text></EnterText>
           </View>
 
           <Tap

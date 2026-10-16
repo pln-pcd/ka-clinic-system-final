@@ -1,7 +1,7 @@
 // app/auth/login.tsx
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { goBackOr, resetTo } from '../../utils/navigation';
 import { useEffect, useState } from 'react';
 import {
@@ -23,6 +23,7 @@ import { markOnboardingSeen, setKeepSignedIn } from '../../config/appPrefs';
 import { usePatientAuth } from '../../context/PatientAuthContext';
 import { moderateScale, scale, verticalScale } from '../../utils/scale';
 import CustomAlertModal from '../../components/CustomAlertModal';
+import { perfMark, perfNow } from '../../utils/perf';
 
 const { height } = Dimensions.get('window');
 // Short, gentle rise shared by both blocks. A new builder per block:
@@ -37,7 +38,10 @@ export default function LoginScreen() {
   const insets = useSafeAreaInsets();
 
   const [focusedField, setFocusedField] = useState<string | null>(null);
-  const [mrnInput, setMrnInput] = useState('');
+  // Arriving from sign-up: MRN filled in and a short confirmation shown.
+  const params = useLocalSearchParams<{ mrn?: string; created?: string }>();
+  const justCreated = params.created === '1';
+  const [mrnInput, setMrnInput] = useState(params.mrn || '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
@@ -61,6 +65,7 @@ export default function LoginScreen() {
     }
 
     setLoading(true);
+    const t = perfNow();
     try {
       const cleanMRN = mrnInput.trim().toUpperCase();
       // Recorded before sign-in so the auth listener sees the correct choice on
@@ -76,13 +81,15 @@ export default function LoginScreen() {
       // held as "pending" by PatientAuthContext until either the server vouches
       // for THIS device (trust token from an earlier OTP + "keep me signed in")
       // or the patient enters the emailed code.
-      const { trusted, mrn } = await checkLoginTrust();
+      const { trusted, mrn } = await checkLoginTrust(20000, keepSignedIn);
       if (trusted) {
+        perfMark('sign-in-trusted', t);
         completeSecondFactor(mrn);
         resetTo(router, '/(tabs)');
         return;
       }
       const { maskedEmail } = await sendLoginOTP();
+      perfMark('sign-in-code-sent', t);
       router.replace({
         pathname: '/auth/verify-login-otp',
         params: { maskedEmail, remember: keepSignedIn ? '1' : '0' },
@@ -179,6 +186,13 @@ export default function LoginScreen() {
           <Animated.View entering={enter(90)} renderToHardwareTextureAndroid needsOffscreenAlphaCompositing style={styles.formCard}>
             <Text style={styles.title}>Sign in to Your Account</Text>
             <Text style={styles.subtitle}>Enter your details below to access your medical records.</Text>
+
+            {justCreated && !error ? (
+              <View style={styles.createdBanner}>
+                <Ionicons name="checkmark-circle-outline" size={18} color="#047857" />
+                <Text style={styles.createdText}>Account created. Sign in with your password to continue.</Text>
+              </View>
+            ) : null}
 
             {error ? (
               <View style={styles.errorBanner}>
@@ -386,6 +400,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEE2E2', borderRadius: scale(14), padding: scale(12), marginBottom: verticalScale(14),
   },
   errorText: { flex: 1, fontSize: moderateScale(12.5), color: '#B91C1C', lineHeight: moderateScale(18) },
+  createdBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: scale(8),
+    backgroundColor: '#ECFDF5', borderRadius: scale(14), padding: scale(12), marginBottom: verticalScale(14),
+  },
+  createdText: { flex: 1, fontSize: moderateScale(12.5), color: '#047857', lineHeight: moderateScale(18) },
   inputContainer: { gap: scale(2) },
   inputWrapper: { marginBottom: verticalScale(14) },
   inputLabel: { fontSize: moderateScale(13), fontWeight: '700', color: '#334155', marginBottom: verticalScale(6), marginLeft: scale(2) },

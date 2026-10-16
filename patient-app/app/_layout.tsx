@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react';
 import { Platform, Text, TextInput, View } from 'react-native';
 import { PatientAuthProvider } from '../context/PatientAuthContext';
 import { DesktopApp, MobileApp } from '../components/AppShells';
+import { perfMark } from '../utils/perf';
+
+perfMark('js-start');
 
 // Held until the saved sign-in is resolved; components/AppShells.tsx hides it.
 SplashScreen.preventAutoHideAsync().catch(() => {});

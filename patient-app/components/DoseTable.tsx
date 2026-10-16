@@ -9,7 +9,8 @@ import { moderateScale, scale, verticalScale } from '../utils/scale';
 // so every value shows in full.
 
 // Column widths, shared by the header and the rows.
-const COL = { dose: 1.35, vaccine: 1.6, date: 1.15, status: 0.95 };
+// Dose is widest so every "Session N (Day NN)" label stays on one line.
+const COL = { dose: 1.75, vaccine: 1.45, date: 1.1, status: 0.95 };
 
 type Props = { doses: any[]; record: any; today?: string };
 

@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import React, { useEffect } from 'react';
 import { Dimensions, Image, Platform, StyleSheet, Text, View } from 'react-native';
 import Tap from '../components/Tap';
+import { EnterIllustration, EnterText, OnboardingDots } from '../components/OnboardingMotion';
 import { preloadOnboarding } from '../utils/preloadOnboarding';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { moderateScale, scale, verticalScale } from '../utils/scale';
@@ -62,29 +63,26 @@ export default function Onboarding3() {
         {/* ILLUSTRATION AREA - 54% SCREEN HEIGHT */}
         <View style={styles.illustrationWrapper}>
           <View style={styles.glassEffect} />
-          <Image
-            source={require('../assets/onboarding3.png')} 
-            style={styles.image}
-            resizeMode="contain"
-          />
+          <EnterIllustration style={styles.image}>
+            <Image
+              source={require('../assets/onboarding3.png')}
+              style={StyleSheet.absoluteFill}
+              resizeMode="contain"
+            />
+          </EnterIllustration>
         </View>
 
         {/* WHITE CARD - 46% SCREEN HEIGHT (BUTTON ELEVATED ABOVE NAV BAR) */}
         <View style={[styles.card, { paddingBottom: bottomPadding }]}>
           <View style={styles.cardContent}>
-            <View style={styles.indicatorContainer}>
-              <View style={styles.indicator} />
-              <View style={styles.indicator} />
-              <View style={[styles.indicator, styles.activeIndicator]} />
-              <View style={styles.indicator} />
-            </View>
+            <OnboardingDots active={2} />
 
-            <Text style={styles.tag}>RECORD: CARD & MEDICAL RECORDS</Text>
-            <Text style={styles.title}>Your Card & Records,{"\n"}Always With You</Text>
+            <EnterText delay={60}><Text style={styles.tag}>RECORD: CARD & MEDICAL RECORDS</Text></EnterText>
+            <EnterText delay={110}><Text style={styles.title}>Your Card & Records,{"\n"}Always With You</Text></EnterText>
             
-            <Text style={styles.description}>
+            <EnterText delay={160}><Text style={styles.description}>
               Your official vaccination card lives on your phone: exposure details, category, vaccine route, and every dose with its date. Flip it, enlarge it, or save it to your gallery — and open your full medical and exposure record any time in the Records tab.
-            </Text>
+            </Text></EnterText>
           </View>
 
           <Tap

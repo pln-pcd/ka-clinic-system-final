@@ -71,6 +71,82 @@ export const BLOCKED_STRICT = [
   /\b(lab|laboratory|test|titer|titre)\s+(result|report)s?\b|\b(interpret|explain)\s+(my|the|this)\s+(result|report|record)\b/,
 ];
 
+
+// ── Medical vocabulary (with misspellings) ──────────────────────────────────
+// Diseases and conditions, symptoms, medicines and drug names, vaccines and
+// treatments. Any word within a small spelling distance of one of these
+// ("pnuemonia", "paracetmol") counts, in any letter case, so medical
+// detection does not depend on an exact keyword list. Short words (4 letters
+// or fewer) must match exactly, so ordinary words are never mistaken.
+export const MEDICAL_TERMS = [
+  // diseases and conditions
+  'pneumonia', 'pneumococcal', 'dengue', 'covid', 'coronavirus', 'influenza', 'flu', 'tuberculosis', 'tb',
+  'hepatitis', 'measles', 'chickenpox', 'mpox', 'monkeypox', 'smallpox', 'malaria', 'cholera', 'typhoid',
+  'leptospirosis', 'diabetes', 'hypertension', 'asthma', 'cancer', 'tumor', 'stroke', 'anemia', 'allergy',
+  'allergic', 'infection', 'infected', 'virus', 'viral', 'bacteria', 'bacterial', 'disease', 'illness',
+  'sickness', 'sick', 'ill', 'pregnancy', 'pregnant', 'tetanus', 'lockjaw', 'rabies', 'rabid', 'hiv', 'aids',
+  'pneumonitis', 'bronchitis', 'sinusitis', 'tonsillitis', 'conjunctivitis', 'dermatitis', 'eczema', 'psoriasis',
+  'ulcer', 'gastritis', 'appendicitis', 'arthritis', 'gout', 'migraine', 'epilepsy', 'seizure', 'convulsion',
+  // symptoms
+  'fever', 'lagnat', 'headache', 'migraine', 'pain', 'painful', 'ache', 'aching', 'sore', 'swelling', 'swollen',
+  'itch', 'itchy', 'itching', 'rash', 'rashes', 'cough', 'coughing', 'colds', 'sneezing', 'vomit', 'vomiting',
+  'nausea', 'diarrhea', 'diarrhoea', 'dizzy', 'dizziness', 'fatigue', 'weakness', 'numb', 'numbness', 'tingling',
+  'bleeding', 'blood', 'bruise', 'bruising', 'inflammation', 'inflamed', 'redness', 'pus', 'chills', 'shivering',
+  'breathless', 'wheezing', 'palpitations', 'insomnia', 'symptom', 'symptoms', 'sintomas', 'masakit', 'sakit',
+  // medicines and drug names
+  'medicine', 'medicines', 'medication', 'medications', 'drug', 'drugs', 'pill', 'pills', 'tablet', 'tablets',
+  'capsule', 'syrup', 'ointment', 'cream', 'antibiotic', 'antibiotics', 'antiviral', 'painkiller', 'analgesic',
+  'paracetamol', 'acetaminophen', 'ibuprofen', 'mefenamic', 'aspirin', 'amoxicillin', 'amoxicilin', 'cefalexin',
+  'cephalexin', 'azithromycin', 'ciprofloxacin', 'metronidazole', 'cetirizine', 'loratadine', 'antihistamine',
+  'biogesic', 'neozep', 'bioflu', 'decolgen', 'alaxan', 'tempra', 'calpol', 'betadine', 'povidone', 'hydrogen',
+  'peroxide', 'vitamin', 'vitamins', 'supplement', 'steroid', 'insulin', 'gamot', 'reseta', 'prescription',
+  // vaccines and treatments
+  'vaccine', 'vaccines', 'vaccination', 'vaccinated', 'immunization', 'booster', 'dose', 'doses', 'dosage',
+  'injection', 'shot', 'shots', 'jab', 'immunoglobulin', 'antiserum', 'serum', 'toxoid', 'treatment', 'therapy',
+  'surgery', 'operation', 'stitches', 'suture', 'bandage', 'dressing', 'diagnosis', 'diagnose', 'cure', 'remedy',
+  'bakuna', 'turok', 'pep', 'prep', 'erig', 'rig', 'verorab', 'rabipur', 'speeda',
+];
+// Body parts count only with a health word next to them ("my arm hurts",
+// "swollen hand"); on their own they are not medical.
+const BODY_PARTS_RE = /\b(head|eye|eyes|ear|ears|nose|mouth|throat|neck|chest|stomach|belly|tummy|back|arm|arms|hand|hands|finger|fingers|leg|legs|knee|foot|feet|toe|toes|skin|face|lip|lips|tooth|teeth|heart|lungs?|ulo|mata|tiyan|kamay|paa|braso|binti)\b/;
+const HEALTH_CONTEXT_RE = /\b(hurt\w*|pain\w*|ache\w*|sore|swell\w*|swollen|itch\w*|red|bleed\w*|bruis\w*|numb\w*|burn\w*|cut|broken|injur\w*|infect\w*|masakit|sakit|namamaga|makati)\b/;
+
+// Optimal string alignment distance (insertions, deletions, substitutions,
+// and swapping two neighbouring letters), stopping early past `max`.
+function editDistance(a: string, b: string, max: number): number {
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  const d: number[][] = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    let rowMin = Infinity;
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+      rowMin = Math.min(rowMin, d[i][j]);
+    }
+    if (rowMin > max) return max + 1;
+  }
+  return d[a.length][b.length];
+}
+
+const EXACT_TERMS = new Set(MEDICAL_TERMS);
+const FUZZY_TERMS = MEDICAL_TERMS.filter(t => t.length >= 6);
+// Ordinary words that sit one letter away from a medical term.
+const NOT_MEDICAL = new Set(['clinic', 'clinics', 'cancel', 'cancels', 'sicker', 'doesn', 'hosting', 'shout', 'shoot', 'serve', 'served', 'service', 'services', 'payment', 'treated', 'booking', 'booked', 'schedule', 'available', 'address', 'contact', 'located', 'location', 'thanks', 'hours', 'appointment', 'appointments', 'tomorrow', 'weekend', 'weekends', 'saturday', 'sunday', 'monday', 'friday', 'website', 'account', 'password', 'profile', 'notification', 'notifications', 'register']);
+
+/** True when the message names a disease, symptom, medicine, vaccine or treatment (spelling-tolerant). */
+export function mentionsMedical(q: string): boolean {
+  const words = q.toLowerCase().replace(/[^a-z\s-]/g, ' ').split(/[\s-]+/).filter(Boolean);
+  if (BODY_PARTS_RE.test(q) && HEALTH_CONTEXT_RE.test(q)) return true;
+  return words.some(w => {
+    if (EXACT_TERMS.has(w)) return true;
+    if (w.length < 6 || NOT_MEDICAL.has(w)) return false;
+    const max = w.length >= 8 ? 2 : 1;
+    return FUZZY_TERMS.some(t => Math.abs(t.length - w.length) <= max && editDistance(w, t, max) <= max);
+  });
+}
+
 export const BLOCKED_DOMAIN = [
   // The rabies domain.
   /\b(rabies|rabid|rabis|abtc|lyssa\w*|hydrophobia)\b/,
@@ -133,16 +209,22 @@ export function classifyMessage(text: string): ScopeCategory {
   if (!q) return 'in_scope';
   // 1. Missed doses, wounds, symptoms, advice: blocked, whatever else the
   //    message asks.
-  if (BLOCKED_STRICT.some(re => re.test(q))) return 'clinical';
+  // ("forgot my password" is an account question, not a missed dose.)
+  const accountOnly = /\b(password|passcode|log\s*-?\s*in|login|sign\s*-?\s*in|mrn|account|otp|verification\s+code)\b/.test(q)
+    && !mentionsMedical(q) && !BLOCKED_DOMAIN.some(re => re.test(q));
+  if (!accountOnly && BLOCKED_STRICT.some(re => re.test(q))) return 'clinical';
   // 2. The patient's own schedule / doses / status: navigation only.
   if (PERSONAL_SCHEDULE_PATTERNS.some(re => re.test(q))) return 'personal_nav';
   // 2b. The user's own name / MRN / contact details: say where they are shown.
   if (PERSONAL_INFO_PATTERNS.some(re => re.test(q))) return 'personal_info';
   // 3. "Which services / vaccines do you offer?" names services only: allowed
   //    when nothing medical is left once the services phrase is set aside.
-  if (SERVICES_RE.test(q) && !BLOCKED_DOMAIN.some(re => re.test(q.replace(SERVICES_RE, ' ')))) return 'in_scope';
+  if (SERVICES_RE.test(q)) {
+    const rest = q.replace(SERVICES_RE, ' ');
+    if (!BLOCKED_DOMAIN.some(re => re.test(rest)) && !mentionsMedical(rest)) return 'in_scope';
+  }
   // 4. Rabies, vaccines, doses, regimens, even as a single word: blocked.
-  if (BLOCKED_DOMAIN.some(re => re.test(q))) return 'clinical';
+  if (BLOCKED_DOMAIN.some(re => re.test(q)) || mentionsMedical(q)) return 'clinical';
   // 5. Allowed topics. A greeting with nothing else gets the "tell me more"
   //    reply, which lists what KAI can help with.
   if (THANKS_RE.test(q)) return 'in_scope';
