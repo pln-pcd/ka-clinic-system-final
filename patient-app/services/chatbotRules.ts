@@ -186,7 +186,7 @@ export const THANKS_RE = /^(thanks?|thank\s+you|salamat|dios\s+mabalos|ok(ay)?|s
 export const HOURS_RE = /\b(hours?|open|opening|close|closed|closing|what\s+time|anong\s+oras|oras|walk-?ins?|weekends?|weekdays?|saturday|sunday|monday|holiday|lunch|bukas\s+ba|sarado)\b/;
 export const BOOKING_RE = /\b(book\w*|appointment|appointments|appt|reschedul\w*|cancel\w*|slots?|reserv\w*|availab\w*|magpa-?schedule|magpa-?book|mag-?book)\b/;
 export const CONTACT_RE = /\b(address|location|located|where\s+(are|is)\s+(you|the\s+clinic|k&a)|directions?|contact|phone|number|telephone|call|email|e-mail|reach\s+you|saan|nasaan|hain)\b/;
-export const SERVICES_RE = /\b(services?|serbisyo|what\s+(do\s+you|does\s+the\s+clinic)\s+(offer|provide|have)|what\s+(vaccines?|services?)(\s+(and|or|\/|at)\s+(services?|vaccines?))?\s+(do\s+you|does\s+the\s+clinic)\s+(have|offer|provide|carry)|do\s+you\s+(offer|have|provide|give)\s+(anti-?rabies\s+|rabies\s+|anti-?tetanus\s+|tetanus\s+|pneumonia\s+|pneumococcal\s+|hepatitis\s+|hepa\s+)?(vaccines?|vaccinations?|shots?|bakuna)|anong\s+(mga\s+)?(serbisyo|bakuna)\s+(meron|mayroon|ang\s+meron))\b/;
+export const SERVICES_RE = /\b(services?|serbisyo|what\s+(do\s+you|does\s+the\s+clinic)\s+(offer|provide|have|carry|give)|what\s+(are\s+the\s+|your\s+)?(vaccines?|services?)(\s+(and|or|\/|at|tsaka)\s+(the\s+)?(services?|vaccines?))?(\s+(do\s+you|does\s+the\s+clinic)\s+(have|offer|provide|carry|give)|\s+(are\s+)?(available|offered|provided)|(\s+(ang\s+)?(meron|mayroon|na\s+meron)))?|do\s+you\s+(offer|have|provide|give|carry)\s+(anti-?rabies\s+|rabies\s+|anti-?tetanus\s+|tetanus\s+|pneumonia\s+|pneumococcal\s+|hepatitis\s+|hepa\s+|verorab\s*|speeda\s*|rabipur\s*|erig\s*|rig\s*|ats\s*|toxoid\s*)?(vaccines?|vaccinations?|shots?|bakuna)?|(available|list\s+of)\s+(vaccines?|services?|bakuna|serbisyo)|(vaccines?|services?|bakuna|serbisyo)\s+(available|list|offered)|(vaccines?\s+(and|or|\/|at|tsaka)\s+services?|services?\s+(and|or|\/|at|tsaka)\s+vaccines?)|(bakuna\s+(at|o)\s+serbisyo|serbisyo\s+(at|o)\s+bakuna)|anong\s+(mga\s+)?(serbisyo|bakuna)\s+(meron|mayroon|ang\s+meron)|(meron|mayroon)\s+(ba\s+)?(kayong\s+|ng\s+)?(anti-?rabies|rabies|verorab|speeda|rabipur|tetanus|anti-?tetanus|pneumonia|erig|rig|bakuna)|available\s+ba\s+(ang\s+)?(verorab|speeda|rabipur|anti-?rabies|tetanus|pneumonia|erig|rig|bakuna))\b/;
 export const PRICE_RE = /\b(price|prices|pricing|cost|costs|fee|fees|rate|rates|how\s+much|magkano|bayad|presyo|payment|pay)\b|₱/;
 export const APP_NAV_RE = /\b(app|application|website|log\s*-?\s*in|login|log\s*-?\s*out|sign\s*-?\s*(in|up)|password|account|profile|register\w*|otp|verif\w*|tab|screen|button|navigate|where\s+(do|can)\s+i\s+(see|find|view|check)|how\s+do\s+i\s+(use|find|open|change|update|export|download|save)|notification\w*|mrn|chat\s+with\s+staff|talk\s+to\s+staff|card)\b/;
 
@@ -220,7 +220,7 @@ export function classifyMessage(text: string): ScopeCategory {
   // 3. "Which services / vaccines do you offer?" names services only: allowed
   //    when nothing medical is left once the services phrase is set aside.
   if (SERVICES_RE.test(q)) {
-    const rest = q.replace(SERVICES_RE, ' ').replace(/\b(vaccines?|vaccinations?|bakuna|services?|serbisyo|and|or|at|mga|do|you|the|clinic|offer|have|provide|carry)\b/g, ' ');
+    const rest = q.replace(SERVICES_RE, ' ').replace(/\b(vaccines?|vaccinations?|bakuna|services?|serbisyo|and|or|at|tsaka|mga|do|you|the|clinic|offer|have|provide|carry|give|available|list|of|anong?|ano|meron|mayroon|ba|kayo|kayong|sa|ang|ng|is|are|there|your|what|anti-?rabies|rabies|verorab|speeda|rabipur|tetan\w*|anti-?tetano|pneumo\w*|erig|rig|ats|toxoid|hepatitis|hepa)\b/g, ' ');
     if (!BLOCKED_DOMAIN.some(re => re.test(rest)) && !mentionsMedical(rest)) return 'in_scope';
   }
   // 3b. Pricing inquiries: "How much does a visit cost?", "How much is the anti-rabies vaccine?", "Price of treatment"
@@ -303,13 +303,20 @@ export const CONTACT_REPLY =
   '• Hours: Monday to Friday walk-in, Saturday and Sunday by appointment, 8:00 AM – 5:00 PM (lunch 12:00 – 1:00 PM)';
 
 export const SERVICES_REPLY =
-  '🏥 **Services at K&A Clinic**\n' +
-  '• Anti-rabies vaccination\n' +
-  '• Anti-tetanus vaccination\n' +
-  '• Rabies immunoglobulin administration\n' +
-  '• Pneumococcal (pneumonia) vaccination\n\n' +
-  'Which service is right for you is decided by clinic staff, not by me. ' +
-  `For questions about a service, contact the clinic at ${CLINIC.phone}.`;
+  '🏥 **Vaccines & Services at K&A Clinic**\n\n' +
+  '💉 **Vaccines Offered:**\n' +
+  '• Anti-Rabies Vaccines (Verorab, Speeda, Rabipur)\n' +
+  '• Rabies Immunoglobulin (RIG / ERIG)\n' +
+  '• Anti-Tetanus Vaccines (Tetanus Toxoid, ATS)\n' +
+  '• Pneumococcal (Pneumonia) Vaccine\n\n' +
+  '🩺 **Clinical Services:**\n' +
+  '• Post-Exposure Prophylaxis (PEP) after animal bites & scratches\n' +
+  '• Pre-Exposure Prophylaxis (PrEP) preventive immunization\n' +
+  '• Anti-Tetanus prophylaxis & immunization\n' +
+  '• Rabies Immunoglobulin (RIG) administration\n' +
+  '• Animal bite consultation & exposure assessment\n\n' +
+  'Notice: K&A Clinic is no longer catering or offering Hepatitis vaccines. ' +
+  `For questions or consultation, contact the clinic at ${CLINIC.phone} or ${CLINIC.email}.`;
 
 // Vaccine & treatment pricing at K&A Clinic
 export const PRICE_REPLY =
