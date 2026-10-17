@@ -186,7 +186,7 @@ export const THANKS_RE = /^(thanks?|thank\s+you|salamat|dios\s+mabalos|ok(ay)?|s
 export const HOURS_RE = /\b(hours?|open|opening|close|closed|closing|what\s+time|anong\s+oras|oras|walk-?ins?|weekends?|weekdays?|saturday|sunday|monday|holiday|lunch|bukas\s+ba|sarado)\b/;
 export const BOOKING_RE = /\b(book\w*|appointment|appointments|appt|reschedul\w*|cancel\w*|slots?|reserv\w*|availab\w*|magpa-?schedule|magpa-?book|mag-?book)\b/;
 export const CONTACT_RE = /\b(address|location|located|where\s+(are|is)\s+(you|the\s+clinic|k&a)|directions?|contact|phone|number|telephone|call|email|e-mail|reach\s+you|saan|nasaan|hain)\b/;
-export const SERVICES_RE = /\b(services?|serbisyo|what\s+(do\s+you|does\s+the\s+clinic)\s+(offer|provide|have)|what\s+vaccines?\s+(do\s+you|does\s+the\s+clinic)\s+(have|offer|provide|carry)|do\s+you\s+(offer|have|provide|give)\s+(anti-?rabies\s+|rabies\s+|anti-?tetanus\s+|tetanus\s+|pneumonia\s+|pneumococcal\s+)?(vaccines?|vaccinations?|shots?|bakuna)|anong\s+(mga\s+)?(serbisyo|bakuna)\s+(meron|mayroon|ang\s+meron))\b/;
+export const SERVICES_RE = /\b(services?|serbisyo|what\s+(do\s+you|does\s+the\s+clinic)\s+(offer|provide|have)|what\s+(vaccines?|services?)(\s+(and|or|\/|at)\s+(services?|vaccines?))?\s+(do\s+you|does\s+the\s+clinic)\s+(have|offer|provide|carry)|do\s+you\s+(offer|have|provide|give)\s+(anti-?rabies\s+|rabies\s+|anti-?tetanus\s+|tetanus\s+|pneumonia\s+|pneumococcal\s+|hepatitis\s+|hepa\s+)?(vaccines?|vaccinations?|shots?|bakuna)|anong\s+(mga\s+)?(serbisyo|bakuna)\s+(meron|mayroon|ang\s+meron))\b/;
 export const PRICE_RE = /\b(price|prices|pricing|cost|costs|fee|fees|rate|rates|how\s+much|magkano|bayad|presyo|payment|pay)\b|₱/;
 export const APP_NAV_RE = /\b(app|application|website|log\s*-?\s*in|login|log\s*-?\s*out|sign\s*-?\s*(in|up)|password|account|profile|register\w*|otp|verif\w*|tab|screen|button|navigate|where\s+(do|can)\s+i\s+(see|find|view|check)|how\s+do\s+i\s+(use|find|open|change|update|export|download|save)|notification\w*|mrn|chat\s+with\s+staff|talk\s+to\s+staff|card)\b/;
 
@@ -220,7 +220,12 @@ export function classifyMessage(text: string): ScopeCategory {
   // 3. "Which services / vaccines do you offer?" names services only: allowed
   //    when nothing medical is left once the services phrase is set aside.
   if (SERVICES_RE.test(q)) {
-    const rest = q.replace(SERVICES_RE, ' ');
+    const rest = q.replace(SERVICES_RE, ' ').replace(/\b(vaccines?|vaccinations?|bakuna|services?|serbisyo|and|or|at|mga|do|you|the|clinic|offer|have|provide|carry)\b/g, ' ');
+    if (!BLOCKED_DOMAIN.some(re => re.test(rest)) && !mentionsMedical(rest)) return 'in_scope';
+  }
+  // 3b. Pricing inquiries: "How much does a visit cost?", "How much is the anti-rabies vaccine?", "Price of treatment"
+  if (PRICE_RE.test(q)) {
+    const rest = q.replace(PRICE_RE, ' ').replace(/\b(vaccin\w*|bakuna|shot|shots|dose|doses|treatment|gamutan|rabies|anti-?rabies|pep|prep|tetan\w*|anti-?tetano|pneumo\w*|hepatitis|hepa|visit|session|sessions|for|of|the|a|an|in|at|ng|sa|ang|is|are|it|po)\b/g, ' ');
     if (!BLOCKED_DOMAIN.some(re => re.test(rest)) && !mentionsMedical(rest)) return 'in_scope';
   }
   // 4. Rabies, vaccines, doses, regimens, even as a single word: blocked.
@@ -306,9 +311,13 @@ export const SERVICES_REPLY =
   'Which service is right for you is decided by clinic staff, not by me. ' +
   `For questions about a service, contact the clinic at ${CLINIC.phone}.`;
 
-// Prices are not published on the clinic website, so KAI does not quote them.
+// Vaccine & treatment pricing at K&A Clinic
 export const PRICE_REPLY =
-  `I can't quote prices. Please ask the clinic front desk at ${CLINIC.phone} or ${CLINIC.email}.`;
+  '💉 **K&A Clinic Vaccine Pricing**\n' +
+  '• PEP Category 2 (with Anti-Tetanus): ₱1,000 for the 1st session, and ₱800 for each of the next 3 sessions\n' +
+  '• PEP Category 3: ₱4,500 for 4 sessions (complete package includes Anti-Tetanus and IRIG)\n' +
+  '• Pneumonia Vaccine: ₱4,500\n\n' +
+  `Notice: K&A Clinic is no longer catering or offering Hepatitis vaccines. For other questions, contact the clinic front desk at ${CLINIC.phone} or ${CLINIC.email}.`;
 
 // Matches the app's booking flow (patient-app/app/(tabs)/appt.tsx): the
 // Appointments tab, the Book Appointment calendar (weekends only), the

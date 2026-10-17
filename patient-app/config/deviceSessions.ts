@@ -25,6 +25,8 @@ export type DeviceSession = {
   lastActiveAt: number;
   createdAt: number;
   revoked?: boolean;
+  associatedDeviceIds?: string[];
+  associatedDocIds?: string[];
 };
 
 const sessionDocId = (uid: string, deviceId: string) => `${uid}_${deviceId}`;
@@ -44,6 +46,60 @@ function describeThisDevice(): { label: string; platform: string; osVersion: str
     platform,
     osVersion,
   };
+}
+
+/**
+ * Deduplicates sessions belonging to the same device (e.g. repeated logins,
+ * reinstalls, or updates on the same phone).
+ * Keeps the newest session for each unique device, preserving "This device"
+ * priority and consolidating all associated device IDs so revoking handles all of them.
+ */
+export function deduplicateDeviceSessions(
+  sessions: DeviceSession[],
+  currentDeviceId?: string | null,
+): DeviceSession[] {
+  const groups = new Map<string, DeviceSession[]>();
+
+  for (const s of sessions) {
+    const key = `${s.platform || ''}___${s.osVersion || ''}___${s.label || ''}`;
+    const list = groups.get(key) || [];
+    list.push(s);
+    groups.set(key, list);
+  }
+
+  const result: DeviceSession[] = [];
+
+  for (const group of groups.values()) {
+    group.sort((a, b) => (b.lastActiveAt || 0) - (a.lastActiveAt || 0));
+
+    // If one of the sessions in the group is THIS device, keep it as primary
+    const currentSession = currentDeviceId
+      ? group.find(s => s.deviceId === currentDeviceId)
+      : undefined;
+
+    const primary = currentSession || group[0];
+    const latestActive = Math.max(...group.map(s => s.lastActiveAt || 0));
+    const allDeviceIds = Array.from(new Set(group.map(s => s.deviceId).filter(Boolean)));
+    const allDocIds = Array.from(new Set(group.map(s => s.id).filter(Boolean)));
+
+    result.push({
+      ...primary,
+      lastActiveAt: latestActive,
+      associatedDeviceIds: allDeviceIds,
+      associatedDocIds: allDocIds,
+    });
+  }
+
+  // Sort: current device first, then newest lastActiveAt
+  result.sort((a, b) => {
+    if (currentDeviceId) {
+      if (a.deviceId === currentDeviceId) return -1;
+      if (b.deviceId === currentDeviceId) return 1;
+    }
+    return (b.lastActiveAt || 0) - (a.lastActiveAt || 0);
+  });
+
+  return result;
 }
 
 /** Records (or refreshes) this device in the patient's session list. */
@@ -67,14 +123,31 @@ export async function registerThisDevice(uid: string): Promise<string> {
     },
     { merge: true },
   );
+
+  // Clean up older stale session docs for this same user and device to prevent
+  // accumulation of orphaned session records across app reinstalls or updates.
+  try {
+    const snap = await getDocs(query(collection(db, 'patientSessions'), where('uid', '==', uid)));
+    const duplicates = snap.docs.filter(d => {
+      const data = d.data() as any;
+      return data.deviceId !== deviceId && data.label === info.label;
+    });
+    if (duplicates.length > 0) {
+      await Promise.all(duplicates.map(d => deleteDoc(d.ref).catch(() => {})));
+    }
+  } catch (err) {
+    console.warn('Session duplicate cleanup skipped:', err);
+  }
+
   return deviceId;
 }
 
-/** Live list of this patient's devices, newest activity first. */
+/** Live list of this patient's devices, newest activity first, deduplicated by device. */
 export function watchDeviceSessions(
   uid: string,
   onChange: (sessions: DeviceSession[]) => void,
   onError?: (e: unknown) => void,
+  currentDeviceId?: string | null,
 ) {
   const q = query(collection(db, 'patientSessions'), where('uid', '==', uid));
   return onSnapshot(
@@ -82,9 +155,9 @@ export function watchDeviceSessions(
     snap => {
       const rows = snap.docs
         .map(d => ({ id: d.id, ...(d.data() as any) } as DeviceSession))
-        .filter(s => !s.revoked)
-        .sort((a, b) => (b.lastActiveAt || 0) - (a.lastActiveAt || 0));
-      onChange(rows);
+        .filter(s => !s.revoked);
+      const deduplicated = deduplicateDeviceSessions(rows, currentDeviceId);
+      onChange(deduplicated);
     },
     e => { console.error('Device session listener error:', e); onError?.(e); },
   );
@@ -111,15 +184,28 @@ export function watchOwnSession(uid: string, deviceId: string, onRevoked: () => 
 
 /** Signs a different device out. Deleting the doc is what that device sees. */
 export async function revokeDeviceSession(uid: string, deviceId: string): Promise<void> {
-  const { revokePatientDeviceSession } = await import('./backend');
-  await revokePatientDeviceSession(deviceId);
+  try {
+    await deleteDoc(doc(db, 'patientSessions', sessionDocId(uid, deviceId)));
+  } catch {}
+  try {
+    const { revokePatientDeviceSession } = await import('./backend');
+    await revokePatientDeviceSession(deviceId);
+  } catch {}
 }
 
 /** Removes this device's own record — called on an intentional sign-out. */
 export async function clearThisDeviceSession(uid: string): Promise<void> {
   try {
     const deviceId = await getDeviceId();
+    const info = describeThisDevice();
     await deleteDoc(doc(db, 'patientSessions', sessionDocId(uid, deviceId)));
+    // Also clean up any other sessions for this device
+    const snap = await getDocs(query(collection(db, 'patientSessions'), where('uid', '==', uid)));
+    const duplicates = snap.docs.filter(d => {
+      const data = d.data() as any;
+      return data.label === info.label;
+    });
+    await Promise.all(duplicates.map(d => deleteDoc(d.ref).catch(() => {})));
   } catch (e) {
     console.error('Could not clear device session:', e);
   }

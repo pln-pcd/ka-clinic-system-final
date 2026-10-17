@@ -397,9 +397,10 @@ export default function ProfileScreen() {
       user.uid,
       rows => { setDevices(rows); setDevicesLoading(false); },
       () => setDevicesLoading(false),
+      deviceId,
     );
     return unsub;
-  }, [user?.uid]);
+  }, [user?.uid, deviceId]);
 
   const confirmLogoutDevice = (target: DeviceSession) => {
     const isThis = target.deviceId === deviceId;
@@ -424,7 +425,10 @@ export default function ProfileScreen() {
           resetTo(router, '/auth/login');
         } else {
           try {
-            if (user?.uid) await revokeDeviceSession(user.uid, target.deviceId);
+            if (user?.uid) {
+              const ids = target.associatedDeviceIds?.length ? target.associatedDeviceIds : [target.deviceId];
+              await Promise.all(ids.map(id => revokeDeviceSession(user.uid, id)));
+            }
           } catch {
             showAlert({
               type: 'error',
@@ -1191,7 +1195,7 @@ export default function ProfileScreen() {
               </View>
             </View>
 
-            <Text style={s.versionText}><Text style={{ color: C.red, fontWeight: '900' }}>K&A</Text> Anti-Rabies Vaccine Clinic v1.0.10</Text>
+            <Text style={s.versionText}><Text style={{ color: C.red, fontWeight: '900' }}>K&A</Text> Anti-Rabies Vaccine Clinic v1.0.11</Text>
           </ScrollView>
         );
     }

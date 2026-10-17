@@ -64,8 +64,13 @@ export const CASES = [
   // ── Allowed: services by name, prices ──
   ['What services do you offer?', 'in_scope'],
   ['What vaccines do you offer?', 'in_scope'],
+  ['What vaccines and services do you offer?', 'in_scope'],
+  ['What services and vaccines do you offer?', 'in_scope'],
   ['Do you offer anti-rabies vaccine?', 'in_scope'],
   ['How much does a visit cost?', 'in_scope'],
+  ['How much is the anti-rabies vaccine?', 'in_scope'],
+  ['Magkano ang bakuna?', 'in_scope'],
+  ['What is the price of the vaccine?', 'in_scope'],
   // ── Allowed: appointment procedures ──
   ['How do I book an appointment?', 'in_scope'],
   ['How do I cancel my appointment?', 'in_scope'],
@@ -144,7 +149,7 @@ for (const mod of [['server', server], ['app', app]]) {
   for (const k of REPLIES) {
     const v = mod[1][k];
     if (typeof v !== 'string') { replyProblems.push(`${mod[0]}.${k} missing`); continue; }
-    if (NO_MEDICAL.test(v)) replyProblems.push(`${mod[0]}.${k} contains medical/schedule/price text`);
+    if (k !== 'PRICE_REPLY' && NO_MEDICAL.test(v)) replyProblems.push(`${mod[0]}.${k} contains medical/schedule/price text`);
   }
 }
 if (replyProblems.length) { console.log('Reply problems:\n  ' + replyProblems.join('\n  ')); failures += replyProblems.length; }

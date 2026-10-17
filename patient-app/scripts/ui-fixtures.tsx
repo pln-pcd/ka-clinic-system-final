@@ -99,7 +99,7 @@ function CardsFixture() {
             <View testID={`popup-${p.key}`}><VaccinationCard variant="popup" data={data} flipped={false} frontRef={createRef()} backRef={createRef()} /></View>
             <View testID={`history-${p.key}`}><PreviousTreatments history={p.record.caseHistory} onOpen={() => {}} /></View>
             {p.record.caseHistory.map((h: any, i: number) => {
-              const past = buildCardData({ record: historicalRecord({ ...p.record, mrn: p.mrn }, h), mrn: p.mrn, isGuest: false, today: TODAY, tag: `PREVIOUS TREATMENT · ${treatmentRange(h)}` });
+              const past = buildCardData({ record: historicalRecord({ ...p.record, mrn: p.mrn }, h), mrn: p.mrn, isGuest: false, today: TODAY });
               return (
                 <View key={i} style={{ gap: 12 }}>
                   <View testID={`past-front-${p.key}-${i}`}><VaccinationCard variant="inline" data={past} flipped={false} frontRef={createRef()} backRef={createRef()} /></View>

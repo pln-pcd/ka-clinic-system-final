@@ -75,3 +75,7 @@ ui-debug.log
 
 # Local JSON backups of sample data (scripts/sample-data-reset.mjs)
 backups/
+
+# Release APK binaries
+*.apk
+/K&A-Clinic-Deliverables/

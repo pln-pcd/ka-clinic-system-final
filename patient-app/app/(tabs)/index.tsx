@@ -655,7 +655,7 @@ export default function RabiesRecoveryApp() {
   // only from its snapshot (as the dashboard's historicalCaseRecord does).
   const pastEntry = pastIndex !== null && Array.isArray(pr.caseHistory) ? pr.caseHistory[pastIndex] ?? null : null;
   const pastCardData: CardData | null = pastEntry
-    ? buildCardData({ record: historicalRecord({ ...pr, mrn }, pastEntry), mrn, isGuest: false, displayName: user?.displayName, today, tag: `PREVIOUS TREATMENT · ${treatmentRange(pastEntry)}` })
+    ? buildCardData({ record: historicalRecord({ ...pr, mrn }, pastEntry), mrn, isGuest: false, displayName: user?.displayName, today })
     : null;
 
   // Progress tracker shows the same placeholder rows for guests, all unchecked.
