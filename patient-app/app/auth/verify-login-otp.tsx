@@ -8,6 +8,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { isPreview } from '../../utils/preview';
 import { resetTo } from '../../utils/navigation';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -40,7 +41,7 @@ const MAX_OTP_ATTEMPTS = 5;
 export default function VerifyLoginOtp() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ maskedEmail?: string; remember?: string }>();
+  const params = useLocalSearchParams<{ maskedEmail?: string; remember?: string; preview?: string }>();
   const { pendingUser, completeSecondFactor } = usePatientAuth();
   const rememberDevice = params.remember === '1';
 
@@ -56,7 +57,7 @@ export default function VerifyLoginOtp() {
   // No pending session (e.g. deep link, or it was signed out) → nothing to
   // verify. Back to login rather than showing a dead form.
   useEffect(() => {
-    if (!pendingUser && !auth.currentUser && params.preview !== '1') router.replace('/auth/login');
+    if (!pendingUser && !auth.currentUser && !isPreview(params.preview)) router.replace('/auth/login');
   }, [pendingUser]);
 
   useEffect(() => {

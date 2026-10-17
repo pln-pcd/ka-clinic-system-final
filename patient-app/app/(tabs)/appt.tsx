@@ -2,6 +2,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { isPreview } from '../../utils/preview';
 import { resetTo } from '../../utils/navigation';
 import { clinicToday } from '../../utils/patientRecord';
 import {
@@ -421,7 +422,7 @@ export default function AppointmentsScreen() {
     },
   ];
 
-  const upcomingApts = params.preview === '1' && myAppointments.length === 0
+  const upcomingApts = isPreview(params.preview) && myAppointments.length === 0
     ? previewSampleApts
     : myAppointments.filter(a =>
         !isEnded(a) && a.date >= todayKey
@@ -498,7 +499,7 @@ export default function AppointmentsScreen() {
   const handleDayPress = (day: number) => {
     // Guests have no clinic record to attach an appointment to — clinic staff
     // can't act on a booking that isn't tied to a real patient.
-    if ((user?.isAnonymous || !mrn) && params.preview !== '1') {
+    if ((user?.isAnonymous || !mrn) && !isPreview(params.preview)) {
       showAlert({
         type: 'guest',
         title: 'Guest Account',
@@ -555,7 +556,7 @@ export default function AppointmentsScreen() {
 
   // ── Book appointment → Firestore ──────────────────────────────────────────
   const handleConfirm = async () => {
-    if (params.preview === '1') {
+    if (isPreview(params.preview)) {
       setShowDetailsForm(false);
       setShowToast(true);
       setTimeout(() => setShowToast(false), 4000);

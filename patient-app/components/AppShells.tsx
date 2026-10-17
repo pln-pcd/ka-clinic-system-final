@@ -5,6 +5,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, InteractionManager, View, StyleSheet, Text } from 'react-native';
+import { urlHasPreview } from '../utils/preview';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { usePatientAuth } from '../context/PatientAuthContext';
 import { setupNotificationChannelAsync } from '../config/notifications';
@@ -59,7 +60,7 @@ export function MobileApp() {
     const currentSegment = segs[0];
     const isPublicRoute =
       PUBLIC_ROUTES.includes(currentSegment) ||
-      (typeof window !== 'undefined' && window.location.search.includes('preview=1'));
+      urlHasPreview();
 
     if (!user && !isPublicRoute) {
       // Not logged in → go to login

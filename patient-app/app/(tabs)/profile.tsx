@@ -3,6 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { isPreview } from '../../utils/preview';
 import { resetTo } from '../../utils/navigation';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'react';
@@ -126,6 +127,9 @@ const PREVIEW_PERSONAL_DATA = {
 const PREVIEW_DEVICES: DeviceSession[] = [
   {
     id: 'dev-1',
+    uid: 'preview',
+    osVersion: '',
+    createdAt: 0,
     deviceId: 'dev-curr',
     platform: 'android',
     label: 'Samsung Galaxy S23 (This Phone)',
@@ -133,6 +137,9 @@ const PREVIEW_DEVICES: DeviceSession[] = [
   },
   {
     id: 'dev-2',
+    uid: 'preview',
+    osVersion: '',
+    createdAt: 0,
     deviceId: 'dev-prev',
     platform: 'ios',
     label: 'Apple iPhone 14 Pro',
@@ -140,6 +147,9 @@ const PREVIEW_DEVICES: DeviceSession[] = [
   },
   {
     id: 'dev-3',
+    uid: 'preview',
+    osVersion: '',
+    createdAt: 0,
     deviceId: 'dev-web',
     platform: 'web',
     label: 'Chrome Browser (Windows 11)',
@@ -158,8 +168,8 @@ export default function ProfileScreen() {
     if (params.subview === 'devices') return 'devices';
     return 'main';
   });
-  const [devices, setDevices] = useState<DeviceSession[]>(() => (params.preview === '1' ? PREVIEW_DEVICES : []));
-  const [devicesLoading, setDevicesLoading] = useState(params.preview !== '1');
+  const [devices, setDevices] = useState<DeviceSession[]>(() => (isPreview(params.preview) ? PREVIEW_DEVICES : []));
+  const [devicesLoading, setDevicesLoading] = useState(!isPreview(params.preview));
   const [isEditingPersonal, setIsEditingPersonal] = useState(false);
   const closeAccountSection = useCallback(() => {
     setCurrentView('main');
@@ -170,7 +180,7 @@ export default function ProfileScreen() {
     closeAccountSection();
     return true;
   }, [currentView, closeAccountSection]));
-  const [personalData, setPersonalData] = useState(() => (params.preview === '1' ? PREVIEW_PERSONAL_DATA : EMPTY_PERSONAL_DATA));
+  const [personalData, setPersonalData] = useState(() => (isPreview(params.preview) ? PREVIEW_PERSONAL_DATA : EMPTY_PERSONAL_DATA));
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   // Null until the patient actually has a picture. The placeholder used to be
   // a remote initials service, which needed the network to render and turned a
@@ -376,7 +386,7 @@ export default function ProfileScreen() {
 
   // Live device list. Guests have no account to attach sessions to.
   useEffect(() => {
-    if (params.preview === '1') {
+    if (isPreview(params.preview)) {
       setDevices(PREVIEW_DEVICES);
       setDevicesLoading(false);
       return;
@@ -1181,7 +1191,7 @@ export default function ProfileScreen() {
               </View>
             </View>
 
-            <Text style={s.versionText}><Text style={{ color: C.red, fontWeight: '900' }}>K&A</Text> Anti-Rabies Vaccine Clinic v1.0.8</Text>
+            <Text style={s.versionText}><Text style={{ color: C.red, fontWeight: '900' }}>K&A</Text> Anti-Rabies Vaccine Clinic v1.0.10</Text>
           </ScrollView>
         );
     }

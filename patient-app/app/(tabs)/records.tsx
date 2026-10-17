@@ -1,6 +1,7 @@
 // patient-app/app/(tabs)/records.tsx
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { isPreview } from '../../utils/preview';
 import { collection, doc, onSnapshot, orderBy, query } from 'firebase/firestore';
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -185,7 +186,7 @@ export default function RecordsScreen() {
     ]
   };
 
-  const pr = patientRecord || (params.preview === '1' ? previewSampleRecord : {});
+  const pr = patientRecord || (isPreview(params.preview) ? previewSampleRecord : {});
   const nameSplit = splitName(pr.name || user?.displayName || '');
   const lastNameVal = pr.lastName || nameSplit.last || EMPTY;
   const firstNameVal = pr.firstName || nameSplit.first || EMPTY;
