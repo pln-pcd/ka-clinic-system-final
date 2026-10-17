@@ -57,7 +57,9 @@ export function MobileApp() {
     if (segs.length === 0) return;
 
     const currentSegment = segs[0];
-    const isPublicRoute = PUBLIC_ROUTES.includes(currentSegment);
+    const isPublicRoute =
+      PUBLIC_ROUTES.includes(currentSegment) ||
+      (typeof window !== 'undefined' && window.location.search.includes('preview=1'));
 
     if (!user && !isPublicRoute) {
       // Not logged in → go to login

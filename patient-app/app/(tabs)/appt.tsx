@@ -1,7 +1,7 @@
 // kna/app/app/(tabs)/appt.tsx
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { resetTo } from '../../utils/navigation';
 import { clinicToday } from '../../utils/patientRecord';
 import {
@@ -215,6 +215,7 @@ const normalizeSex = (v: unknown): string => {
 // ─── Screen ───────────────────────────────────────────────────────────────────
 export default function AppointmentsScreen() {
   const router   = useRouter();
+  const params   = useLocalSearchParams<{ preview?: string }>();
   const { user, mrn } = usePatientAuth();
   const insets   = useSafeAreaInsets();
   const now      = new Date();
@@ -375,9 +376,56 @@ export default function AppointmentsScreen() {
     return () => unsub();
   }, [user]);
 
-  const upcomingApts = myAppointments.filter(a =>
-    !isEnded(a) && a.date >= todayKey
-  );
+  const previewSampleApts: FirestoreAppt[] = [
+    {
+      id: 'preview-1',
+      userId: user?.uid || 'preview',
+      name: 'Maria Santos',
+      date: '2026-10-24',
+      time: '9:00 AM - 10:00 AM',
+      type: 'General Consultation',
+      status: 'pending',
+      age: '28',
+      gender: 'Female',
+      address: 'Libon, Albay',
+      contactNumber: '09123456789',
+      createdAt: Date.now(),
+    },
+    {
+      id: 'preview-2',
+      userId: user?.uid || 'preview',
+      name: 'Maria Santos',
+      date: '2026-10-31',
+      time: '10:00 AM - 11:00 AM',
+      type: 'PEP',
+      status: 'confirmed',
+      age: '28',
+      gender: 'Female',
+      address: 'Libon, Albay',
+      contactNumber: '09123456789',
+      createdAt: Date.now(),
+    },
+    {
+      id: 'preview-3',
+      userId: user?.uid || 'preview',
+      name: 'Maria Santos',
+      date: '2026-10-18',
+      time: '2:00 PM - 3:00 PM',
+      type: 'Anti-Tetanus Vaccine',
+      status: 'done',
+      age: '28',
+      gender: 'Female',
+      address: 'Libon, Albay',
+      contactNumber: '09123456789',
+      createdAt: Date.now(),
+    },
+  ];
+
+  const upcomingApts = params.preview === '1' && myAppointments.length === 0
+    ? previewSampleApts
+    : myAppointments.filter(a =>
+        !isEnded(a) && a.date >= todayKey
+      );
   const pastApts = myAppointments.filter(a =>
     (a.status === 'confirmed' || a.status === 'accepted' || a.status === 'done') && a.date < todayKey
   );
@@ -450,7 +498,7 @@ export default function AppointmentsScreen() {
   const handleDayPress = (day: number) => {
     // Guests have no clinic record to attach an appointment to — clinic staff
     // can't act on a booking that isn't tied to a real patient.
-    if (user?.isAnonymous || !mrn) {
+    if ((user?.isAnonymous || !mrn) && params.preview !== '1') {
       showAlert({
         type: 'guest',
         title: 'Guest Account',
@@ -507,9 +555,15 @@ export default function AppointmentsScreen() {
 
   // ── Book appointment → Firestore ──────────────────────────────────────────
   const handleConfirm = async () => {
+    if (params.preview === '1') {
+      setShowDetailsForm(false);
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 4000);
+      setShowSuccess(true);
+      return;
+    }
     if (!validateForm()) return;
     if (!selectedKey || !selectedTime) return;
-
 
     if (!user) {
       showAlert({
@@ -773,13 +827,11 @@ export default function AppointmentsScreen() {
           </View>
         </View>
 
-        {/* Hint */}
-        {!selectedKey && (
-          <View style={s.hint}>
-            <Ionicons name="hand-left-outline" size={14} color={C.muted}/>
-            <Text style={s.hintTxt}>Appointments are on Saturdays & Sundays. Weekdays (Mon–Fri) are for walk-ins, no booking needed. Tap a highlighted date to see time slots.</Text>
-          </View>
-        )}
+        {/* Hint: always visible whether modal is open or closed */}
+        <View style={s.hint}>
+          <Ionicons name="hand-left-outline" size={14} color={C.muted}/>
+          <Text style={s.hintTxt}>Appointments are on Saturdays & Sundays. Weekdays (Mon–Fri) are for walk-ins, no booking needed. Tap a highlighted date to see time slots.</Text>
+        </View>
 
         {/* ══ SECTION: My Appointments ══ */}
         <View style={[s.sectionLabel, { marginTop: verticalScale(28) }]}>
@@ -822,7 +874,10 @@ export default function AppointmentsScreen() {
                   </Text>
                 </View>
                 <View style={s.apptInfo}>
-                  <Text style={s.apptType}>{apptTypeLabel(appt.type)}</Text>
+                  <View style={s.apptHeaderRow}>
+                    <Text style={s.apptType}>{apptTypeLabel(appt.type)}</Text>
+                    <StatusBadge status={appt.status} declined={isEnded(appt) && endedByClinic(appt)}/>
+                  </View>
                   <View style={s.apptInfoRow}>
                     <Ionicons name="time-outline" size={12} color={C.muted}/>
                     <Text style={s.apptInfoSub}>{shortKeyWithDay(appt.date)} · {appt.time}</Text>
@@ -840,34 +895,20 @@ export default function AppointmentsScreen() {
                     </View>
                   )}
                 </View>
-                {/* Status on top, the cancel (X) under it, right-aligned and
-                    centred against the date block. A same-size spacer keeps
-                    the status in place when the visit cannot be cancelled. */}
-                <View style={s.apptStack}>
-                  <StatusBadge status={appt.status} declined={isEnded(appt) && endedByClinic(appt)}/>
-                  {/* The status (information, a tinted badge) sits above the
-                      cancel action (an outlined pill with a label), both
-                      right-aligned. A visit that cannot be cancelled keeps
-                      an invisible pill of the same size, so the badge never
-                      moves. Opens the same Request Cancellation flow. */}
-                  {canCancel ? (
-                    <Tap
-                      style={s.cancelPill}
-                      hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
-                      onPress={() => { setCancellationReasonInput(''); setSelectedApptDetail(appt); }}
-                      accessibilityRole="button"
-                      accessibilityLabel="Request cancellation"
-                    >
-                      <Ionicons name="close-circle-outline" size={13} color={C.navy}/>
-                      <Text style={s.cancelPillTxt}>Cancel</Text>
-                    </Tap>
-                  ) : (
-                    <View style={[s.cancelPill, s.cancelPillHidden]} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-                      <Ionicons name="close-circle-outline" size={13} color={C.navy}/>
-                      <Text style={s.cancelPillTxt}>Cancel</Text>
-                    </View>
-                  )}
-                </View>
+                {/* Cancel action has its own space on the right, vertically centered.
+                    When not cancellable, it is hidden cleanly without leaving an empty gap. */}
+                {canCancel && (
+                  <Tap
+                    style={s.cancelPill}
+                    hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+                    onPress={() => { setCancellationReasonInput(''); setSelectedApptDetail(appt); }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Request cancellation"
+                  >
+                    <Ionicons name="close-circle-outline" size={13} color={C.navy}/>
+                    <Text style={s.cancelPillTxt}>Cancel</Text>
+                  </Tap>
+                )}
               </Tap>
               );
             })
@@ -1016,13 +1057,11 @@ export default function AppointmentsScreen() {
                     })}
                   </View>
 
-                  {/* Informational note (Summary section removed per Item 6) */}
-                  {selectedTime && (
-                    <View style={s.noteBox}>
-                      <Ionicons name="information-circle" size={16} color={C.shapeBlue}/>
-                      <Text style={s.noteTxt}>Your request will be reviewed by the clinic. You&apos;ll be notified once confirmed.</Text>
-                    </View>
-                  )}
+                  {/* Informational note */}
+                  <View style={s.noteBox}>
+                    <Ionicons name="information-circle" size={16} color={C.shapeBlue}/>
+                    <Text style={s.noteTxt}>Your request will be reviewed by the clinic. You&apos;ll be notified once confirmed.</Text>
+                  </View>
 
                   {/* Action buttons */}
                   <View style={sm.footer}>
@@ -1602,6 +1641,7 @@ const s = StyleSheet.create({
   apptDateNum:  { fontSize: moderateScale(20), fontWeight: '900', color: C.red, lineHeight: moderateScale(22) },
   apptDateMon:  { fontSize: moderateScale(9), fontWeight: '700', color: C.red, textTransform: 'uppercase', letterSpacing: 0.3 },
   apptInfo:     { flex: 1, minWidth: 0 },
+  apptHeaderRow:{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: scale(8), marginBottom: verticalScale(2) },
   apptType:     { fontSize: moderateScale(14), fontWeight: '800', color: C.charcoal },
   patientNoteBox: { backgroundColor: C.bg, borderColor: C.border },
   patientNoteLbl: { fontSize: moderateScale(11), fontWeight: '800', color: C.slate, textTransform: 'uppercase', letterSpacing: 0.4 },
@@ -1614,14 +1654,9 @@ const s = StyleSheet.create({
   adminNoteBox: { flexDirection: 'row', alignItems: 'flex-start', gap: scale(5), backgroundColor: C.redFaint, borderRadius: scale(8), padding: scale(6), marginTop: verticalScale(5) },
   adminNoteTxt: { flex: 1, fontSize: moderateScale(10), color: C.red, fontWeight: '600', lineHeight: moderateScale(14) },
 
-  // 34dp button plus 6dp hitSlop: a 46dp tap target.
-  // Same height and corner radius as the status badge, so the two read as a
-  // pair; outlined with a label so it reads as an action. With hitSlop the
-  // tap area is about 44dp tall.
-  cancelPill: { flexDirection: 'row', alignItems: 'center', gap: scale(4), paddingHorizontal: scale(9), paddingVertical: verticalScale(4), borderRadius: scale(8), borderWidth: 1, borderColor: C.border, backgroundColor: C.white, overflow: 'hidden' },
-  cancelPillHidden: { opacity: 0 },
+  // Clear, dedicated action button with 44dp+ tap target via hitSlop.
+  cancelPill: { flexDirection: 'row', alignItems: 'center', gap: scale(4), paddingHorizontal: scale(10), paddingVertical: verticalScale(6), borderRadius: scale(8), borderWidth: 1, borderColor: C.border, backgroundColor: C.white, overflow: 'hidden', marginLeft: scale(10), alignSelf: 'center' },
   cancelPillTxt: { fontSize: moderateScale(11), fontWeight: '700', color: C.navy },
-  apptStack:  { alignItems: 'flex-end', justifyContent: 'center', gap: verticalScale(6), marginLeft: scale(10) },
   doneBadge:  { flexDirection: 'row', alignItems: 'center', gap: scale(4), backgroundColor: C.greenFaint, paddingHorizontal: scale(8), paddingVertical: verticalScale(4), borderRadius: scale(8) },
   doneTxt:    { fontSize: moderateScale(10), fontWeight: '800', color: C.green },
 });

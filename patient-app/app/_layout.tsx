@@ -20,12 +20,16 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 (TextInput as any).defaultProps = (TextInput as any).defaultProps || {};
 (TextInput as any).defaultProps.allowFontScaling = false;
 
-type WebView = 'desktop' | 'mobile';
+type WebView = 'desktop' | 'mobile' | 'raw';
 
 function getInitialWebView(): WebView {
   if (typeof window === 'undefined') return 'desktop';
   const params = new URLSearchParams(window.location.search);
-  return params.get('view') === 'mobile' ? 'mobile' : 'desktop';
+  const v = params.get('view');
+  if (v === 'raw') return 'raw';
+  if (v === 'mobile') return 'mobile';
+  if (window.innerWidth <= 600) return 'raw';
+  return 'desktop';
 }
 
 // Dev-only web view switcher: lets desktop web preview the mobile layout in a
@@ -42,6 +46,14 @@ function WebRoot() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
+
+  if (view === 'raw') {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#ffffff' }}>
+        <MobileApp />
+      </View>
+    );
+  }
 
   if (view === 'mobile') {
     return (
@@ -106,17 +118,16 @@ const webStyles: Record<string, any> = {
     justifyContent: 'center',
     alignItems: 'center',
     height: '100vh',
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#ffffff',
   },
   phoneFrame: {
     width: 393,
     height: 812,
-    borderRadius: 40,
+    borderRadius: 36,
     overflow: 'hidden',
-    backgroundColor: '#000',
-    borderWidth: 10,
-    borderColor: '#0d0d0d',
-    boxShadow: '0 30px 70px rgba(0, 0, 0, 0.55)',
+    backgroundColor: '#ffffff',
+    borderWidth: 2,
+    borderColor: '#e2e8f0',
   },
 };
 

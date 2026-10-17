@@ -56,7 +56,7 @@ export default function VerifyLoginOtp() {
   // No pending session (e.g. deep link, or it was signed out) → nothing to
   // verify. Back to login rather than showing a dead form.
   useEffect(() => {
-    if (!pendingUser && !auth.currentUser) router.replace('/auth/login');
+    if (!pendingUser && !auth.currentUser && params.preview !== '1') router.replace('/auth/login');
   }, [pendingUser]);
 
   useEffect(() => {
@@ -175,6 +175,9 @@ export default function VerifyLoginOtp() {
     if (key === 'Backspace' && !otpDigits[index] && index > 0) otpRefs.current[index - 1]?.focus();
   };
 
+  const navTop = Math.max(insets.top + (Platform.OS === 'android' ? 12 : 8), verticalScale(42));
+  const contentTopPadding = navTop + scale(44) + verticalScale(16);
+
   return (
     <View style={styles.container}>
       <LinearGradient colors={['#FFFFFF', '#F0F6FE', '#F8FAFC']} style={styles.background}>
@@ -185,20 +188,21 @@ export default function VerifyLoginOtp() {
         </View>
       </LinearGradient>
 
-      <View style={[styles.navHeader, { top: Math.max(insets.top + (Platform.OS === 'android' ? 12 : 8), verticalScale(42)) }]}>
+      <View style={[styles.navHeader, { top: navTop }]}>
         <Tap style={styles.backButton} onPress={abandon} activeOpacity={0.7}>
           <Ionicons name="chevron-back" size={22} color="#1E293B" />
         </Tap>
       </View>
 
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
           contentContainerStyle={[
             styles.scrollContent,
             {
-              paddingTop: Math.max(insets.top + verticalScale(35), verticalScale(90)),
-              paddingBottom: Math.max(insets.bottom + (Platform.OS === 'android' ? 24 : 16), verticalScale(40)),
+              paddingTop: contentTopPadding,
+              paddingBottom: Math.max(insets.bottom + (Platform.OS === 'android' ? 24 : 16), verticalScale(32)),
             },
           ]}
         >
@@ -319,43 +323,44 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8,
     elevation: 4,
   },
-  scrollContent: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: scale(24) },
-  header: { alignItems: 'center', marginBottom: verticalScale(24) },
+  scrollContent: { flexGrow: 1, justifyContent: 'flex-start', paddingHorizontal: scale(24) },
+  header: { alignItems: 'center', marginBottom: verticalScale(16) },
   logoCircleBadge: {
-    width: scale(110), height: scale(110), borderRadius: scale(55),
+    width: scale(96), height: scale(96), borderRadius: scale(48),
     backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center',
-    shadowColor: NAVY_BLUE, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.12, shadowRadius: 16,
+    shadowColor: NAVY_BLUE, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.12, shadowRadius: 14,
     elevation: 6, borderWidth: 1, borderColor: '#DBEAFE',
   },
-  logo: { width: scale(85), height: scale(85) },
-  brandName: { fontSize: moderateScale(26), fontWeight: '900', color: '#1E293B', letterSpacing: 4, marginTop: verticalScale(12), fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif-medium' },
-  brandSubtitle: { fontSize: moderateScale(10.5), fontWeight: '800', color: NAVY_BLUE, letterSpacing: 2, marginTop: verticalScale(2) },
+  logo: { width: scale(72), height: scale(72) },
+  brandName: { fontSize: moderateScale(23), fontWeight: '900', color: '#1E293B', letterSpacing: 3.5, marginTop: verticalScale(8), fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif-medium' },
+  brandSubtitle: { fontSize: moderateScale(10), fontWeight: '800', color: NAVY_BLUE, letterSpacing: 2, marginTop: verticalScale(2) },
   formCard: {
-    backgroundColor: '#FFF', borderRadius: scale(32), paddingHorizontal: scale(30), paddingTop: verticalScale(32), paddingBottom: verticalScale(34),
+    backgroundColor: '#FFF', borderRadius: scale(28), paddingHorizontal: scale(26), paddingTop: verticalScale(24), paddingBottom: verticalScale(26),
     shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 20,
     elevation: 8, borderWidth: 1, borderColor: '#F1F5F9',
   },
-  title: { fontSize: moderateScale(25), fontWeight: '900', color: '#1E293B', textAlign: 'center', marginBottom: verticalScale(4) },
-  subtitle: { fontSize: moderateScale(13), color: '#64748B', textAlign: 'center', marginBottom: verticalScale(22), marginTop: verticalScale(6), lineHeight: moderateScale(20) },
+  title: { fontSize: moderateScale(22), fontWeight: '900', color: '#1E293B', textAlign: 'center', marginBottom: verticalScale(4) },
+  subtitle: { fontSize: moderateScale(12.5), color: '#64748B', textAlign: 'center', marginBottom: verticalScale(16), marginTop: verticalScale(4), lineHeight: moderateScale(18) },
   highlight: { color: NAVY_BLUE, fontWeight: '800' },
   errorBanner: {
     flexDirection: 'row', alignItems: 'center', gap: scale(8),
-    backgroundColor: '#FEE2E2', borderRadius: scale(14), padding: scale(12), marginTop: verticalScale(12), marginBottom: verticalScale(12),
+    backgroundColor: '#FEE2E2', borderRadius: scale(14), padding: scale(10), marginTop: verticalScale(8), marginBottom: verticalScale(10),
   },
-  errorText: { flex: 1, fontSize: moderateScale(12.5), color: '#B91C1C', lineHeight: moderateScale(18) },
-  otpIconWrapper: { alignItems: 'center', marginBottom: verticalScale(14) },
-  otpIconBg: { width: scale(72), height: scale(72), borderRadius: scale(36), justifyContent: 'center', alignItems: 'center' },
-  otpRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(22), gap: scale(8) },
+  errorText: { flex: 1, fontSize: moderateScale(12), color: '#B91C1C', lineHeight: moderateScale(17) },
+  otpIconWrapper: { alignItems: 'center', marginBottom: verticalScale(10) },
+  otpIconBg: { width: scale(62), height: scale(62), borderRadius: scale(31), justifyContent: 'center', alignItems: 'center' },
+  otpRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(18), gap: scale(7) },
   otpBox: {
     flex: 1,
-    height: verticalScale(62),
-    minHeight: 52,
-    maxHeight: 70,
-    borderRadius: scale(14),
+    minWidth: 0,
+    height: verticalScale(56),
+    minHeight: 48,
+    maxHeight: 64,
+    borderRadius: scale(12),
     borderWidth: 1.5,
     borderColor: BORDER_INACTIVE,
     backgroundColor: SOFT_GRAY_BG,
-    fontSize: moderateScale(22),
+    fontSize: moderateScale(20),
     fontWeight: '800',
     color: '#0F172A',
     textAlign: 'center',
@@ -380,19 +385,19 @@ const styles = StyleSheet.create({
     borderWidth: 1.8,
   },
   primaryButton: {
-    borderRadius: scale(16), overflow: 'hidden', elevation: 5, marginTop: verticalScale(10),
+    borderRadius: scale(16), overflow: 'hidden', elevation: 5, marginTop: verticalScale(6),
     shadowColor: NAVY_BLUE, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.25, shadowRadius: 10,
   },
-  primaryGradient: { flexDirection: 'row', height: verticalScale(56), justifyContent: 'center', alignItems: 'center' },
+  primaryGradient: { flexDirection: 'row', height: verticalScale(52), justifyContent: 'center', alignItems: 'center' },
   buttonDisabled: { opacity: 0.6 },
-  primaryButtonText: { color: '#FFF', fontSize: moderateScale(16.5), fontWeight: '700', letterSpacing: 0.3 },
-  resendButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: scale(6), marginTop: verticalScale(14), padding: scale(8) },
+  primaryButtonText: { color: '#FFF', fontSize: moderateScale(15.5), fontWeight: '700', letterSpacing: 0.3 },
+  resendButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: scale(6), marginTop: verticalScale(12), padding: scale(6) },
   resendDisabled: { opacity: 0.5 },
-  resendText: { fontSize: moderateScale(13), fontWeight: '700', color: NAVY_BLUE },
+  resendText: { fontSize: moderateScale(12.5), fontWeight: '700', color: NAVY_BLUE },
   resendTextDisabled: { color: '#94A3B8' },
   rememberNote: {
     flexDirection: 'row', alignItems: 'flex-start', gap: scale(8),
-    backgroundColor: '#F1F5F9', borderRadius: scale(12), padding: scale(12), marginTop: verticalScale(16),
+    backgroundColor: '#F1F5F9', borderRadius: scale(12), padding: scale(10), marginTop: verticalScale(14),
   },
-  rememberNoteText: { flex: 1, fontSize: moderateScale(11.5), color: '#475569', lineHeight: moderateScale(16) },
+  rememberNoteText: { flex: 1, fontSize: moderateScale(11), color: '#475569', lineHeight: moderateScale(15) },
 });

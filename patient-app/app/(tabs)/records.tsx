@@ -1,6 +1,6 @@
 // patient-app/app/(tabs)/records.tsx
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { collection, doc, onSnapshot, orderBy, query } from 'firebase/firestore';
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -57,6 +57,7 @@ const C = {
 
 export default function RecordsScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const { user, mrn, isGuest } = usePatientAuth();
   const insets = useSafeAreaInsets();
 
@@ -164,7 +165,27 @@ export default function RecordsScreen() {
   // Everything below comes from the clinic's record. Nothing is filled in
   // with sample values — a field the clinic hasn't recorded shows "—", and
   // a patient with no doses yet sees an empty schedule, not demo doses.
-  const pr = patientRecord || {};
+  const previewSampleRecord = {
+    name: 'Maria L. Santos',
+    lastName: 'Santos',
+    firstName: 'Maria',
+    middleName: 'Lopez',
+    dob: '1998-04-12',
+    mrn: 'MRN-2026-0842',
+    service: 'Post-Exposure Prophylaxis (PEP)',
+    cat: 'III',
+    date: '2026-10-12',
+    animal: 'Canine (Stray Dog)',
+    treatments: ['Rabies Immunoglobulin (RIG)', 'Anti-Tetanus Serum (ATS)'],
+    doses: [
+      { doseNumber: 1, dayLabel: 'Day 0', targetDate: '2026-10-12', actualDate: '2026-10-12', status: 'completed', vaccine: 'Speeda (PVRV)', lot: 'SP-2026-08', nurse: 'RN. Cruz' },
+      { doseNumber: 2, dayLabel: 'Day 3', targetDate: '2026-10-15', actualDate: '2026-10-15', status: 'completed', vaccine: 'Speeda (PVRV)', lot: 'SP-2026-08', nurse: 'RN. Cruz' },
+      { doseNumber: 3, dayLabel: 'Day 7', targetDate: '2026-10-19', status: 'pending', vaccine: 'Speeda (PVRV)', lot: 'SP-2026-08' },
+      { doseNumber: 4, dayLabel: 'Day 28', targetDate: '2026-11-09', status: 'pending', vaccine: 'Speeda (PVRV)', lot: 'SP-2026-08' },
+    ]
+  };
+
+  const pr = patientRecord || (params.preview === '1' ? previewSampleRecord : {});
   const nameSplit = splitName(pr.name || user?.displayName || '');
   const lastNameVal = pr.lastName || nameSplit.last || EMPTY;
   const firstNameVal = pr.firstName || nameSplit.first || EMPTY;

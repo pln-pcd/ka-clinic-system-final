@@ -2,7 +2,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { resetTo } from '../../utils/navigation';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'react';
@@ -104,14 +104,62 @@ const EMPTY_PERSONAL_DATA = {
   emergencyAltPhone: '',
 };
 
+const PREVIEW_PERSONAL_DATA = {
+  fullName: 'Maria L. Santos',
+  age: '28',
+  dob: '1998-04-12',
+  gender: 'Female',
+  religion: 'Roman Catholic',
+  education: 'College Graduate',
+  address: 'Zone 4, Poblacion, Libon, Albay',
+  occupation: 'Teacher',
+  contact: '0917 888 9922',
+  height: '162 cm',
+  weight: '54 kg',
+  bp: '120/80 mmHg',
+  emergencyName: 'Roberto Santos',
+  emergencyRel: 'Spouse',
+  emergencyPhone: '0918 777 6655',
+  emergencyAltPhone: '0922 333 4411',
+};
+
+const PREVIEW_DEVICES: DeviceSession[] = [
+  {
+    id: 'dev-1',
+    deviceId: 'dev-curr',
+    platform: 'android',
+    label: 'Samsung Galaxy S23 (This Phone)',
+    lastActiveAt: Date.now(),
+  },
+  {
+    id: 'dev-2',
+    deviceId: 'dev-prev',
+    platform: 'ios',
+    label: 'Apple iPhone 14 Pro',
+    lastActiveAt: Date.now() - 7200000,
+  },
+  {
+    id: 'dev-3',
+    deviceId: 'dev-web',
+    platform: 'web',
+    label: 'Chrome Browser (Windows 11)',
+    lastActiveAt: Date.now() - 86400000,
+  },
+];
+
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const params = useLocalSearchParams();
   const { user, mrn, isGuest, deviceId } = usePatientAuth();
 
-  const [currentView, setCurrentView] = useState<ViewState>('main');
-  const [devices, setDevices] = useState<DeviceSession[]>([]);
-  const [devicesLoading, setDevicesLoading] = useState(true);
+  const [currentView, setCurrentView] = useState<ViewState>(() => {
+    if (params.subview === 'personal') return 'personal';
+    if (params.subview === 'devices') return 'devices';
+    return 'main';
+  });
+  const [devices, setDevices] = useState<DeviceSession[]>(() => (params.preview === '1' ? PREVIEW_DEVICES : []));
+  const [devicesLoading, setDevicesLoading] = useState(params.preview !== '1');
   const [isEditingPersonal, setIsEditingPersonal] = useState(false);
   const closeAccountSection = useCallback(() => {
     setCurrentView('main');
@@ -122,7 +170,7 @@ export default function ProfileScreen() {
     closeAccountSection();
     return true;
   }, [currentView, closeAccountSection]));
-  const [personalData, setPersonalData] = useState(EMPTY_PERSONAL_DATA);
+  const [personalData, setPersonalData] = useState(() => (params.preview === '1' ? PREVIEW_PERSONAL_DATA : EMPTY_PERSONAL_DATA));
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   // Null until the patient actually has a picture. The placeholder used to be
   // a remote initials service, which needed the network to render and turned a
@@ -328,6 +376,11 @@ export default function ProfileScreen() {
 
   // Live device list. Guests have no account to attach sessions to.
   useEffect(() => {
+    if (params.preview === '1') {
+      setDevices(PREVIEW_DEVICES);
+      setDevicesLoading(false);
+      return;
+    }
     if (!user || user.isAnonymous) { setDevices([]); setDevicesLoading(false); return; }
     setDevicesLoading(true);
     const unsub = watchDeviceSessions(

@@ -233,6 +233,9 @@ export default function PatientSignupScreen() {
     }
   };
 
+  const navTop = Math.max(insets.top + (Platform.OS === 'android' ? 12 : 8), verticalScale(42));
+  const contentTopPadding = navTop + scale(44) + verticalScale(16);
+
   return (
     <View style={styles.container}>
       <LinearGradient colors={['#FFFFFF', '#F0F6FE', '#F8FAFC']} style={styles.background}>
@@ -244,7 +247,7 @@ export default function PatientSignupScreen() {
       </LinearGradient>
 
       {/* TOP NAVIGATION */}
-      <View style={[styles.navHeader, { top: Math.max(insets.top + (Platform.OS === 'android' ? 12 : 8), verticalScale(42)) }]}>
+      <View style={[styles.navHeader, { top: navTop }]}>
         <Tap
           style={styles.backButton}
           onPress={() => {
@@ -258,14 +261,15 @@ export default function PatientSignupScreen() {
         </Tap>
       </View>
 
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView 
           showsVerticalScrollIndicator={false} 
+          keyboardShouldPersistTaps="handled"
           contentContainerStyle={[
             styles.scrollContent,
             {
-              paddingTop: Math.max(insets.top + verticalScale(35), verticalScale(90)),
-              paddingBottom: Math.max(insets.bottom + (Platform.OS === 'android' ? 24 : 16), verticalScale(40)),
+              paddingTop: contentTopPadding,
+              paddingBottom: Math.max(insets.bottom + (Platform.OS === 'android' ? 24 : 16), verticalScale(32)),
             },
           ]}
         >
@@ -575,40 +579,38 @@ const styles = StyleSheet.create({
   // it grows past it (the OTP and password steps are taller than the MRN step).
   scrollContent: {
     flexGrow: 1,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     paddingHorizontal: scale(24),
-    paddingTop: verticalScale(90),
-    paddingBottom: verticalScale(40),
   },
-  header: { alignItems: 'center', marginBottom: verticalScale(24) },
-  headerCompact: { marginBottom: verticalScale(14) },
-  logoCircleBadgeCompact: { width: scale(72), height: scale(72), borderRadius: scale(36) },
-  logoCompact: { width: scale(56), height: scale(56) },
-  formCardCompact: { paddingHorizontal: scale(24), paddingTop: verticalScale(24), paddingBottom: verticalScale(24) },
+  header: { alignItems: 'center', marginBottom: verticalScale(16) },
+  headerCompact: { marginBottom: verticalScale(10) },
+  logoCircleBadgeCompact: { width: scale(64), height: scale(64), borderRadius: scale(32) },
+  logoCompact: { width: scale(48), height: scale(48) },
+  formCardCompact: { paddingHorizontal: scale(22), paddingTop: verticalScale(20), paddingBottom: verticalScale(20) },
   subtitleCompact: { marginBottom: verticalScale(8) },
-  inputWrapperCompact: { marginTop: verticalScale(12) },
-  inputBoxCompact: { height: verticalScale(52) },
+  inputWrapperCompact: { marginTop: verticalScale(10) },
+  inputBoxCompact: { height: verticalScale(50) },
   logoCircleBadge: {
-    width: scale(110),
-    height: scale(110),
-    borderRadius: scale(55),
+    width: scale(96),
+    height: scale(96),
+    borderRadius: scale(48),
     backgroundColor: '#FFF',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: NAVY_BLUE,
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.12,
-    shadowRadius: 16,
+    shadowRadius: 14,
     elevation: 6,
     borderWidth: 1,
     borderColor: '#DBEAFE',
   },
   // No tint: the clinic mark is red by design.
-  logo: { width: scale(85), height: scale(85) },
-  brandName: { fontSize: moderateScale(26), fontWeight: '900', color: '#1E293B', letterSpacing: 4, marginTop: verticalScale(12), fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif-medium' },
-  brandSubtitle: { fontSize: moderateScale(10.5), fontWeight: '800', color: NAVY_BLUE, letterSpacing: 2, marginTop: verticalScale(2) },
+  logo: { width: scale(72), height: scale(72) },
+  brandName: { fontSize: moderateScale(23), fontWeight: '900', color: '#1E293B', letterSpacing: 3.5, marginTop: verticalScale(8), fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif-medium' },
+  brandSubtitle: { fontSize: moderateScale(10), fontWeight: '800', color: NAVY_BLUE, letterSpacing: 2, marginTop: verticalScale(2) },
   formCard: {
-    backgroundColor: '#FFF', borderRadius: scale(32), paddingHorizontal: scale(30), paddingTop: verticalScale(32), paddingBottom: verticalScale(34),
+    backgroundColor: '#FFF', borderRadius: scale(28), paddingHorizontal: scale(26), paddingTop: verticalScale(24), paddingBottom: verticalScale(26),
     shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 20,
     elevation: 8, borderWidth: 1, borderColor: '#F1F5F9',
   },
@@ -672,6 +674,7 @@ const styles = StyleSheet.create({
   },
   otpBox: {
     flex: 1,
+    minWidth: 0,
     height: verticalScale(62),
     minHeight: 52,
     maxHeight: 70,

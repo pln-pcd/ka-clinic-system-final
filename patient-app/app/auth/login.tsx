@@ -137,6 +137,9 @@ export default function LoginScreen() {
     }
   };
 
+  const navTop = Math.max(insets.top + (Platform.OS === 'android' ? 12 : 8), verticalScale(42));
+  const contentTopPadding = navTop + scale(44) + verticalScale(16);
+
   return (
     <View style={styles.container}>
       <LinearGradient colors={['#FFFFFF', '#F0F6FE', '#F8FAFC']} style={styles.background}>
@@ -148,20 +151,21 @@ export default function LoginScreen() {
       </LinearGradient>
 
       {/* TOP NAVIGATION */}
-      <View style={[styles.navHeader, { top: Math.max(insets.top + (Platform.OS === 'android' ? 12 : 8), verticalScale(42)) }]}>
+      <View style={[styles.navHeader, { top: navTop }]}>
         <Tap style={styles.backButton} onPress={() => goBackOr(router, '/onboarding4')} activeOpacity={0.7}>
           <Ionicons name="chevron-back" size={22} color="#1E293B" />
         </Tap>
       </View>
 
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView 
           showsVerticalScrollIndicator={false} 
+          keyboardShouldPersistTaps="handled"
           contentContainerStyle={[
             styles.scrollContent,
             {
-              paddingTop: Math.max(insets.top + verticalScale(35), verticalScale(90)),
-              paddingBottom: Math.max(insets.bottom + (Platform.OS === 'android' ? 24 : 16), verticalScale(40)),
+              paddingTop: contentTopPadding,
+              paddingBottom: Math.max(insets.bottom + (Platform.OS === 'android' ? 24 : 16), verticalScale(32)),
             },
           ]}
         >
@@ -359,42 +363,37 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8,
     elevation: 4,
   },
-  // Centers the logo/brand/card block vertically when it's shorter than the
-  // screen, while still scrolling once the keyboard shrinks the viewport.
   scrollContent: {
     flexGrow: 1,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     paddingHorizontal: scale(24),
-    paddingTop: verticalScale(90),
-    paddingBottom: verticalScale(40),
   },
-  header: { alignItems: 'center', marginBottom: verticalScale(24) },
+  header: { alignItems: 'center', marginBottom: verticalScale(16) },
   logoCircleBadge: {
-    width: scale(110),
-    height: scale(110),
-    borderRadius: scale(55),
+    width: scale(96),
+    height: scale(96),
+    borderRadius: scale(48),
     backgroundColor: '#FFF',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: NAVY_BLUE,
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.12,
-    shadowRadius: 16,
+    shadowRadius: 14,
     elevation: 6,
     borderWidth: 1,
     borderColor: '#DBEAFE',
   },
-  // No tint: the clinic mark is red by design.
-  logo: { width: scale(85), height: scale(85) },
-  brandName: { fontSize: moderateScale(26), fontWeight: '900', color: '#1E293B', letterSpacing: 4, marginTop: verticalScale(12), fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif-medium' },
-  brandSubtitle: { fontSize: moderateScale(10.5), fontWeight: '800', color: NAVY_BLUE, letterSpacing: 2, marginTop: verticalScale(2) },
+  logo: { width: scale(72), height: scale(72) },
+  brandName: { fontSize: moderateScale(23), fontWeight: '900', color: '#1E293B', letterSpacing: 3.5, marginTop: verticalScale(8), fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif-medium' },
+  brandSubtitle: { fontSize: moderateScale(10), fontWeight: '800', color: NAVY_BLUE, letterSpacing: 2, marginTop: verticalScale(2) },
   formCard: {
-    backgroundColor: '#FFF', borderRadius: scale(32), paddingHorizontal: scale(26), paddingTop: verticalScale(26), paddingBottom: verticalScale(28),
+    backgroundColor: '#FFF', borderRadius: scale(28), paddingHorizontal: scale(26), paddingTop: verticalScale(24), paddingBottom: verticalScale(26),
     shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 20,
     elevation: 8, borderWidth: 1, borderColor: '#F1F5F9',
   },
-  title: { fontSize: moderateScale(25), fontWeight: '900', color: '#1E293B', textAlign: 'center' },
-  subtitle: { fontSize: moderateScale(13), color: '#64748B', textAlign: 'center', marginTop: verticalScale(4), marginBottom: verticalScale(14), lineHeight: moderateScale(18) },
+  title: { fontSize: moderateScale(22), fontWeight: '900', color: '#1E293B', textAlign: 'center' },
+  subtitle: { fontSize: moderateScale(12.5), color: '#64748B', textAlign: 'center', marginTop: verticalScale(4), marginBottom: verticalScale(14), lineHeight: moderateScale(18) },
   errorBanner: {
     flexDirection: 'row', alignItems: 'center', gap: scale(8),
     backgroundColor: '#FEE2E2', borderRadius: scale(14), padding: scale(12), marginBottom: verticalScale(14),
