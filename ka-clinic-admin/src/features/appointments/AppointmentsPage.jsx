@@ -1047,8 +1047,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
 
   const promptDecline = (apt) => {
     setDeclineTargetApt(apt);
-    setDeclinePreset(DECLINE_REASONS[0]);
-    setDeclineReason(DECLINE_REASONS[0]);
+    setDeclineReason('');
     setDeclineModalOpen(true);
   };
 
@@ -1908,7 +1907,6 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                   <Field label="Date" value={formatDateLong(apt.date) || apt.date} />
                   <Field label="Time Slot" value={apt.time} />
                   <Field label="Purpose / Service" value={formatServiceType(apt.type, '')} />
-                  <Field label="Patient Notes" value={apt.notes} span />
                   {isCancelReq && apt.cancellationReason && <Field label="Reason for cancelling" value={apt.cancellationReason} span />}
                   {apt.status === 'cancelled' && reason && <Field label="Cancellation Reason" value={reason} span />}
                 </dl>
@@ -2016,36 +2014,9 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
               Only colours change between states (same 1px border, padding,
               weight and icon box), so the text never shifts. */}
           {/* The subject in one compact row: who, then when. */}
-          <div className="mt-3 rounded-xl bg-slate-50 border border-slate-100 px-3.5 py-2 flex items-center justify-between gap-4 text-[13px]">
+          <div className="mt-3 mb-4 rounded-xl bg-slate-50 border border-slate-100 px-3.5 py-2 flex items-center justify-between gap-4 text-[13px]">
             <span className="font-semibold text-slate-800 truncate">{declineTargetApt.name}</span>
             <span className="text-slate-500 shrink-0">{formatDateMedium(declineTargetApt.date)} · {declineTargetApt.time || '—'}</span>
-          </div>
-          <div id="decline-quick-label" className="text-[13px] font-bold text-slate-700 mt-4 mb-2">Quick reason</div>
-          <div role="radiogroup" aria-labelledby="decline-quick-label" className="grid grid-cols-2 gap-2 mb-4">
-            {[...DECLINE_REASONS, 'Other'].map((r) => {
-              const isOther = r === 'Other';
-              const key = isOther ? 'other' : r;
-              const isSelected = declinePreset === key;
-              return (
-                <button key={r} type="button" role="radio" aria-checked={isSelected}
-                  onClick={() => {
-                    setDeclinePreset(key);
-                    if (isOther) {
-                      setDeclineReason('');
-                      requestAnimationFrame(() => document.getElementById('decline-reason')?.focus());
-                    } else {
-                      setDeclineReason(r);
-                    }
-                  }}
-                  className={`flex items-center gap-2.5 min-h-[40px] text-left px-3 py-1.5 rounded-xl border text-[13px] font-medium leading-snug transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-rose-300 ${
-                    isSelected ? 'border-rose-400 bg-rose-50 text-rose-800' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'}`}>
-                  <span className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-colors ${isSelected ? 'bg-rose-600 border-rose-600 text-white' : 'border-slate-300 bg-white text-transparent'}`} style={{ lineHeight: 0 }}>
-                    <Check size={11} strokeWidth={3} style={{ display: 'block' }} aria-hidden="true" />
-                  </span>
-                  <span className="min-w-0">{r}</span>
-                </button>
-              );
-            })}
           </div>
           <label htmlFor="decline-reason" className="block text-[13px] font-bold text-slate-800 mb-1.5">
             Reason for declining <span className="text-rose-600">*</span>

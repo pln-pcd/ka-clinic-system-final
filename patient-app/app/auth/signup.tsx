@@ -340,7 +340,7 @@ export default function PatientSignupScreen() {
               </Tap>
 
               <View style={styles.secondaryLinkRow}>
-                <Text style={styles.secondaryLinkText}>or you can Sign in if you have an existing account </Text>
+                <Text style={styles.secondaryLinkText}>Already have an account? </Text>
                 <Tap onPress={() => router.push('/auth/login')}>
                   <Text style={styles.linkBold}>Sign In</Text>
                 </Tap>

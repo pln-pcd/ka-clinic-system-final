@@ -52,7 +52,7 @@ export const ALLERGY_OPTIONS = [
   'Seafood',
   'Latex',
   'Previous vaccine reaction',
-  'Other',
+  OTHERS,
 ];
 
 export const PLACE_OF_EXPOSURE_OPTIONS = [
@@ -273,13 +273,14 @@ const REGISTER_RULES = {
   pastVaccinesOther: f => historyErrors(f).pastVaccinesOther,
   pneumoHistory: f => historyErrors(f).pneumoHistory,
   pneumoHistoryOther: f => historyErrors(f).pneumoHistoryOther,
+  allergiesOther: f => historyErrors(f).allergiesOther,
 };
 // Checked on Next, in on-screen order (the first invalid one gets focus).
 const STEP_FIELDS = {
   identity: ['fname', 'lname', 'sex', 'dob', 'age', 'email', 'contact', 'barangay'],
   services: ['service'],
   pep_details: ['date', 'typeOfExposure', 'animal', 'cat', 'woundWashed'],
-  history: ['pneumoHistory', 'pneumoHistoryOther', 'pastVaccinesOther', 'history'],
+  history: ['pneumoHistory', 'pneumoHistoryOther', 'pastVaccinesOther', 'allergiesOther', 'history'],
 };
 
 function parsePatientName(p) {
@@ -351,22 +352,7 @@ function HistoryFields({ form, set, v, variant = 'wizard' }) {
   );
   const invalidIfOneOf = k => (cfg.oneOf.includes(k) && oneOfError ? { 'aria-invalid': true } : {});
 
-  // The one note the patient sees: shown under "Clinical Notes" on the back
-  // of their vaccination card in the app. Clinical notes above stay internal.
-  const patientNoteField = wrap('patientNote', true, <>
-    <label htmlFor={`${p}-patientNote`} className={isEdit ? EDIT_LABEL : undefined}>Note for patient (shown on their vaccination card)</label>
-    <textarea id={`${p}-patientNote`} value={form.patientNote || ''} maxLength={PATIENT_NOTE_MAX}
-      onChange={e => set('patientNote', e.target.value)}
-      placeholder="e.g. Bring this card to every visit. No medical details staff would not share with the patient."
-      rows={isEdit ? 2 : 3}
-      className={isEdit ? `${EDIT_INPUT} resize-y` : undefined}
-      style={isEdit ? undefined : { resize: 'none', height: 84, overflowY: 'auto' }} />
-    <span className={isEdit ? 'block mt-1 text-[11px] text-slate-400' : 'apw-help'}>
-      Visible to the patient in the app. {(form.patientNote || '').length}/{PATIENT_NOTE_MAX} characters
-    </span>
-  </>);
-
-  return [...cfg.history.map(k => {
+  return cfg.history.map(k => {
     switch (k) {
       case 'pastVaccines':
         return wrap(k, false, <>
@@ -389,7 +375,11 @@ function HistoryFields({ form, set, v, variant = 'wizard' }) {
           {otherBox(k, 'pneumoHistoryOther', 'Type the pneumococcal history')}
         </>);
       case 'allergies':
-        return wrap(k, false, <>{label(k, `${p}-allergies`)}{select(k, ALLERGY_OPTIONS, 'Select allergy', { props: invalidIfOneOf(k) })}</>);
+        return wrap(k, false, <>
+          {label(k, `${p}-allergies`)}
+          {select(k, ALLERGY_OPTIONS, 'Select allergy', { props: invalidIfOneOf(k) })}
+          {otherBox(k, 'allergiesOther', 'Type the specific allergy')}
+        </>);
       case 'riskCondition':
         return wrap(k, false, <>{label(k, `${p}-riskCondition`)}{select(k, RISK_CONDITION_OPTIONS, 'Select condition')}</>);
       case 'woundType':
@@ -418,7 +408,7 @@ function HistoryFields({ form, set, v, variant = 'wizard' }) {
       default:
         return null;
     }
-  }), patientNoteField];
+  });
 }
 
 // Long enough for a short instruction; the card shows 3 lines (8 enlarged).
@@ -467,6 +457,7 @@ export function AddPatientModal({ onClose, onAdd, initialPatient = null }) {
     pastVaccines: '',
     pastVaccinesOther: '',
     allergies: '',
+    allergiesOther: '',
     notes: '',
     patientNote: '',
     /* Tetanus */
@@ -1005,6 +996,7 @@ const EDIT_RULES = {
   // here, so older Pneumonia records saved before it existed stay editable.
   pastVaccinesOther: REGISTER_RULES.pastVaccinesOther,
   pneumoHistoryOther: REGISTER_RULES.pneumoHistoryOther,
+  allergiesOther: REGISTER_RULES.allergiesOther,
 };
 
 export function EditPatientModal({ patient, onClose, onSave, inventoryItems = [] }) {
@@ -1019,7 +1011,7 @@ export function EditPatientModal({ patient, onClose, onSave, inventoryItems = []
     date: patient.date || today(),
     woundLocation: patient.woundLocation || '', woundDepth: patient.woundDepth || '', numberOfBites: patient.numberOfBites || '',
     pastVaccines: patient.pastVaccines || '', pastVaccinesOther: patient.pastVaccinesOther || '',
-    allergies: patient.allergies || '', notes: patient.notes || '', patientNote: patient.patientNote || '',
+    allergies: patient.allergies || '', allergiesOther: patient.allergiesOther || '', notes: patient.notes || '', patientNote: patient.patientNote || '',
     woundType: patient.woundType || '', lastTetanus: patient.lastTetanus || '',
     pneumoHistory: patient.pneumoHistory || '', pneumoHistoryOther: patient.pneumoHistoryOther || '',
     riskCondition: patient.riskCondition || '',
@@ -1040,7 +1032,7 @@ export function EditPatientModal({ patient, onClose, onSave, inventoryItems = []
   // handleEditSave (parent) persists and closes this modal itself; the
   // checks here are the same inline ones as the Register wizard.
   const v = useFieldErrors(EDIT_RULES, form, 'edit');
-  const editFields = ['name', 'age', 'dob', 'email', 'contact', 'service', 'vaccineBrand', ...(isPep ? ['date', 'animal', 'cat'] : []), 'pastVaccinesOther', 'pneumoHistoryOther'];
+  const editFields = ['name', 'age', 'dob', 'email', 'contact', 'service', 'vaccineBrand', ...(isPep ? ['date', 'animal', 'cat'] : []), 'pastVaccinesOther', 'pneumoHistoryOther', 'allergiesOther'];
   function handleSave() {
     if (!v.validate(editFields)) return;
     onSave(form);

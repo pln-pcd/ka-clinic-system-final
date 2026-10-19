@@ -40,7 +40,7 @@ function chunk<T>(list: T[], size: number): T[][] {
 const CASE_KEYS = [
   'service', 'date', 'status', 'completedAt', 'closedAt',
   'cat', 'animal', 'typeOfExposure', 'sourceOfExposure', 'woundWashed', 'numberOfBites', 'vaccineBrand',
-  'pastVaccines', 'pastVaccinesOther', 'allergies', 'woundType', 'lastTetanus',
+  'pastVaccines', 'pastVaccinesOther', 'allergies', 'allergiesOther', 'woundType', 'lastTetanus',
   'pneumoHistory', 'pneumoHistoryOther', 'riskCondition', 'doses', 'route', 'patientNote',
 ];
 export function historicalRecord(patient: any, entry: any): any {
@@ -131,21 +131,32 @@ export function buildCardData({ record, mrn, isGuest, displayName, today = clini
     backSubtitle: isPep ? 'Clinical Exposure History & Medical Profile' : 'Medical Profile & Treatment Status',
     frontRows,
     backRows: [...exposure, ...chunk(profile, 3)],
-    // The patient-facing note staff write for this treatment ("Note for
-    // patient" in the dashboard). The internal clinical remarks (`notes`)
-    // are never shown.
-    notes: String(pr.patientNote || '').trim(),
-    doses: doseList.map((d: any, idx: number) => {
-      const state = doseState(d, today);
-      const brand = doseBrand(d, pr, state);
-      const extras = [d.dosage || pr.route, d.lot].filter(Boolean).join(' · ');
-      return {
-        key: String(d.id || d.key || idx),
-        label: d.label || d.n || d.name || `Dose ${idx + 1}`,
-        vaccine: d.blankRow || brand === EMPTY ? EMPTY : (extras ? `${brand} (${extras})` : brand),
-        date: d.blankRow ? EMPTY : (d.date ? formatDoseDate(d.date) : EMPTY),
-        status: d.blankRow ? EMPTY : doseStatus(d, today).label,
-      };
-    }),
+    // Patient note removed from card per Item 14
+    notes: '',
+    doses: (() => {
+      const rows = doseList.map((d: any, idx: number) => {
+        const state = doseState(d, today);
+        const brand = doseBrand(d, pr, state);
+        const extras = [d.dosage || pr.route, d.lot].filter(Boolean).join(' · ');
+        return {
+          key: String(d.id || d.key || idx),
+          label: d.label || d.n || d.name || `Dose ${idx + 1}`,
+          vaccine: d.blankRow || brand === EMPTY ? EMPTY : (extras ? `${brand} (${extras})` : brand),
+          date: d.blankRow ? EMPTY : (d.date ? formatDoseDate(d.date) : EMPTY),
+          status: d.blankRow ? EMPTY : doseStatus(d, today).label,
+        };
+      });
+      // Universal 4-dose rows across all services (PEP max doses = 4)
+      while (rows.length < 4) {
+        rows.push({
+          key: `empty-row-${rows.length}`,
+          label: EMPTY,
+          vaccine: EMPTY,
+          date: EMPTY,
+          status: EMPTY,
+        });
+      }
+      return rows;
+    })(),
   };
 }

@@ -366,29 +366,13 @@ async function sendFollowUp(req, res, caller) {
   const patientName = patient.name || [patient.fname, patient.lname].filter(Boolean).join(' ') || '';
   const email = (patient.email || '').trim();
 
-  // The notification doc is created first so its id can be embedded in the
-  // email's acknowledgement link and in the push payload.
-  const notifRef = db.collection('patientNotifications').doc();
-  await notifRef.set({
-    patientId,
-    patientName,
-    title,
-    message,
-    doseLabel: doseLabel || null,
-    dueDate: dueDate || null,
-    source,
-    sentBy: caller.uid,
-    sentByName: caller.data?.name || '',
-    createdAt: Date.now(),
-    acknowledged: false,
-    acknowledgedAt: null,
-    acknowledgedVia: null,
-    read: false,
-  });
+  const vaccineType = (req.body?.vaccineType || patient.treatmentType || patient.service || patient.vaccineName || '').trim();
 
+  // Generate notification doc reference first to embed id in ackUrl and push payload
+  const notifRef = db.collection('patientNotifications').doc();
   const ackUrl = `${siteOrigin(req)}/api/notifications?action=ack&id=${notifRef.id}`;
 
-  const push = await sendExpoPush(patient.pushTokens || [], {
+  const pushPromise = sendExpoPush(patient.pushTokens || [], {
     title,
     body: message || 'You have a new reminder from K&A Clinic.',
     // Lets a tap on the tray notification open the matching app screen.
@@ -399,32 +383,54 @@ async function sendFollowUp(req, res, caller) {
     },
   });
 
+  const mailPromise = (email && isValidEmail(email))
+    ? sendMail({
+        to: email,
+        subject: `K&A Clinic — ${title}`,
+        html: buildFollowUpEmailHtml({
+          patientName,
+          message,
+          ackUrl: ackUrl.startsWith('http') ? ackUrl : '',
+          doseLabel,
+          dueDate,
+          vaccineType,
+        }),
+        role: 'reminders',
+      })
+    : Promise.resolve({ skipped: true });
+
+  const [push, mailResult] = await Promise.all([pushPromise, mailPromise]);
+
   let emailed = false;
   let emailError = null;
   if (email && isValidEmail(email)) {
-    const { error, skipped } = await sendMail({
-      to: email,
-      subject: `K&A Clinic — ${title}`,
-      html: buildFollowUpEmailHtml({
-        patientName,
-        message,
-        ackUrl: ackUrl.startsWith('http') ? ackUrl : '',
-        doseLabel,
-        dueDate,
-      }),
-      role: 'reminders',
-    });
-    if (skipped) {
+    if (mailResult?.skipped) {
       emailError = 'Not emailed: test address.';
-    } else if (error) {
-      console.error('send-followup mail error:', error);
+    } else if (mailResult?.error) {
+      console.error('send-followup mail error:', mailResult.error);
       emailError = 'Email delivery failed.';
     } else {
       emailed = true;
     }
   }
 
-  await notifRef.update({
+  // Single Firestore write containing both base notification and delivery status
+  await notifRef.set({
+    patientId,
+    patientName,
+    title,
+    message,
+    doseLabel: doseLabel || null,
+    dueDate: dueDate || null,
+    vaccineType: vaccineType || null,
+    source,
+    sentBy: caller.uid,
+    sentByName: caller.data?.name || '',
+    createdAt: Date.now(),
+    acknowledged: false,
+    acknowledgedAt: null,
+    acknowledgedVia: null,
+    read: false,
     pushSent: push.sent,
     pushError: push.error,
     emailed,
@@ -1157,8 +1163,10 @@ export async function deleteExpiredArchivedConversations(now = Date.now()) {
   const cutoff = now - ARCHIVED_CONVERSATION_TTL_MS;
   const snap = await db.collection('chatThreads').where('archived', '==', true).get();
   const expired = snap.docs.filter(d => {
-    const at = Number(d.data().archivedAt) || 0;
-    return at > 0 && at <= cutoff;
+    const data = d.data();
+    const hasMessage = typeof data.lastMessage === 'string' && data.lastMessage.trim().length > 0;
+    const at = Number(data.archivedAt) || 0;
+    return hasMessage && at > 0 && at <= cutoff;
   });
   let messages = 0;
   for (const thread of expired) {

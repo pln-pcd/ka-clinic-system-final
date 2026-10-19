@@ -4,7 +4,7 @@ import { MAP_STUDY_MODE } from '../../lib/studyMode';
 import { arrayUnion, collection, deleteField, doc, getDoc, getDocs, limit, query, runTransaction, serverTimestamp, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { auth, db } from "../../lib/firebase";
-import { diffFields, logActivity } from "../../lib/activityLog";
+import { currentActor, diffFields, logActivity } from "../../lib/activityLog";
 import { peekLiveCollection, useLiveCollection } from '../../lib/liveStore';
 import { buildDoses, buildInitialDoses } from "../../lib/doseSchedules";
 import { getArchiveDueDate, getCompletionDate, getCompletionYear, getRegistrationYear, showsRestoredLabel } from "../../lib/patientArchive";
@@ -310,9 +310,16 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
       const asked = (k) => (svcFields.history.includes(k) ? (form[k] || '') : '');
       const pep = (k) => (isPepCase ? (form[k] || '') : '');
 
+      let staffName = '';
+      try {
+        const actor = await currentActor();
+        staffName = actor?.name || '';
+      } catch {}
+
       let updatedCaseHistory = [];
       if (isReturning) {
         const prevCaseSnapshot = {
+          registeredByName: returningPatient.registeredByName || '',
           service: returningPatient.service || 'PEP',
           date: returningPatient.date || '',
           status: returningPatient.status || 'completed',
@@ -343,6 +350,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
           pastVaccines: returningPatient.pastVaccines || '',
           pastVaccinesOther: returningPatient.pastVaccinesOther || '',
           allergies: returningPatient.allergies || '',
+          allergiesOther: returningPatient.allergiesOther || '',
           woundType: returningPatient.woundType || '',
           lastTetanus: returningPatient.lastTetanus || '',
           pneumoHistory: returningPatient.pneumoHistory || '',
@@ -393,6 +401,10 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
         pastVaccines: asked('pastVaccines'),
         pastVaccinesOther: asked('pastVaccines') === 'Others' ? (form.pastVaccinesOther || '').trim() : '',
         allergies: asked('allergies'),
+        allergiesOther: asked('allergies') === 'Others' ? (form.allergiesOther || '').trim() : '',
+        registeredByName: staffName || auth.currentUser?.displayName || 'Clinic Staff',
+        registeredBy: auth.currentUser?.uid || '',
+        registeredAt: Date.now(),
         woundLocation: pep('woundLocation'),
         woundDepth: pep('woundDepth'),
         numberOfBites: pep('numberOfBites'),
@@ -514,6 +526,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
       patientNote: (form.patientNote || '').trim().slice(0, 300),
       pastVaccines: form.pastVaccines || '', allergies: form.allergies || '',
       pastVaccinesOther: form.pastVaccines === 'Others' ? (form.pastVaccinesOther || '').trim() : '',
+      allergiesOther: form.allergies === 'Others' ? (form.allergiesOther || '').trim() : '',
       woundLocation: form.woundLocation || '', woundDepth: form.woundDepth || '', numberOfBites: form.numberOfBites || '',
       woundType: form.woundType || '', lastTetanus: form.lastTetanus || '',
       pneumoHistory: form.pneumoHistory || '',

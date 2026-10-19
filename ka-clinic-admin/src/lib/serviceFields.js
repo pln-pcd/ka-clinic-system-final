@@ -60,7 +60,7 @@ export const FIELD_DEFS = {
   riskCondition: { label: 'High-Risk Condition', value: r => r?.riskCondition || '' },
   woundType: { label: 'Wound / Injury Type', value: r => r?.woundType || '' },
   lastTetanus: { label: 'Last Tetanus Shot', value: r => r?.lastTetanus || '' },
-  allergies: { label: 'Known Allergies', value: r => r?.allergies || '' },
+  allergies: { label: 'Known Allergies', value: withOther('allergies', 'allergiesOther') },
   notes: { label: 'Remarks', value: r => r?.notes || '' },
 };
 
@@ -171,5 +171,7 @@ export function historyErrors(f) {
       ? 'Choose the past pneumococcal vaccination' : '',
     pneumoHistoryOther: asks('pneumoHistory') && f?.pneumoHistory === OTHERS && !filled('pneumoHistoryOther')
       ? 'Type the pneumococcal history' : '',
+    allergiesOther: asks('allergies') && f?.allergies === OTHERS && !filled('allergiesOther')
+      ? 'Type the specific allergy' : '',
   };
 }

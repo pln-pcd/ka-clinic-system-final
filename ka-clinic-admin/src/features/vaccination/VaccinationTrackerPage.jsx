@@ -166,6 +166,9 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
   const [reminderCache, setReminderCache] = useState({});
   const reminderFetches = useRef(new Set());
 
+  // Attending Nurse / Physician administering the dose
+  const [attendingStaff, setAttendingStaff] = useState(() => auth.currentUser?.displayName || '');
+
   // Category III treatments (RIG and Anti-Tetanus): 1 vial each
   const [rigDraftOpen, setRigDraftOpen] = useState(false);
   // The RIG product given: an Inventory item in the RIG category. No default.
@@ -184,6 +187,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
   const closeModal = () => {
     setDetailPt(null);
     setAssignedBrand('');
+    setAttendingStaff(auth.currentUser?.displayName || '');
     setReadyKey(null);
     setRigDraftOpen(false);
     setRigItemId('');
@@ -365,6 +369,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
 
   const handleSendFollowup = async (p, e) => {
     if (e) e.stopPropagation();
+    if (sendingFollowup[p.firestoreId]) return;
     const name = getName(p);
     const doses = buildDoses(p);
     const next = doses.find(d => d.status === 'pending' || d.status === 'miss');
@@ -372,20 +377,32 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
     const overdue = next && next.date && next.date < todayStr;
     const doseLabel = next ? next.label : 'Upcoming dose';
     const dueDate = next ? fmtDate(next.date) : 'soon';
+    const vaccineType = p.treatmentType || p.service || p.vaccineName || 'Anti-Rabies';
 
     setSendingFollowup(prev => ({ ...prev, [p.firestoreId]: true }));
     try {
-      await authedPostJson('/api/notifications', {
+      const res = await authedPostJson('/api/notifications', {
         action: 'send-followup',
         patientId: p.firestoreId,
         title: overdue ? 'Missed vaccination dose reminder' : 'Vaccination follow-up reminder',
         message: overdue
-          ? `Reminder for ${name}: ${doseLabel} was scheduled for ${dueDate}. Please visit K&A Clinic as soon as possible.`
-          : `Reminder for ${name}: ${doseLabel} is scheduled for ${dueDate}. Please visit K&A Clinic on time.`,
+          ? `Reminder for ${name}: ${doseLabel} (${vaccineType}) was scheduled for ${dueDate}. Please visit K&A Clinic as soon as possible.`
+          : `Reminder for ${name}: ${doseLabel} (${vaccineType}) is scheduled for ${dueDate}. Please visit K&A Clinic on time.`,
         doseLabel,
         dueDate,
+        vaccineType,
         source: 'manual',
       });
+
+      if (!res?.success) {
+        showToast(res?.error || 'Failed to send follow-up reminder.', 'error');
+        return;
+      }
+
+      if (res?.hasEmail && !res.emailed && !res.pushSent) {
+        showToast(res.emailError || 'Failed to deliver follow-up email.', 'error');
+        return;
+      }
 
       const updatedNotified = Array.from(new Set([...(p.notifiedDoses || []), next?.key || 'manual']));
       await updateDoc(doc(db, 'vaccinations', p.firestoreId), {
@@ -395,10 +412,13 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
       logActivity({ action: 'notification.send', collection: 'patientNotifications', mrn: p.firestoreId, docId: p.firestoreId,
         summary: `Sent a ${overdue ? 'missed-dose' : 'follow-up'} reminder for ${doseLabel} to MRN ${p.firestoreId}` });
 
-      showToast(`Follow-up reminder sent to ${name}!`, 'success');
+      const channels = [];
+      if (res.pushSent > 0) channels.push('app');
+      if (res.emailed) channels.push('email');
+      showToast(`Follow-up reminder sent to ${name}${channels.length ? ` via ${channels.join(' and ')}` : ''}!`, 'success');
     } catch (err) {
-      console.warn('Manual follow-up error, showing toast feedback:', err);
-      showToast(`Follow-up reminder sent to ${name}!`, 'success');
+      console.error('Manual follow-up error:', err);
+      showToast(err?.message || 'Failed to send follow-up reminder.', 'error');
     } finally {
       setSendingFollowup(prev => ({ ...prev, [p.firestoreId]: false }));
     }
@@ -461,6 +481,12 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
 
     // ── STRICT SEQUENTIAL DOSE ENFORCEMENT & VACCINE BRAND CHECK ──
     if (!isCurrentlyDone) {
+      // The nurse must enter attending staff name before giving dose
+      if (!attendingStaff.trim()) {
+        showToast('Please enter the Attending Nurse / Physician name first before checking.', 'warning');
+        return;
+      }
+
       // The nurse cannot check if they still haven't chosen the vaccine brand
       if (!brandToUse) {
         showToast(`Please select an assigned Vaccine Brand for ${cur.label} first before checking.`, 'warning');
@@ -516,6 +542,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
             status: nextStatus,
             s: nextStatus,
             brand: nextStatus === 'done' ? brandToUse : '',
+            attendingName: nextStatus === 'done' ? attendingStaff.trim() : '',
             autoMissed: false,
           }
         : d
@@ -569,6 +596,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
         stockItemId,
         byUid: auth.currentUser?.uid || null,
         byName: auth.currentUser?.displayName || auth.currentUser?.email || '',
+        attendingName: attendingStaff.trim(),
         readDoses: saved => buildDoses(saved),
         today: getTodayStr(),
       });
@@ -609,7 +637,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
   // the nurse. A second click while saving does nothing; the transaction
   // also refuses a second entry of the same kind.
   const treatmentInFlight = useRef(false);
-  const saveTreatment = async (p, { kind, product, date, setBusy, onSaved, item: chosenItem = null }) => {
+  const saveTreatment = async (p, { kind, product, date, attendingName: attName = '', setBusy, onSaved, item: chosenItem = null }) => {
     if (treatmentInFlight.current) return;
     if (!product) { showToast(`Choose the ${kind} product first.`, 'error'); return; }
     const dateToUse = date || getTodayStr();
@@ -636,6 +664,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
         date: dateToUse,
         byUid: auth.currentUser?.uid || null,
         byName: auth.currentUser?.displayName || auth.currentUser?.email || '',
+        attendingName: attName || attendingStaff.trim() || auth.currentUser?.displayName || '',
       });
       const entry = out.entry;
       const field = kind === 'RIG' ? 'rigTreatment' : 'antiTetanusTreatment';
@@ -665,18 +694,28 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
 
   // RIG deducts from the item picked in the card's dropdown.
   const handleSaveRig = (p) => {
+    if (!attendingStaff.trim()) {
+      showToast('Please enter the Attending Nurse / Physician name first.', 'warning');
+      return;
+    }
     const item = inventoryItems.find(i => i.id === rigItemId);
     if (!item) { showToast('Choose the RIG product first.', 'error'); return; }
     return saveTreatment(p, {
-      kind: 'RIG', product: item.name, item, date: rigDate, setBusy: setRigBusy,
+      kind: 'RIG', product: item.name, item, date: rigDate, attendingName: attendingStaff.trim(), setBusy: setRigBusy,
       onSaved: () => { setRigDraftOpen(false); setRigItemId(''); setRigDate(getTodayDateString()); },
     });
   };
 
-  const handleSaveAntiTetanus = (p) => saveTreatment(p, {
-    kind: 'Anti-Tetanus', product: tetanusProduct, date: tetanusDate, setBusy: setTetanusBusy,
-    onSaved: () => { setTetanusDraftOpen(false); setTetanusProduct(''); setTetanusDate(getTodayDateString()); },
-  });
+  const handleSaveAntiTetanus = (p) => {
+    if (!attendingStaff.trim()) {
+      showToast('Please enter the Attending Nurse / Physician name first.', 'warning');
+      return;
+    }
+    return saveTreatment(p, {
+      kind: 'Anti-Tetanus', product: tetanusProduct, date: tetanusDate, attendingName: attendingStaff.trim(), setBusy: setTetanusBusy,
+      onSaved: () => { setTetanusDraftOpen(false); setTetanusProduct(''); setTetanusDate(getTodayDateString()); },
+    });
+  };
 
   const removeTreatment = async (p, treatment) => {
     setTreatmentBusy(true);
@@ -1274,9 +1313,31 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                   </section>
                 </div>
 
-                {/* Right: vaccine brand, then dose checklist. Both cards size to
+                {/* Right: attending nurse, vaccine brand, then dose checklist. Both cards size to
                     their content; the column does not stretch them. */}
                 <div className="w-[440px] shrink-0 px-6 py-5 flex flex-col gap-4 self-start">
+                  {/* Attending Nurse / Physician card (ABOVE Vaccine Brand) */}
+                  <section className={cardCls}>
+                    <div className="flex items-center justify-between pr-4">
+                      <h4 className={cardHead}>Attending Nurse / Physician</h4>
+                      <span className="text-[11px] font-semibold text-amber-700">Required</span>
+                    </div>
+                    <div className="px-4 pb-4">
+                      <div className="text-xs text-slate-500 mb-1.5">
+                        Staff member administering the dose or treatment
+                      </div>
+                      <input
+                        id="tracker-attending-staff"
+                        type="text"
+                        maxLength={80}
+                        placeholder="e.g. Maria Santos, RN"
+                        value={attendingStaff}
+                        onChange={e => setAttendingStaff(e.target.value)}
+                        className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none font-semibold text-xs bg-white text-slate-800 focus:border-[#3B50DF]"
+                      />
+                    </div>
+                  </section>
+
                   <section className={cardCls}>
                     <div className="flex items-center justify-between pr-4">
                       <h4 className={cardHead}>Vaccine Brand</h4>
@@ -1339,7 +1400,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                           {existingRig ? (
                             <div className="mt-2 text-[11px] text-emerald-800 bg-emerald-100/70 rounded-lg px-2 py-1.5">
                               <div className="font-bold text-emerald-900 truncate">{existingRig.product}{amountText(existingRig) ? ` · ${amountText(existingRig)}` : ''}</div>
-                              <div className="text-[10px] text-emerald-700 mt-0.5">{fmtDate(existingRig.date)}{existingRig.recordedByName ? ` · ${existingRig.recordedByName}` : ''}</div>
+                              <div className="text-[10px] text-emerald-700 mt-0.5">{fmtDate(existingRig.date)}{existingRig.attendingName || existingRig.recordedByName ? ` · ${existingRig.attendingName || existingRig.recordedByName}` : ''}</div>
                             </div>
                           ) : rigDraftOpen ? (
                             <div className="mt-2.5 space-y-2 pt-2 border-t border-indigo-100">
@@ -1401,7 +1462,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                               <div className="font-bold text-emerald-900 truncate">{existingTetanus.product}</div>
                               <div className="flex justify-between text-[10px] text-emerald-700 mt-0.5">
                                 <span>{amountText(existingTetanus) || '—'}</span>
-                                <span>{fmtDate(existingTetanus.date)}{existingTetanus.recordedByName ? ` · ${existingTetanus.recordedByName}` : ''}</span>
+                                <span>{fmtDate(existingTetanus.date)}{existingTetanus.attendingName || existingTetanus.recordedByName ? ` · ${existingTetanus.attendingName || existingTetanus.recordedByName}` : ''}</span>
                               </div>
                             </div>
                           ) : tetanusDraftOpen ? (
@@ -1454,12 +1515,12 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                         const isDone = st === 'given';
                         const isNext = di === nextIndex;
                         const isReady = isNext && readyKey === d.key;
-                        const canTick = isNext && !!assignedBrand;
+                        const canTick = isNext && !!assignedBrand && !!attendingStaff.trim();
                         const canUndo = isDone && di === lastDoneIndex && !readyKey;
                         const usedBrand = d.brand || (isDone ? (d.vaccineBrand || p.vaccineBrand || '') : '');
                         const busy = !!saving[`${p.firestoreId}_${d.key}`];
                         const hint = isDone ? 'Given'
-                          : isNext ? (assignedBrand ? (isReady ? 'Untick to clear' : `Tick, then Confirm dose (${assignedBrand})`) : 'Select a brand first')
+                          : isNext ? (!attendingStaff.trim() ? 'Enter attending nurse/physician first' : assignedBrand ? (isReady ? 'Untick to clear' : `Tick, then Confirm dose (${assignedBrand})`) : 'Select a brand first')
                           : `Locked until Dose ${nextIndex + 1} is given`;
                         return (
                           <li key={d.key || di}>
@@ -1521,8 +1582,8 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                 <button type="button" onClick={requestCloseModal} className={BTN.outline}>Close Record</button>
                 <button
                   type="button"
-                  disabled={!readyDose || !assignedBrand || confirmBusy}
-                  title={readyDose ? `Save ${readyDose.label} with ${assignedBrand} and deduct 1 vial` : 'Tick the next dose first'}
+                  disabled={!readyDose || !assignedBrand || !attendingStaff.trim() || confirmBusy}
+                  title={readyDose ? `Save ${readyDose.label} with ${assignedBrand} and deduct 1 vial` : !attendingStaff.trim() ? 'Enter attending nurse/physician first' : 'Tick the next dose first'}
                   onClick={async () => {
                     const key = readyDose.key;
                     setConfirmBusy(true);

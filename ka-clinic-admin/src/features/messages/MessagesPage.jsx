@@ -83,11 +83,12 @@ export default function MessagesPage() {
   /* ── real-time chatThreads listener ────────────────────────── */
   useEffect(() => {
     let unsub;
+    const isRealThread = t => typeof t.lastMessage === 'string' && t.lastMessage.trim().length > 0;
     const fetchThreads = () => {
       try {
         const q = query(collection(db, 'chatThreads'), orderBy('lastMessageAt', 'desc'));
         unsub = listen(q, snap => {
-          const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          const data = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(isRealThread);
           setThreads(data);
           // Deliberately does NOT auto-select the first thread: selecting a
           // thread marks it read, and a conversation should only count as read
@@ -98,7 +99,7 @@ export default function MessagesPage() {
           console.warn('Ordered chatThreads query failed, falling back to unordered:', err);
           const fallbackQ = query(collection(db, 'chatThreads'));
           unsub = listen(fallbackQ, snap => {
-            const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            const data = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(isRealThread);
             setThreads(data);
             setSelectedThread(prev => (prev ? data.find(t => t.id === prev.id) || prev : null));
             setLoadingThreads(false);
@@ -108,7 +109,7 @@ export default function MessagesPage() {
         console.warn('Query catch fallback:', err);
         const fallbackQ = query(collection(db, 'chatThreads'));
         unsub = listen(fallbackQ, snap => {
-          const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          const data = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(isRealThread);
           setThreads(data);
           setSelectedThread(prev => (prev ? data.find(t => t.id === prev.id) || prev : null));
           setLoadingThreads(false);

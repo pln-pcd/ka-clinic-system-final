@@ -72,8 +72,26 @@ export async function postJson(url, body, extraHeaders) {
   return res.json();
 }
 
+export const ADMIN_LAST_ACTIVITY_KEY = 'kna_admin_last_activity';
+
+export function recordAdminActivity(timestamp = Date.now()) {
+  try {
+    localStorage.setItem(ADMIN_LAST_ACTIVITY_KEY, String(timestamp));
+  } catch {}
+}
+
+export function getAdminLastActivity() {
+  try {
+    const val = localStorage.getItem(ADMIN_LAST_ACTIVITY_KEY);
+    return val ? Number(val) : Date.now();
+  } catch {
+    return Date.now();
+  }
+}
+
 // Same, with the signed-in admin's Firebase ID token attached.
 export async function authedPostJson(url, body) {
+  recordAdminActivity();
   const idToken = await auth.currentUser?.getIdToken();
   return postJson(url, body ?? {}, idToken ? { Authorization: `Bearer ${idToken}` } : {});
 }

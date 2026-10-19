@@ -130,7 +130,7 @@ export function splitName(full: string): { first: string; middle: string; last: 
 // at registration (ka-clinic-admin/src/features/patients/PatientsPage.jsx buildInitialDoses)
 // and stored on the record, so the app renders whatever is actually stored.
 
-export type ServiceKey = 'PEP' | 'PrEP' | 'Tetanus' | 'Pneumonia' | 'Other';
+export type ServiceKey = 'PEP' | 'PrEP' | 'Tetanus' | 'Pneumonia' | 'Booster' | 'Other';
 
 type ServiceCopy = {
   /** Badge/abbreviation, e.g. "PEP". */
@@ -168,6 +168,12 @@ const SERVICE_COPY: Record<ServiceKey, ServiceCopy> = {
     timelineTitle: 'Pneumonia Dose Timeline',
     protocol: 'Pneumococcal Protocol',
   },
+  Booster: {
+    short: 'Booster',
+    long: 'Rabies Booster Dose',
+    timelineTitle: 'Booster Dose Timeline',
+    protocol: 'Rabies Booster Protocol',
+  },
   Other: {
     short: 'Vaccination',
     long: 'Vaccination',
@@ -183,6 +189,7 @@ export function normalizeService(service?: string | null): ServiceKey {
   if (!s) return 'Other';
   if (s === 'prep' || s.startsWith('pre-exposure') || s.includes('pre-exposure')) return 'PrEP';
   if (s === 'pep' || s.startsWith('post-exposure') || s.includes('post-exposure')) return 'PEP';
+  if (s.includes('booster')) return 'Booster';
   if (s.includes('tetan')) return 'Tetanus';
   if (s.includes('pneumo')) return 'Pneumonia';
   return 'Other';

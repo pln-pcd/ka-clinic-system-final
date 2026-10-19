@@ -399,12 +399,6 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
                     {merged.notes || 'No clinical remarks recorded.'}
                   </p>
                 </div>
-                <div className="pt-3">
-                  <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wider block mb-1.5">Note for patient (on their card)</span>
-                  <p className="text-xs text-slate-700 leading-relaxed bg-slate-50 px-3 py-2.5 rounded-lg border border-slate-200 whitespace-pre-wrap break-words">
-                    {merged.patientNote || 'No note for the patient.'}
-                  </p>
-                </div>
               </>
             );
           })()}
@@ -431,6 +425,7 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
             <InfoField size="lg" label="Blood Pressure" value={rec.bloodPressure} />
             <InfoField size="lg" label="Mobile Number" value={rec.contact || patient.contact} />
             <InfoField size="lg" label="Registration Date" value={rec.date ? fmtDate(rec.date) : ''} />
+            <InfoField size="lg" label="Primary Attending" value={resolvePrimaryAttending(rec || patient)} />
             <InfoField size="lg" label="Address" value={rec.address && rec.address !== '—' ? rec.address : ''} full />
             {(rec.emergencyName || rec.emergencyPhone || rec.guardian || rec.emergencyContact) && (
               <InfoField size="lg"
@@ -800,7 +795,7 @@ const CASE_KEYS = [
   'service', 'date', 'status', 'completedAt', 'closedAt',
   'cat', 'animal', 'placeOfExposure', 'typeOfExposure', 'sourceOfExposure',
   'woundLocation', 'woundDepth', 'woundWashed', 'numberOfBites', 'vaccineBrand',
-  'erig', 'rigGiven', 'rigTreatment', 'antiTetanusTreatment', 'notes', 'patientNote', 'pastVaccines', 'pastVaccinesOther', 'allergies',
+  'erig', 'rigGiven', 'rigTreatment', 'antiTetanusTreatment', 'notes', 'patientNote', 'pastVaccines', 'pastVaccinesOther', 'allergies', 'allergiesOther', 'registeredByName',
   'woundType', 'lastTetanus', 'pneumoHistory', 'pneumoHistoryOther', 'riskCondition',
   'height', 'weight', 'bloodPressure', ...CASE_ARRAY_KEYS,
 ];
@@ -827,10 +822,22 @@ export function historicalCaseRecord(patient, caseData, index) {
   };
 }
 
-// Dose / treatment staff: the tracker saves givenByName / recordedByName;
+export function resolvePrimaryAttending(record) {
+  const doses = Array.isArray(record?.doses) ? record.doses : [];
+  const firstGiven = doses.find(d => {
+    const s = String(d?.status || d?.s || '').toLowerCase();
+    return s === 'done' || s === 'completed' || d?.done;
+  });
+  const firstAttending = firstGiven?.attendingName || firstGiven?.givenByName || firstGiven?.administeredBy || firstGiven?.staff;
+  if (firstAttending && String(firstAttending).trim()) return String(firstAttending).trim();
+  if (record?.registeredByName && String(record.registeredByName).trim()) return String(record.registeredByName).trim();
+  return '—';
+}
+
+// Dose / treatment staff: the tracker saves attendingName / givenByName / recordedByName;
 // older entries may carry administeredBy or staff.
-const doseStaff = d => d?.givenByName || d?.administeredBy || d?.staff || '';
-const treatmentStaff = t => t?.recordedByName || t?.staff || t?.administeredBy || '';
+const doseStaff = d => d?.attendingName || d?.givenByName || d?.administeredBy || d?.staff || '';
+const treatmentStaff = t => t?.attendingName || t?.recordedByName || t?.staff || t?.administeredBy || '';
 // mL saved on older doses / entries, "1 vial" on vial-based entries, '' if none.
 const amountMl = x => amountText(x);
 
@@ -885,6 +892,10 @@ function ViewPreviousCaseModal({ caseData, index, patientName, mrn, onClose, onE
                 <span className="text-[10px] uppercase font-semibold text-slate-400 block">Service</span>
                 <span className="font-semibold text-slate-800">{serviceLabel(caseData.service || 'PEP')}</span>
               </div>
+              <div>
+                <span className="text-[10px] uppercase font-semibold text-slate-400 block">Primary Attending</span>
+                <span className="font-semibold text-slate-800">{resolvePrimaryAttending(caseData)}</span>
+              </div>
               {rows.map(r => (
                 <div key={r.key} className="min-w-0">
                   <span className="text-[10px] uppercase font-semibold text-slate-400 block">{r.label}</span>
@@ -909,7 +920,7 @@ function ViewPreviousCaseModal({ caseData, index, patientName, mrn, onClose, onE
                       <th className="px-3.5 py-2.5">Status</th>
                       <th className="px-3.5 py-2.5">Vaccine</th>
                       <th className="px-3.5 py-2.5">Amount Given</th>
-                      <th className="px-3.5 py-2.5">Administered By</th>
+                      <th className="px-3.5 py-2.5">Attending Nurse / Physician</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -951,7 +962,7 @@ function ViewPreviousCaseModal({ caseData, index, patientName, mrn, onClose, onE
                         <th className="px-3.5 py-2.5">Product</th>
                         <th className="px-3.5 py-2.5">Amount Given</th>
                         <th className="px-3.5 py-2.5">Date Given</th>
-                        <th className="px-3.5 py-2.5">Administered By</th>
+                        <th className="px-3.5 py-2.5">Attending Nurse / Physician</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-slate-700">

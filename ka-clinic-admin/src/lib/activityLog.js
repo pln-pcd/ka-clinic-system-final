@@ -61,7 +61,7 @@ export const SUMMARY_REDACTED = ['woundLocation', 'woundDepth', 'biteLocation'];
 
 // Actor details, loaded once per signed-in user.
 let actorCache = null;
-async function currentActor() {
+export async function currentActor() {
   const u = auth.currentUser;
   if (!u) throw new Error('Not signed in.');
   if (actorCache?.uid === u.uid) return actorCache;

@@ -18,6 +18,7 @@ import {
 import Tap from '../../components/Tap';
 import Animated, { Easing, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { auth, checkLoginTrust, getAuthErrorMessage, sendLoginOTP, signInAsGuest, signInWithMRN, signOut, warmAuthApi } from '../../config/backend';
 import { markOnboardingSeen, setKeepSignedIn } from '../../config/appPrefs';
 import { usePatientAuth } from '../../context/PatientAuthContext';
@@ -127,6 +128,9 @@ export default function LoginScreen() {
       // A guest session is deliberately not kept across launches — there is no
       // account to return to, and the next person on this phone starts clean.
       await setKeepSignedIn(false);
+      await AsyncStorage.removeItem('kna:avatar:global').catch(() => {});
+      await AsyncStorage.removeItem('kna:avatar:guest').catch(() => {});
+      await AsyncStorage.removeItem('kna:personalData:guest').catch(() => {});
       await signInAsGuest();
       await markOnboardingSeen();
       resetTo(router, '/(tabs)');

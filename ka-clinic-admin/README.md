@@ -44,7 +44,7 @@ npm run dev
 
 - 📊 **Dashboard** - Key statistics, appointments, patient activity
 - 👥 **Patient Management** - View all patients with dose tracking
-- 📅 **Appointments** - Today's schedule and booking
+- 📅 **Appointments** - Today's appointments and booking
 - 📈 **Analytics** - Performance metrics and reports
 - ⚙️ **Settings** - Configuration panel
 - 🔄 **Collapsible Sidebar** - Toggle navigation

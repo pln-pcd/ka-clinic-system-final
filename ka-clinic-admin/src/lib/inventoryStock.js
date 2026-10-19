@@ -95,7 +95,7 @@ const wasMlEra = (x) => x?.ml !== undefined && x?.ml !== null;
  * @param today     YYYY-MM-DD (clinic date), stamped as completedAt
  */
 export async function recordDoseChange(fs, db, {
-  patientId, doseKey, give, brand = '', stockItemId = null, byUid = null, byName = '', readDoses, today,
+  patientId, doseKey, give, brand = '', stockItemId = null, byUid = null, byName = '', attendingName = '', readDoses, today,
 }) {
   const { runTransaction, doc, collection, deleteField } = fs;
   const vaxRef = doc(db, 'vaccinations', patientId);
@@ -121,6 +121,7 @@ export async function recordDoseChange(fs, db, {
     const stockOf = (i) => ({
       stockItemId: rawSaved[i]?.stockItemId, stockDeducted: rawSaved[i]?.stockDeducted,
       ml: rawSaved[i]?.ml, givenAt: rawSaved[i]?.givenAt, givenBy: rawSaved[i]?.givenBy, givenByName: rawSaved[i]?.givenByName,
+      attendingName: rawSaved[i]?.attendingName,
     });
 
     const item = iSnap && iSnap.exists() ? iSnap.data() : null;
@@ -136,9 +137,9 @@ export async function recordDoseChange(fs, db, {
       }
       return give
         ? { ...base, status: 'done', s: 'done', brand, stockItemId: item ? stockItemId : '', stockDeducted: Boolean(move),
-            ml: undefined, givenAt: Date.now(), givenBy: byUid || '', givenByName: byName || '' }
+            ml: undefined, givenAt: Date.now(), givenBy: byUid || '', givenByName: byName || '', attendingName: attendingName || byName || '' }
         : { ...base, status: 'pending', s: 'pending', brand: '', stockItemId: '', stockDeducted: false,
-            ml: undefined, givenAt: undefined, givenBy: undefined, givenByName: undefined };
+            ml: undefined, givenAt: undefined, givenBy: undefined, givenByName: undefined, attendingName: undefined };
     }).map(d => Object.fromEntries(Object.entries(d).filter(([, v]) => v !== undefined)));
 
     const doneN = nextDoses.filter(d => d.status === 'done').length;
@@ -212,7 +213,7 @@ export function amountText(x) {
  * Returns { before, after, moved, itemName, entry }.
  */
 export async function recordTreatmentChange(fs, db, {
-  patientId, give, kind = '', treatmentId = null, product = '', stockItemId = null, date = '', byUid = null, byName = '', today = '',
+  patientId, give, kind = '', treatmentId = null, product = '', stockItemId = null, date = '', byUid = null, byName = '', attendingName = '', today = '',
 }) {
   const { runTransaction, doc, collection, deleteField } = fs;
   const vaxRef = doc(db, 'vaccinations', patientId);
@@ -248,6 +249,7 @@ export async function recordTreatmentChange(fs, db, {
         recordedAt: Date.now(),
         recordedBy: byUid || '',
         recordedByName: byName || '',
+        attendingName: attendingName || byName || '',
       };
       tx.update(vaxRef, {
         treatments: [...currentTreatments, entry],

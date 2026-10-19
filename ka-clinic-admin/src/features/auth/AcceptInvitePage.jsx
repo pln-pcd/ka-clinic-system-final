@@ -149,7 +149,7 @@ export default function AcceptInvite({ onDone }) {
         <div className="w-full md:w-1/2 p-8 sm:p-10 md:p-12 bg-white flex flex-col relative z-10 self-stretch">
           {/* Brand lockup — logo sits beside the wordmark, both flush left */}
           <div className="flex items-center gap-3 mb-9">
-            <div className="w-11 h-11 rounded-xl bg-white border border-slate-200 shadow-[0_6px_18px_rgba(10,29,71,0.12)] flex items-center justify-center p-1.5 shrink-0">
+            <div className="w-11 h-11 rounded-xl bg-white border border-slate-200 shadow-[0_6px_18px_rgba(10,29,71,0.12)] flex items-center justify-center p-[2.5px] shrink-0">
               <img src="/assets/dashboard/logo-white-nobg.png" alt="" className="w-full h-full object-contain" />
             </div>
             <div className="font-display font-extrabold text-[19px] tracking-tight text-slate-900 leading-tight">

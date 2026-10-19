@@ -845,13 +845,13 @@ export default function AppointmentsScreen() {
 
         <View style={s.section}>
           {loadingApts ? (
-            // Same size as an appointment card, so the list does not jump
-            // when the first one arrives.
-            <View style={s.apptCard} accessibilityLabel="Loading appointments">
-              <View style={[s.apptDateBox, { backgroundColor: '#E2E8F0' }]} />
-              <View style={{ flex: 1, gap: verticalScale(8) }}>
-                <View style={{ height: verticalScale(14), width: '60%', borderRadius: scale(6), backgroundColor: '#E2E8F0' }} />
-                <View style={{ height: verticalScale(11), width: '40%', borderRadius: scale(6), backgroundColor: '#E2E8F0' }} />
+            <View style={s.apptListCard} accessibilityLabel="Loading appointments">
+              <View style={s.apptListItem}>
+                <View style={[s.apptDateBox, { backgroundColor: '#E2E8F0' }]} />
+                <View style={{ flex: 1, gap: verticalScale(8) }}>
+                  <View style={{ height: verticalScale(14), width: '60%', borderRadius: scale(6), backgroundColor: '#E2E8F0' }} />
+                  <View style={{ height: verticalScale(11), width: '40%', borderRadius: scale(6), backgroundColor: '#E2E8F0' }} />
+                </View>
               </View>
             </View>
           ) : upcomingApts.length === 0 ? (
@@ -860,59 +860,64 @@ export default function AppointmentsScreen() {
               <Text style={s.emptyCardTxt}>No upcoming appointments</Text>
             </View>
           ) : (
-            upcomingApts.map(appt => {
-              const confirmedLike = appt.status === 'confirmed' || appt.status === 'accepted' || appt.status === 'done';
-              const canCancel = appt.status === 'pending' || appt.status === 'confirmed' || appt.status === 'accepted';
-              return (
-              <Tap key={appt.id} style={s.apptCard} activeOpacity={0.85} onPress={() => setSelectedApptDetail(appt)}
-                accessibilityLabel={`${apptTypeLabel(appt.type)} appointment, ${shortKeyWithDay(appt.date)}, ${appt.time}. Open details.`}>
-                <View style={[s.apptDateBox, confirmedLike && { backgroundColor: C.greenFaint }]}>
-                  <Text style={[s.apptDateNum, confirmedLike && { color: C.green }]}>
-                    {new Date(appt.date + 'T00:00:00').getDate()}
-                  </Text>
-                  <Text style={[s.apptDateMon, confirmedLike && { color: C.green }]}>
-                    {new Date(appt.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short' })}
-                  </Text>
-                </View>
-                <View style={s.apptInfo}>
-                  <View style={s.apptHeaderRow}>
-                    <Text style={s.apptType}>{apptTypeLabel(appt.type)}</Text>
-                    <StatusBadge status={appt.status} declined={isEnded(appt) && endedByClinic(appt)}/>
+            <View style={s.apptListCard}>
+              {upcomingApts.map((appt, idx) => {
+                const confirmedLike = appt.status === 'confirmed' || appt.status === 'accepted' || appt.status === 'done';
+                const canCancel = appt.status === 'pending' || appt.status === 'confirmed' || appt.status === 'accepted';
+                return (
+                  <View key={appt.id}>
+                    <Tap style={s.apptListItem} activeOpacity={0.85} onPress={() => setSelectedApptDetail(appt)}
+                      accessibilityLabel={`${apptTypeLabel(appt.type)} appointment, ${shortKeyWithDay(appt.date)}, ${appt.time}. Open details.`}>
+                      <View style={[s.apptDateBox, confirmedLike && { backgroundColor: C.greenFaint }]}>
+                        <Text style={[s.apptDateNum, confirmedLike && { color: C.green }]}>
+                          {new Date(appt.date + 'T00:00:00').getDate()}
+                        </Text>
+                        <Text style={[s.apptDateMon, confirmedLike && { color: C.green }]}>
+                          {new Date(appt.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short' })}
+                        </Text>
+                      </View>
+                      <View style={s.apptInfo}>
+                        <View style={s.apptHeaderRow}>
+                          <Text style={s.apptType}>{apptTypeLabel(appt.type)}</Text>
+                          <StatusBadge status={appt.status} declined={isEnded(appt) && endedByClinic(appt)}/>
+                        </View>
+                        <View style={s.apptInfoRow}>
+                          <Ionicons name="time-outline" size={12} color={C.muted}/>
+                          <Text style={s.apptInfoSub}>{shortKeyWithDay(appt.date)} · {appt.time}</Text>
+                        </View>
+                        {appt.note && appt.status === 'cancelled' && (
+                          <View style={s.adminNoteBox}>
+                            <Ionicons name="chatbubble-ellipses-outline" size={11} color={C.red}/>
+                            <Text style={s.adminNoteTxt}>Clinic: {appt.note}</Text>
+                          </View>
+                        )}
+                        {appt.note && confirmedLike && (
+                          <View style={[s.adminNoteBox, { backgroundColor: C.greenFaint }]}>
+                            <Ionicons name="chatbubble-ellipses-outline" size={11} color={C.green}/>
+                            <Text style={[s.adminNoteTxt, { color: C.green }]}>Clinic: {appt.note}</Text>
+                          </View>
+                        )}
+                      </View>
+                      {/* Cancel action has its own space on the right, vertically centered.
+                          When not cancellable, it is hidden cleanly without leaving an empty gap. */}
+                      {canCancel && (
+                        <Tap
+                          style={s.cancelPill}
+                          hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+                          onPress={() => { setCancellationReasonInput(''); setSelectedApptDetail(appt); }}
+                          accessibilityRole="button"
+                          accessibilityLabel="Request cancellation"
+                        >
+                          <Ionicons name="close-circle-outline" size={13} color={C.navy}/>
+                          <Text style={s.cancelPillTxt}>Cancel</Text>
+                        </Tap>
+                      )}
+                    </Tap>
+                    {idx < upcomingApts.length - 1 && <View style={s.apptListDivider} />}
                   </View>
-                  <View style={s.apptInfoRow}>
-                    <Ionicons name="time-outline" size={12} color={C.muted}/>
-                    <Text style={s.apptInfoSub}>{shortKeyWithDay(appt.date)} · {appt.time}</Text>
-                  </View>
-                  {appt.note && appt.status === 'cancelled' && (
-                    <View style={s.adminNoteBox}>
-                      <Ionicons name="chatbubble-ellipses-outline" size={11} color={C.red}/>
-                      <Text style={s.adminNoteTxt}>Clinic: {appt.note}</Text>
-                    </View>
-                  )}
-                  {appt.note && confirmedLike && (
-                    <View style={[s.adminNoteBox, { backgroundColor: C.greenFaint }]}>
-                      <Ionicons name="chatbubble-ellipses-outline" size={11} color={C.green}/>
-                      <Text style={[s.adminNoteTxt, { color: C.green }]}>Clinic: {appt.note}</Text>
-                    </View>
-                  )}
-                </View>
-                {/* Cancel action has its own space on the right, vertically centered.
-                    When not cancellable, it is hidden cleanly without leaving an empty gap. */}
-                {canCancel && (
-                  <Tap
-                    style={s.cancelPill}
-                    hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
-                    onPress={() => { setCancellationReasonInput(''); setSelectedApptDetail(appt); }}
-                    accessibilityRole="button"
-                    accessibilityLabel="Request cancellation"
-                  >
-                    <Ionicons name="close-circle-outline" size={13} color={C.navy}/>
-                    <Text style={s.cancelPillTxt}>Cancel</Text>
-                  </Tap>
-                )}
-              </Tap>
-              );
-            })
+                );
+              })}
+            </View>
           )}
         </View>
 
@@ -927,32 +932,36 @@ export default function AppointmentsScreen() {
               </View>
             </View>
             <View style={s.section}>
-              {pastApts.map(appt => (
-                <Tap
-                  key={appt.id}
-                  style={[s.apptCard, { opacity: 0.7 }]}
-                  activeOpacity={0.85}
-                  onPress={() => setSelectedApptDetail(appt)}
-                >
-                  <View style={[s.apptDateBox, { backgroundColor: C.greenFaint }]}>
-                    <Text style={[s.apptDateNum, { color: C.green }]}>{new Date(appt.date + 'T00:00:00').getDate()}</Text>
-                    <Text style={[s.apptDateMon, { color: C.green }]}>{new Date(appt.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short' })}</Text>
+              <View style={s.apptListCard}>
+                {pastApts.map((appt, idx) => (
+                  <View key={appt.id}>
+                    <Tap
+                      style={[s.apptListItem, { opacity: 0.7 }]}
+                      activeOpacity={0.85}
+                      onPress={() => setSelectedApptDetail(appt)}
+                    >
+                      <View style={[s.apptDateBox, { backgroundColor: C.greenFaint }]}>
+                        <Text style={[s.apptDateNum, { color: C.green }]}>{new Date(appt.date + 'T00:00:00').getDate()}</Text>
+                        <Text style={[s.apptDateMon, { color: C.green }]}>{new Date(appt.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short' })}</Text>
+                      </View>
+                      <View style={s.apptInfo}>
+                        <Text style={s.apptType}>{apptTypeLabel(appt.type)}</Text>
+                        <View style={s.apptInfoRow}>
+                          <Ionicons name="time-outline" size={12} color={C.muted}/>
+                          <Text style={s.apptInfoSub}>{shortKeyWithDay(appt.date)} · {appt.time}</Text>
+                        </View>
+                      </View>
+                      <View style={s.apptRight}>
+                        <View style={s.doneBadge}>
+                          <Ionicons name="checkmark-circle" size={12} color={C.green}/>
+                          <Text style={s.doneTxt}>Done</Text>
+                        </View>
+                      </View>
+                    </Tap>
+                    {idx < pastApts.length - 1 && <View style={s.apptListDivider} />}
                   </View>
-                  <View style={s.apptInfo}>
-                    <Text style={s.apptType}>{apptTypeLabel(appt.type)}</Text>
-                    <View style={s.apptInfoRow}>
-                      <Ionicons name="time-outline" size={12} color={C.muted}/>
-                      <Text style={s.apptInfoSub}>{shortKeyWithDay(appt.date)} · {appt.time}</Text>
-                    </View>
-                  </View>
-                  <View style={s.apptRight}>
-                    <View style={s.doneBadge}>
-                      <Ionicons name="checkmark-circle" size={12} color={C.green}/>
-                      <Text style={s.doneTxt}>Done</Text>
-                    </View>
-                  </View>
-                </Tap>
-              ))}
+                ))}
+              </View>
             </View>
           </>
         )}
@@ -968,40 +977,43 @@ export default function AppointmentsScreen() {
               </View>
             </View>
             <View style={s.section}>
-              {cancelledApts.map(appt => (
-                <View key={appt.id} style={{ marginBottom: verticalScale(10) }}>
-                  <Tap
-                    style={[s.apptCard, { opacity: 0.9 }]}
-                    activeOpacity={0.85}
-                    onPress={() => setSelectedApptDetail(appt)}
-                  >
-                    <View style={[s.apptDateBox, { backgroundColor: C.redFaint }]}>
-                      <Text style={[s.apptDateNum, { color: C.red }]}>{new Date(appt.date + 'T00:00:00').getDate()}</Text>
-                      <Text style={[s.apptDateMon, { color: C.red }]}>{new Date(appt.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short' })}</Text>
-                    </View>
-                    <View style={s.apptInfo}>
-                      <Text style={s.apptType}>{apptTypeLabel(appt.type)}</Text>
-                      <View style={s.apptInfoRow}>
-                        <Ionicons name="time-outline" size={12} color={C.muted}/>
-                        <Text style={s.apptInfoSub}>{shortKeyWithDay(appt.date)} · {appt.time}</Text>
+              <View style={s.apptListCard}>
+                {cancelledApts.map((appt, idx) => (
+                  <View key={appt.id}>
+                    <Tap
+                      style={[s.apptListItem, { opacity: 0.9 }]}
+                      activeOpacity={0.85}
+                      onPress={() => setSelectedApptDetail(appt)}
+                    >
+                      <View style={[s.apptDateBox, { backgroundColor: C.redFaint }]}>
+                        <Text style={[s.apptDateNum, { color: C.red }]}>{new Date(appt.date + 'T00:00:00').getDate()}</Text>
+                        <Text style={[s.apptDateMon, { color: C.red }]}>{new Date(appt.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short' })}</Text>
                       </View>
-                      {(appt.declineReason || appt.cancellationReason) ? (
-                        <View style={[s.adminNoteBox, { backgroundColor: '#FEF2F2', borderColor: '#FECACA', borderWidth: 0.5, marginTop: 4 }]}>
-                          <Ionicons name="alert-circle-outline" size={11} color={C.red}/>
-                          <Text style={[s.adminNoteTxt, { color: '#B91C1C', fontWeight: '600' }]} numberOfLines={2}>
-                            {appt.declineReason ? `Declined by clinic: ${appt.declineReason}` : `Reason: ${appt.cancellationReason}`}
-                          </Text>
+                      <View style={s.apptInfo}>
+                        <Text style={s.apptType}>{apptTypeLabel(appt.type)}</Text>
+                        <View style={s.apptInfoRow}>
+                          <Ionicons name="time-outline" size={12} color={C.muted}/>
+                          <Text style={s.apptInfoSub}>{shortKeyWithDay(appt.date)} · {appt.time}</Text>
                         </View>
-                      ) : appt.note ? (
-                        <View style={s.adminNoteBox}>
-                          <Ionicons name="chatbubble-ellipses-outline" size={11} color={C.red}/>
-                          <Text style={s.adminNoteTxt}>Clinic: {appt.note}</Text>
-                        </View>
-                      ) : null}
-                    </View>
-                  </Tap>
-                </View>
-              ))}
+                        {(appt.declineReason || appt.cancellationReason) ? (
+                          <View style={[s.adminNoteBox, { backgroundColor: '#FEF2F2', borderColor: '#FECACA', borderWidth: 0.5, marginTop: 4 }]}>
+                            <Ionicons name="alert-circle-outline" size={11} color={C.red}/>
+                            <Text style={[s.adminNoteTxt, { color: '#B91C1C', fontWeight: '600' }]} numberOfLines={2}>
+                              {appt.declineReason ? `Declined by clinic: ${appt.declineReason}` : `Reason: ${appt.cancellationReason}`}
+                            </Text>
+                          </View>
+                        ) : appt.note ? (
+                          <View style={s.adminNoteBox}>
+                            <Ionicons name="chatbubble-ellipses-outline" size={11} color={C.red}/>
+                            <Text style={s.adminNoteTxt}>Clinic: {appt.note}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    </Tap>
+                    {idx < cancelledApts.length - 1 && <View style={s.apptListDivider} />}
+                  </View>
+                ))}
+              </View>
             </View>
           </>
         )}
@@ -1638,6 +1650,9 @@ const s = StyleSheet.create({
   emptyCardTxt: { fontSize: moderateScale(13), color: C.muted, fontWeight: '600', textAlign: 'center' },
 
   apptCard:     { flexDirection: 'row', alignItems: 'center', backgroundColor: C.white, borderRadius: scale(18), padding: scale(14), marginBottom: verticalScale(10), shadowColor: C.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 4 },
+  apptListCard: { backgroundColor: C.white, borderRadius: scale(18), overflow: 'hidden', shadowColor: C.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 4, marginBottom: verticalScale(10) },
+  apptListItem: { flexDirection: 'row', alignItems: 'center', padding: scale(14) },
+  apptListDivider: { height: 1, backgroundColor: C.border, marginLeft: scale(76), marginRight: scale(14) },
   apptDateBox:  { width: scale(48), height: verticalScale(54), borderRadius: scale(13), backgroundColor: C.redFaint, justifyContent: 'center', alignItems: 'center', marginRight: scale(14) },
   apptDateNum:  { fontSize: moderateScale(20), fontWeight: '900', color: C.red, lineHeight: moderateScale(22) },
   apptDateMon:  { fontSize: moderateScale(9), fontWeight: '700', color: C.red, textTransform: 'uppercase', letterSpacing: 0.3 },

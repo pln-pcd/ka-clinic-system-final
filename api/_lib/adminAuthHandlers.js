@@ -143,7 +143,12 @@ async function devices(req, res) {
   const trusted = trustedEntry(req, caller);
   if (action === 'check-session') {
     const active = await hasSecuritySession(caller.decoded, 'admin');
-    return res.status(200).json({ success: true, authorized: !!trusted && active, role: caller.data.role, name: caller.data.name || '' });
+    if (trusted) {
+      await grantSecuritySession(caller.decoded, 'admin');
+      await caller.ref.update({ [`trustedDevices.${trusted.fp}.lastActiveAt`]: Date.now() });
+      return res.status(200).json({ success: true, authorized: true, role: caller.data.role, name: caller.data.name || '' });
+    }
+    return res.status(200).json({ success: true, authorized: active, role: caller.data.role, name: caller.data.name || '' });
   }
   if (action === 'heartbeat') {
     await securitySessionRef(caller.decoded).update({ expiresAt: Date.now() + ADMIN_IDLE_MS, lastActiveAt: Date.now() });

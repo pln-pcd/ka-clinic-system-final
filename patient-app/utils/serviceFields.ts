@@ -27,7 +27,7 @@ const FIELD_DEFS: Record<FieldKey, { label: string; value: (r: any) => string }>
   riskCondition: { label: 'High-Risk Condition', value: r => r?.riskCondition || '' },
   woundType: { label: 'Wound / Injury Type', value: r => r?.woundType || '' },
   lastTetanus: { label: 'Last Tetanus Shot', value: r => r?.lastTetanus || '' },
-  allergies: { label: 'Known Allergies', value: r => r?.allergies || '' },
+  allergies: { label: 'Known Allergies', value: withOther('allergies', 'allergiesOther') },
 };
 
 // Medical history shown to the patient, per service, in screen order. The

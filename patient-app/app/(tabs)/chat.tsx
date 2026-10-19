@@ -1,7 +1,7 @@
 // kna/app/(tabs)/chat.tsx
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { goBackOr } from '../../utils/navigation';
 import {
   addDoc,
@@ -122,10 +122,16 @@ function renderFormattedMessage(rawText: string, isPatient: boolean, textStyle: 
 // clinic staff (staff messages carry no staff id, and staff photos are not
 // readable from the patient app), and KAI's mark beside the assistant.
 const AVATAR = scale(30);
-function ChatAvatar({ sender, photo }: { sender: BubbleMessage['sender']; photo: string | null }) {
+function ChatAvatar({ sender, photo, isGuest }: { sender: BubbleMessage['sender']; photo: string | null; isGuest?: boolean }) {
+  const [imgError, setImgError] = useState(false);
+
+  useEffect(() => {
+    setImgError(false);
+  }, [photo]);
+
   if (sender === 'patient') {
-    return photo
-      ? <Image source={{ uri: photo }} style={s.avatar} accessibilityIgnoresInvertColors />
+    return photo && !imgError && !isGuest
+      ? <Image source={{ uri: photo }} style={s.avatar} accessibilityIgnoresInvertColors onError={() => setImgError(true)} />
       : <View style={[s.avatar, s.avatarIcon]}><Ionicons name="person" size={AVATAR * 0.55} color="#64748B" /></View>;
   }
   return (
@@ -136,27 +142,43 @@ function ChatAvatar({ sender, photo }: { sender: BubbleMessage['sender']; photo:
 }
 
 export default function ChatScreen() {
-  const { user, mrn } = usePatientAuth();
+  const { user, mrn, isGuest } = usePatientAuth();
 
   const [mode, setMode] = useState<Mode>('bot');
+  const [isDraftingEscalation, setIsDraftingEscalation] = useState(false);
 
   // The patient's profile photo for their own bubbles: the clinic-synced copy
   // (patientAvatars/{mrn}), else the one saved on this phone by the profile
   // screen.
   const [myPhoto, setMyPhoto] = useState<string | null>(null);
   useEffect(() => {
-    if (!user) return;
+    if (!user || isGuest || user.isAnonymous) {
+      setMyPhoto(null);
+      return;
+    }
     let cancelled = false;
     AsyncStorage.getItem(`kna:avatar:${user.uid}`)
       .then(v => { if (!cancelled && v) setMyPhoto(v); })
       .catch(() => {});
     if (mrn) {
-      getDoc(doc(db, 'patientAvatars', mrn))
-        .then(snap => { const url = snap.exists() ? (snap.data() as any)?.dataUrl : null; if (!cancelled && url) setMyPhoto(url); })
-        .catch(() => {});
+      const unsub = onSnapshot(doc(db, 'patientAvatars', mrn), snap => {
+        const url = snap.exists() ? (snap.data() as any)?.dataUrl : null;
+        if (!cancelled) setMyPhoto(url || null);
+      }, () => {});
+      return () => { cancelled = true; unsub(); };
     }
     return () => { cancelled = true; };
-  }, [user?.uid, mrn]);
+  }, [user?.uid, mrn, isGuest, user?.isAnonymous]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (user && !isGuest && !user.isAnonymous) {
+        AsyncStorage.getItem(`kna:avatar:${user.uid}`)
+          .then(v => { if (v) setMyPhoto(v); })
+          .catch(() => {});
+      }
+    }, [user, isGuest])
+  );
 
   const [openThreadId, setOpenThreadId] = useState<string | null>(null);
   const [threadLoaded, setThreadLoaded] = useState(false);
@@ -201,11 +223,14 @@ export default function ChatScreen() {
       return true;
     }
     if (mode === 'admin') {
+      if (isDraftingEscalation) {
+        setIsDraftingEscalation(false);
+      }
       setMode('bot');
       return true;
     }
     return false;
-  }, [mode, showEscalationModal]);
+  }, [mode, showEscalationModal, isDraftingEscalation]);
   const goBack = () => {
     if (!closeChatSection()) goBackOr(router, '/(tabs)');
   };
@@ -290,7 +315,7 @@ export default function ChatScreen() {
 
   // Derived rather than stored. An open thread always wins: the patient is
   // returned to the live conversation instead of starting a second one.
-  const staffButtonState: StaffButtonState = openThreadId ? 'resume' : 'trigger';
+  const staffButtonState: StaffButtonState = (openThreadId || isDraftingEscalation) ? 'resume' : 'trigger';
 
   // The bot's last reply was one it could not answer, and there is no open
   // conversation yet — the moment the button matters most, so it is filled
@@ -327,7 +352,7 @@ export default function ChatScreen() {
   // ── Staff button: resume an open conversation, or start a brand-new one ──
   const onStaffButtonPress = () => {
     // 'resume' — an open conversation already exists, just go back to it.
-    if (openThreadId) {
+    if (openThreadId || isDraftingEscalation) {
       setMode('admin');
       return;
     }
@@ -337,7 +362,7 @@ export default function ChatScreen() {
     // 'trigger' — confirm first, in the app's own popup. Opened only from
     // this button, never by a KAI reply.
     if (!user || escalating) return;
-    if (user.isAnonymous) {
+    if (user.isAnonymous || isGuest) {
       // Staff chat is for registered patients (firestore.rules); a guest is
       // told why and offered sign-in instead of a failing request.
       setAlertConfig({
@@ -355,34 +380,12 @@ export default function ChatScreen() {
     setShowEscalationModal(true);
   };
 
-  const startEscalation = async () => {
+  const startEscalation = () => {
     if (!user || escalating) return;
-    setEscalating(true);
-    try {
-      const patientName = user.displayName || (user.isAnonymous ? 'Guest Patient' : (user.email?.split('@')[0] ?? 'Patient'));
-      await addDoc(collection(db, 'chatThreads'), {
-        patientUid: user.uid,
-        patientName,
-        patientMrn: mrn || null,
-        patientEmail: user.email || null,
-        status: 'new',
-        unread: true,
-        resolved: false,
-        lastMessage: '',
-        lastMessageAt: Date.now(),
-        createdAt: Date.now(),
-      });
-      // The open-thread listener picks the new document up and flips
-      // the button to 'resume'; switching mode here opens it straight
-      // away so the patient is not left tapping twice.
-      setMode('admin');
-      rememberPendingTrigger(false);
-    } catch (e: any) {
-      console.error('Escalation error:', e);
-      showError('Could not start a chat', 'Could not start a conversation with clinic staff. Please check your connection and try again.');
-    } finally {
-      setEscalating(false);
-    }
+    setShowEscalationModal(false);
+    setIsDraftingEscalation(true);
+    setMode('admin');
+    rememberPendingTrigger(false);
   };
 
   // ── End the conversation from the patient side ──────────────────────────
@@ -421,6 +424,11 @@ export default function ChatScreen() {
   };
 
   const endConversation = () => {
+    if (isDraftingEscalation && !openThreadId) {
+      setIsDraftingEscalation(false);
+      setMode('bot');
+      return;
+    }
     if (!openThreadId || endingConversation) return;
     setAlertConfig({
       visible: true,
@@ -501,11 +509,31 @@ export default function ChatScreen() {
   // Firestore confirms it (the live listener then shows the saved copy); if
   // it fails it stays, marked "Not sent", with a retry.
   const deliver = async (local: BubbleMessage) => {
-    if (!openThreadId || !user) return;
+    if (!user) return;
     setPendingMessages(list => list.map(m => (m.id === local.id ? { ...m, localStatus: 'sending' } : m)));
+    let threadId = openThreadId;
     try {
+      if (!threadId) {
+        const patientName = user.displayName || (user.isAnonymous ? 'Guest Patient' : (user.email?.split('@')[0] ?? 'Patient'));
+        const threadRef = await addDoc(collection(db, 'chatThreads'), {
+          patientUid: user.uid,
+          patientName,
+          patientMrn: mrn || null,
+          patientEmail: user.email || null,
+          status: 'pending',
+          unread: true,
+          resolved: false,
+          lastMessage: local.text,
+          lastMessageAt: Date.now(),
+          createdAt: Date.now(),
+        });
+        threadId = threadRef.id;
+        setOpenThreadId(threadId);
+        setIsDraftingEscalation(false);
+      }
+
       await addDoc(collection(db, 'chatMessages'), {
-        threadId: openThreadId,
+        threadId,
         text: local.text,
         sender: 'patient',
         senderName: user.displayName || 'Patient',
@@ -520,17 +548,19 @@ export default function ChatScreen() {
     // Inbox order and the clinic's unread flag. The message is already saved,
     // so a failure here only delays the inbox update; it is not shown as an
     // unsent message.
-    updateDoc(doc(db, 'chatThreads', openThreadId), {
-      lastMessage: local.text,
-      lastMessageAt: Date.now(),
-      status: 'pending',
-      unread: true,
-    }).catch(err => console.warn('Thread update after send failed:', err?.code || err));
+    if (openThreadId && threadId === openThreadId) {
+      updateDoc(doc(db, 'chatThreads', threadId), {
+        lastMessage: local.text,
+        lastMessageAt: Date.now(),
+        status: 'pending',
+        unread: true,
+      }).catch(err => console.warn('Thread update after send failed:', err?.code || err));
+    }
   };
 
   const sendAdminMessage = async () => {
     const text = input.trim();
-    if (!text || !openThreadId || !user || sendingRef.current) return;
+    if (!text || (!openThreadId && !isDraftingEscalation) || !user || sendingRef.current) return;
     sendingRef.current = true;
     setInput('');
     setSending(true);
@@ -555,7 +585,7 @@ export default function ChatScreen() {
   };
 
   const messages = mode === 'admin' ? [...adminMessages, ...pendingMessages] : botMessages;
-  const messagesLoaded = mode === 'admin' ? adminMessagesLoaded : true;
+  const messagesLoaded = mode === 'admin' ? (openThreadId ? adminMessagesLoaded : true) : true;
   const typing = mode === 'admin' ? false : botTyping;
 
   return (
@@ -583,7 +613,9 @@ export default function ChatScreen() {
             <Ionicons name="refresh" size={20} color={C.text} />
           </Tap>
         ) : (
-          <View style={{ width: scale(44), height: scale(44) }} />
+          <View style={{ width: scale(44), height: scale(44), alignItems: 'center', justifyContent: 'center' }}>
+            <ChatAvatar sender="patient" photo={myPhoto} isGuest={isGuest || !!user?.isAnonymous} />
+          </View>
         )}
       </View>
 
@@ -650,7 +682,7 @@ export default function ChatScreen() {
                     : PATIENT_SENDER_LABEL;
                 return (
                   <View key={m.id} style={[s.msgRow, isPatient ? s.msgUser : s.msgAi]}>
-                    {!isPatient && <ChatAvatar sender={m.sender} photo={myPhoto} />}
+                    {!isPatient && <ChatAvatar sender={m.sender} photo={myPhoto} isGuest={isGuest || !!user?.isAnonymous} />}
                     <View style={[s.msgColumn, isPatient ? s.msgColumnOwn : s.msgColumnOther]}>
                       {senderLabel && (
                         <Text style={[s.senderLabel, isPatient && s.senderLabelOwn]}>{senderLabel}</Text>
@@ -682,7 +714,7 @@ export default function ChatScreen() {
                         </Pressable>
                       )}
                     </View>
-                    {isPatient && <ChatAvatar sender="patient" photo={myPhoto} />}
+                    {isPatient && <ChatAvatar sender="patient" photo={myPhoto} isGuest={isGuest || !!user?.isAnonymous} />}
                   </View>
                 );
               })}
@@ -694,7 +726,7 @@ export default function ChatScreen() {
 
           {/* KAI view, no open staff conversation: the only way to the
               "Talk to clinic staff?" pop-up. Filled after a medical question. */}
-          {mode === 'bot' && threadLoaded && !openThreadId && (
+          {mode === 'bot' && threadLoaded && !openThreadId && !isDraftingEscalation && (
             <View style={s.actionRow}>
               {/* key: each look is its own native view. Restyling one view in
                   place (outlined → navy after a medical reply) left Android
@@ -722,7 +754,7 @@ export default function ChatScreen() {
           )}
 
           {/* Bot view controls */}
-          {mode === 'bot' && threadLoaded && openThreadId && (
+          {mode === 'bot' && threadLoaded && (openThreadId || isDraftingEscalation) && (
             <View style={s.actionRow}>
               <Tap
                 style={s.flexBtnPrimary}
@@ -754,7 +786,7 @@ export default function ChatScreen() {
           )}
 
           {/* Staff view */}
-          {mode === 'admin' && threadLoaded && openThreadId && (
+          {mode === 'admin' && threadLoaded && (openThreadId || isDraftingEscalation) && (
             <View style={s.actionRow}>
               <Tap style={s.flexBtnSecondary} onPress={() => setMode('bot')} activeOpacity={0.7}>
                 <Ionicons name="chatbubble-ellipses-outline" size={15} color={C.textSub} />

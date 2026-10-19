@@ -57,35 +57,36 @@ type Sizes = ReturnType<typeof sizesFor>;
 function sizesFor(variant: 'inline' | 'popup') {
   const p = variant === 'popup';
   return {
-    pad: scale(p ? 14 : 10),
+    padX: scale(p ? 35 : 22),       // ~6% of card width per side (popup: 35/580 = 6.03%, inline: ~6.1%)
+    padY: verticalScale(p ? 14 : 9), // Proportional, balanced top/bottom margin
     radius: scale(p ? 16 : 14),
-    logoW: scale(p ? 52 : 44),
-    logoH: verticalScale(p ? 52 : 44),
+    logoW: scale(p ? 46 : 38),
+    logoH: verticalScale(p ? 46 : 38),
     logoGap: scale(p ? 8 : 6),
-    clinic: moderateScale(p ? 10.5 : 9.5),
-    title: moderateScale(p ? 13.5 : 11),
-    titleLine: moderateScale(p ? 17 : 14),
-    titleMargin: verticalScale(p ? 1 : 1.5),
-    sub: moderateScale(p ? 10 : 8.5),
-    subLine: moderateScale(p ? 12 : 10.5),
+    clinic: moderateScale(p ? 10 : 9),
+    title: moderateScale(p ? 12.5 : 10.5),
+    titleLine: moderateScale(p ? 15.5 : 13.5),
+    titleMargin: verticalScale(p ? 0.5 : 1),
+    sub: moderateScale(p ? 9.5 : 8),
+    subLine: moderateScale(p ? 11 : 10),
     ruleH: verticalScale(p ? 1.5 : 1),
-    ruleGap: verticalScale(p ? 5 : 3),
-    headerGap: verticalScale(3),
-    rowPad: verticalScale(3),
+    ruleGap: verticalScale(p ? 4 : 2.5),
+    headerGap: verticalScale(2),
+    rowPad: verticalScale(2.5),
     rowGap: scale(p ? 8 : 6),
-    label: moderateScale(p ? 9.5 : 8),
+    label: moderateScale(p ? 9 : 8),
     labelSpacing: p ? 0.3 : 0.2,
-    value: moderateScale(p ? 13 : 10),
-    valueGap: verticalScale(p ? 1 : 2),
-    tableTop: verticalScale(p ? 5 : 4),
+    value: moderateScale(p ? 12 : 10),
+    valueGap: verticalScale(1),
+    tableTop: verticalScale(p ? 4 : 3),
     tableRadius: scale(p ? 6 : 5),
-    th: moderateScale(p ? 10 : 9),
-    thPadX: scale(p ? 8 : 6),
-    thPadY: verticalScale(p ? 5 : 3.5),
-    td: moderateScale(p ? 11 : 9.5),
-    tdPadX: scale(p ? 8 : 6),
-    tdPadY: verticalScale(p ? 4.5 : 3.5),
-    tag: moderateScale(p ? 9.5 : 8),
+    th: moderateScale(p ? 9.5 : 8.5),
+    thPadX: scale(p ? 6 : 4),
+    thPadY: verticalScale(p ? 4 : 2.5),
+    td: moderateScale(p ? 10.5 : 9.5),
+    tdPadX: scale(p ? 6 : 4),
+    tdPadY: verticalScale(p ? 3.5 : 2.5),
+    tag: moderateScale(p ? 9 : 8),
   };
 }
 
@@ -129,10 +130,9 @@ function Rows({ v, rows }: { v: Sizes; rows: CardRow[] }) {
   );
 }
 
-// Original columns: Dose 1.1 · Vaccine/Dosage 2.1 · Date 1.1. Status (kept
-// from 1.0.5) is only as wide as its short labels ("Given", "Upcoming"); the
-// width it frees goes to Dose so "Session 1 (Day 0)" stays on one line.
-const COLS = [1.75, 1.5, 1.1, 0.8];
+// Columns: Dose 1.65 · Vaccine/Dosage 1.65 · Date 1.05 · Status 0.8.
+// Keeps "Session 1 (Day 0)" on one line while giving extra room to long vaccine names.
+const COLS = [1.65, 1.65, 1.05, 0.8];
 
 function Front({ v, d }: { v: Sizes; d: CardData }) {
   return (
@@ -182,14 +182,13 @@ function NotesBox({ v, text, variant, onContent }: { v: Sizes; text: string; var
   );
 }
 
-function Back({ v, d, variant, onTop, onNotes }: { v: Sizes; d: CardData; variant: 'inline' | 'popup'; onTop: (h: number) => void; onNotes: (h: number) => void }) {
+function Back({ v, d }: { v: Sizes; d: CardData }) {
   return (
-    <View style={{ flex: 1 }}>
-      <View onLayout={e => onTop(e.nativeEvent.layout.height)}>
-        <Header v={v} title={d.backTitle} subtitle={d.backSubtitle} tag={d.tag} />
-        <Rows v={v} rows={d.backRows} />
-      </View>
-      <NotesBox v={v} text={d.notes} variant={variant} onContent={onNotes} />
+    <View style={{ flex: 1, justifyContent: 'flex-start' }}>
+      <Header v={v} title={d.backTitle} subtitle={d.backSubtitle} tag={d.tag} />
+      <Rows v={v} rows={d.backRows} />
+      {/* Empty space left blank without moving content per item 14 */}
+      <View style={{ flex: 1 }} />
     </View>
   );
 }
@@ -199,18 +198,12 @@ export default function VaccinationCard({ variant, data, flipped, frontRef, back
   const v = sizesFor(variant);
   const { width: winW, height: winH } = useWindowDimensions();
   const [frontH, setFrontH] = useState(0);
-  // The back's natural height: header + rows, plus the notes box at its
-  // content height (the box then stretches to fill the shared height).
-  const [backTop, setBackTop] = useState(0);
-  const [notesContent, setNotesContent] = useState(0);
-  const notesChrome = v.tableTop + v.rowGap * 2 + 2;
-  const backH = backTop > 0 && notesContent > 0 ? backTop + notesContent + notesChrome : 0;
-  const measured = frontH > 0 && backH > 0;
-  // Inner (ViewShot) height shared by both faces: the front's, unless the
-  // back would otherwise be clipped.
-  const inner = Math.ceil(Math.max(frontH, backH));
+  const measured = frontH > 0;
+  // Fixed outer height matching the standard 4-dose PEP card across all services
   const BORDER = 1;
-  const outer = inner + v.pad * 2 + BORDER * 2;
+  const standardOuterH = verticalScale(variant === 'popup' ? 415 : 346);
+  const outer = measured ? Math.max(standardOuterH, Math.ceil(frontH) + v.padY * 2 + BORDER * 2) : standardOuterH;
+  const inner = outer - BORDER * 2;
 
   const flip = useSharedValue(flipped ? 1 : 0);
   useEffect(() => {
@@ -234,14 +227,16 @@ export default function VaccinationCard({ variant, data, flipped, frontRef, back
         accessibilityElementsHidden={hidden}
         importantForAccessibility={hidden ? 'no-hide-descendants' : 'auto'}
         testID={`card-${variant}-${side}`}
-        style={[st.paper, { padding: v.pad, borderRadius: v.radius }, measured && { height: outer }, side === 'front' ? frontStyle : backStyle]}
+        style={[st.paper, { borderRadius: v.radius, height: outer }, side === 'front' ? frontStyle : backStyle]}
       >
         <ViewShot ref={side === 'front' ? frontRef : backRef} options={{ format: 'png', quality: 1 }}
-          style={[st.shot, measured && { height: inner }]}>
+          style={[st.shot, { height: inner }]}>
           <View testID={`shot-${variant}-${side}`} style={StyleSheet.absoluteFill} pointerEvents="none" />
-          {side === 'front'
-            ? <View onLayout={onBody}><Front v={v} d={data} /></View>
-            : <Back v={v} d={data} variant={variant} onTop={keep(setBackTop)} onNotes={keep(setNotesContent)} />}
+          <View style={[st.cardBody, { paddingHorizontal: v.padX, paddingVertical: v.padY, height: inner }]}>
+            {side === 'front'
+              ? <View onLayout={onBody}><Front v={v} d={data} /></View>
+              : <Back v={v} d={data} />}
+          </View>
         </ViewShot>
       </Animated.View>
     );
@@ -249,25 +244,22 @@ export default function VaccinationCard({ variant, data, flipped, frontRef, back
 
   if (variant === 'inline') {
     return (
-      // Until both faces report their height, a typical card height holds the
-      // space so the sections below do not jump.
-      <View style={[st.inlineBox, { height: measured ? outer : verticalScale(300), opacity: measured ? 1 : 0 }]}>
+      <View style={[st.inlineBox, { height: outer, opacity: measured ? 1 : 0 }]}>
         {face('front')}
         {face('back')}
       </View>
     );
   }
 
-  // Pop-up: the original landscape card (scale(580) wide) turned -90°, scaled
-  // down as a whole (text keeps its proportions) only when the phone is too
-  // small to show it at full size.
+  // Pop-up: the landscape card (scale(580) wide) turned -90°, scaled down
+  // if necessary so it fits the viewport comfortably.
   const cardW = scale(580);
   const availW = winW * 0.98 - scale(24);
   const availH = winH * 0.94 - verticalScale(200);
-  const fit = measured ? Math.min(1, availW / outer, availH / cardW) : 1;
+  const fit = Math.min(1, availW / outer, availH / cardW);
   return (
     <View style={{ width: '100%', height: cardW * fit, alignItems: 'center', justifyContent: 'center', opacity: measured ? 1 : 0 }}>
-      <View style={{ width: cardW, height: measured ? outer : undefined, transform: [{ rotate: '-90deg' }, { scale: fit }] }}>
+      <View style={{ width: cardW, height: outer, transform: [{ rotate: '-90deg' }, { scale: fit }] }}>
         {face('front')}
         {face('back')}
       </View>
@@ -284,6 +276,7 @@ const st = StyleSheet.create({
     backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#CBD5E1', overflow: 'hidden',
   },
   shot: { backgroundColor: '#FFFFFF' },
+  cardBody: { backgroundColor: '#FFFFFF', justifyContent: 'flex-start' },
   notesBox: { flexGrow: 1, borderWidth: 1, borderColor: '#CBD5E1', backgroundColor: '#F8FAFC' },
   notesTxt: { fontWeight: '600', color: '#0F172A' },
   notesEmpty: { color: '#94A3B8', fontStyle: 'italic', fontWeight: '500' },

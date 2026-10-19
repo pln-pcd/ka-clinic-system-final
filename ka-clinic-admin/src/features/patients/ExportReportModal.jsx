@@ -974,76 +974,72 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
       ? (formatDateLong(completedRaw) || formatDateShort(completedRaw) || String(completedRaw).split('T')[0])
       : '—';
 
+    function resolvePrimaryAttending(record) {
+      const doses = Array.isArray(record?.doses) ? record.doses : [];
+      const firstGiven = doses.find(d => {
+        const s = String(d?.status || d?.s || '').toLowerCase();
+        return s === 'done' || s === 'completed' || d?.done;
+      });
+      const firstAttending = firstGiven?.attendingName || firstGiven?.givenByName || firstGiven?.administeredBy || firstGiven?.staff;
+      if (firstAttending && String(firstAttending).trim()) return String(firstAttending).trim();
+      if (record?.registeredByName && String(record.registeredByName).trim()) return String(record.registeredByName).trim();
+      return '—';
+    }
+    const primaryAttending = resolvePrimaryAttending(p);
+
     const admin = [
       ['Date', registered, 'MRN', p.id || p.mrn || '—'],
       ['Account / Case No.', caseNo, 'Ward / Service', `${serviceLabel(p.service || 'PEP')} (Animal Bite Clinic)`],
       ...(historical ? [['Registration Date', registered, 'Completion Date', completed]] : []),
-      ['Primary Attending', 'Dr. Francis R. Reyes, MD', 'Status', st.toUpperCase()],
+      ['Primary Attending', primaryAttending, 'Status', st.toUpperCase()],
     ];
 
     // Only the fields this service asks (lib/serviceFields.js). The
     // patient-safe copy drops wound location and depth, as before.
-    const treatmentText = t => `${t.product || 'Treatment'} (${[amountText(t), t.date ? (formatDateShort(t.date) || t.date) : '', (t.recordedByName || t.staff) ? `by ${t.recordedByName || t.staff}` : ''].filter(Boolean).join(' · ')})`;
+    const treatmentText = t => `${t.product || 'Treatment'} (${[amountText(t), t.date ? (formatDateShort(t.date) || t.date) : '', (t.attendingName || t.recordedByName || t.staff) ? `by ${t.attendingName || t.recordedByName || t.staff}` : ''].filter(Boolean).join(' · ')})`;
     const hasTreatments = Array.isArray(p.treatments) && p.treatments.length > 0;
     const exposureRows = serviceFieldRows(p, 'exposure', { audience, exclude: ['cat'] }).map(r => [r.label, r.value || '—']);
     const woundWithheld = !showWoundDetail && serviceFieldRows(p, 'exposure').some(r => r.key === 'woundLocation' || r.key === 'woundDepth');
 
-    const complaintRows = isPEP
-      ? [
-          ['Presenting Complaint', `Clinical evaluation and post-exposure prophylaxis following exposure to ${p.animal || 'animal'} on ${fmtDate(p.date) || registered}. Assessed as Category ${p.cat || '—'} bite exposure.`],
-          ['Exposure Category', `Category ${p.cat || '—'}`],
-          ...exposureRows,
-          ...(woundWithheld ? [['Wound Assessment', PATIENT_HIDDEN_NOTE]] : []),
-          // ERIG and RIG / Anti-Tetanus only for Category III (or when saved).
-          ...(showsTreatments(p) ? [['ERIG', erigStatusLabel(p, d => formatDateShort(d) || d)]] : []),
-          ...(hasTreatments ? [['Cat III Treatments', p.treatments.map(treatmentText).join('; ')]] : []),
-        ]
-      : [
-          ['Presenting Complaint', `Patient received clinical assessment and vaccination administration under the ${serviceLabel(p.service) || 'vaccination'} protocol.`],
-          ...exposureRows,
-          ...(hasTreatments ? [['Treatments', p.treatments.map(treatmentText).join('; ')]] : []),
-        ];
+    const clinicalDetailsRows = [
+      ...(isPEP ? [['Exposure Category', `Category ${p.cat || '—'}`]] : []),
+      ...exposureRows,
+      ...(woundWithheld ? [['Wound Assessment', PATIENT_HIDDEN_NOTE]] : []),
+      ...(showsTreatments(p) ? [['ERIG', erigStatusLabel(p, d => formatDateShort(d) || d)]] : []),
+      ...(hasTreatments ? [[isPEP ? 'Cat III Treatments (RIG / Anti-Tetanus)' : 'Treatments Given', p.treatments.map(treatmentText).join('; ')]] : []),
+      ...(p.notes ? [['Clinical Remarks', p.notes]] : []),
+    ];
 
     const sections = [
       {
-        title: '1. PATIENT DEMOGRAPHICS',
+        title: '1. ENCOUNTER SUMMARY',
         rows: [
-          ['Name', formatTitleCase(p.name)],
+          ['Patient Name', formatTitleCase(p.name)],
           ['Age / Gender', `${p.age || '—'} yrs · ${(p.sex || '—').toUpperCase()}`],
           ['Date of Birth', p.dob ? (formatDateLong(p.dob) || p.dob) : '—'],
           ['Height / Weight', `${p.height ? `${p.height} cm` : '—'} · ${p.weight ? `${p.weight} kg` : '—'}`],
           ['Blood Pressure', p.bloodPressure || '—'],
           ['Contact / Address', `${p.contact || '—'} · ${p.address || '—'}`],
-          ['Guarantor / Next of Kin', p.emergencyName
-            ? `${p.emergencyName}${p.emergencyRel ? ` (${p.emergencyRel})` : ''}${p.emergencyPhone ? ` · ${p.emergencyPhone}` : ''}`
-            : (p.guardian || p.emergencyContact || '—')],
-        ],
-      },
-      {
-        title: '2. ENCOUNTER SUMMARY',
-        rows: [
           ['Encounter Type', 'Outpatient Clinical Consultation & Prophylaxis'],
           ['Protocol / Reason', isPEP ? `Animal Bite Exposure (${p.animal || 'Animal'} Bite)` : `${serviceLabel(p.service) || 'Vaccination'} Protocol`],
+          ['Primary Attending', primaryAttending],
           ['Registration Date', registered],
           ['Treatment Protocol', getProtocolLabel(p)],
           ['Attending Facility', 'K&A Animal Bite Treatment Center · Municipality of Libon, Province of Albay'],
         ],
       },
       {
-        title: '3. CHIEF COMPLAINT & CLINICAL DETAILS',
-        rows: complaintRows,
-      },
-      {
-        title: '4. MEDICAL HISTORY & PREVIOUS ENCOUNTERS',
+        title: '2. MEDICAL HISTORY & PREVIOUS ENCOUNTERS',
         rows: [
-          // "—" only for a field the service asks that was left empty.
           ...serviceFieldRows(p, 'history', { audience, exclude: ['notes'] }).map(r => [r.label, r.value || '—']),
-          // Remarks are internal clinical notes: clinic copy only.
-          ...(showWoundDetail ? [['Clinical Remarks', p.notes || '—']] : []),
           ...(Array.isArray(p.caseHistory) && p.caseHistory.length > 0
             ? [['Previous Case Encounters', `${p.caseHistory.length} prior service encounter(s) recorded under this MRN (see Previous Services table below)`]]
             : []),
         ],
+      },
+      {
+        title: '3. CLINICAL DETAILS',
+        rows: clinicalDetailsRows,
       },
     ];
 
@@ -1062,7 +1058,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
         status: historical ? (isDone ? 'Given' : isMiss ? 'Missed' : 'Not given') : isMiss ? 'Overdue' : isDone ? 'Completed' : 'Scheduled',
         kind: isMiss ? 'miss' : isDone ? 'done' : 'pending',
         amount: ml != null && ml !== '' ? `${ml} mL` : '—',
-        by: raw.givenByName || raw.administeredBy || raw.staff || '—',
+        by: raw.attendingName || raw.givenByName || raw.administeredBy || raw.staff || '—',
       };
     });
 
@@ -1084,26 +1080,17 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
         })
       : [];
 
-    const assessment = [
-      ['Assessment', st === 'completed'
-        ? 'Successfully completed full prescribed post-exposure prophylaxis regimen with no adverse reactions.'
-        : 'Ongoing vaccination treatment. Patient is adhering to protocol.'],
-      ['Plan & Recommendations', 'Complete remaining scheduled vaccine doses on designated dates. Maintain proper wound care hygiene. Avoid applying irritants or traditional remedies to bite wound. Report any fever, malaise, or neurological symptoms immediately.'],
-    ];
-
     return {
       title: historical ? `PATIENT MEDICAL REPORT (HISTORICAL CASE #${p.historicalIndex})` : 'PATIENT MEDICAL REPORT',
       registered,
       status: st,
-      doseDetail: historical,
+      doseDetail: true,
       admin,
       sections,
-      doseSectionTitle: '5. VACCINATION DOSING SCHEDULE',
+      doseSectionTitle: '4. VACCINATION DOSING SCHEDULE',
       doseRows,
-      previousServicesTitle: '6. PREVIOUS SERVICES & CASE HISTORY',
+      previousServicesTitle: '5. PREVIOUS SERVICES & CASE HISTORY',
       previousServicesRows,
-      assessmentTitle: previousServicesRows.length ? '7. ASSESSMENTS & RECOMMENDATIONS' : '6. ASSESSMENTS & RECOMMENDATIONS',
-      assessment,
       officer: {
         name: 'Dr. Francis R. Reyes, MD',
         license: 'PRC License # 0123456 · Animal Bite Treatment Specialist',
@@ -1158,7 +1145,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     // A historical case adds the amount given and who gave each dose.
     const HEAD = `${CELL}background:#1D4ED8;color:#FFFFFF;text-align:left;font-weight:700;`;
     const doseCols = m.doseDetail
-      ? [['Dose', 28], ['Date', 20], ['Status', 14], ['Amount Given', 14], ['Administered By', 24]]
+      ? [['Dose', 24], ['Date', 18], ['Status', 16], ['Amount Given', 16], ['Attending Nurse / Physician', 26]]
       : [['Dose', 40], ['Scheduled Date', 35], ['Status', 25]];
     const doseTable = `
       <table style="width:100%;border-collapse:collapse;margin-bottom:8px;table-layout:fixed;">
@@ -1244,8 +1231,6 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
         ${doseTable}
 
         ${prevServicesTable}
-
-        ${sectionHtml(m.assessmentTitle, m.assessment)}
 
         <!-- Attending officer & verification -->
         <table style="width:100%;border-collapse:collapse;margin-top:10px;border-top:1px solid #CBD5E1;">
@@ -1374,10 +1359,10 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
       });
     });
 
-    // 5. Vaccination Dosing Schedule
+    // 4. Vaccination Dosing Schedule
     autoTable(doc, {
       startY: doc.lastAutoTable.finalY + GAP,
-      head: [m.doseDetail ? ['Dose', 'Date', 'Status', 'Amount Given', 'Administered By'] : ['Dose', 'Scheduled Date', 'Status']],
+      head: [m.doseDetail ? ['Dose', 'Date', 'Status', 'Amount Given', 'Attending Nurse / Physician'] : ['Dose', 'Scheduled Date', 'Status']],
       body: m.doseRows.length
         ? m.doseRows.map(d => (m.doseDetail ? [d.label, d.date, d.status, d.amount, d.by] : [d.label, d.date, d.status]))
         : [m.doseDetail ? ['No dose schedule on file.', '', '', '', ''] : ['No dose schedule on file.', '', '']],
@@ -1386,7 +1371,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
       alternateRowStyles: { fillColor: [250, 250, 252] },
     });
 
-    // 6. Previous Services & Case History (if any)
+    // 5. Previous Services & Case History (if any)
     if (m.previousServicesRows.length) {
       autoTable(doc, {
         startY: doc.lastAutoTable.finalY + GAP,
@@ -1398,17 +1383,6 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
         alternateRowStyles: { fillColor: [250, 250, 252] },
       });
     }
-
-    // Assessments & Recommendations
-    autoTable(doc, {
-      startY: doc.lastAutoTable.finalY + GAP,
-      head: [[m.assessmentTitle, '']],
-      body: m.assessment,
-      theme: 'grid',
-      headStyles: { fillColor: [10, 29, 71], textColor: 255, fontSize: density.fontSize, fontStyle: 'bold' },
-      styles: baseStyles,
-      columnStyles: labelColumn,
-    });
 
     // Attending officer & verification. The block is pinned above the footer
     // rather than pushed to a second page — buildDocumentPdf re-renders at a

@@ -3,6 +3,9 @@
   "outputDirectory": "ka-clinic-admin/dist",
   "devCommand": "cd ka-clinic-admin && npm run dev -- --port $PORT",
   "framework": null,
+  "regions": [
+    "sin1"
+  ],
   "rewrites": [
     {
       "source": "/api/admin-login",

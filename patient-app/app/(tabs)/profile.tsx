@@ -24,7 +24,7 @@ import { cacheKeys, peekCache, writeCache } from '../../utils/localCache';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { auth, db, forgetTrustedDevice, signOut, API_BASE_URL } from '../../config/backend';
 import { setKeepSignedIn } from '../../config/appPrefs';
-import { exposureCategory, formatDoseDate, isPepService } from '../../utils/patientRecord';
+import { clinicToday, doseState, exposureCategory, formatDoseDate, isPepService, serviceCopy } from '../../utils/patientRecord';
 import {
   clearThisDeviceSession,
   revokeAllOtherSessions,
@@ -210,7 +210,7 @@ export default function ProfileScreen() {
   const [recordError, setRecordError] = useState('');
 
   useEffect(() => {
-    if (!mrn) { setPatientRecord(null); return; }
+    if (!mrn || isGuest || user?.isAnonymous) { setPatientRecord(null); return; }
     return onSnapshot(doc(db, 'vaccinations', mrn), (snap) => {
       setRecordError('');
       if (snap.exists()) { setPatientRecord(snap.data()); writeCache(cacheKeys.vaccination(mrn), snap.data()); }
@@ -220,18 +220,36 @@ export default function ProfileScreen() {
         ? 'You do not have permission to view this record.'
         : 'Could not load your patient record.');
     });
-  }, [mrn]);
+  }, [mrn, isGuest, user?.isAnonymous]);
 
   // Restore persistent avatar image, personal data, and push notification preference
   useEffect(() => {
-    const uid = user?.uid || 'guest';
+    if (isGuest || user?.isAnonymous || !user) {
+      setProfileImage(null);
+      setPersonalData({
+        fullName: 'Guest',
+        age: '—',
+        dob: '—',
+        gender: '—',
+        religion: '',
+        education: '',
+        address: '',
+        occupation: '',
+        contact: '',
+        height: '',
+        weight: '',
+        bp: '',
+        emergencyName: '',
+        emergencyRel: '',
+        emergencyPhone: '',
+        emergencyAltPhone: '',
+      });
+      return;
+    }
+    const uid = user.uid;
     AsyncStorage.getItem(`kna:avatar:${uid}`).then(val => {
       if (val) {
         setProfileImage(val);
-      } else {
-        AsyncStorage.getItem('kna:avatar:global').then(gval => {
-          if (gval) setProfileImage(gval);
-        });
       }
     }).catch(err => console.warn('Avatar restore error:', err));
 
@@ -266,7 +284,7 @@ export default function ProfileScreen() {
   // newer admin correction — the listener was live but its result was dropped.
   // Local storage is now only the fallback for fields the record leaves empty.
   useEffect(() => {
-    if (!patientRecord) return;
+    if (!patientRecord || isGuest || user?.isAnonymous) return;
     const fromRecord = (recordValue: any, cached: any) =>
       recordValue !== undefined && recordValue !== null && recordValue !== '' ? recordValue : cached;
     setPersonalData(prev => ({
@@ -291,17 +309,17 @@ export default function ProfileScreen() {
     if (patientRecord.avatarUrl) {
       setProfileImage(patientRecord.avatarUrl);
     }
-  }, [patientRecord]);
+  }, [patientRecord, isGuest, user?.isAnonymous]);
 
   // Clinic-synced photo (patientAvatars/{mrn}) wins over the local cache so a
   // photo set on another device shows here too.
   useEffect(() => {
-    if (!mrn) return;
+    if (!mrn || isGuest || user?.isAnonymous) return;
     return onSnapshot(doc(db, 'patientAvatars', mrn), snap => {
       const url = snap.data()?.dataUrl;
       if (url) setProfileImage(url);
     }, () => {});
-  }, [mrn]);
+  }, [mrn, isGuest, user?.isAnonymous]);
 
   const handleSavePersonalData = async () => {
     if (isGuest || user?.isAnonymous) {
@@ -375,14 +393,31 @@ export default function ProfileScreen() {
     });
   };
 
-  const patientDoses: any[] = Array.isArray(patientRecord?.doses) ? patientRecord.doses : [];
-  const doneDoseCount = patientDoses.filter(d => (d.status || d.s) === 'done').length;
-  const nextPendingDose = patientDoses.find(d => (d.status || d.s) !== 'done');
-  // Category II/III on PEP records only (a bat exposure is always III).
-  const catCode = isPepService(patientRecord?.service) ? exposureCategory(patientRecord?.cat, patientRecord?.animal || patientRecord?.sourceOfExposure) : '';
-  const categoryLabel = catCode ? `Cat. ${catCode}` : '—';
-  const dosesLabel = patientDoses.length > 0 ? `${doneDoseCount}/${patientDoses.length}` : '—';
-  const nextDoseLabel = nextPendingDose ? formatDoseDate(nextPendingDose.date) : (patientDoses.length > 0 ? 'Done' : '—');
+  const todayISO = clinicToday();
+  const rawDoses: any[] = (!isGuest && !user?.isAnonymous && Array.isArray(patientRecord?.doses)) ? patientRecord.doses : [];
+  const doneDoseCount = rawDoses.filter(d => doseState(d, todayISO) === 'done').length;
+  const nextPendingDose = rawDoses.find(d => doseState(d, todayISO) !== 'done');
+
+  // Service stat on profile card:
+  // Patient with a new active service: show the new one.
+  // Patient with only completed services: show the most recent one.
+  // No case yet: show "—". Guest mode: show "—".
+  let serviceLabel = '—';
+  if (!isGuest && !user?.isAnonymous) {
+    if (patientRecord?.service) {
+      serviceLabel = serviceCopy(patientRecord.service).short;
+    } else if (Array.isArray(patientRecord?.caseHistory) && patientRecord.caseHistory.length > 0) {
+      const mostRecent = patientRecord.caseHistory[patientRecord.caseHistory.length - 1];
+      if (mostRecent?.service) {
+        serviceLabel = serviceCopy(mostRecent.service).short;
+      }
+    }
+  }
+
+  const dosesLabel = (!isGuest && !user?.isAnonymous && rawDoses.length > 0) ? `${doneDoseCount}/${rawDoses.length}` : '—';
+  const nextDoseLabel = (!isGuest && !user?.isAnonymous)
+    ? (nextPendingDose ? formatDoseDate(nextPendingDose.date) : (rawDoses.length > 0 ? 'Done' : '—'))
+    : '—';
 
   // Live device list. Guests have no account to attach sessions to.
   useEffect(() => {
@@ -418,6 +453,10 @@ export default function ProfileScreen() {
             await unregisterPushNotifications();
             await forgetTrustedDevice();
             await setKeepSignedIn(false);
+            await AsyncStorage.removeItem('kna:avatar:global').catch(() => {});
+            await AsyncStorage.removeItem('kna:avatar:guest').catch(() => {});
+            await AsyncStorage.removeItem('kna:personalData:guest').catch(() => {});
+            setProfileImage(null);
             await signOut(auth);
           } catch (e) {
             console.log(e);
@@ -489,6 +528,28 @@ export default function ProfileScreen() {
           await unregisterPushNotifications();
           await forgetTrustedDevice();
           await setKeepSignedIn(false);
+          await AsyncStorage.removeItem('kna:avatar:global').catch(() => {});
+          await AsyncStorage.removeItem('kna:avatar:guest').catch(() => {});
+          await AsyncStorage.removeItem('kna:personalData:guest').catch(() => {});
+          setProfileImage(null);
+          setPersonalData({
+            fullName: 'Guest',
+            age: '—',
+            dob: '—',
+            gender: '—',
+            religion: '',
+            education: '',
+            address: '',
+            occupation: '',
+            contact: '',
+            height: '',
+            weight: '',
+            bp: '',
+            emergencyName: '',
+            emergencyRel: '',
+            emergencyPhone: '',
+            emergencyAltPhone: '',
+          });
           await signOut(auth);
         } catch (e) {
           console.log(e);
@@ -596,9 +657,10 @@ export default function ProfileScreen() {
         const asset = result.assets[0];
         const uri = asset.uri;
         setProfileImage(uri);
-        const uid = user?.uid || 'guest';
-        await AsyncStorage.setItem(`kna:avatar:${uid}`, uri).catch(() => {});
-        await AsyncStorage.setItem('kna:avatar:global', uri).catch(() => {});
+        const uid = user?.uid;
+        if (uid && !isGuest && !user?.isAnonymous) {
+          await AsyncStorage.setItem(`kna:avatar:${uid}`, uri).catch(() => {});
+        }
 
         // Sync to the clinic record so the nurse/admin portal shows the same
         // photo. Guests have no record, so this is local-only for them.
@@ -686,7 +748,7 @@ export default function ProfileScreen() {
 
       // Immediate visual & audible proof to device tray
       await presentLocalNotification(
-        '🔔 Push Notifications Active',
+        'Push Notifications Active',
         'You will now receive vaccine dose schedules, reminders, and clinic alerts on this phone.',
         { type: 'enabled-confirmation' },
       );
@@ -1078,25 +1140,27 @@ export default function ProfileScreen() {
 
             {/* Profile card */}
             <View style={s.profileCard}>
-              <Tap onPress={handleAvatarPress} style={s.avatarWrap} activeOpacity={0.8}>
-                {profileImage ? (
+              <Tap onPress={handleAvatarPress} style={s.avatarWrap} activeOpacity={0.8} disabled={isGuest || user?.isAnonymous}>
+                {profileImage && !isGuest && !user?.isAnonymous ? (
                   <Image source={{ uri: profileImage }} style={s.avatar} />
                 ) : (
                   <View style={[s.avatar, s.avatarPlaceholder]}>
                     <Ionicons name="person" size={scale(46)} color={C.white} />
                   </View>
                 )}
-                <View style={s.cameraBadge}>
-                  <Ionicons name="camera" size={12} color={C.white} />
-                </View>
+                {!isGuest && !user?.isAnonymous && (
+                  <View style={s.cameraBadge}>
+                    <Ionicons name="camera" size={12} color={C.white} />
+                  </View>
+                )}
               </Tap>
-              <Text style={s.userName}>{personalData.fullName || user?.displayName || '—'}</Text>
-              {user?.email ? <Text style={s.userEmail}>{user.email}</Text> : null}
+              <Text style={s.userName}>{isGuest || user?.isAnonymous ? 'Guest' : (personalData.fullName || user?.displayName || '—')}</Text>
+              {!isGuest && !user?.isAnonymous && user?.email ? <Text style={s.userEmail}>{user.email}</Text> : null}
 
               <View style={s.statsRow}>
                 <View style={s.statItem}>
-                  <Text style={s.statNumber}>{categoryLabel}</Text>
-                  <Text style={s.statLabel}>Category</Text>
+                  <Text style={s.statNumber} numberOfLines={1}>{serviceLabel}</Text>
+                  <Text style={s.statLabel}>Service</Text>
                 </View>
                 <View style={s.statDivider} />
                 <View style={s.statItem}>
@@ -1195,7 +1259,7 @@ export default function ProfileScreen() {
               </View>
             </View>
 
-            <Text style={s.versionText}><Text style={{ color: C.red, fontWeight: '900' }}>K&A</Text> Anti-Rabies Vaccine Clinic v1.0.11</Text>
+            <Text style={s.versionText}><Text style={{ color: C.red, fontWeight: '900' }}>K&A</Text> Anti-Rabies Vaccine Clinic v1.0.12</Text>
           </ScrollView>
         );
     }

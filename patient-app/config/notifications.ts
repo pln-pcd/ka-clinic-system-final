@@ -168,7 +168,7 @@ export async function scheduleDoseReminder(doseLabel: string, dueDateStr: string
     if (doseDate.getTime() > Date.now()) {
       await Notifications.scheduleNotificationAsync({
         content: {
-          title: 'Vaccination Dose Reminder 💉',
+          title: 'Vaccination Dose Reminder',
           body: `Reminder: Your ${doseLabel} is scheduled for today (${dueDateStr}). Please visit K&A Clinic on time.`,
           sound: 'default',
           data: { type: 'dose-reminder', dueDate: dueDateStr },

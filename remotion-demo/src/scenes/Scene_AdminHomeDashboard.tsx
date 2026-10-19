@@ -526,13 +526,13 @@ const TodayDosesCard: React.FC<{ opacity: number; translateY: number }> = ({ opa
   </div>
 );
 
-// ─── Today's Schedule card ────────────────────────────────────────────────────
+// ─── Today's Appointments card ────────────────────────────────────────────────────
 const TodayScheduleCard: React.FC<{ opacity: number; translateY: number }> = ({ opacity, translateY }) => (
   <div style={{ borderRadius: DASH.cardRadius, border: `1px solid ${DASH.cardBorder}`, background: DASH.cardBg, overflow: "hidden", display: "flex", flexDirection: "column", opacity, transform: `translateY(${translateY}px)`, fontFamily: FONT }}>
     <div style={{ padding: "20px", borderBottom: "1px solid #EFF6FF", background: "#F0F7FF", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
       <div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: DASH.deepNavy, margin: 0 }}>Today's Schedule</h3>
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: DASH.deepNavy, margin: 0 }}>Today's Appointments</h3>
           <span style={{ background: DASH.indigoBg, color: DASH.indigoText, fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 9999, border: `1px solid ${DASH.indigoBorder}` }}>
             {DEMO_SCHEDULE.length} Appointments
           </span>

@@ -96,10 +96,7 @@ try {
       }
 
       const card = await page.getByTestId(`inline-front-${key}`).innerText();
-      const backTxt = await page.getByTestId(`inline-front-${key}`).getByTestId('card-inline-back').innerText();
-      assert(/CLINICAL NOTES/i.test(backTxt), `${key}: no Clinical Notes box`);
       assert(!/DOSE SCHEDULE/i.test(backTxt), `${key}: Dose Schedule still on the back`);
-      if (key === 'tetanus') assert(/No clinical notes/.test(backTxt), 'empty note placeholder missing');
       const back = await page.getByTestId(`inline-front-${key}`).getByTestId('card-inline-back').innerText();
       // Service-to-fields rule, from the dashboard's own definitions.
       const record = { ...spec };

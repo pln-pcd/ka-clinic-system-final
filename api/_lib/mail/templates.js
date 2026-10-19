@@ -394,20 +394,20 @@ export function buildReportEmailText({ recipientName, reportName, period, genera
 // the notification without signing in, and the click is recorded against the
 // notification doc (see api/notifications.js, action `ack`). It is omitted
 // when no acknowledgement is wanted.
-export function buildFollowUpEmailHtml({ patientName, message, ackUrl, doseLabel, dueDate }) {
+export function buildFollowUpEmailHtml({ patientName, message, ackUrl, doseLabel, dueDate, vaccineType }) {
   const greeting = patientName ? `Dear ${patientName},` : 'Dear Patient,';
   const scheduleLine = doseLabel && dueDate
-    ? paragraph(`<strong>${doseLabel}</strong> is scheduled for <strong>${dueDate}</strong>.`)
-    : '';
+    ? paragraph(`<strong>${doseLabel}${vaccineType ? ` (${vaccineType})` : ''}</strong> is scheduled for <strong>${dueDate}</strong>.`)
+    : (vaccineType && dueDate ? paragraph(`Upcoming <strong>${vaccineType}</strong> vaccination is scheduled for <strong>${dueDate}</strong>.`) : '');
   return shell({
     title: 'K&amp;A Clinic follow-up reminder',
     preheader: message
       ? String(message).slice(0, 120)
-      : 'A follow-up reminder from your K&A Anti-Rabies Clinic care team.',
+      : 'A follow-up reminder from your K&A Clinic care team.',
     body: [
       heading('Follow-up reminder'),
       paragraph(greeting),
-      paragraph(message || 'This is a reminder from K&amp;A Clinic about your anti-rabies treatment schedule. Please visit the clinic on your scheduled date to stay on track.'),
+      paragraph(message || `This is a reminder from K&amp;A Clinic about your ${vaccineType ? `${vaccineType} ` : ''}treatment schedule. Please visit the clinic on your scheduled date to stay on track.`),
       scheduleLine,
       ackUrl ? button(ackUrl, 'I received this notification') : '',
       ackUrl

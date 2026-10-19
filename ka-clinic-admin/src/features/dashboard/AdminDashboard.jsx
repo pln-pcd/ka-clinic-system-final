@@ -288,9 +288,22 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   // An unknown URL opens the 404 page inside the dashboard shell; moving to
   // any page puts the address back to "/".
-  const [activePage,  setActivePage]  = useState(notFound ? 'not-found' : 'dashboard');
+  const [activePage,  setActivePage]  = useState(() => {
+    if (notFound) return 'not-found';
+    try {
+      const returnPage = sessionStorage.getItem('kna_admin_return_page');
+      if (returnPage) {
+        sessionStorage.removeItem('kna_admin_return_page');
+        return returnPage;
+      }
+    } catch {}
+    return 'dashboard';
+  });
   useEffect(() => {
-    if (activePage !== 'not-found' && window.location.pathname !== '/') window.history.replaceState({}, '', '/');
+    if (activePage !== 'not-found') {
+      try { sessionStorage.setItem('kna_admin_current_page', activePage); } catch {}
+      if (window.location.pathname !== '/') window.history.replaceState({}, '', '/');
+    }
   }, [activePage]);
   const [openAddPatientModal, setOpenAddPatientModal] = useState(false);
   const [addModalInitialPatient, setAddModalInitialPatient] = useState(null);
@@ -619,10 +632,14 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
   useEffect(() => {
     const q = query(collection(db, 'chatThreads'), where('unread', '==', true));
     return listen(q, snap => {
-      setUnreadCount(snap.size);
-      setStats(p => ({ ...p, unreadMessages: snap.size }));
+      const activeUnreadDocs = snap.docs.filter(d => {
+        const msg = d.data()?.lastMessage;
+        return typeof msg === 'string' && msg.trim().length > 0;
+      });
+      setUnreadCount(activeUnreadDocs.length);
+      setStats(p => ({ ...p, unreadMessages: activeUnreadDocs.length }));
 
-      const msgNotifs = snap.docs.map(d => {
+      const msgNotifs = activeUnreadDocs.map(d => {
         const data = d.data();
         return {
           id: `msg-${d.id}`,
@@ -956,7 +973,7 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
     });
   const todayDosesPending = todayDosesList.filter(d => !d.done).length;
 
-  // Today's Schedule lists only visits that are still happening today:
+  // Today's Appointments lists only visits that are still happening today:
   // confirmed and pending (cancelled, declined and done are left out).
   const todayScheduleList = todayApts
     .filter(a => ['confirmed', 'accepted', 'pending'].includes(String(a.status || 'pending').toLowerCase()))
@@ -1522,7 +1539,7 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
                     </DashPanel>
 
                     <DashPanel
-                      title="Today's Schedule"
+                      title="Today's Appointments"
                       subtitle="Confirmed & pending clinic visits"
                       badge={todayScheduleList.length > 0 ? <StatusBadge tone="blue" label={`${todayScheduleList.length} appointment${todayScheduleList.length === 1 ? '' : 's'}`} /> : null}
                       total={todayScheduleList.length}
