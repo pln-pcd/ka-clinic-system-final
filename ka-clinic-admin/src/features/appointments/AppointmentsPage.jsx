@@ -876,22 +876,21 @@ const globalCSS = `
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    background: #3B50DF;
-    border: 1px solid #3B50DF;
-    color: #FFFFFF;
-    border-radius: 10px;
-    padding: 7px 14px;
+    background: #FFFFFF;
+    border: 1px solid #D1D5DB;
+    color: #374151;
+    border-radius: var(--radius-md);
+    padding: 7px 13px;
     font-size: 0.8125rem;
-    font-weight: 700;
+    font-weight: 600;
     cursor: pointer;
     transition: all 0.15s ease;
-    box-shadow: 0 1px 3px rgba(59, 80, 223, 0.25);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
   }
   .btn-close-schedule:hover {
-    background: #2F40B5;
-    border-color: #2F40B5;
-    color: #FFFFFF;
-    box-shadow: 0 2px 6px rgba(59, 80, 223, 0.35);
+    background: #F9FAFB;
+    border-color: #9CA3AF;
+    color: #111827;
   }
 `;
 
@@ -2351,8 +2350,8 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
               {/* Header */}
               <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-                    <Lock size={18} />
+                  <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
+                    <Lock size={17} />
                   </div>
                   <div>
                     <h3 className="text-sm font-bold text-slate-900">
@@ -2394,7 +2393,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                           type="checkbox"
                           checked={closeForm.isRange}
                           onChange={e => setCloseForm(f => ({ ...f, isRange: e.target.checked, endDate: e.target.checked ? f.endDate || f.startDate : f.startDate }))}
-                          className="rounded border-slate-300 text-[#3B50DF] focus:ring-[#3B50DF]"
+                          className="rounded border-slate-300 text-slate-800 focus:ring-slate-700"
                         />
                         <span>Multi-day range</span>
                       </label>
@@ -2434,7 +2433,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                       <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
                         Time Slots to Close <span className="text-rose-600">*</span>
                       </label>
-                      <span className="text-xs text-amber-700 font-semibold">
+                      <span className="text-xs text-slate-600 font-medium">
                         {closeForm.slots.length} of {TIME_SLOTS.length} selected
                       </span>
                     </div>
@@ -2448,7 +2447,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                             key={slot}
                             className={`flex items-center justify-between p-2 rounded-lg border cursor-pointer transition-all ${
                               isSelected
-                                ? 'border-amber-400 bg-amber-50 text-amber-950 font-medium'
+                                ? 'border-slate-800 bg-slate-100 text-slate-900 font-semibold'
                                 : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
                             }`}
                           >
@@ -2462,11 +2461,11 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                                     slots: isSelected ? f.slots.filter(s => s !== slot) : [...f.slots, slot]
                                   }));
                                 }}
-                                className="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                                className="rounded border-slate-300 text-slate-800 focus:ring-slate-700"
                               />
                               <span>{slot}</span>
                             </div>
-                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${bookedCount > 0 ? 'bg-amber-200 text-amber-800' : 'bg-slate-100 text-slate-500'}`}>
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${bookedCount > 0 ? 'bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-500'}`}>
                               {bookedCount} booked
                             </span>
                           </label>
@@ -2497,7 +2496,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                           }}
                           className={`px-3 py-1.5 text-xs rounded-lg font-medium border transition-colors cursor-pointer ${
                             active
-                              ? 'bg-amber-100 text-amber-800 border-amber-300 font-bold shadow-2xs'
+                              ? 'bg-slate-900 text-white border-slate-900 font-semibold shadow-xs'
                               : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                           }`}
                         >
@@ -2522,21 +2521,21 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                     id="closure-reason"
                     rows={2}
                     maxLength={150}
-                    className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none focus:border-amber-500 bg-white font-medium text-slate-800 text-xs transition-all resize-none"
+                    className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none focus:border-slate-400 bg-white font-medium text-slate-800 text-xs transition-all resize-none"
                     value={closeForm.reason}
                     onChange={e => setCloseForm(f => ({ ...f, reason: e.target.value }))}
                     placeholder="Shown to patients before booking..."
                   />
 
                   {/* Patient Live Preview */}
-                  <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50/70 p-3 flex flex-col gap-1">
-                    <div className="text-[11px] font-bold text-amber-800 uppercase tracking-wide flex items-center gap-1.5">
-                      <Lock size={12} className="text-amber-600" /> Patient Preview
+                  <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 p-3 flex flex-col gap-1">
+                    <div className="text-[11px] font-bold text-slate-600 uppercase tracking-wide flex items-center gap-1.5">
+                      <Lock size={12} className="text-slate-500" /> Patient Preview
                     </div>
-                    <blockquote className="text-xs text-amber-950 font-medium italic border-l-2 border-amber-400 pl-2.5 my-0.5">
+                    <blockquote className="text-xs text-slate-800 font-medium italic border-l-2 border-slate-300 pl-2.5 my-0.5">
                       &ldquo;Message from K&amp;A Clinic: {closeForm.reason || 'Reason for schedule closure...'}&rdquo;
                     </blockquote>
-                    <p className="text-[10px] text-amber-700">
+                    <p className="text-[10px] text-slate-500">
                       Shown when patients select {closeForm.startDate || 'this date'}{closeForm.type === 'slots' && closeForm.slots.length > 0 ? ` (${closeForm.slots.join(', ')})` : ''}.
                     </p>
                   </div>
@@ -2550,7 +2549,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                   <textarea
                     id="closure-note"
                     rows={2}
-                    className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800 text-xs transition-all resize-none"
+                    className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none focus:border-slate-400 bg-white font-medium text-slate-800 text-xs transition-all resize-none"
                     value={closeForm.internalNote}
                     onChange={e => setCloseForm(f => ({ ...f, internalNote: e.target.value }))}
                     placeholder="Optional context for clinic staff..."
@@ -2559,17 +2558,17 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
 
                 {/* Existing bookings warning card */}
                 {affectedBookings.length > 0 && (
-                  <div className="rounded-xl border border-amber-300 bg-amber-50/90 p-3.5 flex flex-col gap-2">
-                    <div className="flex items-center gap-2 text-amber-900 font-bold text-xs">
-                      <AlertTriangle size={15} className="text-amber-600 shrink-0" />
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 flex flex-col gap-2">
+                    <div className="flex items-center gap-2 text-slate-900 font-bold text-xs">
+                      <AlertTriangle size={15} className="text-slate-600 shrink-0" />
                       <span>{affectedBookings.length} Existing Appointment{affectedBookings.length === 1 ? '' : 's'} Affected</span>
                     </div>
-                    <p className="text-xs text-amber-800 leading-relaxed">
+                    <p className="text-xs text-slate-600 leading-relaxed">
                       Existing appointments stay as they are. Closing only stops new bookings. Affected patients will be notified so they can reschedule or cancel. Staff cannot cancel them.
                     </p>
-                    <div className="max-h-36 overflow-y-auto flex flex-col gap-1.5 mt-1 border-t border-amber-200 pt-2">
+                    <div className="max-h-36 overflow-y-auto flex flex-col gap-1.5 mt-1 border-t border-slate-200 pt-2">
                       {affectedBookings.map(a => (
-                        <div key={a.id} className="flex items-center justify-between text-xs py-1 px-2 rounded bg-white/70 border border-amber-100">
+                        <div key={a.id} className="flex items-center justify-between text-xs py-1 px-2 rounded bg-white border border-slate-200">
                           <span className="font-semibold text-slate-900">{a.name}</span>
                           <div className="flex items-center gap-2">
                             <span className="text-slate-500">{a.time}</span>
@@ -2579,12 +2578,12 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                       ))}
                     </div>
 
-                    <label className="flex items-center gap-2 text-xs font-semibold text-amber-900 mt-1 cursor-pointer">
+                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 mt-1 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={closeForm.notifyAffectedPatients}
                         onChange={e => setCloseForm(f => ({ ...f, notifyAffectedPatients: e.target.checked }))}
-                        className="rounded border-amber-400 text-amber-600 focus:ring-amber-500"
+                        className="rounded border-slate-300 text-slate-800 focus:ring-slate-700"
                       />
                       <span>Notify affected patients via Push &amp; Email</span>
                     </label>
@@ -2606,9 +2605,9 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                   type="button"
                   onClick={handleSaveClosure}
                   disabled={savingClosure}
-                  className="px-5 py-2.5 rounded-xl font-bold text-xs text-white bg-[#3B50DF] hover:bg-[#2F40B5] transition-colors shadow-sm disabled:opacity-50 cursor-pointer flex items-center gap-2"
+                  className={BTN.primary}
                 >
-                  <Lock size={14} />
+                  <Lock size={BTN_ICON} />
                   <span>{savingClosure ? 'Saving…' : closeForm.id ? 'Update Schedule Closure' : 'Close Schedule'}</span>
                 </button>
               </div>
