@@ -226,7 +226,7 @@ export default function VerifyLoginOtp() {
 
             <Text style={styles.title}>Verify It&apos;s You</Text>
             <Text style={styles.subtitle}>
-              This device isn&apos;t recognized yet. We sent a 6-digit sign-in code to{'\n'}
+              We sent a 6-digit verification code to{'\n'}
               <Text style={styles.highlight}>{maskedEmail}</Text>
             </Text>
 

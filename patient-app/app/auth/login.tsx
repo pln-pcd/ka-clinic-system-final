@@ -19,9 +19,8 @@ import Tap from '../../components/Tap';
 import Animated, { Easing, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { auth, checkLoginTrust, getAuthErrorMessage, sendLoginOTP, signInAsGuest, signInWithMRN, signOut, warmAuthApi } from '../../config/backend';
+import { auth, getAuthErrorMessage, sendLoginOTP, signInAsGuest, signInWithMRN, signOut, warmAuthApi } from '../../config/backend';
 import { markOnboardingSeen, setKeepSignedIn } from '../../config/appPrefs';
-import { usePatientAuth } from '../../context/PatientAuthContext';
 import { moderateScale, scale, verticalScale } from '../../utils/scale';
 import CustomAlertModal from '../../components/CustomAlertModal';
 import { perfMark, perfNow } from '../../utils/perf';
@@ -51,7 +50,6 @@ export default function LoginScreen() {
   const [showSupport, setShowSupport] = useState(false);
   // Defaults off: this is a medical record, and the phone may be shared.
   const [keepSignedIn, setKeepSignedInState] = useState(false);
-  const { completeSecondFactor } = usePatientAuth();
 
   // Wake the sign-in server while the patient types, so pressing Sign In
   // does not also pay for a cold start.
@@ -78,17 +76,7 @@ export default function LoginScreen() {
       // awaited: nothing after this depends on it.
       markOnboardingSeen().catch(() => {});
 
-      // Second factor. The password alone never opens the app: the session is
-      // held as "pending" by PatientAuthContext until either the server vouches
-      // for THIS device (trust token from an earlier OTP + "keep me signed in")
-      // or the patient enters the emailed code.
-      const { trusted, mrn } = await checkLoginTrust(20000, keepSignedIn);
-      if (trusted) {
-        perfMark('sign-in-trusted', t);
-        completeSecondFactor(mrn);
-        resetTo(router, '/(tabs)');
-        return;
-      }
+      // Second factor: Always send and require the emailed OTP verification code on sign in
       const { maskedEmail } = await sendLoginOTP();
       perfMark('sign-in-code-sent', t);
       router.replace({
