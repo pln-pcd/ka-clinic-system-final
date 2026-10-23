@@ -876,20 +876,22 @@ const globalCSS = `
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    background: #FFFBEB;
-    border: 1px solid #FCD34D;
-    color: #B45309;
+    background: #3B50DF;
+    border: 1px solid #3B50DF;
+    color: #FFFFFF;
     border-radius: 10px;
-    padding: 7px 13px;
+    padding: 7px 14px;
     font-size: 0.8125rem;
     font-weight: 700;
     cursor: pointer;
     transition: all 0.15s ease;
+    box-shadow: 0 1px 3px rgba(59, 80, 223, 0.25);
   }
   .btn-close-schedule:hover {
-    background: #FEF3C7;
-    border-color: #F59E0B;
-    color: #92400E;
+    background: #2F40B5;
+    border-color: #2F40B5;
+    color: #FFFFFF;
+    box-shadow: 0 2px 6px rgba(59, 80, 223, 0.35);
   }
 `;
 
@@ -2341,237 +2343,257 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
           <Modal
             isOpen={closeModalOpen}
             onClose={requestCloseClosure}
-            title={closeForm.id ? "Edit Schedule Closure" : "Close Schedule"}
-            subtitle="Close specific weekend dates or hours to new patient bookings."
-            maxWidth="max-w-xl"
-            icon={Lock}
           >
-            <div className="p-6 flex flex-col gap-5">
-              {/* What to close: Whole day / Specific time slots */}
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-                  What to Close <span className="text-rose-600">*</span>
-                </label>
-                <SegmentedTabs
-                  tabs={CLOSE_TABS}
-                  value={closeForm.type}
-                  onChange={val => setCloseForm(f => ({ ...f, type: val }))}
-                  label="Closure type"
-                  fill
-                />
-              </div>
-
-              {/* Date selection */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    {closeForm.isRange && closeForm.type === 'day' ? 'Date Range' : 'Date'} <span className="text-rose-600">*</span>
-                  </label>
-                  {closeForm.type === 'day' && (
-                    <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={closeForm.isRange}
-                        onChange={e => setCloseForm(f => ({ ...f, isRange: e.target.checked, endDate: e.target.checked ? f.endDate || f.startDate : f.startDate }))}
-                        className="rounded border-slate-300 text-[#3B50DF] focus:ring-[#3B50DF]"
-                      />
-                      <span>Multi-day range</span>
-                    </label>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <span className="text-[11px] text-slate-500 mb-1 block">Start Date (Saturday or Sunday)</span>
-                    <DatePicker
-                      value={closeForm.startDate}
-                      onChange={d => setCloseForm(f => ({ ...f, startDate: d, endDate: f.isRange ? f.endDate : d }))}
-                      filterDate={isWeekendDate}
-                      placeholder="Select weekend date"
-                    />
+            <div
+              className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-xl max-h-[calc(100vh-64px)] flex flex-col overflow-hidden my-auto"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                    <Lock size={18} />
                   </div>
-                  {closeForm.isRange && closeForm.type === 'day' && (
-                    <div>
-                      <span className="text-[11px] text-slate-500 mb-1 block">End Date (Saturday or Sunday)</span>
-                      <DatePicker
-                        value={closeForm.endDate}
-                        onChange={d => setCloseForm(f => ({ ...f, endDate: d }))}
-                        filterDate={isWeekendDate}
-                        minDate={closeForm.startDate}
-                        placeholder="Select end weekend date"
-                      />
-                    </div>
-                  )}
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">
+                      {closeForm.id ? "Edit Schedule Closure" : "Close Schedule"}
+                    </h3>
+                    <p className="text-[11px] text-slate-500 font-normal mt-0.5">
+                      Close specific weekend dates or hours to new patient bookings.
+                    </p>
+                  </div>
                 </div>
-                <p className="text-[11px] text-slate-400 mt-1.5">Only Saturdays and Sundays (clinic appointment days) can be closed.</p>
+                <IconButton icon={X} label="Close" size={36} iconSize={16} onClick={requestCloseClosure} />
               </div>
 
-              {/* Time Slots (if specific time slots) */}
-              {closeForm.type === 'slots' && (
+              {/* Scrollable Form Body */}
+              <div className="p-6 overflow-y-auto flex-1 min-h-0 flex flex-col gap-5">
+                {/* What to close: Whole day / Specific time slots */}
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+                    What to Close <span className="text-rose-600">*</span>
+                  </label>
+                  <SegmentedTabs
+                    tabs={CLOSE_TABS}
+                    value={closeForm.type}
+                    onChange={val => setCloseForm(f => ({ ...f, type: val }))}
+                    label="Closure type"
+                    fill
+                  />
+                </div>
+
+                {/* Date selection */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                      Time Slots to Close <span className="text-rose-600">*</span>
+                      {closeForm.isRange && closeForm.type === 'day' ? 'Date Range' : 'Date'} <span className="text-rose-600">*</span>
                     </label>
-                    <span className="text-xs text-amber-700 font-semibold">
-                      {closeForm.slots.length} of {TIME_SLOTS.length} selected
-                    </span>
+                    {closeForm.type === 'day' && (
+                      <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={closeForm.isRange}
+                          onChange={e => setCloseForm(f => ({ ...f, isRange: e.target.checked, endDate: e.target.checked ? f.endDate || f.startDate : f.startDate }))}
+                          className="rounded border-slate-300 text-[#3B50DF] focus:ring-[#3B50DF]"
+                        />
+                        <span>Multi-day range</span>
+                      </label>
+                    )}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1 border border-slate-200 rounded-xl bg-slate-50">
-                    {TIME_SLOTS.map(slot => {
-                      const isSelected = closeForm.slots.includes(slot);
-                      const bookedCount = appointments.filter(a => a.date === closeForm.startDate && a.time === slot && !INACTIVE_STATUSES.includes(String(a.status || '').toLowerCase())).length;
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <span className="text-[11px] text-slate-500 mb-1 block">Start Date (Saturday or Sunday)</span>
+                      <DatePicker
+                        value={closeForm.startDate}
+                        onChange={d => setCloseForm(f => ({ ...f, startDate: d, endDate: f.isRange ? f.endDate : d }))}
+                        filterDate={isWeekendDate}
+                        placeholder="Select weekend date"
+                      />
+                    </div>
+                    {closeForm.isRange && closeForm.type === 'day' && (
+                      <div>
+                        <span className="text-[11px] text-slate-500 mb-1 block">End Date (Saturday or Sunday)</span>
+                        <DatePicker
+                          value={closeForm.endDate}
+                          onChange={d => setCloseForm(f => ({ ...f, endDate: d }))}
+                          filterDate={isWeekendDate}
+                          minDate={closeForm.startDate}
+                          placeholder="Select end weekend date"
+                        />
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1.5">Only Saturdays and Sundays (clinic appointment days) can be closed.</p>
+                </div>
+
+                {/* Time Slots (if specific time slots) */}
+                {closeForm.type === 'slots' && (
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                        Time Slots to Close <span className="text-rose-600">*</span>
+                      </label>
+                      <span className="text-xs text-amber-700 font-semibold">
+                        {closeForm.slots.length} of {TIME_SLOTS.length} selected
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1 border border-slate-200 rounded-xl bg-slate-50">
+                      {TIME_SLOTS.map(slot => {
+                        const isSelected = closeForm.slots.includes(slot);
+                        const bookedCount = appointments.filter(a => a.date === closeForm.startDate && a.time === slot && !INACTIVE_STATUSES.includes(String(a.status || '').toLowerCase())).length;
+                        return (
+                          <label
+                            key={slot}
+                            className={`flex items-center justify-between p-2 rounded-lg border cursor-pointer transition-all ${
+                              isSelected
+                                ? 'border-amber-400 bg-amber-50 text-amber-950 font-medium'
+                                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 text-xs">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => {
+                                  setCloseForm(f => ({
+                                    ...f,
+                                    slots: isSelected ? f.slots.filter(s => s !== slot) : [...f.slots, slot]
+                                  }));
+                                }}
+                                className="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                              />
+                              <span>{slot}</span>
+                            </div>
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${bookedCount > 0 ? 'bg-amber-200 text-amber-800' : 'bg-slate-100 text-slate-500'}`}>
+                              {bookedCount} booked
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Reason Presets */}
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                    Reason Preset
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {CLOSURE_PRESETS.map(preset => {
+                      const active = closeForm.reasonPreset === preset.id;
                       return (
-                        <label
-                          key={slot}
-                          className={`flex items-center justify-between p-2 rounded-lg border cursor-pointer transition-all ${
-                            isSelected
-                              ? 'border-amber-400 bg-amber-50 text-amber-950 font-medium'
-                              : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => {
+                            setCloseForm(f => ({
+                              ...f,
+                              reasonPreset: preset.id,
+                              reason: preset.defaultMsg || f.reason,
+                            }));
+                          }}
+                          className={`px-3 py-1.5 text-xs rounded-lg font-medium border transition-colors cursor-pointer ${
+                            active
+                              ? 'bg-amber-100 text-amber-800 border-amber-300 font-bold shadow-2xs'
+                              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                           }`}
                         >
-                          <div className="flex items-center gap-2 text-xs">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => {
-                                setCloseForm(f => ({
-                                  ...f,
-                                  slots: isSelected ? f.slots.filter(s => s !== slot) : [...f.slots, slot]
-                                }));
-                              }}
-                              className="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
-                            />
-                            <span>{slot}</span>
-                          </div>
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${bookedCount > 0 ? 'bg-amber-200 text-amber-800' : 'bg-slate-100 text-slate-500'}`}>
-                            {bookedCount} booked
-                          </span>
-                        </label>
+                          {preset.label}
+                        </button>
                       );
                     })}
                   </div>
                 </div>
-              )}
 
-              {/* Reason Presets */}
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-                  Reason Preset
-                </label>
-                <div className="flex flex-wrap gap-1.5">
-                  {CLOSURE_PRESETS.map(preset => {
-                    const active = closeForm.reasonPreset === preset.id;
-                    return (
-                      <button
-                        key={preset.id}
-                        type="button"
-                        onClick={() => {
-                          setCloseForm(f => ({
-                            ...f,
-                            reasonPreset: preset.id,
-                            reason: preset.defaultMsg || f.reason,
-                          }));
-                        }}
-                        className={`px-3 py-1.5 text-xs rounded-lg font-medium border transition-colors cursor-pointer ${
-                          active
-                            ? 'bg-amber-100 text-amber-800 border-amber-300 font-bold shadow-2xs'
-                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                        }`}
-                      >
-                        {preset.label}
-                      </button>
-                    );
-                  })}
+                {/* Message to Patients */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label htmlFor="closure-reason" className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      Message to Patients <span className="text-rose-600">*</span>
+                    </label>
+                    <span className={`text-xs ${closeForm.reason.length > 140 ? 'text-rose-600 font-bold' : 'text-slate-400'}`}>
+                      {closeForm.reason.length} / 150
+                    </span>
+                  </div>
+                  <textarea
+                    id="closure-reason"
+                    rows={2}
+                    maxLength={150}
+                    className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none focus:border-amber-500 bg-white font-medium text-slate-800 text-xs transition-all resize-none"
+                    value={closeForm.reason}
+                    onChange={e => setCloseForm(f => ({ ...f, reason: e.target.value }))}
+                    placeholder="Shown to patients before booking..."
+                  />
+
+                  {/* Patient Live Preview */}
+                  <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50/70 p-3 flex flex-col gap-1">
+                    <div className="text-[11px] font-bold text-amber-800 uppercase tracking-wide flex items-center gap-1.5">
+                      <Lock size={12} className="text-amber-600" /> Patient Preview
+                    </div>
+                    <blockquote className="text-xs text-amber-950 font-medium italic border-l-2 border-amber-400 pl-2.5 my-0.5">
+                      &ldquo;Message from K&amp;A Clinic: {closeForm.reason || 'Reason for schedule closure...'}&rdquo;
+                    </blockquote>
+                    <p className="text-[10px] text-amber-700">
+                      Shown when patients select {closeForm.startDate || 'this date'}{closeForm.type === 'slots' && closeForm.slots.length > 0 ? ` (${closeForm.slots.join(', ')})` : ''}.
+                    </p>
+                  </div>
                 </div>
-              </div>
 
-              {/* Message to Patients */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label htmlFor="closure-reason" className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    Message to Patients <span className="text-rose-600">*</span>
+                {/* Internal Note (Staff only) */}
+                <div>
+                  <label htmlFor="closure-note" className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                    Internal Note <span className="text-slate-400 font-normal lowercase">(staff only, private)</span>
                   </label>
-                  <span className={`text-xs ${closeForm.reason.length > 140 ? 'text-rose-600 font-bold' : 'text-slate-400'}`}>
-                    {closeForm.reason.length} / 150
-                  </span>
+                  <textarea
+                    id="closure-note"
+                    rows={2}
+                    className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800 text-xs transition-all resize-none"
+                    value={closeForm.internalNote}
+                    onChange={e => setCloseForm(f => ({ ...f, internalNote: e.target.value }))}
+                    placeholder="Optional context for clinic staff..."
+                  />
                 </div>
-                <textarea
-                  id="closure-reason"
-                  rows={2}
-                  maxLength={150}
-                  className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none focus:border-amber-500 bg-white font-medium text-slate-800 text-xs transition-all resize-none"
-                  value={closeForm.reason}
-                  onChange={e => setCloseForm(f => ({ ...f, reason: e.target.value }))}
-                  placeholder="Shown to patients before booking..."
-                />
 
-                {/* Patient Live Preview */}
-                <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50/70 p-3 flex flex-col gap-1">
-                  <div className="text-[11px] font-bold text-amber-800 uppercase tracking-wide flex items-center gap-1.5">
-                    <Lock size={12} className="text-amber-600" /> Patient Preview
-                  </div>
-                  <blockquote className="text-xs text-amber-950 font-medium italic border-l-2 border-amber-400 pl-2.5 my-0.5">
-                    &ldquo;Message from K&amp;A Clinic: {closeForm.reason || 'Reason for schedule closure...'}&rdquo;
-                  </blockquote>
-                  <p className="text-[10px] text-amber-700">
-                    Shown when patients select {closeForm.startDate || 'this date'}{closeForm.type === 'slots' && closeForm.slots.length > 0 ? ` (${closeForm.slots.join(', ')})` : ''}.
-                  </p>
-                </div>
-              </div>
-
-              {/* Internal Note (Staff only) */}
-              <div>
-                <label htmlFor="closure-note" className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-                  Internal Note <span className="text-slate-400 font-normal lowercase">(staff only, private)</span>
-                </label>
-                <textarea
-                  id="closure-note"
-                  rows={2}
-                  className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800 text-xs transition-all resize-none"
-                  value={closeForm.internalNote}
-                  onChange={e => setCloseForm(f => ({ ...f, internalNote: e.target.value }))}
-                  placeholder="Optional context for clinic staff..."
-                />
-              </div>
-
-              {/* Existing bookings warning card */}
-              {affectedBookings.length > 0 && (
-                <div className="rounded-xl border border-amber-300 bg-amber-50/90 p-3.5 flex flex-col gap-2">
-                  <div className="flex items-center gap-2 text-amber-900 font-bold text-xs">
-                    <AlertTriangle size={15} className="text-amber-600 shrink-0" />
-                    <span>{affectedBookings.length} Existing Appointment{affectedBookings.length === 1 ? '' : 's'} Affected</span>
-                  </div>
-                  <p className="text-xs text-amber-800 leading-relaxed">
-                    Existing appointments stay as they are. Closing only stops new bookings. Affected patients will be notified so they can reschedule or cancel. Staff cannot cancel them.
-                  </p>
-                  <div className="max-h-36 overflow-y-auto flex flex-col gap-1.5 mt-1 border-t border-amber-200 pt-2">
-                    {affectedBookings.map(a => (
-                      <div key={a.id} className="flex items-center justify-between text-xs py-1 px-2 rounded bg-white/70 border border-amber-100">
-                        <span className="font-semibold text-slate-900">{a.name}</span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-slate-500">{a.time}</span>
-                          <StatusBadge status={a.status} />
+                {/* Existing bookings warning card */}
+                {affectedBookings.length > 0 && (
+                  <div className="rounded-xl border border-amber-300 bg-amber-50/90 p-3.5 flex flex-col gap-2">
+                    <div className="flex items-center gap-2 text-amber-900 font-bold text-xs">
+                      <AlertTriangle size={15} className="text-amber-600 shrink-0" />
+                      <span>{affectedBookings.length} Existing Appointment{affectedBookings.length === 1 ? '' : 's'} Affected</span>
+                    </div>
+                    <p className="text-xs text-amber-800 leading-relaxed">
+                      Existing appointments stay as they are. Closing only stops new bookings. Affected patients will be notified so they can reschedule or cancel. Staff cannot cancel them.
+                    </p>
+                    <div className="max-h-36 overflow-y-auto flex flex-col gap-1.5 mt-1 border-t border-amber-200 pt-2">
+                      {affectedBookings.map(a => (
+                        <div key={a.id} className="flex items-center justify-between text-xs py-1 px-2 rounded bg-white/70 border border-amber-100">
+                          <span className="font-semibold text-slate-900">{a.name}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-slate-500">{a.time}</span>
+                            <StatusBadge status={a.status} />
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
+
+                    <label className="flex items-center gap-2 text-xs font-semibold text-amber-900 mt-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={closeForm.notifyAffectedPatients}
+                        onChange={e => setCloseForm(f => ({ ...f, notifyAffectedPatients: e.target.checked }))}
+                        className="rounded border-amber-400 text-amber-600 focus:ring-amber-500"
+                      />
+                      <span>Notify affected patients via Push &amp; Email</span>
+                    </label>
                   </div>
+                )}
+              </div>
 
-                  <label className="flex items-center gap-2 text-xs font-semibold text-amber-900 mt-1 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={closeForm.notifyAffectedPatients}
-                      onChange={e => setCloseForm(f => ({ ...f, notifyAffectedPatients: e.target.checked }))}
-                      className="rounded border-amber-400 text-amber-600 focus:ring-amber-500"
-                    />
-                    <span>Notify affected patients via Push &amp; Email</span>
-                  </label>
-                </div>
-              )}
-
-              {/* Footer buttons */}
-              <div className="flex items-center justify-between pt-3 border-t border-slate-100 mt-1">
+              {/* Sticky Footer */}
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between shrink-0">
                 <button
                   type="button"
                   onClick={requestCloseClosure}
@@ -2584,7 +2606,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                   type="button"
                   onClick={handleSaveClosure}
                   disabled={savingClosure}
-                  className="px-5 py-2.5 rounded-xl font-bold text-xs text-white bg-amber-600 hover:bg-amber-700 transition-colors shadow-sm disabled:opacity-50 cursor-pointer flex items-center gap-2"
+                  className="px-5 py-2.5 rounded-xl font-bold text-xs text-white bg-[#3B50DF] hover:bg-[#2F40B5] transition-colors shadow-sm disabled:opacity-50 cursor-pointer flex items-center gap-2"
                 >
                   <Lock size={14} />
                   <span>{savingClosure ? 'Saving…' : closeForm.id ? 'Update Schedule Closure' : 'Close Schedule'}</span>
