@@ -40,17 +40,12 @@ const CARD_ACTION: ReplyAction = { label: 'Open my vaccination card', target: 'c
 
 export async function askClinicAssistant(prompt: string, history: ChatTurn[] = []): Promise<AssistantReply> {
   const category = classifyMessage(prompt);
+  // 1. Strict on-device protections: medical queries and personal schedule navigation
   if (category === 'clinical') return { text: BLOCKED_REPLY_APP, needsEscalation: true, category };
   if (category === 'personal_nav') return { text: PERSONAL_NAV_REPLY_APP, needsEscalation: false, category, action: CARD_ACTION };
   if (category === 'personal_info') return { text: PERSONAL_INFO_REPLY_APP, needsEscalation: false, category, action: CARD_ACTION };
-  if (category === 'vague') return { text: VAGUE_REPLY, needsEscalation: false, category };
-  if (category === 'out_of_scope') return { text: OUT_OF_SCOPE_REPLY, needsEscalation: false, category };
 
-  const fixed = fixedInScopeReply(prompt);
-  if (fixed) return { text: fixed, needsEscalation: false, category: 'in_scope' };
-
-  // Booking questions with a date (live slots) and anything else allowed but
-  // without a fixed answer go to the server.
+  // 2. Online: Route all clinic questions, app navigation, booking, and conversational queries to backend
   if (API_BASE_URL) {
     try {
       const res = await fetch(`${API_BASE_URL}/api/chatbot`, {
@@ -58,24 +53,36 @@ export async function askClinicAssistant(prompt: string, history: ChatTurn[] = [
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt, history: history.map(h => ({ role: h.role, text: h.text })), channel: 'app' }),
       });
-      const data = await res.json();
-      if (data?.success && data.text) {
-        return {
-          text: data.text as string,
-          needsEscalation: !!data.needsEscalation,
-          category: (data.category as ScopeCategory) ?? 'in_scope',
-          action: data.action?.target === 'card' || data.action?.target === 'appointments' ? data.action : undefined,
-        };
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.success && data.text) {
+          return {
+            text: data.text as string,
+            needsEscalation: !!data.needsEscalation,
+            category: (data.category as ScopeCategory) ?? 'in_scope',
+            action: data.action?.target === 'card' || data.action?.target === 'appointments' ? data.action : undefined,
+          };
+        }
       }
     } catch (err) {
       console.warn('Chatbot API request failed:', err);
     }
   }
 
-  // Server unreachable: the booking procedure is the one allowed topic left
-  // without a fixed reply; anything else asks what the user needs.
+  // 3. Offline / Network error fallback
+  if (category === 'out_of_scope') return { text: OUT_OF_SCOPE_REPLY, needsEscalation: false, category };
+
+  const fixed = fixedInScopeReply(prompt);
+  if (fixed) return { text: fixed, needsEscalation: false, category: 'in_scope' };
+
   if (/\b(book|appointment|appt|reserv|cancel|reschedul|slot)/i.test(prompt)) {
     return { text: BOOKING_REPLY, needsEscalation: false, category: 'in_scope', action: { label: 'Open appointments', target: 'appointments' } };
   }
-  return { text: VAGUE_REPLY, needsEscalation: false, category: 'vague' };
+  if (category === 'vague') return { text: VAGUE_REPLY, needsEscalation: false, category };
+
+  return {
+    text: "KAI can't answer right now. Please check your connection or contact K&A Clinic at +63 912 345 6789.",
+    needsEscalation: false,
+    category: 'in_scope',
+  };
 }

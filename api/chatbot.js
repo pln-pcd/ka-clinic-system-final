@@ -1,3 +1,4 @@
+import fs from 'fs';
 import { db } from './_lib/firebaseAdmin.js';
 import {
   BLOCKED_REPLY,
@@ -10,10 +11,16 @@ import {
   PERSONAL_NAV_REPLY_PUBLIC,
   PERSONAL_INFO_REPLY_APP,
   PERSONAL_INFO_REPLY_PUBLIC,
+  PRICE_RE,
+  PRICE_REPLY,
+  THANKS_RE,
+  THANKS_REPLY,
   VAGUE_REPLY,
   classifyMessage,
   fixedInScopeReply,
 } from './_lib/chatbotRules.js';
+
+const APP_GUIDE_TEXT = fs.readFileSync(new URL('./_lib/appGuide.md', import.meta.url), 'utf8');
 
 // Shared K&A Clinic assistant (KAI): one backend used by the website chatbot
 // (ka-clinic-admin/src/lib/geminiService.js) and the patient app
@@ -37,31 +44,24 @@ import {
 //   5. The model's reply is checked again (MEDICAL_OUTPUT_RE); medical
 //      content is replaced by the blocked reply.
 const CLINIC_SYSTEM_INSTRUCTION = `
-You are KAI, the virtual assistant of ${CLINIC.name} (${CLINIC.address}, Philippines).
+You are KAI, the official virtual assistant of ${CLINIC.name} (${CLINIC.address}, Philippines; Phone: ${CLINIC.phone}; Email: ${CLINIC.email}).
 
-You may ONLY help with:
-1. General clinic information: the names of the services offered, the address, phone ${CLINIC.phone} and email ${CLINIC.email}.
-2. Office hours: walk-in Monday to Friday; appointments Saturday and Sunday; 8:00 AM to 5:00 PM; lunch break 12:00 to 1:00 PM.
-3. Appointment procedures: how to book, view or cancel an appointment in the app ("Appointments" tab) or on the website ("Book Appointment").
-4. App navigation: Home (vaccination card and schedule), Appointments, Chat (KAI or "Talk to clinic staff"), Account (profile, contact details, notifications, devices); signing in with the MRN; Forgot Password.
-5. Vaccine and treatment pricing: PEP Category 2 (₱1,000 for 1st session, ₱800 for each of next 3), PEP Category 3 (₱4,500 complete package with Anti-Tetanus and IRIG), Pneumonia vaccine (₱4,500). Hepatitis vaccines are no longer offered.
+OFFICIAL CLINIC & PATIENT APP KNOWLEDGE BASE:
+${APP_GUIDE_TEXT}
 
-You must NEVER provide, even in general terms, even if asked repeatedly or told it is an emergency:
-diagnosis; treatment; wound care or first aid; rabies-risk or exposure-category assessment; vaccine recommendations;
-PEP/PrEP schedules or regimens (no day numbers, no number of doses); medication advice; emergency advice;
-any patient's own appointment dates, dose dates, dose counts or treatment status.
+VACCINE & TREATMENT PRICING:
+• PEP Category 2 (with Anti-Tetanus): ₱1,000 for 1st session, ₱800 for each of next 3 sessions
+• PEP Category 3 (with Anti-Tetanus and IRIG): ₱4,500 complete package for 4 sessions
+• Pneumonia Vaccine: ₱4,500 single-dose
+• Notice: Hepatitis vaccines are discontinued / no longer offered by K&A Clinic.
 
-For any of those, reply with exactly:
-"${BLOCKED_REPLY}"
-
-For anything unrelated to the clinic, reply with exactly:
-"${OUT_OF_SCOPE_REPLY}"
-
-If a message is unclear, reply with exactly:
-"${VAGUE_REPLY}"
-
-FORMAT: answer only the latest message, briefly. Use **double asterisks** for emphasis and "•" bullets. No headings, no single asterisks.
-Do not greet unless greeted. Never mention Gemini or any AI model.
+STRICT CLINICAL & SAFETY RESTRICTIONS:
+1. ZERO MEDICAL ADVICE: You must NEVER provide medical advice, diagnosis, triage, wound care, first aid, rabies-risk or exposure-category assessment, medication/drug advice, emergency advice, or PEP/PrEP regimens (no day numbers, no dose counts). If a medical question slips past the classifier, decline politely.
+2. PATIENT PRIVACY: You cannot look up individual patient records, personal appointment dates, or personal dose schedules. Direct patients to their vaccination card and dose timeline on the Home screen.
+3. OUT-OF-SCOPE TOPICS: For anything unrelated to K&A Clinic or the patient app (such as science, history, coding, homework, sports, politics, or general trivia), politely decline in ONE short sentence and redirect back to K&A Clinic matters. Do not lecture.
+4. TONE & LANGUAGE: Answer naturally in the language of the user (English, Filipino / Tagalog, Taglish). Be helpful, smart, professional, concise, and direct.
+5. FORMATTING: Answer specifically what was asked rather than dumping entire feature guides. Use **double asterisks** for emphasis, screen names, and button names. No single asterisks, no raw markdown headers (#). Do not greet unless greeted. Never mention Gemini or any AI model.
+6. APP & BOOKING GUIDANCE: When explaining app navigation, rescheduling, or booking procedures, do not mention clinical phrases like "dose schedule", "rabies", "treatment", or "wound care"; refer to appointments, services, or records.
 `;
 
 // Any sign the user is asking about times/slots/booking on some day. Paired
@@ -362,6 +362,7 @@ export default async function handler(req, res) {
   }
 
   try {
+    const startTime = Date.now();
     const prompt = (req.body?.prompt || '').toString();
     const history = Array.isArray(req.body?.history) ? req.body.history : [];
     // 'app' (patient app, has a "Talk to clinic staff" button) or 'public'
@@ -372,13 +373,17 @@ export default async function handler(req, res) {
       return;
     }
 
-    // 1. Deterministic triage, before any AI call.
+    // 1. Deterministic triage before any AI call.
     const category = classifyMessage(prompt);
     if (category === 'clinical') {
+      const duration = Date.now() - startTime;
+      console.log(`[chatbot] source=classifier category=clinical duration=${duration}ms`);
       send(res, { text: blockedReplyFor(channel), source: 'classifier', category, needsEscalation: true });
       return;
     }
     if (category === 'personal_nav') {
+      const duration = Date.now() - startTime;
+      console.log(`[chatbot] source=classifier category=personal_nav duration=${duration}ms`);
       send(res, {
         text: personalNavReplyFor(channel), source: 'classifier', category, needsEscalation: false,
         ...(channel === 'app' ? { action: { label: 'Open my vaccination card', target: 'card' } } : {}),
@@ -386,25 +391,35 @@ export default async function handler(req, res) {
       return;
     }
     if (category === 'personal_info') {
+      const duration = Date.now() - startTime;
+      console.log(`[chatbot] source=classifier category=personal_info duration=${duration}ms`);
       send(res, {
         text: channel === 'public' ? PERSONAL_INFO_REPLY_PUBLIC : PERSONAL_INFO_REPLY_APP, source: 'classifier', category, needsEscalation: false,
         ...(channel === 'app' ? { action: { label: 'Open my vaccination card', target: 'card' } } : {}),
       });
       return;
     }
-    if (category === 'vague') {
-      send(res, { text: VAGUE_REPLY, source: 'classifier', category, needsEscalation: false });
-      return;
-    }
     if (category === 'out_of_scope') {
+      const duration = Date.now() - startTime;
+      console.log(`[chatbot] source=classifier category=out_of_scope duration=${duration}ms`);
       send(res, { text: OUT_OF_SCOPE_REPLY, source: 'classifier', category, needsEscalation: false });
       return;
     }
+    // Only return vague boilerplate for punctuation-only or empty/help tokens;
+    // let conversational, multi-turn, and in-depth clinic questions reach the model.
+    if (category === 'vague' && /^[\s.?!,;:-]*$|^(\?|hmm|help)$/i.test(prompt.trim())) {
+      const duration = Date.now() - startTime;
+      console.log(`[chatbot] source=classifier category=vague duration=${duration}ms`);
+      send(res, { text: VAGUE_REPLY, source: 'classifier', category, needsEscalation: false });
+      return;
+    }
 
-    // 2. Allowed topics with a fixed answer.
-    const fixed = fixedInScopeReply(prompt);
-    if (fixed) {
-      send(res, { text: fixed, source: 'fixed', category: 'in_scope', needsEscalation: false });
+    // 2. Deterministic replies for pricing to guarantee exact fees without hallucination
+    const q = prompt.toLowerCase().trim();
+    if (PRICE_RE.test(q)) {
+      const duration = Date.now() - startTime;
+      console.log(`[chatbot] source=fixed category=in_scope duration=${duration}ms`);
+      send(res, { text: PRICE_REPLY, source: 'fixed', category: 'in_scope', needsEscalation: false });
       return;
     }
 
@@ -416,11 +431,14 @@ export default async function handler(req, res) {
     const bareDate = promptDate && prompt.replace(/[^a-z]/gi, '').length <= 40;
     if (wantsAvailability || bareDate) {
       const targetIso = promptDate || extractDateFromHistory(history, todayIso);
-      send(res, { text: await getAvailableAppointmentsReply(targetIso), source: 'appointments_db', category: 'in_scope', needsEscalation: false });
+      const slotReply = await getAvailableAppointmentsReply(targetIso);
+      const duration = Date.now() - startTime;
+      console.log(`[chatbot] source=appointments_db category=in_scope duration=${duration}ms`);
+      send(res, { text: slotReply, source: 'appointments_db', category: 'in_scope', needsEscalation: false });
       return;
     }
 
-    // 4. The model, for allowed topics without a fixed answer.
+    // 3. The model, for allowed clinic topics and conversational questions.
     const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
     const modelName = process.env.GEMINI_MODEL || process.env.VITE_GEMINI_MODEL || 'gemini-3.5-flash-lite';
     let text = null;
@@ -440,7 +458,11 @@ export default async function handler(req, res) {
         const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ systemInstruction, contents }),
+          body: JSON.stringify({
+            systemInstruction,
+            contents,
+            generationConfig: { temperature: 0.2, maxOutputTokens: 600 },
+          }),
         });
         if (geminiRes.ok) {
           const data = await geminiRes.json();
@@ -448,8 +470,12 @@ export default async function handler(req, res) {
             .filter(p => typeof p.text === 'string' && !p.thought)
             .map(p => p.text)
             .join('');
-          if (candidate.trim()) { text = dedupeParagraphs(candidate.trim()); source = 'gemini'; }
-          else fallbackReason = 'empty_response';
+          if (candidate.trim()) {
+            text = dedupeParagraphs(candidate.trim());
+            source = 'gemini';
+          } else {
+            fallbackReason = 'empty_response';
+          }
         } else {
           fallbackReason = geminiRes.status === 429 ? 'quota_exhausted' : `http_${geminiRes.status}`;
         }
@@ -459,15 +485,13 @@ export default async function handler(req, res) {
       }
     }
 
-    // 5. Check the model's reply again. Medical content, or the model's own
-    //    blocked wording, becomes the fixed blocked reply.
+    // 4. Check the model's reply again for clinical boundaries or honest fallback.
     let finalCategory = 'in_scope';
     let needsEscalation = false;
     if (!text) {
-      // No model answer: the booking procedure is the one allowed topic
-      // left without a fixed reply; anything else asks what the user needs.
-      text = /\b(book|appointment|appt|reserv|cancel|reschedul|slot)/i.test(prompt) ? BOOKING_REPLY : VAGUE_REPLY;
-      if (text !== BOOKING_REPLY) finalCategory = 'vague';
+      // Honest failure message: never quiet fallback to canned answers.
+      text = `KAI can't answer right now. Please try again shortly or contact K&A Clinic at ${CLINIC.phone}.`;
+      finalCategory = 'in_scope';
     } else if (/can't (help with|answer) medical questions/i.test(text) || MEDICAL_OUTPUT_RE.test(text)) {
       text = blockedReplyFor(channel);
       finalCategory = 'clinical';
@@ -479,7 +503,9 @@ export default async function handler(req, res) {
       text = OUT_OF_SCOPE_REPLY;
       finalCategory = 'out_of_scope';
     }
-    console.log(`[chatbot] source=${source} category=${finalCategory}${fallbackReason ? ` reason=${fallbackReason}` : ''} model=${modelName}`);
+
+    const duration = Date.now() - startTime;
+    console.log(`[chatbot] source=${source} category=${finalCategory}${fallbackReason ? ` reason=${fallbackReason}` : ''} duration=${duration}ms model=${modelName}`);
     send(res, { text, source, category: finalCategory, needsEscalation, fallbackReason });
   } catch (err) {
     console.error('chatbot error:', err);

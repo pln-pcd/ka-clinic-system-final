@@ -932,9 +932,18 @@ function QueueCard({ apt, reason, reasonLabel = 'Reason', actions, badge, onOpen
           <span className="shrink-0 max-w-full text-sm font-semibold leading-5 text-slate-900 truncate underline-offset-2 decoration-slate-400 group-hover:underline">{apt.name}</span>
           <ServicePill type={apt.type} />
           {badge}
+          {(apt.rescheduledAt || apt.previousDate) && (
+            <span
+              className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200"
+              title={`Previously: ${formatDateMedium(apt.previousDate || '')} ${apt.previousTime || ''}`}
+            >
+              Rescheduled
+            </span>
+          )}
         </div>
         <div className="mt-0.5 text-xs leading-5 text-slate-500 truncate">
           {formatDateMedium(apt.date)} · {apt.time || '—'}{phone ? ` · ${phone}` : ''}
+          {(apt.rescheduledAt || apt.previousDate) && ` (was ${formatDateMedium(apt.previousDate || '')} ${apt.previousTime || ''})`}
         </div>
         {reason && (
           <div className={`mt-0.5 text-xs leading-5 text-slate-500 ${expanded ? 'whitespace-pre-wrap break-words' : 'flex items-center gap-1 min-w-0'}`}>
@@ -962,9 +971,6 @@ function QueueCard({ apt, reason, reasonLabel = 'Reason', actions, badge, onOpen
   );
 }
 
-// Who ended a cancelled visit: the clinic declined it, or the patient
-// cancelled (their request was approved).
-const endedByClinic = (a) => a.status === 'declined' || !!a.declineReason || !!a.declinedBy;
 
 // "2026-10-11" → "October 2026"
 const monthLabel = (d) => {
@@ -992,7 +998,6 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
   const [selectedDate, setSelectedDate] = useState(getTodayDateString());
   const [currentViewDate, setCurrentViewDate] = useState(new Date());
   const [rightPanelTab, setRightPanelTab] = useState('requests'); // 'requests' | 'cancel-requests' | 'cancelled'
-  const [cancelledFilter, setCancelledFilter] = useState('all'); // 'all' | 'clinic' | 'patient'
   const [monthPickerOpen, setMonthPickerOpen] = useState(false);
   const [pickerYear, setPickerYear] = useState(() => new Date().getFullYear());
   const monthPickerRef = useRef(null);
@@ -1011,23 +1016,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
   const [toast, setToast] = useState({ msg: '', type: '' });
   const [saving, setSaving] = useState(false);
 
-  // Decline Reason Modal States
-  const [declineModalOpen, setDeclineModalOpen] = useState(false);
-  const [declineTargetApt, setDeclineTargetApt] = useState(null);
-  const [declineReason, setDeclineReason] = useState('');
-  const [declinePreset, setDeclinePreset] = useState('');
-  const [declineSaving, setDeclineSaving] = useState(false);
-
-  const DECLINE_REASONS = [
-    'Fully booked for this date and time slot',
-    'Clinic closed / Special holiday schedule',
-    'Attending physician unavailable',
-    'Duplicate appointment booking',
-    'Incomplete patient contact details',
-    'Emergency cases prioritized at the clinic',
-  ];
-
-  // Confirm / decline pop-up — every quick status change goes through this so
+  // Confirm pop-up — every quick status change goes through this so
   // the admin sees the appointment details before committing.
   const [pendingAction, setPendingAction] = useState(null); // { apt, status }
   const [pendingActionSaving, setPendingActionSaving] = useState(false);
@@ -1042,70 +1031,6 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
       setPendingAction(null);
     } finally {
       setPendingActionSaving(false);
-    }
-  };
-
-  const promptDecline = (apt) => {
-    setDeclineTargetApt(apt);
-    setDeclineReason('');
-    setDeclineModalOpen(true);
-  };
-
-  const notifyAppointmentDeclined = async (apt, reason) => {
-    const patientId = apt?.patientId || apt?.userId;
-    if (!patientId) return;
-    const whenDate = formatDateLong(apt.date) || apt.date || 'your scheduled date';
-    const whenTime = apt.time ? ` at ${apt.time}` : '';
-    const reasonMsg = reason ? ` Reason: ${reason}` : '';
-    try {
-      await authedPostJson('/api/notifications', {
-        action: 'send-followup',
-        patientId,
-        title: 'Appointment request declined',
-        message: `Your appointment request for ${formatServiceType(apt.type)} on ${whenDate}${whenTime} could not be approved.${reasonMsg}`,
-        dueDate: whenDate,
-        source: 'appointment-declined',
-      });
-    } catch (err) {
-      console.error('Appointment decline notification failed:', err);
-    }
-  };
-
-  const handleConfirmDecline = async () => {
-    if (!declineTargetApt) return;
-    const finalReason = (declineReason || '').trim() || declinePreset;
-    if (!finalReason) {
-      showToast('Please provide a reason for declining the appointment', 'error');
-      return;
-    }
-    setDeclineSaving(true);
-    try {
-      const aptId = declineTargetApt.id;
-      const prevDate = declineTargetApt.date;
-      const prevTime = declineTargetApt.time;
-      await updateDoc(doc(db, 'appointments', aptId), {
-        status: 'cancelled',
-        declineReason: finalReason,
-        cancellationReason: finalReason,
-        declinedAt: Date.now(),
-        declinedBy: auth?.currentUser?.displayName || 'Admin',
-        updatedAt: Date.now(),
-      });
-      await releaseSlot(prevDate, prevTime);
-      logActivity({ action: 'appointment.decline', collection: 'appointments', docId: aptId, mrn: declineTargetApt.patientId || '',
-        summary: `Declined ${formatServiceType(declineTargetApt.type)} on ${prevDate} ${prevTime || ''} for ${declineTargetApt.name}`.trim(),
-        changes: [{ field: 'status', before: declineTargetApt.status || 'pending', after: 'cancelled' }, { field: 'declineReason', before: null, after: finalReason }] });
-      await notifyAppointmentDeclined(declineTargetApt, finalReason);
-      trackEvent('appointment_declined');
-      showToast(`Appointment for ${declineTargetApt.name} declined`);
-      setDeclineModalOpen(false);
-      setDeclineTargetApt(null);
-      setDeclineReason('');
-    } catch (err) {
-      console.error('Failed to decline appointment:', err);
-      showToast('Failed to decline appointment', 'error');
-    } finally {
-      setDeclineSaving(false);
     }
   };
 
@@ -1210,30 +1135,30 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
   const confirmedToday = appointments.filter(a => a.date === todayStr && (a.status === 'confirmed' || a.status === 'accepted')).length;
 
   // Actions
-  // Approving an appointment tells the patient. The app already surfaces a
+  // Confirming an appointment tells the patient. The app already surfaces a
   // confirmed appointment in its notification list from the appointments
   // listener, but that only fires while the app is open — this pushes through
   // the same /api/notifications pipeline the dose reminders use, so it also
   // lands in the patient's inbox and as a push/email when the app is closed.
-  const notifyAppointmentApproved = async (apt) => {
+  const notifyAppointmentConfirmed = async (apt) => {
     const patientId = apt?.patientId;
     if (!patientId) return;
     const whenDate = formatDateLong(apt.date) || apt.date || 'your scheduled date';
-    const whenTime = apt.time ? ` at ${apt.time}` : '';
+    const whenTime = apt.time ? `, ${apt.time}` : '';
     try {
       await authedPostJson('/api/notifications', {
         action: 'send-followup',
         patientId,
-        title: 'Appointment approved',
-        message: `Your ${formatServiceType(apt.type, 'appointment')} at K&A Clinic on ${whenDate}${whenTime} has been approved. Please arrive 10 minutes early and bring your patient record.`,
+        title: 'Appointment confirmed by the clinic',
+        message: `Your appointment on ${whenDate}${whenTime} was confirmed by the clinic.`,
         dueDate: whenDate,
-        source: 'appointment-approved',
+        source: 'appointment-confirmed',
       });
     } catch (err) {
       // The status change itself already succeeded; a failed notification
-      // must not read as a failed approval.
-      console.error('Appointment approval notification failed:', err);
-      showToast('Appointment approved, but the patient notification failed to send', 'error');
+      // must not read as a failed confirmation.
+      console.error('Appointment confirmation notification failed:', err);
+      showToast('Appointment confirmed, but the patient notification failed to send', 'error');
     }
   };
 
@@ -1255,10 +1180,10 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
         await releaseSlot(target.date, target.time);
       }
       if ((newStatus === 'confirmed' || newStatus === 'accepted') && target) {
-        await notifyAppointmentApproved(target);
+        await notifyAppointmentConfirmed(target);
       }
       trackEvent(`appointment_${newStatus}`);
-      showToast(`Appointment status updated to ${newStatus}`);
+      showToast(newStatus === 'confirmed' ? 'Appointment confirmed' : `Appointment status updated to ${newStatus}`);
     } catch (err) {
       console.error('Error updating status:', err);
       showToast('Failed to update status', 'error');
@@ -1484,11 +1409,11 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
               // get an accent on their count.
               const TABS = [
                 { key: 'requests', label: 'Booking Requests', count: pendingOnlineRequests.length, action: true,
-                  desc: 'New bookings from the app and website, waiting for you to confirm or decline.' },
-                { key: 'cancel-requests', label: 'Cancel Requests', count: cancellationRequests.length, action: true,
-                  desc: 'Patients asked to cancel a confirmed visit. Approve to free the slot, or keep it.' },
+                  desc: 'New bookings from the app and website, waiting for you to confirm.' },
+                ...(cancellationRequests.length > 0 ? [{ key: 'cancel-requests', label: 'Cancel Requests', count: cancellationRequests.length, action: true,
+                  desc: 'Patients asked to cancel a confirmed visit. Approve to free the slot, or keep it.' }] : []),
                 { key: 'cancelled', label: 'Cancelled', count: allCancelledApts.length, action: false,
-                  desc: 'Cancelled and declined visits (read-only). Each is removed automatically 90 days after its visit date.' },
+                  desc: 'Cancelled visits (read-only). Each is removed automatically 90 days after its visit date.' },
               ];
               const active = TABS.find(t => t.key === rightPanelTab) || TABS[0];
               return (
@@ -1509,11 +1434,11 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                     <QueueCard key={apt.id} apt={apt} onOpen={openEditModal}
                       reason={apt.cancellationReason || 'No reason given'}
                       actions={<>
-                        <button type="button" className={BTN_SM.outline} onClick={() => promptQuickAction(apt, 'confirmed')} title="Keep this appointment (the request is declined)">
+                        <button type="button" className={BTN_SM.outline} onClick={() => promptQuickAction(apt, 'confirmed')} title="Keep this appointment">
                           <RotateCcw size={BTN_SM_ICON} /> Keep appointment
                         </button>
-                        <button type="button" className={BTN_SM.danger} onClick={() => promptQuickAction(apt, 'cancelled')} title="Approve the request and cancel this appointment">
-                          <CalendarX size={BTN_SM_ICON} /> Approve cancellation
+                        <button type="button" className={BTN_SM.danger} onClick={() => promptQuickAction(apt, 'cancelled')} title="Cancel this appointment">
+                          <CalendarX size={BTN_SM_ICON} /> Cancel appointment
                         </button>
                       </>} />
                   ));
@@ -1522,31 +1447,8 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                 // Cancelled history: newest first, grouped by month, each card
                 // saying who ended the visit. Read-only (chevron, no actions).
                 if (rightPanelTab === 'cancelled') {
-                  if (allCancelledApts.length === 0) return <EmptyState icon={CalendarX} title="No cancelled appointments" text="Cancelled and declined visits are kept here for 90 days after the visit date." minHeight={140} />;
-                  // Filter by who ended the visit.
-                  const byClinicCount = allCancelledApts.filter(endedByClinic).length;
-                  const FILTERS = [
-                    { key: 'all', label: 'All', count: allCancelledApts.length },
-                    { key: 'clinic', label: 'Declined by clinic', count: byClinicCount },
-                    { key: 'patient', label: 'Cancelled by patient', count: allCancelledApts.length - byClinicCount },
-                  ];
-                  const shown = allCancelledApts.filter(a => cancelledFilter === 'all' || (cancelledFilter === 'clinic') === endedByClinic(a));
-                  const filterRow = (
-                    <div key="filters" role="radiogroup" aria-label="Filter cancelled visits" className="flex items-center gap-1.5 flex-wrap px-0.5 pb-1">
-                      {FILTERS.map(f => {
-                        const on = cancelledFilter === f.key;
-                        return (
-                          <button key={f.key} type="button" role="radio" aria-checked={on} onClick={() => setCancelledFilter(f.key)}
-                            className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full border text-[11.5px] font-semibold transition-colors cursor-pointer ${
-                              on ? 'bg-slate-900 border-slate-900 text-white' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'}`}>
-                            {f.label}
-                            <span className={`tabular-nums text-[11px] ${on ? 'text-white/70' : 'text-slate-400'}`}>{f.count}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  );
-                  if (shown.length === 0) return [filterRow, <EmptyState key="empty" icon={CalendarX} title="Nothing here" text={cancelledFilter === 'clinic' ? 'No visits declined by the clinic.' : 'No visits cancelled by patients.'} minHeight={140} />];
+                  if (allCancelledApts.length === 0) return <EmptyState icon={CalendarX} title="No cancelled appointments" text="Cancelled visits are kept here for 90 days after the visit date." minHeight={140} />;
+                  const shown = allCancelledApts;
                   const sorted = [...shown].sort((x, y) => String(y.date || '').localeCompare(String(x.date || '')) || String(y.time || '').localeCompare(String(x.time || '')));
                   const groups = [];
                   sorted.forEach(apt => {
@@ -1554,19 +1456,16 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                     if (!groups.length || groups[groups.length - 1].label !== label) groups.push({ label, items: [] });
                     groups[groups.length - 1].items.push(apt);
                   });
-                  return [filterRow, ...groups.map(g => (
+                  return groups.map(g => (
                     <section key={g.label} className="flex flex-col gap-2" aria-label={g.label}>
                       <h4 className="px-1 pt-1 text-[11px] font-bold uppercase tracking-wide text-slate-400">{g.label}</h4>
-                      {g.items.map(apt => {
-                        const byClinic = endedByClinic(apt);
-                        return (
-                          <QueueCard key={apt.id} apt={apt} onOpen={openEditModal}
-                            badge={<StatusBadge tone={byClinic ? 'red' : 'slate'} label={byClinic ? 'Declined by clinic' : 'Cancelled by patient'} />}
-                            reason={(byClinic ? apt.declineReason : apt.cancellationReason) || apt.cancellationReason || apt.declineReason || 'No reason recorded'} />
-                        );
-                      })}
+                      {g.items.map(apt => (
+                        <QueueCard key={apt.id} apt={apt} onOpen={openEditModal}
+                          badge={<StatusBadge tone="slate" label="Cancelled by patient" />}
+                          reason={apt.cancellationReason || apt.declineReason || 'No reason recorded'} />
+                      ))}
                     </section>
-                  ))];
+                  ));
                 }
 
                 if (pendingOnlineRequests.length === 0) return empty(CheckCircle2, 'All caught up', 'No booking requests are waiting.');
@@ -1574,9 +1473,6 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                   <QueueCard key={apt.id} apt={apt} onOpen={openEditModal}
                     reason={apt.notes} reasonLabel="Patient note"
                     actions={<>
-                      <button type="button" className={BTN_SM.decline} onClick={() => promptDecline(apt)} title="Decline appointment">
-                        <X size={BTN_SM_ICON} /> Decline
-                      </button>
                       <button type="button" className={BTN_SM.primary} onClick={() => promptQuickAction(apt, 'confirmed')} title="Confirm appointment">
                         <UserCheck size={BTN_SM_ICON} /> Confirm
                       </button>
@@ -1909,17 +1805,27 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                   <Field label="Purpose / Service" value={formatServiceType(apt.type, '')} />
                   {isCancelReq && apt.cancellationReason && <Field label="Reason for cancelling" value={apt.cancellationReason} span />}
                   {apt.status === 'cancelled' && reason && <Field label="Cancellation Reason" value={reason} span />}
+                  {(apt.rescheduledAt || apt.previousDate) && (
+                    <Field
+                      label="Rescheduled"
+                      value={`Previously ${formatDateLong(apt.previousDate) || apt.previousDate || 'earlier date'} at ${apt.previousTime || '—'}${apt.rescheduledCount ? ` (${apt.rescheduledCount} time${apt.rescheduledCount === 1 ? '' : 's'})` : ''}`}
+                      span
+                    />
+                  )}
+                  {apt.cancelledAt && (
+                    <Field
+                      label="Cancelled At"
+                      value={`${formatDateLong(apt.cancelledAt)} at ${new Date(apt.cancelledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+                    />
+                  )}
                 </dl>
               </div>
 
-              {/* Footer: Close far left; negative action, then primary on the right */}
+              {/* Footer: Close far left; primary Confirm on the right */}
               <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-2.5 shrink-0">
                 <button type="button" onClick={close} className={BTN.outline}>Close</button>
                 {isPendingReq && (
                   <div className="flex items-center gap-2.5">
-                    <button type="button" className={BTN.decline} onClick={() => { close(); promptDecline(apt); }}>
-                      <X size={BTN_ICON} /> Decline
-                    </button>
                     <button type="button" className={BTN.primary} onClick={() => { close(); promptQuickAction(apt, 'confirmed'); }}>
                       <UserCheck size={BTN_ICON} /> Confirm
                     </button>
@@ -1941,12 +1847,12 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
         );
       })()}
 
-      {/* Confirm / Decline Action Pop-up — shows appointment details before committing */}
+      {/* Confirm Action Pop-up — shows appointment details before committing */}
       {pendingAction && (() => {
         const { apt, status } = pendingAction;
         const isCancelReq = apt.status === 'cancellation_pending';
         const approving = status === 'confirmed' || status === 'accepted';
-        // Declining a cancellation request keeps the appointment (status back to confirmed)
+        // Cancellation requests (legacy)
         const title = isCancelReq
           ? (approving ? 'Keep this appointment?' : 'Approve cancellation?')
           : (approving ? 'Confirm Appointment?' : 'Cancel Appointment?');
@@ -1958,8 +1864,6 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
           : (approving
             ? <>The appointment is <strong>Confirmed</strong> and the patient is notified.</>
             : <>The slot is <strong>released</strong> and the patient is notified.</>);
-        // Ending a visit (approving a cancellation, cancelling) is red, like
-        // "Declined by clinic"; keeping or confirming it is the blue primary.
         const danger = !approving;
         const dialogVariant = danger ? 'danger' : 'neutral';
         const dialogIcon = isCancelReq && !approving ? CalendarX : danger ? AlertCircle : UserCheck;
@@ -1990,51 +1894,6 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
           />
         );
       })()}
-
-      {/* Decline Appointment: a confirmation that also takes the reason */}
-      {declineModalOpen && declineTargetApt && (
-        <ConfirmDialog
-          variant="danger"
-          icon={AlertCircle}
-          title="Decline this appointment?"
-          subtitle="Booking request"
-          message={<>The booking request is <strong>declined</strong>.</>}
-          boxClassName="max-w-[580px]"
-          note="The reason is shown in the app's appointment details."
-          confirmLabel="Decline appointment"
-          busy={declineSaving}
-          busyLabel="Declining…"
-          confirmDisabled={!declineReason.trim()}
-          onConfirm={handleConfirmDecline}
-          onCancel={() => setDeclineModalOpen(false)}
-        >
-          {/* Radio-card grid: equal-width options in two columns, plus
-              "Other", which clears the text box and focuses it. Picking an
-              option fills the reason; editing the text keeps the choice.
-              Only colours change between states (same 1px border, padding,
-              weight and icon box), so the text never shifts. */}
-          {/* The subject in one compact row: who, then when. */}
-          <div className="mt-3 mb-4 rounded-xl bg-slate-50 border border-slate-100 px-3.5 py-2 flex items-center justify-between gap-4 text-[13px]">
-            <span className="font-semibold text-slate-800 truncate">{declineTargetApt.name}</span>
-            <span className="text-slate-500 shrink-0">{formatDateMedium(declineTargetApt.date)} · {declineTargetApt.time || '—'}</span>
-          </div>
-          <label htmlFor="decline-reason" className="block text-[13px] font-bold text-slate-800 mb-1.5">
-            Reason for declining <span className="text-rose-600">*</span>
-          </label>
-          <textarea
-            id="decline-reason"
-            rows={3}
-            data-gramm="false"
-            data-gramm_editor="false"
-            data-enable-grammarly="false"
-            value={declineReason}
-            onChange={e => setDeclineReason(e.target.value)}
-            placeholder="Explain why this appointment cannot be accepted…"
-            className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm text-slate-900 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/15 resize-y"
-            style={{ fontFamily: 'inherit', lineHeight: 1.45 }}
-          />
-        </ConfirmDialog>
-      )}
 
     </div>
   );

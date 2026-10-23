@@ -136,8 +136,16 @@ type FirestoreAppt = {
   note?: string;
   notes?: string;
   cancellationReason?: string;
+  cancelReason?: string;
+  cancelledAt?: number;
+  cancelledBy?: string;
   declineReason?: string;
   declinedAt?: number;
+  rescheduledAt?: number;
+  rescheduledCount?: number;
+  previousDate?: string;
+  previousTime?: string;
+  rescheduleHistory?: { previousDate: string; previousTime: string; newDate: string; newTime: string; rescheduledAt: number }[];
   age: string;
   gender: string;
   address: string;
@@ -237,50 +245,85 @@ export default function AppointmentsScreen() {
   // date -> hours taken, across the month currently on screen.
   const [monthSlotCounts, setMonthSlotCounts] = useState<Record<string, number>>({});
 
-  // ── Appointment Details & Cancellation Modals ─────────────────────────────
+  // ── Appointment Details & Modals ──────────────────────────────────────────
   const [selectedApptDetail, setSelectedApptDetail] = useState<FirestoreAppt | null>(null);
-  const [cancellationReasonInput, setCancellationReasonInput] = useState('');
-  const [cancelReasonError, setCancelReasonError] = useState('');
-  // Android: KeyboardAvoidingView 'height' inside a translucent Modal fights
-  // the window inset and jitters. Reanimated reads the keyboard natively and
-  // lifts the sheet smoothly instead (same approach as chat.tsx). iOS keeps
-  // KeyboardAvoidingView 'padding'.
-  const detailKeyboard = useAnimatedKeyboard({ isStatusBarTranslucentAndroid: true, isNavigationBarTranslucentAndroid: true });
-  const detailKeyboardLift = useAnimatedStyle(() => ({
-    paddingBottom: Platform.OS === 'android' ? detailKeyboard.height.value : 0,
-  }));
+
+  // ── Direct Cancellation ───────────────────────────────────────────────────
+  const [cancellingAppt, setCancellingAppt] = useState<FirestoreAppt | null>(null);
+  const [cancelReasonInput, setCancelReasonInput] = useState('');
   const [submittingCancellation, setSubmittingCancellation] = useState(false);
 
-  // Reason is typed inline in the details modal (no second pop-up).
-  const handleRequestCancellation = async () => {
-    const target = selectedApptDetail;
-    if (!target) return;
-    if (!cancellationReasonInput.trim()) {
-      setCancelReasonError('Enter a reason so the clinic can review your request');
+  const openCancelModal = (appt: FirestoreAppt) => {
+    if (appt.status === 'cancelled' || appt.status === 'done' || appt.date < todayKey) {
+      showAlert({
+        type: 'warning',
+        title: 'Cannot Cancel',
+        message: 'This appointment is in the past or has already concluded and cannot be cancelled.',
+        primaryButtonText: 'OK',
+        onPrimaryPress: hideAlert,
+      });
       return;
     }
+    setCancelReasonInput('');
+    setCancellingAppt(appt);
+  };
+
+  const handleDirectCancel = async () => {
+    const target = cancellingAppt;
+    if (!target) return;
+    if (target.status === 'cancelled' || target.status === 'done' || target.date < todayKey) {
+      showAlert({
+        type: 'warning',
+        title: 'Cannot Cancel',
+        message: 'This appointment cannot be cancelled.',
+        primaryButtonText: 'OK',
+        onPrimaryPress: hideAlert,
+      });
+      setCancellingAppt(null);
+      return;
+    }
+
     setSubmittingCancellation(true);
     try {
-      await updateDoc(doc(db, 'appointments', target.id), {
-        status: 'cancellation_pending',
-        cancellationReason: cancellationReasonInput.trim(),
-        cancellationRequestedAt: Date.now(),
-        updatedAt: Date.now(),
+      const slotRef = doc(db, 'appointmentSlots', slotId(target.date, target.time));
+      const apptRef = doc(db, 'appointments', target.id);
+      await runTransaction(db, async tx => {
+        const aptDoc = await tx.get(apptRef);
+        if (!aptDoc.exists()) throw new Error('Appointment not found');
+        const d = aptDoc.data();
+        if (d.status === 'cancelled' || d.status === 'done' || d.date < todayKey) {
+          throw new Error('This appointment can no longer be cancelled.');
+        }
+        const slotDoc = await tx.get(slotRef);
+        if (slotDoc.exists()) {
+          tx.delete(slotRef);
+        }
+        const reason = cancelReasonInput.trim();
+        tx.update(apptRef, {
+          status: 'cancelled',
+          cancelledBy: 'patient',
+          cancelledAt: Date.now(),
+          cancellationReason: reason || 'Cancelled by patient',
+          updatedAt: Date.now(),
+        });
       });
+
+      setCancellingAppt(null);
       setSelectedApptDetail(null);
-      setCancellationReasonInput('');
+      setCancelReasonInput('');
       showAlert({
         type: 'success',
-        title: 'Cancellation Requested',
-        message: 'Your request was sent to the clinic. The appointment stays booked until staff approve the cancellation.',
+        title: 'Appointment Cancelled',
+        message: 'Your appointment has been cancelled and the time slot was freed immediately.',
         primaryButtonText: 'OK',
         onPrimaryPress: hideAlert,
       });
     } catch (e: any) {
+      console.error('Cancellation error:', e);
       showAlert({
         type: 'error',
-        title: 'Request Failed',
-        message: e?.message || 'Could not submit the cancellation request. Please try again.',
+        title: 'Cancellation Failed',
+        message: e?.message || 'Could not cancel the appointment. Please try again.',
         primaryButtonText: 'OK',
         onPrimaryPress: hideAlert,
       });
@@ -288,6 +331,192 @@ export default function AppointmentsScreen() {
       setSubmittingCancellation(false);
     }
   };
+
+  // ── Reschedule Flow ───────────────────────────────────────────────────────
+  const [reschedulingAppt, setReschedulingAppt] = useState<FirestoreAppt | null>(null);
+  const [rescheduleStep, setRescheduleStep] = useState<'calendar' | 'slots' | 'confirm'>('calendar');
+  const [rescheduleYear, setRescheduleYear] = useState(now.getFullYear());
+  const [rescheduleMonth, setRescheduleMonth] = useState(now.getMonth());
+  const [rescheduleDate, setRescheduleDate] = useState<string | null>(null);
+  const [rescheduleTime, setRescheduleTime] = useState<string | null>(null);
+  const [rescheduleNotes, setRescheduleNotes] = useState('');
+  const [rescheduleTakenTimes, setRescheduleTakenTimes] = useState<string[]>([]);
+  const [rescheduleMonthSlotCounts, setRescheduleMonthSlotCounts] = useState<Record<string, number>>({});
+  const [submittingReschedule, setSubmittingReschedule] = useState(false);
+
+  const openReschedule = (appt: FirestoreAppt) => {
+    if (appt.status === 'cancelled' || appt.status === 'done' || appt.date < todayKey) {
+      showAlert({
+        type: 'warning',
+        title: 'Cannot Reschedule',
+        message: 'Past or cancelled appointments cannot be rescheduled.',
+        primaryButtonText: 'OK',
+        onPrimaryPress: hideAlert,
+      });
+      return;
+    }
+    setReschedulingAppt(appt);
+    setRescheduleStep('calendar');
+    setRescheduleYear(now.getFullYear());
+    setRescheduleMonth(now.getMonth());
+    setRescheduleDate(null);
+    setRescheduleTime(null);
+    setRescheduleNotes(appt.notes || '');
+  };
+
+  // Reschedule calendar month occupancy
+  useEffect(() => {
+    if (!reschedulingAppt) return;
+    const mStart = toKey(rescheduleYear, rescheduleMonth, 1);
+    const mEnd   = toKey(rescheduleYear, rescheduleMonth, daysInMonth(rescheduleYear, rescheduleMonth));
+    const q = query(
+      collection(db, 'appointmentSlots'),
+      where('date', '>=', mStart),
+      where('date', '<=', mEnd),
+    );
+    return onSnapshot(q, snap => {
+      const counts: Record<string, number> = {};
+      snap.docs.forEach(d => {
+        const date = (d.data() as any).date;
+        if (date) counts[date] = (counts[date] || 0) + 1;
+      });
+      setRescheduleMonthSlotCounts(counts);
+    }, err => {
+      console.error('Reschedule month slot listener error:', err);
+      setRescheduleMonthSlotCounts({});
+    });
+  }, [reschedulingAppt, rescheduleYear, rescheduleMonth]);
+
+  // Reschedule slot occupancy on selected date
+  useEffect(() => {
+    if (!rescheduleDate || !reschedulingAppt) {
+      setRescheduleTakenTimes([]);
+      return;
+    }
+    const q = query(collection(db, 'appointmentSlots'), where('date', '==', rescheduleDate));
+    return onSnapshot(q, snap => {
+      const times = snap.docs
+        .map(d => (d.data() as any).time)
+        .filter(t => Boolean(t) && !(rescheduleDate === reschedulingAppt.date && t === reschedulingAppt.time));
+      setRescheduleTakenTimes(times);
+    }, err => {
+      console.error('Reschedule slot availability listener error:', err);
+      setRescheduleTakenTimes([]);
+    });
+  }, [rescheduleDate, reschedulingAppt]);
+
+  const handleSaveReschedule = async () => {
+    const target = reschedulingAppt;
+    if (!target || !rescheduleDate || !rescheduleTime) return;
+
+    if (rescheduleDate === target.date && rescheduleTime === target.time) {
+      showAlert({
+        type: 'warning',
+        title: 'Same Time Selected',
+        message: 'You have chosen your current time slot. Please pick a different date or time.',
+        primaryButtonText: 'Choose Another Time',
+        onPrimaryPress: hideAlert,
+      });
+      return;
+    }
+
+    setSubmittingReschedule(true);
+    try {
+      const oldSlotRef = doc(db, 'appointmentSlots', slotId(target.date, target.time));
+      const newSlotRef = doc(db, 'appointmentSlots', slotId(rescheduleDate, rescheduleTime));
+      const apptRef = doc(db, 'appointments', target.id);
+
+      await runTransaction(db, async tx => {
+        const newSlotDoc = await tx.get(newSlotRef);
+        if (newSlotDoc.exists()) {
+          throw new Error('SLOT_TAKEN');
+        }
+
+        const apptDoc = await tx.get(apptRef);
+        if (!apptDoc.exists()) throw new Error('Appointment not found');
+        const apptData = apptDoc.data();
+        if (apptData.status === 'cancelled' || apptData.status === 'done') {
+          throw new Error('This appointment can no longer be rescheduled.');
+        }
+
+        const oldSlotDoc = await tx.get(oldSlotRef);
+        if (oldSlotDoc.exists()) {
+          tx.delete(oldSlotRef);
+        }
+
+        tx.set(newSlotRef, {
+          date: rescheduleDate,
+          time: rescheduleTime,
+          heldBy: user?.uid || target.userId,
+          createdAt: Date.now(),
+        });
+
+        const historyItem = {
+          previousDate: target.date,
+          previousTime: target.time,
+          newDate: rescheduleDate,
+          newTime: rescheduleTime,
+          rescheduledAt: Date.now(),
+        };
+        const prevCount = target.rescheduledCount || 0;
+        const prevHistory = target.rescheduleHistory || [];
+
+        tx.update(apptRef, {
+          date: rescheduleDate,
+          time: rescheduleTime,
+          status: 'pending',
+          notes: rescheduleNotes.trim().slice(0, NOTE_MAX),
+          previousDate: target.date,
+          previousTime: target.time,
+          rescheduledAt: Date.now(),
+          rescheduledCount: prevCount + 1,
+          rescheduleHistory: [...prevHistory, historyItem],
+          updatedAt: Date.now(),
+        });
+      });
+
+      setReschedulingAppt(null);
+      setSelectedApptDetail(null);
+      setRescheduleDate(null);
+      setRescheduleTime(null);
+
+      showAlert({
+        type: 'success',
+        title: 'Appointment Rescheduled',
+        message: "Your new time is waiting for the clinic's confirmation.",
+        primaryButtonText: 'OK',
+        onPrimaryPress: hideAlert,
+      });
+    } catch (e: any) {
+      console.error('Reschedule transaction error:', e);
+      if (e?.message === 'SLOT_TAKEN') {
+        setRescheduleTime(null);
+        setRescheduleStep('slots');
+        showAlert({
+          type: 'warning',
+          title: 'Time Slot Taken',
+          message: 'That time was just taken. Please pick another.',
+          primaryButtonText: 'Choose Another Time',
+          onPrimaryPress: hideAlert,
+        });
+      } else {
+        showAlert({
+          type: 'error',
+          title: 'Reschedule Failed',
+          message: e?.message || 'Could not reschedule appointment. Please try again.',
+          primaryButtonText: 'OK',
+          onPrimaryPress: hideAlert,
+        });
+      }
+    } finally {
+      setSubmittingReschedule(false);
+    }
+  };
+
+  const detailKeyboard = useAnimatedKeyboard({ isStatusBarTranslucentAndroid: true, isNavigationBarTranslucentAndroid: true });
+  const detailKeyboardLift = useAnimatedStyle(() => ({
+    paddingBottom: Platform.OS === 'android' ? detailKeyboard.height.value : 0,
+  }));
 
   // ── Patient details form modal ────────────────────────────────────────────
   const [showDetailsForm, setShowDetailsForm] = useState(false);
@@ -695,23 +924,7 @@ export default function AppointmentsScreen() {
 
   // ─────────────────────────────────────────────────────────────────────────
   const closeAppointmentDetail = () => {
-    if (cancellationReasonInput.trim()) {
-      showAlert({
-        type: 'warning',
-        title: 'Discard Changes?',
-        message: 'You have typed a cancellation reason. Are you sure you want to close without submitting?',
-        primaryButtonText: 'Discard',
-        onPrimaryPress: () => {
-          hideAlert();
-          setSelectedApptDetail(null);
-          setCancellationReasonInput('');
-        },
-        secondaryButtonText: 'Keep Editing',
-        onSecondaryPress: hideAlert,
-      });
-    } else {
-      setSelectedApptDetail(null);
-    }
+    setSelectedApptDetail(null);
   };
 
   return (
@@ -904,9 +1117,9 @@ export default function AppointmentsScreen() {
                         <Tap
                           style={s.cancelPill}
                           hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
-                          onPress={() => { setCancellationReasonInput(''); setSelectedApptDetail(appt); }}
+                          onPress={() => openCancelModal(appt)}
                           accessibilityRole="button"
-                          accessibilityLabel="Request cancellation"
+                          accessibilityLabel="Cancel appointment"
                         >
                           <Ionicons name="close-circle-outline" size={13} color={C.navy}/>
                           <Text style={s.cancelPillTxt}>Cancel</Text>
@@ -999,7 +1212,7 @@ export default function AppointmentsScreen() {
                           <View style={[s.adminNoteBox, { backgroundColor: '#FEF2F2', borderColor: '#FECACA', borderWidth: 0.5, marginTop: 4 }]}>
                             <Ionicons name="alert-circle-outline" size={11} color={C.red}/>
                             <Text style={[s.adminNoteTxt, { color: '#B91C1C', fontWeight: '600' }]} numberOfLines={2}>
-                              {appt.declineReason ? `Declined by clinic: ${appt.declineReason}` : `Reason: ${appt.cancellationReason}`}
+                              Reason: {appt.cancellationReason || appt.declineReason}
                             </Text>
                           </View>
                         ) : appt.note ? (
@@ -1349,7 +1562,7 @@ export default function AppointmentsScreen() {
       </Modal>
 
       {/* ══ APPOINTMENT DETAIL MODAL ═════════════════════════════════════════ */}
-      <Modal visible={!!selectedApptDetail} transparent animationType="fade" statusBarTranslucent onRequestClose={closeAppointmentDetail} onShow={() => { setCancellationReasonInput(''); setCancelReasonError(''); }}>
+      <Modal visible={!!selectedApptDetail} transparent animationType="fade" statusBarTranslucent onRequestClose={closeAppointmentDetail}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
           <TouchableWithoutFeedback onPress={closeAppointmentDetail}>
             <Animated.View style={[sm.overlay, detailKeyboardLift]}>
@@ -1401,19 +1614,33 @@ export default function AppointmentsScreen() {
                           ) : null}
                         </View>
 
-                        {(selectedApptDetail.declineReason || (selectedApptDetail.status === 'cancelled' && selectedApptDetail.cancellationReason)) ? (
-                          // noteBox is a row layout; this card overrides it to a column so the
-                          // reason sits below its label and wraps within the card width.
+                        {selectedApptDetail.previousDate ? (
+                          <View style={[s.noteBox, { backgroundColor: C.navyFaint, marginTop: verticalScale(12) }]}>
+                            <Ionicons name="swap-horizontal" size={16} color={C.navy} />
+                            <Text style={[s.noteTxt, { color: C.navy, fontWeight: '700' }]}>
+                              Rescheduled from: {displayKey(selectedApptDetail.previousDate)} · {selectedApptDetail.previousTime}
+                            </Text>
+                          </View>
+                        ) : null}
+
+                        {selectedApptDetail.status === 'cancelled' ? (
                           <View style={[s.noteBox, { flexDirection: 'column', alignItems: 'stretch', gap: verticalScale(4), backgroundColor: '#FEF2F2', borderColor: '#FCA5A5', borderWidth: 1, marginTop: verticalScale(12) }]}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(6) }}>
                               <Ionicons name="close-circle" size={16} color="#DC2626" />
                               <Text style={{ flexShrink: 1, fontSize: moderateScale(12), fontWeight: '800', color: '#991B1B' }}>
-                                {selectedApptDetail.declineReason ? 'Reason for Decline' : 'Cancellation Reason'}
+                                {selectedApptDetail.cancelledBy === 'patient' ? 'Cancelled by patient' : selectedApptDetail.declineReason ? 'Declined by clinic' : 'Cancelled'}
                               </Text>
                             </View>
-                            <Text style={{ width: '100%', flexShrink: 1, fontSize: moderateScale(13), color: '#7F1D1D', fontWeight: '600', lineHeight: moderateScale(18) }}>
-                              {selectedApptDetail.declineReason || selectedApptDetail.cancellationReason}
-                            </Text>
+                            {(selectedApptDetail.declineReason || selectedApptDetail.cancellationReason) ? (
+                              <Text style={{ width: '100%', flexShrink: 1, fontSize: moderateScale(13), color: '#7F1D1D', fontWeight: '600', lineHeight: moderateScale(18) }}>
+                                {selectedApptDetail.declineReason || selectedApptDetail.cancellationReason}
+                              </Text>
+                            ) : null}
+                            {selectedApptDetail.cancelledAt ? (
+                              <Text style={{ fontSize: moderateScale(11), color: '#991B1B', marginTop: verticalScale(2) }}>
+                                Time cancelled: {new Date(selectedApptDetail.cancelledAt).toLocaleString()}
+                              </Text>
+                            ) : null}
                           </View>
                         ) : selectedApptDetail.cancellationReason ? (
                           <View style={[s.noteBox, { backgroundColor: C.orangeFaint, marginTop: verticalScale(12) }]}>
@@ -1440,50 +1667,36 @@ export default function AppointmentsScreen() {
                             <Text style={s.noteTxt}>Clinic Note: {selectedApptDetail.note}</Text>
                           </View>
                         ) : null}
-
-                        {(selectedApptDetail.status === 'pending' || selectedApptDetail.status === 'confirmed' || selectedApptDetail.status === 'accepted') && (
-                          <View style={{ marginTop: verticalScale(16) }}>
-                            <Text style={{ fontSize: moderateScale(13), fontWeight: '700', color: C.charcoal, marginBottom: verticalScale(8) }}>
-                              Reason for Cancellation <Text style={{ color: C.red }}>*</Text>
-                            </Text>
-                            <TextInput
-                              style={[df.input, df.inputMulti, { minHeight: verticalScale(76) }, !!cancelReasonError && df.inputError]}
-                              placeholder="e.g. Schedule conflict, illness, emergency..."
-                              placeholderTextColor={C.muted}
-                              multiline
-                              numberOfLines={3}
-                              value={cancellationReasonInput}
-                              onChangeText={v => { setCancellationReasonInput(v); if (cancelReasonError) setCancelReasonError(''); }}
-                            />
-                            {cancelReasonError ? <Text style={df.errorTxt}>{cancelReasonError}</Text> : null}
-                            <Text style={{ fontSize: moderateScale(11), color: C.muted, marginTop: verticalScale(6), fontStyle: 'italic' }}>
-                              Sent to the clinic for approval. The appointment stays booked until staff approve it.
-                            </Text>
-                          </View>
-                        )}
                       </ScrollView>
 
-                      <View style={sm.footer}>
-                        <Tap style={sm.cancelBtn} onPress={() => setSelectedApptDetail(null)}>
-                          <Text style={sm.cancelTxt}>Close</Text>
-                        </Tap>
-                        {(selectedApptDetail.status === 'pending' || selectedApptDetail.status === 'confirmed' || selectedApptDetail.status === 'accepted') && (
+                      {((selectedApptDetail.status === 'pending' || selectedApptDetail.status === 'confirmed' || selectedApptDetail.status === 'accepted') && selectedApptDetail.date >= todayKey) ? (
+                        <View style={sm.footer}>
                           <Tap
-                            style={[sm.confirmBtn, { backgroundColor: C.navy }, submittingCancellation && { opacity: 0.6 }]}
+                            style={sm.secondaryBtn}
                             activeOpacity={0.85}
                             accessibilityRole="button"
-                            accessibilityState={{ disabled: submittingCancellation }}
-                            onPress={handleRequestCancellation}
-                            disabled={submittingCancellation}
+                            onPress={() => openReschedule(selectedApptDetail)}
                           >
-                            {submittingCancellation ? (
-                              <ActivityIndicator color={C.white} size="small" />
-                            ) : (
-                              <Text style={sm.confirmTxt}>Request Cancellation</Text>
-                            )}
+                            <Ionicons name="calendar-outline" size={14} color={C.navy} style={{ marginRight: scale(4) }} />
+                            <Text style={sm.secondaryTxt}>Reschedule</Text>
                           </Tap>
-                        )}
-                      </View>
+                          <Tap
+                            style={[sm.confirmBtn, { flex: 1, backgroundColor: C.navy }]}
+                            activeOpacity={0.85}
+                            accessibilityRole="button"
+                            onPress={() => openCancelModal(selectedApptDetail)}
+                          >
+                            <Ionicons name="close-circle-outline" size={14} color={C.white} style={{ marginRight: scale(4) }} />
+                            <Text style={sm.confirmTxt}>Cancel Appointment</Text>
+                          </Tap>
+                        </View>
+                      ) : (
+                        <View style={sm.footer}>
+                          <Tap style={[sm.cancelBtn, { flex: 1 }]} onPress={() => setSelectedApptDetail(null)}>
+                            <Text style={sm.cancelTxt}>Close</Text>
+                          </Tap>
+                        </View>
+                      )}
                     </>
                   )}
                 </View>
@@ -1491,6 +1704,373 @@ export default function AppointmentsScreen() {
             </Animated.View>
           </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ══ CANCEL CONFIRMATION MODAL ═════════════════════════════════════════ */}
+      <Modal visible={!!cancellingAppt} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setCancellingAppt(null)}>
+        <TouchableWithoutFeedback onPress={() => setCancellingAppt(null)}>
+          <View style={sm.overlay}>
+            <TouchableWithoutFeedback onPress={e => e.stopPropagation()}>
+              <View style={[sm.card, { maxWidth: scale(380) }]}>
+                <LinearGradient colors={[C.navy, C.charcoal]} style={sm.header}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={sm.headerTitle}>Cancel this appointment?</Text>
+                    {cancellingAppt && (
+                      <Text style={sm.headerSub}>{displayKey(cancellingAppt.date)} · {cancellingAppt.time}</Text>
+                    )}
+                  </View>
+                  <Tap onPress={() => setCancellingAppt(null)} style={sm.closeBtn}>
+                    <Ionicons name="close" size={20} color={C.white}/>
+                  </Tap>
+                </LinearGradient>
+
+                <View style={sm.body}>
+                  <Text style={{ fontSize: moderateScale(14), color: C.charcoal, fontWeight: '600', lineHeight: moderateScale(20), marginBottom: verticalScale(14) }}>
+                    Cancel this appointment? Your time slot will be freed immediately and another patient can book it.
+                  </Text>
+
+                  <Text style={{ fontSize: moderateScale(12), fontWeight: '700', color: C.slate, marginBottom: verticalScale(6) }}>
+                    Reason for cancellation (optional):
+                  </Text>
+                  <TextInput
+                    style={[df.input, df.inputMulti, { minHeight: verticalScale(70) }]}
+                    placeholder="e.g. Schedule conflict, feeling better..."
+                    placeholderTextColor={C.muted}
+                    multiline
+                    numberOfLines={3}
+                    maxLength={300}
+                    value={cancelReasonInput}
+                    onChangeText={setCancelReasonInput}
+                  />
+                  <Text style={{ fontSize: moderateScale(11), color: C.muted, textAlign: 'right', marginTop: verticalScale(4) }}>
+                    {cancelReasonInput.length}/300
+                  </Text>
+                </View>
+
+                <View style={sm.footer}>
+                  <Tap
+                    style={[sm.cancelBtn, { flex: 1 }]}
+                    onPress={() => setCancellingAppt(null)}
+                    disabled={submittingCancellation}
+                  >
+                    <Text style={sm.cancelTxt}>Keep appointment</Text>
+                  </Tap>
+                  <Tap
+                    style={[sm.confirmBtn, { flex: 1, backgroundColor: '#DC2626' }, submittingCancellation && { opacity: 0.6 }]}
+                    onPress={handleDirectCancel}
+                    disabled={submittingCancellation}
+                  >
+                    {submittingCancellation ? (
+                      <ActivityIndicator color={C.white} size="small" />
+                    ) : (
+                      <Text style={sm.confirmTxt}>Cancel appointment</Text>
+                    )}
+                  </Tap>
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
+      {/* ══ RESCHEDULE MODAL ═════════════════════════════════════════════════ */}
+      <Modal
+        visible={!!reschedulingAppt}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => {
+          if (rescheduleStep !== 'calendar' || rescheduleDate) {
+            showAlert({
+              type: 'warning',
+              title: 'Discard Reschedule?',
+              message: 'Are you sure you want to exit without saving your new appointment time?',
+              primaryButtonText: 'Discard',
+              onPrimaryPress: () => {
+                hideAlert();
+                setReschedulingAppt(null);
+              },
+              secondaryButtonText: 'Keep Editing',
+              onSecondaryPress: hideAlert,
+            });
+          } else {
+            setReschedulingAppt(null);
+          }
+        }}
+      >
+        <TouchableWithoutFeedback
+          onPress={() => {
+            if (rescheduleStep !== 'calendar' || rescheduleDate) {
+              showAlert({
+                type: 'warning',
+                title: 'Discard Reschedule?',
+                message: 'Are you sure you want to exit without saving your new appointment time?',
+                primaryButtonText: 'Discard',
+                onPrimaryPress: () => {
+                  hideAlert();
+                  setReschedulingAppt(null);
+                },
+                secondaryButtonText: 'Keep Editing',
+                onSecondaryPress: hideAlert,
+              });
+            } else {
+              setReschedulingAppt(null);
+            }
+          }}
+        >
+          <View style={sm.overlay}>
+            <TouchableWithoutFeedback onPress={e => e.stopPropagation()}>
+              <View style={[sm.card, { maxHeight: '90%' }]}>
+                {/* Header */}
+                <LinearGradient colors={[C.navy, C.charcoal]} style={sm.header}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={sm.headerTitle}>
+                      {rescheduleStep === 'calendar' ? 'Reschedule Appointment' : rescheduleStep === 'slots' ? 'Pick a New Time' : 'Confirm Reschedule'}
+                    </Text>
+                    <Text style={sm.headerSub}>
+                      {rescheduleStep === 'calendar' ? 'Select a new weekend date' : rescheduleStep === 'slots' ? (rescheduleDate ? displayKey(rescheduleDate) : '') : 'Review and confirm changes'}
+                    </Text>
+                  </View>
+                  <Tap onPress={() => setReschedulingAppt(null)} style={sm.closeBtn}>
+                    <Ionicons name="close" size={20} color={C.white}/>
+                  </Tap>
+                </LinearGradient>
+
+                {/* Body depends on step */}
+                {rescheduleStep === 'calendar' && (
+                  <View style={sm.body}>
+                    {/* Month Header */}
+                    <View style={s.calHeader}>
+                      <Tap
+                        onPress={() => {
+                          const isCurrent = rescheduleYear === now.getFullYear() && rescheduleMonth === now.getMonth();
+                          if (isCurrent) return;
+                          if (rescheduleMonth === 0) { setRescheduleYear(y => y - 1); setRescheduleMonth(11); }
+                          else setRescheduleMonth(m => m - 1);
+                        }}
+                        style={[s.calNavBtn, (rescheduleYear === now.getFullYear() && rescheduleMonth === now.getMonth()) && s.calNavBtnOff]}
+                        disabled={rescheduleYear === now.getFullYear() && rescheduleMonth === now.getMonth()}
+                      >
+                        <Ionicons name="chevron-back" size={18} color={(rescheduleYear === now.getFullYear() && rescheduleMonth === now.getMonth()) ? '#CBD5E1' : C.charcoal} />
+                      </Tap>
+                      <Text style={s.calMonthTxt}>
+                        {MONTH_NAMES[rescheduleMonth]} {rescheduleYear}
+                      </Text>
+                      <Tap
+                        onPress={() => {
+                          if (rescheduleMonth === 11) { setRescheduleYear(y => y + 1); setRescheduleMonth(0); }
+                          else setRescheduleMonth(m => m + 1);
+                        }}
+                        style={s.calNavBtn}
+                      >
+                        <Ionicons name="chevron-forward" size={18} color={C.charcoal} />
+                      </Tap>
+                    </View>
+
+                    {/* Weekday labels */}
+                    <View style={s.calWeekRow}>
+                      {DAY_NAMES.map(d => (
+                        <View key={d} style={s.calWeekCell}>
+                          <Text style={s.calWeekTxt}>{d}</Text>
+                        </View>
+                      ))}
+                    </View>
+
+                    {/* Day Grid */}
+                    <View style={s.calGrid}>
+                      {Array.from({ length: firstWeekday(rescheduleYear, rescheduleMonth) }, (_, i) => (
+                        <View key={`empty-${i}`} style={s.calCell} />
+                      ))}
+                      {Array.from({ length: daysInMonth(rescheduleYear, rescheduleMonth) }, (_, i) => {
+                        const day = i + 1;
+                        const key = toKey(rescheduleYear, rescheduleMonth, day);
+                        const isWeekend = isWeekendDate(key);
+                        const isPast = key < todayKey;
+                        const isCurrentApptDate = reschedulingAppt?.date === key;
+                        const hoursTaken = rescheduleMonthSlotCounts[key] || 0;
+                        const isFull = hoursTaken >= TIME_SLOTS.length && !isCurrentApptDate;
+                        const tappable = isWeekend && !isPast && !isFull;
+
+                        return (
+                          <Tap
+                            key={key}
+                            style={s.calCell}
+                            disabled={!tappable}
+                            onPress={() => {
+                              setRescheduleDate(key);
+                              setRescheduleStep('slots');
+                            }}
+                          >
+                            <View style={[
+                              s.calTile,
+                              isCurrentApptDate && { backgroundColor: C.navyFaint, borderColor: C.navy, borderWidth: 1.5 },
+                              tappable && !isCurrentApptDate && { borderColor: C.navy, borderWidth: 1 },
+                            ]}>
+                              <Text style={[
+                                s.calDayTxt,
+                                isPast && s.calDayPast,
+                                !isPast && !isWeekend && s.calDayNoSlot,
+                                tappable && s.calDayOpen,
+                                isFull && s.calDayFull,
+                              ]}>
+                                {day}
+                              </Text>
+                            </View>
+                          </Tap>
+                        );
+                      })}
+                    </View>
+
+                    <View style={[s.noteBox, { marginTop: verticalScale(14) }]}>
+                      <Ionicons name="information-circle" size={16} color={C.shapeBlue}/>
+                      <Text style={s.noteTxt}>Weekend slots only (Saturday & Sunday). Weekdays operate on walk-in basis.</Text>
+                    </View>
+                  </View>
+                )}
+
+                {rescheduleStep === 'slots' && (
+                  <View style={sm.body}>
+                    <View style={s.timeGrid}>
+                      {TIME_SLOTS.map(time => {
+                        const isCurrentSlot = reschedulingAppt?.date === rescheduleDate && reschedulingAppt?.time === time;
+                        const isTaken = rescheduleTakenTimes.includes(time);
+                        const disabled = isTaken || isCurrentSlot;
+                        const active = rescheduleTime === time;
+
+                        return (
+                          <Tap
+                            key={time}
+                            style={[
+                              s.timeChip,
+                              active && s.timeChipActive,
+                              disabled && s.timeChipOff,
+                              isCurrentSlot && { borderColor: C.navy, borderWidth: 1.5, backgroundColor: C.navyFaint },
+                            ]}
+                            disabled={disabled}
+                            onPress={() => setRescheduleTime(time)}
+                          >
+                            {active && <LinearGradient colors={[C.navy, C.charcoal]} style={[StyleSheet.absoluteFill, { borderRadius: scale(14) }]}/>}
+                            <Ionicons name={active ? 'time' : 'time-outline'} size={12} color={active ? C.white : isCurrentSlot ? C.navy : disabled ? '#CBD5E1' : C.slate}/>
+                            <Text
+                              numberOfLines={1}
+                              adjustsFontSizeToFit
+                              style={[
+                                s.timeTxt,
+                                active && { color: C.white, fontWeight: '800' },
+                                disabled && !isCurrentSlot && { color: '#CBD5E1', textDecorationLine: 'line-through' },
+                                isCurrentSlot && { color: C.navy, fontWeight: '700' },
+                              ]}
+                            >
+                              {time}
+                            </Text>
+                            {isCurrentSlot ? (
+                              <View style={sm.currentPill}>
+                                <Text style={sm.currentPillTxt}>Current</Text>
+                              </View>
+                            ) : isTaken ? (
+                              <View style={s.fullPill}>
+                                <Text style={s.fullPillTxt}>Full</Text>
+                              </View>
+                            ) : null}
+                          </Tap>
+                        );
+                      })}
+                    </View>
+
+                    <View style={sm.footer}>
+                      <Tap style={sm.cancelBtn} onPress={() => setRescheduleStep('calendar')}>
+                        <Text style={sm.cancelTxt}>Back</Text>
+                      </Tap>
+                      <Tap
+                        style={[sm.confirmBtn, !rescheduleTime && { opacity: 0.4 }]}
+                        disabled={!rescheduleTime}
+                        onPress={() => setRescheduleStep('confirm')}
+                      >
+                        <Text style={sm.confirmTxt}>Next</Text>
+                      </Tap>
+                    </View>
+                  </View>
+                )}
+
+                {rescheduleStep === 'confirm' && (
+                  <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={sm.body}>
+                    <View style={s.summaryCard}>
+                      <Text style={{ fontSize: moderateScale(15), fontWeight: '800', color: C.charcoal, marginBottom: verticalScale(10) }}>
+                        {apptTypeLabel(reschedulingAppt?.type)}
+                      </Text>
+
+                      <View style={[s.summaryRow, { marginBottom: verticalScale(8) }]}>
+                        <Ionicons name="time-outline" size={15} color={C.slate} style={{ marginRight: scale(8) }} />
+                        <Text style={{ fontSize: moderateScale(13), color: C.slate }}>
+                          <Text style={{ fontWeight: '700' }}>Current Time: </Text>
+                          {reschedulingAppt && displayKey(reschedulingAppt.date)} · {reschedulingAppt?.time}
+                        </Text>
+                      </View>
+
+                      <View style={[s.summaryRow, { marginBottom: verticalScale(8) }]}>
+                        <Ionicons name="calendar-outline" size={15} color={C.navy} style={{ marginRight: scale(8) }} />
+                        <Text style={{ fontSize: moderateScale(13), color: C.navy, fontWeight: '700' }}>
+                          <Text style={{ fontWeight: '800' }}>New Time: </Text>
+                          {rescheduleDate && displayKey(rescheduleDate)} · {rescheduleTime}
+                        </Text>
+                      </View>
+
+                      <View style={[s.summaryRow, { marginTop: verticalScale(4) }]}>
+                        <Ionicons name="person-outline" size={15} color={C.slate} style={{ marginRight: scale(8) }} />
+                        <Text style={{ fontSize: moderateScale(13), color: C.slate }}>
+                          Patient: {reschedulingAppt?.name}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={[s.noteBox, { marginTop: verticalScale(12), backgroundColor: C.orangeFaint, borderColor: C.orange }]}>
+                      <Ionicons name="alert-circle-outline" size={16} color={C.orange} />
+                      <Text style={[s.noteTxt, { color: C.orange, fontWeight: '600' }]}>
+                        Your new time is waiting for the clinic's confirmation.
+                      </Text>
+                    </View>
+
+                    <View style={{ marginTop: verticalScale(16) }}>
+                      <Text style={{ fontSize: moderateScale(13), fontWeight: '700', color: C.charcoal, marginBottom: verticalScale(6) }}>
+                        Notes (optional)
+                      </Text>
+                      <TextInput
+                        style={[df.input, df.inputMulti, { minHeight: verticalScale(64) }]}
+                        placeholder="Add any notes or reason for rescheduling..."
+                        placeholderTextColor={C.muted}
+                        multiline
+                        numberOfLines={3}
+                        maxLength={300}
+                        value={rescheduleNotes}
+                        onChangeText={setRescheduleNotes}
+                      />
+                      <Text style={{ fontSize: moderateScale(11), color: C.muted, textAlign: 'right', marginTop: verticalScale(4) }}>
+                        {rescheduleNotes.length}/300
+                      </Text>
+                    </View>
+
+                    <View style={sm.footer}>
+                      <Tap style={sm.cancelBtn} onPress={() => setRescheduleStep('slots')} disabled={submittingReschedule}>
+                        <Text style={sm.cancelTxt}>Back</Text>
+                      </Tap>
+                      <Tap
+                        style={[sm.confirmBtn, { backgroundColor: C.navy }, submittingReschedule && { opacity: 0.6 }]}
+                        onPress={handleSaveReschedule}
+                        disabled={submittingReschedule}
+                      >
+                        {submittingReschedule ? (
+                          <ActivityIndicator color={C.white} size="small" />
+                        ) : (
+                          <Text style={sm.confirmTxt}>Confirm & Save</Text>
+                        )}
+                      </Tap>
+                    </View>
+                  </ScrollView>
+                )}
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
       </Modal>
 
       {/* ── BOTTOM NAV BAR ── */}
@@ -1786,4 +2366,8 @@ const sm = StyleSheet.create({
   cancelTxt:  { fontSize: moderateScale(13), fontWeight: '700', color: C.slate },
   confirmBtn: { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: verticalScale(12), borderRadius: scale(12), backgroundColor: '#334155' },
   confirmTxt: { fontSize: moderateScale(13), fontWeight: '800', color: C.white },
+  secondaryBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: verticalScale(12), borderRadius: scale(12), borderWidth: 1.5, borderColor: C.navy, backgroundColor: C.white },
+  secondaryTxt: { fontSize: moderateScale(13), fontWeight: '800', color: C.navy },
+  currentPill: { backgroundColor: C.navyFaint, paddingHorizontal: scale(6), paddingVertical: verticalScale(2), borderRadius: scale(6), borderWidth: 1, borderColor: C.navy },
+  currentPillTxt: { fontSize: moderateScale(9), fontWeight: '800', color: C.navy, textTransform: 'uppercase' },
 });

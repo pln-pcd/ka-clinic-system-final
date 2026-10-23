@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { db } from '../../lib/firebase';
 import PasswordChecklist, { PasswordMatch } from '../../components/PasswordChecklist';
 import { meetsPasswordPolicy, passwordPolicyError } from '../../lib/passwordPolicy';
+import AnimatedNurseCharacter from './AnimatedNurseCharacter';
 
 function getTokenFromUrl() {
   return new URLSearchParams(window.location.search).get('token') || '';
@@ -130,7 +131,7 @@ export default function AcceptInvite({ onDone }) {
     },
     valid: {
       title: 'Welcome to the team',
-      desc: "Fill in the form to activate your K&A Clinic staff account — your profile below updates as you go.",
+      desc: "Fill in the form to activate your K&A Clinic nurse account — your profile below updates as you go.",
     },
     success: {
       title: "You're all set",
@@ -350,7 +351,7 @@ export default function AcceptInvite({ onDone }) {
                         K&amp;A Animal Bite Center
                       </div>
                       <div className="text-[9px] font-semibold text-blue-200/90 tracking-[0.18em] uppercase mt-0.5">
-                        Staff Credential
+                        Nurse Credential
                       </div>
                     </div>
                     <span className="ml-auto text-[9px] font-bold text-blue-100/80 tracking-wide shrink-0">
@@ -386,7 +387,7 @@ export default function AcceptInvite({ onDone }) {
                   <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 pt-4 border-t border-slate-100">
                     <div>
                       <div className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.14em]">Role</div>
-                      <div className="text-xs font-bold text-slate-800 mt-1">Clinic Staff</div>
+                      <div className="text-xs font-bold text-slate-800 mt-1">Clinic Nurse</div>
                     </div>
                     <div>
                       <div className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.14em]">Credential No.</div>
@@ -446,13 +447,18 @@ export default function AcceptInvite({ onDone }) {
             </div>
           </div>
 
-          <div key={`copy-${status}`} className="relative z-10 pt-8 animate-in fade-in slide-in-from-bottom-1 duration-500">
-            <h2 className="font-display text-2xl font-extrabold text-white mb-2 tracking-tight">
-              {rightCopy.title}
-            </h2>
-            <p className="text-blue-100/80 text-sm leading-relaxed font-medium max-w-md">
-              {rightCopy.desc}
-            </p>
+          <div key={`copy-${status}`} className="relative z-10 pt-6 flex flex-col sm:flex-row items-center sm:items-end justify-between gap-4 animate-in fade-in slide-in-from-bottom-1 duration-500">
+            <div className="flex-1 min-w-0">
+              <h2 className="font-display text-2xl font-extrabold text-white mb-2 tracking-tight">
+                {rightCopy.title}
+              </h2>
+              <p className="text-blue-100/80 text-sm leading-relaxed font-medium max-w-sm">
+                {rightCopy.desc}
+              </p>
+            </div>
+            <div className="shrink-0 -mb-2">
+              <AnimatedNurseCharacter name={name} status={status} isReady={reqLenOk && reqMatchOk} />
+            </div>
           </div>
         </div>
 

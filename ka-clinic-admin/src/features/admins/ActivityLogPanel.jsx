@@ -33,7 +33,7 @@ function formatWhen(ts) {
   if (!d) return 'Just now';
   return d.toLocaleString('en-US', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
-const roleText = (r) => (r === 'manager' ? 'Manager' : r === 'staff' ? 'Staff' : r || '—');
+const roleText = (r) => (r === 'manager' ? 'Manager' : (r === 'staff' || r === 'nurse') ? 'Nurse' : r || '—');
 
 export default function ActivityLogPanel({ staff = [] }) {
   const [filters, setFilters] = useState({ actor: '', action: '', from: '', to: '', mrn: '' });

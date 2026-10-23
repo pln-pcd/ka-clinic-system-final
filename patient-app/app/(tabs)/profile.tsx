@@ -1259,7 +1259,7 @@ export default function ProfileScreen() {
               </View>
             </View>
 
-            <Text style={s.versionText}><Text style={{ color: C.red, fontWeight: '900' }}>K&A</Text> Anti-Rabies Vaccine Clinic v1.0.12</Text>
+            <Text style={s.versionText}><Text style={{ color: C.red, fontWeight: '900' }}>K&A</Text> Anti-Rabies Vaccine Clinic v1.0.13</Text>
           </ScrollView>
         );
     }

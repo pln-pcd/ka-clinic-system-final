@@ -141,7 +141,7 @@ function ArchivedPatients({ canAct, onToast }) {
             patients={rows}
             onBack={() => setOpenId(null)}
             onToast={onToast}
-            readOnly
+            readOnly={Boolean(open.isArchived)}
             onRestore={canAct && open.isArchived ? () => askRestore(open) : undefined}
             restoring={busy}
             backLabel="Back to Archive"

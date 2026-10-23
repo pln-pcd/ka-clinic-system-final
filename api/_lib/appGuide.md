@@ -108,15 +108,15 @@ The Appointments screen is used to book weekend visits and track existing reques
 - My Appointments (Upcoming):
   - Grouped list of active upcoming appointments.
   - Statuses:
-    - "Pending": Awaiting clinic staff review.
-    - "Confirmed" / "Accepted": Approved by clinic staff.
-    - "Cancellation requested": Patient submitted a cancellation request awaiting confirmation.
+    - "Pending": Awaiting clinic confirmation.
+    - "Confirmed": Confirmed by clinic staff. The clinic can only confirm appointments, never decline.
   - Tapping any appointment opens its detailed summary card.
-  - "Cancel" button: Available for pending and confirmed visits. Prompts for an optional cancellation reason before submitting the cancellation request.
+  - Direct Cancellation: Patients can cancel Pending and Confirmed appointments directly by tapping "Cancel Appointment". Tapping it opens a confirmation prompt ("Cancel this appointment?"). An optional reason box is available (up to 300 characters, non-blocking). Cancellation takes effect immediately, frees the time slot right away, and sets the status to "Cancelled by patient" without needing admin approval. Past or completed appointments cannot be cancelled.
+  - Rescheduling: Patients can reschedule Pending and Confirmed appointments that are not in the past by tapping "Reschedule" in Appointment Details. Patients pick a new open Saturday or Sunday time slot using the weekend calendar and slot picker (their current slot is marked "Current" and full slots are disabled), review old vs new times with editable notes, and save in a single transaction that locks the new slot and frees the old one. Confirmed appointments return to Pending status with the notice "Your new time is waiting for the clinic's confirmation". Rescheduling keeps full history and does not alter your scheduled immunization dates.
 - Past Appointments:
   - Grouped list of attended visits marked "Done".
 - Cancelled:
-  - Grouped list of cancelled visits, including clinic decline reasons if rejected by the clinic.
+  - Grouped list of cancelled visits ("Cancelled by patient" with the cancellation reason and timestamp, or legacy records).
 
 ---
 

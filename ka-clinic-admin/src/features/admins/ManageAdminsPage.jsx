@@ -50,7 +50,12 @@ function formatDate(ts) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-const formatRole = (role) => String(role).charAt(0).toUpperCase() + String(role).slice(1);
+const formatRole = (role) => {
+  const r = String(role || '').toLowerCase();
+  if (r === 'manager') return 'Manager';
+  if (r === 'staff' || r === 'nurse') return 'Nurse';
+  return role ? String(role).charAt(0).toUpperCase() + String(role).slice(1) : 'Nurse';
+};
 
 const STATUS_STYLE = {
   active: 'bg-slate-100 text-slate-700 border-slate-200',
@@ -341,7 +346,7 @@ export default function ManageAdmins() {
                                 {admin.name || <span className="text-slate-400 font-medium italic">Pending Setup</span>}
                               </span>
                               <span className="text-[11px] text-slate-400 font-medium">
-                                {isCurrentUser ? 'Current Account (You)' : isManager ? 'Clinic Administrator' : 'Team Member'}
+                                {isCurrentUser ? 'Current Account (You)' : isManager ? 'Clinic Administrator' : 'Staff Nurse'}
                               </span>
                             </div>
                           </div>
@@ -355,7 +360,7 @@ export default function ManageAdmins() {
                         {/* Role Column */}
                         <td className="px-6 py-3.5">
                           <span className="text-[11px] font-extrabold uppercase tracking-wide px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
-                            {admin.role || 'Staff'}
+                            {formatRole(admin.role)}
                           </span>
                         </td>
 

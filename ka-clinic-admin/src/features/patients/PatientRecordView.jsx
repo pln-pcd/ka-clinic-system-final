@@ -246,23 +246,18 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
             Export Patient Record
           </button>
-          {/* An archived record must be restored first (Restore is its own
-              step); Add Another Service shows disabled until then. */}
-          {(isCompletedOrArchived || readOnly) && (
+          {/* Add Another Service is only shown for records that are active or already restored, and whose series is completed */}
+          {!patient.isArchived && isCompletedOrArchived && (
             <button
-              className={`px-3.5 py-2 rounded-xl text-xs font-semibold text-white flex items-center gap-1.5 transition-colors ${
-                patient.isArchived ? 'bg-slate-300 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 cursor-pointer'}`}
-              disabled={patient.isArchived === true}
-              aria-disabled={patient.isArchived === true}
+              className="px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 cursor-pointer flex items-center gap-1.5 transition-colors"
               onClick={() => {
-                if (patient.isArchived) { onToast?.('Restore this record first, then add the new service.', 'error'); return; }
                 if (onAddAnotherService) {
                   onAddAnotherService(patient);
                 } else {
                   window.dispatchEvent(new CustomEvent('open-add-patient-modal', { detail: patient }));
                 }
               }}
-              title={patient.isArchived ? 'Restore this record first' : 'Add another vaccination service for this patient (reuses MRN)'}
+              title="Add another vaccination service for this patient (reuses MRN)"
             >
               <Plus size={14} />
               Add Another Service
@@ -279,7 +274,7 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
                 {restoring ? 'Restoring…' : 'Restore Record'}
               </button>
             )
-          ) : (
+          ) : onEdit ? (
             <button
               className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-[#3B50DF] hover:bg-[#2F40B5] transition-colors cursor-pointer flex items-center gap-2"
               onClick={() => onEdit?.(r || patient)}
@@ -287,7 +282,7 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
               Edit Record
             </button>
-          )}
+          ) : null}
         </div>
       </div>
 

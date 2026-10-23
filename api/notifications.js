@@ -355,6 +355,10 @@ async function sendFollowUp(req, res, caller) {
     res.status(400).json({ success: false, error: 'Missing patient id.' });
     return;
   }
+  if (String(req.body?.source || '').includes('declined') || String(title || '').toLowerCase().includes('decline')) {
+    res.status(400).json({ success: false, error: 'Declining appointments is no longer supported.' });
+    return;
+  }
 
   const patientRef = db.collection('vaccinations').doc(patientId);
   const patientSnap = await patientRef.get();

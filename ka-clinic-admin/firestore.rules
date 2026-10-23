@@ -56,7 +56,7 @@ service cloud.firestore {
     }
     match /appointments/{id} {
       allow read: if isAdmin() || ownAppointment(resource.data);
-      allow create: if isAdmin() || (isPatient()
+      allow create: if (isAdmin() && request.resource.data.status != 'declined') || (isPatient()
         && request.resource.data.status == 'pending'
         && request.resource.data.get('patientUid', '') == request.auth.uid
         && request.resource.data.get('userId', request.auth.uid) == request.auth.uid
@@ -65,10 +65,40 @@ service cloud.firestore {
         && request.resource.data.contactNumber is string && request.resource.data.contactNumber.size() > 0 && request.resource.data.contactNumber.size() < 30
         && request.resource.data.date is string && request.resource.data.date.size() > 0 && request.resource.data.date.size() < 60
         && (!('notes' in request.resource.data) || (request.resource.data.notes is string && request.resource.data.notes.size() <= 300)));
-      allow update: if isAdmin() || (ownAppointment(resource.data)
-        && resource.data.status in ['pending', 'confirmed', 'accepted', 'cancellation_pending']
-        && request.resource.data.status in ['cancelled', 'cancellation_pending']
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledAt', 'cancellationRequestedAt', 'cancelReason', 'cancellationReason', 'updatedAt']));
+      allow update: if
+        request.resource.data.status != 'declined'
+        && resource.data.status != 'cancelled'
+        && (
+          isAdmin() ||
+          (
+            ownAppointment(resource.data)
+            && resource.data.status in ['pending', 'confirmed', 'accepted']
+            && request.resource.data.status != 'confirmed'
+            && request.resource.data.status != 'accepted'
+            && request.resource.data.status != 'done'
+            && (
+              // Patient direct cancellation
+              (
+                request.resource.data.status == 'cancelled'
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                  'status', 'cancelledAt', 'cancelledBy', 'cancelReason', 'cancellationReason', 'updatedAt'
+                ])
+              )
+              ||
+              // Patient reschedule
+              (
+                request.resource.data.status == 'pending'
+                && request.resource.data.date is string && request.resource.data.date.size() > 0
+                && request.resource.data.time is string && request.resource.data.time.size() > 0
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                  'date', 'time', 'status', 'notes', 'previousDate', 'previousTime',
+                  'rescheduledAt', 'rescheduledCount', 'rescheduleHistory', 'updatedAt'
+                ])
+                && (!('notes' in request.resource.data) || (request.resource.data.notes is string && request.resource.data.notes.size() <= 300))
+              )
+            )
+          )
+        );
       allow delete: if isAdmin() || (ownAppointment(resource.data) && resource.data.status == 'cancelled');
     }
     // Public occupancy metadata has no names, contact details or MRNs.
@@ -78,7 +108,8 @@ service cloud.firestore {
         && request.resource.data.heldBy == request.auth.uid
         && request.resource.data.date is string && request.resource.data.time is string
         && request.resource.data.keys().hasOnly(['date', 'time', 'heldBy', 'createdAt']));
-      allow update, delete: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin() || (isPatient() && (resource.data.heldBy == request.auth.uid || resource.data.heldBy == session().mrn || resource.data.heldBy == session().mrn + '-no-app'));
     }
     match /inventory/{id} { allow read, write: if isAdmin(); }
     match /stockMovements/{id} {

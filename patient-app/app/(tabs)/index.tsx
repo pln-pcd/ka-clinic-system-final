@@ -550,10 +550,11 @@ export default function RabiesRecoveryApp() {
       });
     }
     confirmedAppts.slice(0, 3).forEach(a => {
+      const timeStr = a.time ? `, ${a.time}` : '';
       list.push({
         id: `appt-${a.id}`,
-        title: 'Appointment Confirmed',
-        message: `K&A Clinic accepted your ${apptTypeText(a.type)} on ${formatApptDate(a.date)}${a.time ? ` at ${a.time}` : ''}.${a.note ? ` Clinic: ${a.note}` : ''}`,
+        title: 'Appointment confirmed by the clinic',
+        message: `Your appointment on ${formatApptDate(a.date)}${timeStr} was confirmed by the clinic.`,
         time: formatApptDate(a.date),
         unread: true,
         type: 'appointment',
