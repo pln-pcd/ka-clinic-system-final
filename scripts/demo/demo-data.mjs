@@ -364,6 +364,68 @@ function buildAppointments(byKey) {
   });
 }
 
+function buildClosures() {
+  return [
+    {
+      id: 'demo-closure-01',
+      data: {
+        type: 'day',
+        startDate: weekend(2),
+        endDate: weekend(2),
+        slots: [],
+        reasonPreset: 'doctor_unavailable',
+        reason: 'Doctor attending the National Rabies Prevention Summit in Legazpi. Clinic appointments temporarily closed.',
+        hasInternalNote: true,
+        active: true,
+        createdBy: { uid: 'demo-admin-manager', name: 'Dr. Maria Santos' },
+        createdAt: manilaMs(addDaysToDateString(weekend(2), -7)),
+        updatedBy: { uid: 'demo-admin-manager', name: 'Dr. Maria Santos' },
+        updatedAt: manilaMs(addDaysToDateString(weekend(2), -7)),
+        ...DEMO_MARK,
+      },
+      internalNote: 'Keynote on PEP cold-chain compliance. Dr. Reyes on-call for emergency walk-ins.',
+    },
+    {
+      id: 'demo-closure-02',
+      data: {
+        type: 'slots',
+        startDate: weekend(1, true),
+        endDate: weekend(1, true),
+        slots: ['1:00 PM - 2:00 PM', '2:00 PM - 3:00 PM', '3:00 PM - 4:00 PM'],
+        reasonPreset: 'maintenance',
+        reason: 'Scheduled cold-chain vaccine storage maintenance and electrical inspection.',
+        hasInternalNote: false,
+        active: true,
+        createdBy: { uid: 'demo-admin-staff', name: 'Nurse John Rivera' },
+        createdAt: manilaMs(addDaysToDateString(weekend(1, true), -4)),
+        updatedBy: { uid: 'demo-admin-staff', name: 'Nurse John Rivera' },
+        updatedAt: manilaMs(addDaysToDateString(weekend(1, true), -4)),
+        ...DEMO_MARK,
+      },
+      internalNote: '',
+    },
+    {
+      id: 'demo-closure-03',
+      data: {
+        type: 'day',
+        startDate: weekend(-1),
+        endDate: weekend(-1),
+        slots: [],
+        reasonPreset: 'clinic_event',
+        reason: 'Community rabies awareness outreach (rescheduled).',
+        hasInternalNote: false,
+        active: false,
+        createdBy: { uid: 'demo-admin-manager', name: 'Dr. Maria Santos' },
+        createdAt: manilaMs(addDaysToDateString(weekend(-1), -10)),
+        reopenedBy: { uid: 'demo-admin-manager', name: 'Dr. Maria Santos' },
+        reopenedAt: manilaMs(addDaysToDateString(weekend(-1), -2)),
+        ...DEMO_MARK,
+      },
+      internalNote: '',
+    },
+  ];
+}
+
 function buildThreads(byKey) {
   const T0 = manilaMs(T, '08:00');
   const H = 3600000, D = 86400000;
@@ -465,6 +527,17 @@ async function main() {
     put('appointments', a.id, a.data);
     put('appointmentSlots', slotId(a.data.date, a.data.time), { date: a.data.date, time: a.data.time, heldBy: 'demo-admin-manager', createdAt: a.data.createdAt, ...DEMO_MARK });
   });
+  const closures = buildClosures();
+  closures.forEach(c => {
+    put('scheduleClosures', c.id, c.data);
+    if (c.internalNote) {
+      ops.push(b => b.set(db.collection('scheduleClosures').doc(c.id).collection('private').doc('meta'), {
+        internalNote: c.internalNote,
+        updatedAt: Date.now(),
+        ...DEMO_MARK,
+      }));
+    }
+  });
   threads.forEach(t => {
     put('chatThreads', t.id, t.data);
     t.messages.forEach(m => put('chatMessages', m.id, m.data));
@@ -531,7 +604,7 @@ async function clearDemoCommand() {
 // they are never selected. The script lists what it found and asks you to
 // type DELETE before removing anything (or pass --yes for scripted runs).
 
-const MARKED = ['vaccinations', 'authorizedPatients', 'incidents', 'inventory', 'appointments', 'appointmentSlots', 'chatThreads', 'chatMessages', 'admins'];
+const MARKED = ['vaccinations', 'authorizedPatients', 'incidents', 'inventory', 'appointments', 'appointmentSlots', 'scheduleClosures', 'chatThreads', 'chatMessages', 'admins'];
 const PER_UID = ['patientLoginOtps', 'patientTrustedDevices', 'otps', 'patientChatState'];
 
 async function main() {

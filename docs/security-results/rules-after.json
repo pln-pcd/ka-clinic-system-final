@@ -1,5 +1,5 @@
 {
-  "date": "2026-10-16T06:26:25.983Z",
+  "date": "2026-10-23T14:57:08.661Z",
   "results": [
     {
       "id": "RULE-vaccinations-anonymous-read",
@@ -4765,8 +4765,8 @@
       "id": "RULE-appointmentSlots-patient-own-delete",
       "description": "patient-own: delete appointmentSlots",
       "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
-      "expected": "PERMISSION_DENIED",
-      "actual": "permission-denied",
+      "expected": "Allowed",
+      "actual": "Allowed",
       "status": "PASS"
     },
     {
@@ -5602,6 +5602,230 @@
       "status": "PASS"
     },
     {
+      "id": "RULE-scheduleClosures-anonymous-read",
+      "description": "anonymous: read scheduleClosures",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-scheduleClosures-anonymous-create",
+      "description": "anonymous: create scheduleClosures",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-scheduleClosures-anonymous-update",
+      "description": "anonymous: update scheduleClosures",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-scheduleClosures-anonymous-delete",
+      "description": "anonymous: delete scheduleClosures",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-scheduleClosures-patient-own-read",
+      "description": "patient-own: read scheduleClosures",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-scheduleClosures-patient-own-create",
+      "description": "patient-own: create scheduleClosures",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-scheduleClosures-patient-own-update",
+      "description": "patient-own: update scheduleClosures",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-scheduleClosures-patient-own-delete",
+      "description": "patient-own: delete scheduleClosures",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-scheduleClosures-patient-other-read",
+      "description": "patient-other: read scheduleClosures",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-scheduleClosures-patient-other-create",
+      "description": "patient-other: create scheduleClosures",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-scheduleClosures-patient-other-update",
+      "description": "patient-other: update scheduleClosures",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-scheduleClosures-patient-other-delete",
+      "description": "patient-other: delete scheduleClosures",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-scheduleClosures-staff-read",
+      "description": "staff: read scheduleClosures",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-scheduleClosures-staff-create",
+      "description": "staff: create scheduleClosures",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-scheduleClosures-staff-update",
+      "description": "staff: update scheduleClosures",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-scheduleClosures-staff-delete",
+      "description": "staff: delete scheduleClosures",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-scheduleClosures-manager-read",
+      "description": "manager: read scheduleClosures",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-scheduleClosures-manager-create",
+      "description": "manager: create scheduleClosures",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-scheduleClosures-manager-update",
+      "description": "manager: update scheduleClosures",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-scheduleClosures-manager-delete",
+      "description": "manager: delete scheduleClosures",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-scheduleClosures-revoked-read",
+      "description": "revoked: read scheduleClosures",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-scheduleClosures-revoked-create",
+      "description": "revoked: create scheduleClosures",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-scheduleClosures-revoked-update",
+      "description": "revoked: update scheduleClosures",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-scheduleClosures-revoked-delete",
+      "description": "revoked: delete scheduleClosures",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-scheduleClosures-pending-read",
+      "description": "pending: read scheduleClosures",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-scheduleClosures-pending-create",
+      "description": "pending: create scheduleClosures",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-scheduleClosures-pending-update",
+      "description": "pending: update scheduleClosures",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-scheduleClosures-pending-delete",
+      "description": "pending: delete scheduleClosures",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
       "id": "RULE-attack-authorizedPatients-patient UID takeover",
       "description": "patient UID takeover",
       "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
@@ -5935,6 +6159,70 @@
       "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
       "expected": "PERMISSION_DENIED",
       "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-closure-admin-create",
+      "description": "Staff/manager can create schedule closure",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-closure-patient-create",
+      "description": "Patient cannot create schedule closure",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-closure-delete-denied",
+      "description": "Nobody can delete schedule closures",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-closure-private-admin",
+      "description": "Admin can read closure private subcollection",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-closure-private-patient",
+      "description": "Patient cannot read closure private subcollection",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-closure-inactive-patient",
+      "description": "Patient cannot read inactive schedule closure",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-admin-cannot-cancel-appt",
+      "description": "Admin cannot set appointment status to cancelled",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-patient-can-cancel-own-appt",
+      "description": "Patient can cancel own appointment",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
       "status": "PASS"
     }
   ]

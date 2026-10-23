@@ -1,5 +1,5 @@
 {
-  "date": "2026-10-08T02:08:24.703Z",
+  "date": "2026-10-23T15:01:47.090Z",
   "baseline": "working tree",
   "results": [
     {
@@ -585,6 +585,60 @@
       "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
       "expected": "No admin identity resolved",
       "actual": "No admin identity resolved",
+      "status": "PASS"
+    },
+    {
+      "id": "API-066",
+      "area": 1,
+      "description": "Staff can save schedule closure",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "200; closure saved",
+      "actual": "200; closure saved",
+      "status": "PASS"
+    },
+    {
+      "id": "API-067",
+      "area": 1,
+      "description": "Patient cannot save schedule closure",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "403 or 401",
+      "actual": "403 or 401",
+      "status": "PASS"
+    },
+    {
+      "id": "API-068",
+      "area": 1,
+      "description": "Patient cannot get closure internal note",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "403 or 401",
+      "actual": "403 or 401",
+      "status": "PASS"
+    },
+    {
+      "id": "API-069",
+      "area": 1,
+      "description": "Admin can get closure internal note",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "200; internalNote returned",
+      "actual": "200; internalNote returned",
+      "status": "PASS"
+    },
+    {
+      "id": "API-070",
+      "area": 1,
+      "description": "Booking closed day rejected with SCHEDULE_CLOSED",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "409 SCHEDULE_CLOSED",
+      "actual": "409 SCHEDULE_CLOSED",
+      "status": "PASS"
+    },
+    {
+      "id": "API-071",
+      "area": 1,
+      "description": "Staff can reopen schedule closure",
+      "steps": "Direct handler request with real Firebase emulator token; simulated documents only.",
+      "expected": "200; active: false",
+      "actual": "200; active: false",
       "status": "PASS"
     }
   ]

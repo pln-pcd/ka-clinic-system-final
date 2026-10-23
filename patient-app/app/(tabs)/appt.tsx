@@ -151,6 +151,9 @@ type FirestoreAppt = {
   address: string;
   contactNumber: string;
   createdAt: number;
+  affectedByClosure?: boolean;
+  closureId?: string;
+  closureReason?: string;
 };
 
 type PatientForm = {
@@ -244,6 +247,58 @@ export default function AppointmentsScreen() {
   const [takenTimes, setTakenTimes] = useState<string[]>([]);
   // date -> hours taken, across the month currently on screen.
   const [monthSlotCounts, setMonthSlotCounts] = useState<Record<string, number>>({});
+
+  // ── Active Schedule Closures ──────────────────────────────────────────────
+  const [closures, setClosures] = useState<any[]>([]);
+  const [closureModal, setClosureModal] = useState<{
+    visible: boolean;
+    title: string;
+    dateStr: string;
+    slots?: string[];
+    reason: string;
+  } | null>(null);
+
+  useEffect(() => {
+    const q = query(collection(db, 'scheduleClosures'), where('active', '==', true));
+    return onSnapshot(q, snap => {
+      setClosures(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, err => console.warn('Patient app closures listener error:', err));
+  }, []);
+
+  const getClosureForDate = (dateKey: string) => {
+    if (!dateKey) return null;
+    const matches = closures.filter(c => c.startDate <= dateKey && dateKey <= (c.endDate || c.startDate));
+    if (!matches.length) return null;
+    const dayClosure = matches.find(c => c.type === 'day');
+    if (dayClosure) return { type: 'day', closure: dayClosure, all: matches };
+    const closedSlots = Array.from(new Set(matches.filter(c => c.type === 'slots').flatMap(c => c.slots || [])));
+    if (closedSlots.length >= TIME_SLOTS.length) {
+      return { type: 'day', closure: matches[0], all: matches, slots: closedSlots };
+    }
+    return { type: 'slots', closure: matches[0], all: matches, slots: closedSlots };
+  };
+
+  const jumpToNextAvailable = () => {
+    setClosureModal(null);
+    const check = new Date();
+    for (let i = 1; i <= 60; i++) {
+      const d = new Date(check);
+      d.setDate(check.getDate() + i);
+      const day = d.getDay();
+      if (day === 0 || day === 6) {
+        const k = toKey(d.getFullYear(), d.getMonth(), d.getDate());
+        const cInfo = getClosureForDate(k);
+        if (!cInfo || cInfo.type !== 'day') {
+          setViewYear(d.getFullYear());
+          setViewMonth(d.getMonth());
+          setSelectedKey(k);
+          setSelectedTime(null);
+          setShowSlotModal(true);
+          break;
+        }
+      }
+    }
+  };
 
   // ── Appointment Details & Modals ──────────────────────────────────────────
   const [selectedApptDetail, setSelectedApptDetail] = useState<FirestoreAppt | null>(null);
@@ -701,11 +756,24 @@ export default function AppointmentsScreen() {
     });
   }, [selectedKey]);
 
+  const closureInfo = selectedKey ? getClosureForDate(selectedKey) : null;
   const slots      = selectedKey && isWeekendDate(selectedKey)
-    ? TIME_SLOTS.map(time => ({ time, available: !takenTimes.includes(time) }))
+    ? TIME_SLOTS.map(time => {
+        const isClosed = closureInfo && (
+          closureInfo.type === 'day' ||
+          (closureInfo.type === 'slots' && (closureInfo.slots || []).includes(time))
+        );
+        return {
+          time,
+          available: !takenTimes.includes(time) && !isClosed,
+          closed: Boolean(isClosed),
+          closureReason: closureInfo?.closure?.reason || 'Clinic schedule closed',
+        };
+      })
     : [];
   const canConfirm = !!selectedKey && !!selectedTime && !saving
-    && !takenTimes.includes(selectedTime);
+    && !takenTimes.includes(selectedTime)
+    && !slots.find(s => s.time === selectedTime)?.closed;
 
   // ── Month nav ─────────────────────────────────────────────────────────────
   // Paging back past the current month only ever shows fully-disabled cells,
@@ -827,6 +895,23 @@ export default function AppointmentsScreen() {
     }
 
     setSaving(true);
+    // Double check closure before committing
+    const activeClosure = selectedKey ? getClosureForDate(selectedKey) : null;
+    if (activeClosure) {
+      if (activeClosure.type === 'day' || (activeClosure.type === 'slots' && (activeClosure.slots || []).includes(selectedTime || ''))) {
+        setSaving(false);
+        setShowDetailsForm(false);
+        setClosureModal({
+          visible: true,
+          title: 'This time is closed',
+          dateStr: `${displayKey(selectedKey || '')} · ${selectedTime}`,
+          slots: selectedTime ? [selectedTime] : [],
+          reason: activeClosure.closure.reason,
+        });
+        return;
+      }
+    }
+
     try {
       // The hour and the appointment are written in ONE transaction: whoever
       // creates the slot doc wins, a second patient racing for the same hour
@@ -997,15 +1082,29 @@ export default function AppointmentsScreen() {
                 const isSelected = key === selectedKey;
                 const hasSlots   = isWeekendDate(key);
                 const isPast     = key < todayKey; // clinic calendar (Manila)
+                const cInfo      = hasSlots ? getClosureForDate(key) : null;
+                const isClosedDay = cInfo?.type === 'day';
+                const isPartiallyClosed = cInfo?.type === 'slots';
                 // Every hour claimed — still a clinic day, but nothing left to book.
                 const isFull     = hasSlots && (monthSlotCounts[key] || 0) >= TIME_SLOTS.length;
-                const tappable   = !isPast && hasSlots && !isFull;
+                const tappable   = !isPast && hasSlots && (!isFull || isClosedDay);
 
                 return (
                   <Tap
                     key={key}
                     style={s.calCell}
-                    onPress={() => tappable && handleDayPress(day)}
+                    onPress={() => {
+                      if (isClosedDay) {
+                        setClosureModal({
+                          visible: true,
+                          title: 'Appointments closed',
+                          dateStr: displayKey(key),
+                          reason: cInfo.closure.reason,
+                        });
+                      } else if (tappable && !isFull) {
+                        handleDayPress(day);
+                      }
+                    }}
                     activeOpacity={tappable ? 0.75 : 1}
                     disabled={!tappable}
                   >
@@ -1015,13 +1114,21 @@ export default function AppointmentsScreen() {
                       s.calTile,
                       isToday && !isSelected && s.calTileToday,
                       isSelected && s.calTileSelected,
+                      isClosedDay && { backgroundColor: '#FEF3C7', borderColor: '#FCD34D' },
                     ]}>
+                      {isClosedDay && (
+                        <Ionicons name="lock-closed" size={10} color="#D97706" style={{ position: 'absolute', top: 3, right: 3 }} />
+                      )}
+                      {isPartiallyClosed && !isClosedDay && (
+                        <Ionicons name="lock-closed" size={8} color="#F59E0B" style={{ position: 'absolute', top: 3, right: 3 }} />
+                      )}
                       <Text style={[
                         s.calDayTxt,
                         isPast               && s.calDayPast,
                         !isPast && !hasSlots && s.calDayNoSlot,
-                        tappable && !isSelected && s.calDayOpen,
-                        !isPast && isFull && !isSelected && s.calDayFull,
+                        tappable && !isSelected && !isClosedDay && s.calDayOpen,
+                        !isPast && isFull && !isSelected && !isClosedDay && s.calDayFull,
+                        isClosedDay && { color: '#B45309', fontWeight: '800' },
                         isToday && !isSelected && s.calDayToday,
                         isSelected           && s.calDaySelected,
                       ]}>
@@ -1036,6 +1143,7 @@ export default function AppointmentsScreen() {
             <View style={s.legend}>
               <View style={s.legendItem}><Text style={s.legendNum}>5</Text><Text style={s.legendTxt}>Open to book</Text></View>
               <View style={s.legendItem}><Text style={[s.legendNum, s.calDayFull]}>6</Text><Text style={s.legendTxt}>Fully booked</Text></View>
+              <View style={s.legendItem}><Ionicons name="lock-closed" size={12} color="#D97706" /><Text style={s.legendTxt}>Closed</Text></View>
               <View style={s.legendItem}><View style={s.legendToday}/><Text style={s.legendTxt}>Today</Text></View>
             </View>
           </View>
@@ -1126,6 +1234,39 @@ export default function AppointmentsScreen() {
                         </Tap>
                       )}
                     </Tap>
+
+                    {/* Affected by schedule closure banner */}
+                    {appt.affectedByClosure && (
+                      <View style={s.closureCardBanner}>
+                        <View style={s.closureCardHeader}>
+                          <Ionicons name="warning" size={14} color="#D97706" />
+                          <Text style={s.closureCardTitle}>Affected by schedule closure</Text>
+                        </View>
+                        <Text style={s.closureCardReason}>
+                          &ldquo;{appt.closureReason || 'The clinic schedule for this time has been closed.'}&rdquo;
+                        </Text>
+                        <Text style={s.closureCardSub}>
+                          Your appointment is still on record. Please reschedule or cancel.
+                        </Text>
+                        <View style={s.closureCardBtnRow}>
+                          <Tap
+                            style={s.closureCardRescheduleBtn}
+                            onPress={() => openReschedule(appt)}
+                          >
+                            <Ionicons name="calendar-outline" size={13} color="#FFFFFF" />
+                            <Text style={s.closureCardRescheduleTxt}>Reschedule</Text>
+                          </Tap>
+                          <Tap
+                            style={s.closureCardCancelBtn}
+                            onPress={() => openCancelModal(appt)}
+                          >
+                            <Ionicons name="close-circle-outline" size={13} color="#DC2626" />
+                            <Text style={s.closureCardCancelTxt}>Cancel appointment</Text>
+                          </Tap>
+                        </View>
+                      </View>
+                    )}
+
                     {idx < upcomingApts.length - 1 && <View style={s.apptListDivider} />}
                   </View>
                 );
@@ -1255,27 +1396,61 @@ export default function AppointmentsScreen() {
                   <View style={s.timeGrid}>
                     {slots.map(slot => {
                       const active   = selectedTime === slot.time;
+                      const isClosed = slot.closed;
+                      const isTaken  = !slot.available && !isClosed;
                       const disabled = !slot.available;
+
                       return (
                         <Tap
                           key={slot.time}
-                          style={[s.timeChip, active && s.timeChipActive, disabled && s.timeChipOff]}
-                          onPress={() => !disabled && setSelectedTime(slot.time)}
-                          activeOpacity={disabled ? 1 : 0.8}
-                          disabled={disabled}
+                          style={[
+                            s.timeChip,
+                            active && s.timeChipActive,
+                            isTaken && s.timeChipOff,
+                            isClosed && { backgroundColor: '#FEF3C7', borderColor: '#FCD34D' }
+                          ]}
+                          onPress={() => {
+                            if (isClosed) {
+                              setClosureModal({
+                                visible: true,
+                                title: 'This time is closed',
+                                dateStr: `${displayKey(selectedKey || '')} · ${slot.time}`,
+                                slots: [slot.time],
+                                reason: slot.closureReason,
+                              });
+                            } else if (!isTaken) {
+                              setSelectedTime(slot.time);
+                            }
+                          }}
+                          activeOpacity={isTaken ? 1 : 0.8}
+                          disabled={isTaken}
                         >
                           {active && <LinearGradient colors={[C.navy, C.charcoal]} style={[StyleSheet.absoluteFill, { borderRadius: scale(14) }]}/>}
-                          <Ionicons name={active ? 'time' : 'time-outline'} size={12} color={active ? C.white : disabled ? '#CBD5E1' : C.slate}/>
+                          <Ionicons
+                            name={active ? 'time' : isClosed ? 'lock-closed' : 'time-outline'}
+                            size={12}
+                            color={active ? C.white : isClosed ? '#D97706' : isTaken ? '#CBD5E1' : C.slate}
+                          />
                           <Text
                             numberOfLines={1}
                             adjustsFontSizeToFit
-                            style={[s.timeTxt, active && { color: C.white, fontWeight: '800' }, disabled && { color: '#CBD5E1', textDecorationLine: 'line-through' }]}
+                            style={[
+                              s.timeTxt,
+                              active && { color: C.white, fontWeight: '800' },
+                              isTaken && { color: '#CBD5E1', textDecorationLine: 'line-through' },
+                              isClosed && { color: '#B45309', fontWeight: '700' }
+                            ]}
                           >
                             {slot.time}
                           </Text>
-                          {disabled && (
+                          {isTaken && (
                             <View style={s.fullPill}>
                               <Text style={s.fullPillTxt}>Full</Text>
+                            </View>
+                          )}
+                          {isClosed && (
+                            <View style={[s.fullPill, { backgroundColor: '#FDE68A' }]}>
+                              <Text style={[s.fullPillTxt, { color: '#92400E' }]}>Closed</Text>
                             </View>
                           )}
                         </Tap>
@@ -1592,6 +1767,46 @@ export default function AppointmentsScreen() {
                           <Text style={{ flex: 1, minWidth: 0, fontSize: moderateScale(16), fontWeight: '800', color: C.charcoal }}>{apptTypeLabel(selectedApptDetail.type)}</Text>
                           <StatusBadge status={selectedApptDetail.status} declined={isEnded(selectedApptDetail) && endedByClinic(selectedApptDetail)} />
                         </View>
+
+                        {/* Affected by closure banner in detail view */}
+                        {selectedApptDetail.affectedByClosure && (
+                          <View style={[s.closureCardBanner, { marginHorizontal: 0, marginBottom: verticalScale(14) }]}>
+                            <View style={s.closureCardHeader}>
+                              <Ionicons name="warning" size={14} color="#D97706" />
+                              <Text style={s.closureCardTitle}>Affected by schedule closure</Text>
+                            </View>
+                            <Text style={s.closureCardReason}>
+                              &ldquo;{selectedApptDetail.closureReason || 'The clinic schedule for this time has been closed.'}&rdquo;
+                            </Text>
+                            <Text style={s.closureCardSub}>
+                              Your appointment is still on record. Please reschedule or cancel.
+                            </Text>
+                            <View style={s.closureCardBtnRow}>
+                              <Tap
+                                style={s.closureCardRescheduleBtn}
+                                onPress={() => {
+                                  const target = selectedApptDetail;
+                                  setSelectedApptDetail(null);
+                                  openReschedule(target);
+                                }}
+                              >
+                                <Ionicons name="calendar-outline" size={13} color="#FFFFFF" />
+                                <Text style={s.closureCardRescheduleTxt}>Reschedule</Text>
+                              </Tap>
+                              <Tap
+                                style={s.closureCardCancelBtn}
+                                onPress={() => {
+                                  const target = selectedApptDetail;
+                                  setSelectedApptDetail(null);
+                                  openCancelModal(target);
+                                }}
+                              >
+                                <Ionicons name="close-circle-outline" size={13} color="#DC2626" />
+                                <Text style={s.closureCardCancelTxt}>Cancel appointment</Text>
+                              </Tap>
+                            </View>
+                          </View>
+                        )}
 
                         <View style={s.summaryCard}>
                           <View style={[s.summaryRow, { marginBottom: verticalScale(8) }]}>
@@ -2117,6 +2332,81 @@ export default function AppointmentsScreen() {
 
       {/* Custom Alert Modal */}
       <CustomAlertModal config={alertConfig} onClose={hideAlert} />
+
+      {/* ══ SCHEDULE CLOSURE POPUP MODAL ═════════════════════════════════════ */}
+      <Modal
+        visible={!!closureModal}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setClosureModal(null)}
+      >
+        <TouchableWithoutFeedback onPress={() => setClosureModal(null)}>
+          <View style={sm.overlay}>
+            <TouchableWithoutFeedback onPress={e => e.stopPropagation()}>
+              <View style={[sm.card, { maxWidth: scale(340) }]}>
+                {/* Header with lock icon */}
+                <View style={{ paddingHorizontal: scale(18), paddingTop: verticalScale(18), paddingBottom: verticalScale(14), borderBottomWidth: 1, borderColor: '#F1F5F9', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(10), flex: 1 }}>
+                    <View style={{ width: scale(36), height: scale(36), borderRadius: scale(10), backgroundColor: '#FEF3C7', alignItems: 'center', justifyContent: 'center' }}>
+                      <Ionicons name="lock-closed" size={18} color="#D97706" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: moderateScale(15), fontWeight: '800', color: '#0F172A' }}>
+                        {closureModal?.title || 'Appointments closed'}
+                      </Text>
+                      <Text style={{ fontSize: moderateScale(11), color: '#64748B', fontWeight: '600', marginTop: verticalScale(2) }}>
+                        {closureModal?.dateStr}
+                      </Text>
+                    </View>
+                  </View>
+                  <Tap onPress={() => setClosureModal(null)} style={sm.closeBtn}>
+                    <Ionicons name="close" size={18} color={C.slate} />
+                  </Tap>
+                </View>
+
+                {/* Body with reason quote box and helper */}
+                <View style={{ padding: scale(18), gap: verticalScale(12) }}>
+                  <View style={{ backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FCD34D', borderRadius: scale(12), padding: scale(12) }}>
+                    <Text style={{ fontSize: moderateScale(10), fontWeight: '800', color: '#B45309', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: verticalScale(4) }}>
+                      Message from K&amp;A Clinic
+                    </Text>
+                    <Text style={{ fontSize: moderateScale(13), color: '#78350F', fontWeight: '600', lineHeight: moderateScale(18), fontStyle: 'italic' }}>
+                      &ldquo;{closureModal?.reason}&rdquo;
+                    </Text>
+                  </View>
+
+                  <View style={{ backgroundColor: '#F8FAFC', borderRadius: scale(10), padding: scale(10), borderWidth: 1, borderColor: '#E2E8F0' }}>
+                    <Text style={{ fontSize: moderateScale(11), color: '#64748B', lineHeight: moderateScale(16) }}>
+                      Please choose another date or time. Walk-ins are accepted <Text style={{ color: '#0F172A', fontWeight: '700' }}>Mon–Fri, 8 AM–5 PM</Text>.
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Footer buttons */}
+                <View style={{ paddingHorizontal: scale(18), paddingVertical: verticalScale(14), borderTopWidth: 1, borderColor: '#F1F5F9', backgroundColor: '#F8FAFC', flexDirection: 'row', gap: scale(8), justifyContent: 'flex-end' }}>
+                  <Tap
+                    style={{ paddingHorizontal: scale(12), paddingVertical: verticalScale(10), borderRadius: scale(10), borderWidth: 1, borderColor: '#CBD5E1', backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' }}
+                    onPress={jumpToNextAvailable}
+                  >
+                    <Text style={{ fontSize: moderateScale(12), fontWeight: '700', color: C.slate }}>
+                      Show next available
+                    </Text>
+                  </Tap>
+                  <Tap
+                    style={{ paddingHorizontal: scale(16), paddingVertical: verticalScale(10), borderRadius: scale(10), backgroundColor: C.navy, alignItems: 'center', justifyContent: 'center' }}
+                    onPress={() => setClosureModal(null)}
+                  >
+                    <Text style={{ fontSize: moderateScale(12), fontWeight: '700', color: '#FFFFFF' }}>
+                      Pick another date
+                    </Text>
+                  </Tap>
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </View>
   );
 }
@@ -2249,6 +2539,27 @@ const s = StyleSheet.create({
 
   adminNoteBox: { flexDirection: 'row', alignItems: 'flex-start', gap: scale(5), backgroundColor: C.redFaint, borderRadius: scale(8), padding: scale(6), marginTop: verticalScale(5) },
   adminNoteTxt: { flex: 1, fontSize: moderateScale(10), color: C.red, fontWeight: '600', lineHeight: moderateScale(14) },
+
+  // Schedule closure banner on appointments
+  closureCardBanner: {
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+    borderRadius: scale(12),
+    padding: scale(12),
+    marginTop: verticalScale(8),
+    marginHorizontal: scale(14),
+    marginBottom: verticalScale(6),
+  },
+  closureCardHeader: { flexDirection: 'row', alignItems: 'center', gap: scale(6), marginBottom: verticalScale(4) },
+  closureCardTitle:  { fontSize: moderateScale(11.5), fontWeight: '800', color: '#B45309', textTransform: 'uppercase', letterSpacing: 0.3 },
+  closureCardReason: { fontSize: moderateScale(12), fontWeight: '600', color: '#78350F', fontStyle: 'italic', marginBottom: verticalScale(4) },
+  closureCardSub:    { fontSize: moderateScale(11), color: '#92400E', lineHeight: moderateScale(15), marginBottom: verticalScale(8) },
+  closureCardBtnRow: { flexDirection: 'row', gap: scale(8) },
+  closureCardRescheduleBtn: { flexDirection: 'row', alignItems: 'center', gap: scale(4), backgroundColor: C.navy, borderRadius: scale(8), paddingHorizontal: scale(12), paddingVertical: verticalScale(6) },
+  closureCardRescheduleTxt: { fontSize: moderateScale(11.5), fontWeight: '700', color: '#FFFFFF' },
+  closureCardCancelBtn:     { flexDirection: 'row', alignItems: 'center', gap: scale(4), backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#FCA5A5', borderRadius: scale(8), paddingHorizontal: scale(10), paddingVertical: verticalScale(6) },
+  closureCardCancelTxt:     { fontSize: moderateScale(11.5), fontWeight: '700', color: '#DC2626' },
 
   // Clear, dedicated action button with 44dp+ tap target via hitSlop.
   cancelPill: { flexDirection: 'row', alignItems: 'center', gap: scale(4), paddingHorizontal: scale(10), paddingVertical: verticalScale(6), borderRadius: scale(8), borderWidth: 1, borderColor: C.border, backgroundColor: C.white, overflow: 'hidden', marginLeft: scale(10), alignSelf: 'center' },

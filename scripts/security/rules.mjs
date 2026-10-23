@@ -41,6 +41,7 @@ const fixtures = {
   invites: ['simulated-unguessable-invite', { email: 'invite@example.test', status: 'pending' }],
   patientChatState: ['security-a', { messageCount: 1 }],
   mrnRegistry: ['2026-050', { mrn: '2026-050', issuedAt: Date.now(), issuedBy: 'security-staff' }],
+  scheduleClosures: ['security-closure', { type: 'day', startDate: '2026-12-12', endDate: '2026-12-12', slots: [], reasonPreset: 'doctor_unavailable', reason: 'Doctor unavailable', active: true, createdAt: Date.now() }],
 };
 async function seed() {
   await env.withSecurityRulesDisabled(async ctx => {
@@ -56,11 +57,12 @@ async function seed() {
     await setDoc(doc(db, 'authorizedPatients', '2026-002'), { uid: 'security-b', email: 'security-b@example.test', mrn: '2026-002', authorized: true, registered: true });
     await setDoc(doc(db, 'vaccinations', '2026-002'), { authUid: 'security-b', email: 'security-b@example.test', isArchived: false });
     for (const [collection, [id, data]] of Object.entries(fixtures)) await setDoc(doc(db, collection, id), data);
+    await setDoc(doc(db, 'scheduleClosures', 'security-closure', 'private', 'meta'), { internalNote: 'Private staff note', updatedAt: Date.now() });
   });
 }
 function expected(collection, role, op) {
   const admin = adminRoles.includes(role), own = role === 'patient-own';
-  if (collection === 'appointmentSlots') return op === 'read' || admin || (own && op === 'create');
+  if (collection === 'appointmentSlots') return op === 'read' || admin || (own && ['create', 'delete'].includes(op));
   if (collection === 'invites') return op === 'read';
   if (collection === 'mrnRegistry') return admin && ['read', 'create'].includes(op);
   if (collection === 'patientChatState') return ['read', 'delete'].includes(op) && (admin || own);
@@ -73,6 +75,11 @@ function expected(collection, role, op) {
   if (collection === 'vaccinations') return op === 'read' ? admin || own : admin;
   if (collection === 'patientAvatars' || collection === 'patientNotifications') return op === 'read' ? admin || own : admin;
   if (collection === 'appointments') return admin || (own && op !== 'delete');
+  if (collection === 'scheduleClosures') {
+    if (op === 'delete') return false;
+    if (op === 'read') return true;
+    return admin;
+  }
   if (collection === 'chatThreads') return admin || (own && op !== 'delete');
   if (collection === 'chatMessages') return admin || (own && ['read', 'create'].includes(op));
   return admin;
@@ -95,10 +102,12 @@ try {
         if (op === 'create') await deleteDoc(ref); else await setDoc(ref, data);
       });
       const ref = doc(clients[role], collection, id);
-      const patch = collection === 'appointments' ? { status: 'cancelled' }
+      const admin = adminRoles.includes(role);
+      const patch = collection === 'appointments' ? (admin ? { notes: 'Updated by admin' } : { status: 'cancelled' })
         : collection === 'chatThreads' ? { resolved: true, closedBy: 'patient', closedAt: Date.now() }
         : collection === 'adminAvatars' ? { updatedAt: Date.now() }
         : collection === 'patientSessions' ? { label: 'Updated test' }
+        : collection === 'scheduleClosures' ? { reason: 'Updated reason' }
         : collection === 'incidents' ? { mapHidden: true } : { securityTest: true };
       await check(`RULE-${collection}-${role}-${op}`, `${role}: ${op} ${collection}`, expected(collection, role, op), () => {
         if (op === 'read') return getDoc(ref);
@@ -177,6 +186,20 @@ try {
   await seed();
   const passwordClient = env.authenticatedContext('security-a', { email: 'security-a@example.test', auth_time: authTime, firebase: { sign_in_provider: 'password' } }).firestore();
   await check('RULE-password-provider', 'Password-only SDK sign-in cannot bypass the gateway', false, () => getDoc(doc(passwordClient, 'vaccinations', '2026-001')));
+
+  // Schedule closures rules tests
+  await check('RULE-closure-admin-create', 'Staff/manager can create schedule closure', true, () => setDoc(doc(clients.staff, 'scheduleClosures', 'staff-closure'), { type: 'day', startDate: '2026-12-19', endDate: '2026-12-19', active: true, reason: 'Staff closure', createdAt: Date.now() }));
+  await check('RULE-closure-patient-create', 'Patient cannot create schedule closure', false, () => setDoc(doc(clients['patient-own'], 'scheduleClosures', 'patient-closure'), { type: 'day', startDate: '2026-12-19', endDate: '2026-12-19', active: true, reason: 'Patient closure', createdAt: Date.now() }));
+  await check('RULE-closure-delete-denied', 'Nobody can delete schedule closures', false, () => deleteDoc(doc(clients.manager, 'scheduleClosures', 'security-closure')));
+  await check('RULE-closure-private-admin', 'Admin can read closure private subcollection', true, () => getDoc(doc(clients.manager, 'scheduleClosures', 'security-closure', 'private', 'meta')));
+  await check('RULE-closure-private-patient', 'Patient cannot read closure private subcollection', false, () => getDoc(doc(clients['patient-own'], 'scheduleClosures', 'security-closure', 'private', 'meta')));
+  await env.withSecurityRulesDisabled(ctx => updateDoc(doc(ctx.firestore(), 'scheduleClosures', 'security-closure'), { active: false }));
+  await check('RULE-closure-inactive-patient', 'Patient cannot read inactive schedule closure', false, () => getDoc(doc(clients['patient-own'], 'scheduleClosures', 'security-closure')));
+  await env.withSecurityRulesDisabled(ctx => updateDoc(doc(ctx.firestore(), 'scheduleClosures', 'security-closure'), { active: true }));
+
+  // Admin appointment cancellation prohibition tests
+  await check('RULE-admin-cannot-cancel-appt', 'Admin cannot set appointment status to cancelled', false, () => updateDoc(doc(clients.manager, 'appointments', 'security-appt'), { status: 'cancelled' }));
+  await check('RULE-patient-can-cancel-own-appt', 'Patient can cancel own appointment', true, () => updateDoc(doc(clients['patient-own'], 'appointments', 'security-appt'), { status: 'cancelled' }));
 } finally {
   await env.cleanup();
 }

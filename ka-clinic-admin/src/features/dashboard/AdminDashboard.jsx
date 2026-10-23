@@ -13,6 +13,7 @@ import {
   Clock,
   ChevronRight as ChevronRightIcon,
   Home,
+  Lock,
   LogOut,
   MapPin as MapIcon,
   Menu,
@@ -360,6 +361,7 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
   const [allAppointments, setAllAppointments] = useState([]);
   const [inventoryList, setInventoryList] = useState([]);
   const { incidents: incidentList, loading: incidentsLoading } = useIncidents();
+  const closuresLive = useLiveCollection('scheduleClosures');
 
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -987,7 +989,9 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
   // expressed as a full card color instead of just an icon tint.
   // Neutral slate cards by default — color is reserved for Low Stock, whose
   // red/emerald is a real alert signal (stock actually needs action or
-  // doesn't), not decoration.
+  // Schedule closure for today
+  const todayClosure = (closuresLive.rows || []).find(c => c.active !== false && c.startDate <= todayStr && todayStr <= (c.endDate || c.startDate));
+
   const dashboardStatWidgets = [
     {
       label: 'Total Patients',
@@ -1001,7 +1005,9 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
     {
       label: 'Today Appointments',
       value: todayScheduleList.length,
-      sub: `${todayScheduleList.filter(a => a.status === 'confirmed' || a.status === 'accepted').length} confirmed · ${todayScheduleList.filter(a => a.status === 'pending').length} pending`,
+      sub: todayClosure
+        ? `Schedule closed: ${todayClosure.reason}`
+        : `${todayScheduleList.filter(a => a.status === 'confirmed' || a.status === 'accepted').length} confirmed · ${todayScheduleList.filter(a => a.status === 'pending').length} pending`,
       color: '#0E2A6D', tint: '#EEF2FF', border: '#E0E7FF',
       Icon: Calendar,
       progress: null,
@@ -1540,7 +1546,11 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
 
                     <DashPanel
                       title="Today's Appointments"
-                      subtitle="Confirmed & pending clinic visits"
+                      subtitle={todayClosure ? (
+                        <span className="inline-flex items-center gap-1 text-amber-700 font-semibold">
+                          <Lock size={12} className="text-amber-600 shrink-0" /> Schedule closed: {todayClosure.reason}
+                        </span>
+                      ) : "Confirmed & pending clinic visits"}
                       badge={todayScheduleList.length > 0 ? <StatusBadge tone="blue" label={`${todayScheduleList.length} appointment${todayScheduleList.length === 1 ? '' : 's'}`} /> : null}
                       total={todayScheduleList.length}
                       onViewAll={() => setActivePage('appointments')}

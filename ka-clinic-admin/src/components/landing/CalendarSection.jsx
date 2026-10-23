@@ -1,14 +1,17 @@
-import { Phone, Mail, MapPin, Clock, Calendar as CalendarIcon, AlertCircle, CheckCircle2, Lock, ShieldAlert } from 'lucide-react';
-import { useState } from 'react';
+import { Phone, Mail, MapPin, Clock, Calendar as CalendarIcon, AlertCircle, CheckCircle2, Lock, ShieldAlert, X, ChevronRight } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 import { MONTHS } from './constants';
 import { getSlotData, getNextWeekendSlots } from './utils';
 
 // Status metadata for details
 const STATUS_META = {
-  available: { label: 'Weekend Slots Open', color: '#10B981', bg: 'rgba(16,185,129,0.08)', border: 'rgba(16,185,129,0.25)' },
-  full:      { label: 'Weekend Fully Booked', color: '#EF4444', bg: 'rgba(239,68,68,0.06)', border: 'rgba(239,68,68,0.25)' },
-  closed:    { label: 'Closed for Appointments (Weekdays)', color: '#64748B', bg: '#F8FAFC', border: '#E2E8F0' },
-  past:      { label: 'Past Date', color: '#94A3B8', bg: '#F8FAFC', border: '#E2E8F0' },
+  available:       { label: 'Weekend Slots Open', color: '#10B981', bg: 'rgba(16,185,129,0.08)', border: 'rgba(16,185,129,0.25)' },
+  full:            { label: 'Weekend Fully Booked', color: '#EF4444', bg: 'rgba(239,68,68,0.06)', border: 'rgba(239,68,68,0.25)' },
+  closed:          { label: 'Closed for Appointments (Weekdays)', color: '#64748B', bg: '#F8FAFC', border: '#E2E8F0' },
+  schedule_closed: { label: 'Schedule Closed by Clinic', color: '#D97706', bg: '#FEF3C7', border: '#FCD34D' },
+  past:            { label: 'Past Date', color: '#94A3B8', bg: '#F8FAFC', border: '#E2E8F0' },
 };
 
 const normStatus = (st) => (st === 'limited' ? 'available' : st);
@@ -25,8 +28,20 @@ export default function CalendarSection() {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
   const [selectedDate, setSelectedDate] = useState(null);
+  const [closures, setClosures] = useState([]);
+  const [closurePopup, setClosurePopup] = useState(null); // { title, dateStr, reason, slots }
 
-  const nextWeekend = getNextWeekendSlots();
+  // Live Firestore listener for active schedule closures
+  useEffect(() => {
+    try {
+      const q = query(collection(db, 'scheduleClosures'), where('active', '==', true));
+      return onSnapshot(q, snap => {
+        setClosures(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      }, err => console.warn('Public closures listener error:', err));
+    } catch (e) {
+      console.warn('Closures query init error:', e);
+    }
+  }, []);
 
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -36,11 +51,33 @@ export default function CalendarSection() {
   const cells = [];
   for (let i = 0; i < firstDay; i++) cells.push({ day: daysInPrev - firstDay + 1 + i, type: 'other' });
   for (let d = 1; d <= daysInMonth; d++) {
-    const slot = getSlotData(year, month, d);
+    const rawSlot = getSlotData(year, month, d);
     const isToday = new Date(year, month, d).getTime() === today.getTime();
     const dateObj = new Date(year, month, d);
     const dateStr = dateObj.toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-    cells.push({ day: d, dateStr, type: 'current', slot, isToday });
+    const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+
+    // Check active schedule closures
+    const matchingClosures = closures.filter(c => c.startDate <= dateKey && dateKey <= (c.endDate || c.startDate));
+    const fullDayClosure = matchingClosures.find(c => c.type === 'day');
+    const slotClosures = matchingClosures.filter(c => c.type === 'slots');
+
+    let slot = { ...rawSlot, dateKey };
+    if (rawSlot.isWeekend) {
+      if (fullDayClosure) {
+        slot = { status: 'schedule_closed', slots: 0, isWeekend: true, closure: fullDayClosure, dateKey };
+      } else if (slotClosures.length > 0) {
+        const closedSlots = Array.from(new Set(slotClosures.flatMap(c => c.slots || [])));
+        if (closedSlots.length >= 8) {
+          slot = { status: 'schedule_closed', slots: 0, isWeekend: true, closure: slotClosures[0], dateKey };
+        } else {
+          slot.closedSlots = closedSlots;
+          slot.partialClosure = slotClosures[0];
+        }
+      }
+    }
+
+    cells.push({ day: d, dateStr, dateKey, type: 'current', slot, isToday });
   }
 
   const canGoPrev = !(year === now.getFullYear() && month === now.getMonth());
@@ -48,7 +85,51 @@ export default function CalendarSection() {
   const nextMonth = () => { if (month === 11) { setMonth(0); setYear(y => y + 1); } else setMonth(m => m + 1); };
 
   const handleCellClick = (cell) => {
-    setSelectedDate({ dateStr: cell.dateStr, status: cell.slot.status, slots: cell.slot.slots, isWeekend: cell.slot.isWeekend });
+    if (cell.slot.status === 'schedule_closed') {
+      setClosurePopup({
+        title: 'Appointments closed',
+        dateStr: cell.dateStr,
+        reason: cell.slot.closure?.reason || 'The clinic schedule is closed on this date.',
+        slots: cell.slot.closure?.slots || [],
+      });
+      return;
+    }
+    setSelectedDate({
+      dateStr: cell.dateStr,
+      dateKey: cell.dateKey,
+      status: cell.slot.status,
+      slots: cell.slot.slots,
+      isWeekend: cell.slot.isWeekend,
+      closedSlots: cell.slot.closedSlots,
+      partialClosure: cell.slot.partialClosure,
+    });
+  };
+
+  const jumpToNextAvailable = () => {
+    setClosurePopup(null);
+    const check = new Date();
+    for (let i = 1; i <= 60; i++) {
+      const d = new Date(check);
+      d.setDate(check.getDate() + i);
+      const day = d.getDay();
+      if (day === 0 || day === 6) {
+        const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const match = closures.find(c => c.startDate <= k && k <= (c.endDate || c.startDate) && c.type === 'day');
+        if (!match) {
+          setYear(d.getFullYear());
+          setMonth(d.getMonth());
+          const dateStr = d.toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+          setSelectedDate({
+            dateStr,
+            dateKey: k,
+            status: 'available',
+            slots: 8,
+            isWeekend: true,
+          });
+          break;
+        }
+      }
+    }
   };
 
   const selStatus = selectedDate ? normStatus(selectedDate.status) : null;
@@ -285,6 +366,7 @@ export default function CalendarSection() {
                           </span>
                           {st === 'available' && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981', display: 'inline-block' }} />}
                           {st === 'full' && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#EF4444', display: 'inline-block' }} />}
+                          {st === 'schedule_closed' && <Lock size={11} color="#D97706" />}
                           {st === 'closed' && <Lock size={10} color="#94A3B8" />}
                         </div>
 
@@ -296,6 +378,11 @@ export default function CalendarSection() {
                         {st === 'full' && (
                           <span style={{ fontSize: '0.54rem', fontWeight: 800, color: '#EF4444', marginTop: 2 }}>
                             Fully Booked
+                          </span>
+                        )}
+                        {st === 'schedule_closed' && (
+                          <span style={{ fontSize: '0.54rem', fontWeight: 700, color: '#D97706', marginTop: 2 }}>
+                            Closed
                           </span>
                         )}
                         {st === 'closed' && (
@@ -383,11 +470,104 @@ export default function CalendarSection() {
               </div>
             )}
 
-          </div>
-
         </div>
 
       </div>
+
+      {/* K&A Custom Styled Schedule Closure Popup Modal */}
+      {closurePopup && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+          onClick={() => setClosurePopup(null)}
+        >
+          <div
+            style={{
+              background: '#FFFFFF',
+              borderRadius: 20,
+              maxWidth: 440,
+              width: '100%',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              overflow: 'hidden',
+              animation: 'scaleIn 0.2s ease-out',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 40, height: 40, borderRadius: 12, background: '#FEF3C7', color: '#D97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Lock size={20} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                    {closurePopup.title || 'Appointments closed'}
+                  </h3>
+                  <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '2px 0 0', fontWeight: 600 }}>
+                    {closurePopup.dateStr}{closurePopup.slots && closurePopup.slots.length > 0 ? ` (${closurePopup.slots.join(', ')})` : ''}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setClosurePopup(null)}
+                style={{ width: 32, height: 32, borderRadius: 8, border: 'none', background: '#F1F5F9', color: '#64748B', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                aria-label="Close"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Highlighted Quote Box */}
+              <div style={{ background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 14, padding: '14px 16px' }}>
+                <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#B45309', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>
+                  Message from K&amp;A Clinic
+                </div>
+                <div style={{ fontSize: '0.85rem', color: '#78350F', fontWeight: 600, lineHeight: 1.5, fontStyle: 'italic' }}>
+                  &ldquo;{closurePopup.reason}&rdquo;
+                </div>
+              </div>
+
+              {/* Helper line */}
+              <div style={{ fontSize: '0.78rem', color: '#64748B', lineHeight: 1.45, background: '#F8FAFC', borderRadius: 12, padding: '10px 14px', border: '1px solid #E2E8F0' }}>
+                Please choose another date or time. Walk-ins are accepted <strong style={{ color: '#0F172A' }}>Mon–Fri, 8 AM–5 PM</strong>.
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div style={{ padding: '14px 24px 20px', display: 'flex', gap: 10, justifyContent: 'flex-end', borderTop: '1px solid #F1F5F9', background: '#F8FAFC' }}>
+              <button
+                type="button"
+                onClick={jumpToNextAvailable}
+                style={{ padding: '9px 14px', borderRadius: 12, border: '1px solid #CBD5E1', background: '#FFFFFF', color: '#334155', fontSize: '0.8125rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                <span>Show next available</span>
+                <ChevronRight size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setClosurePopup(null)}
+                style={{ padding: '9px 18px', borderRadius: 12, border: 'none', background: '#3B50DF', color: '#FFFFFF', fontSize: '0.8125rem', fontWeight: 700, cursor: 'pointer' }}
+              >
+                Pick another date
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

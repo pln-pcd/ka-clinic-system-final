@@ -69,7 +69,7 @@ service cloud.firestore {
         request.resource.data.status != 'declined'
         && resource.data.status != 'cancelled'
         && (
-          isAdmin() ||
+          (isAdmin() && request.resource.data.status != 'cancelled') ||
           (
             ownAppointment(resource.data)
             && resource.data.status in ['pending', 'confirmed', 'accepted']
@@ -110,6 +110,28 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['date', 'time', 'heldBy', 'createdAt']));
       allow update: if isAdmin();
       allow delete: if isAdmin() || (isPatient() && (resource.data.heldBy == request.auth.uid || resource.data.heldBy == session().mrn || resource.data.heldBy == session().mrn + '-no-app'));
+    }
+    // Schedule closures: staff close whole days or specific slots.
+    // Patients and the public can READ only active closures; admins read all.
+    // Internal notes are kept in /private/meta subcollection (staff-only).
+    // Reopening sets active: false (nobody deletes, keeps full history).
+    match /scheduleClosures/{id} {
+      allow read: if isAdmin() || (resource.data.active == true);
+      allow create: if isAdmin()
+        && request.resource.data.type in ['day', 'slots']
+        && request.resource.data.active == true
+        && request.resource.data.startDate is string
+        && request.resource.data.endDate is string
+        && request.resource.data.reason is string
+        && request.resource.data.reason.size() <= 200
+        && (!('internalNote' in request.resource.data));
+      allow update: if isAdmin()
+        && (!('internalNote' in request.resource.data));
+      allow delete: if false;
+
+      match /private/{subDoc} {
+        allow read, write: if isAdmin();
+      }
     }
     match /inventory/{id} { allow read, write: if isAdmin(); }
     match /stockMovements/{id} {

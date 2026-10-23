@@ -41,7 +41,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { auth, db, storageBucket } from './_lib/firebaseAdmin.js';
 import { requireAuthenticatedAdmin, requireAuthenticatedPatient } from './_lib/auth.js';
 import { isValidEmail, sendMail, warmMailer } from './_lib/mail/mailer.js';
-import { buildFollowUpEmailHtml, buildReportEmailHtml, buildReportEmailText } from './_lib/mail/templates.js';
+import { buildFollowUpEmailHtml, buildReportEmailHtml, buildReportEmailText, buildScheduleClosureEmailHtml, buildScheduleClosureEmailText } from './_lib/mail/templates.js';
 import { logoAttachment } from './_lib/mail/logo.js';
 import { getArchiveDueDate, getCompletionDate, isSeriesCompleted, lastDoseDate, manilaToday } from './_lib/patientCompletion.js';
 import { routeName } from './_lib/router.js';
@@ -1034,10 +1034,335 @@ async function warmReportMailer(req, res) {
   res.status(200).json({ success: true, ...result });
 }
 
-const ADMIN_ACTIONS = { 'send-followup': sendFollowUp, backup: backupNow, 'warm-mailer': warmReportMailer, 'archive-sweep-if-due': archiveSweepIfDue };
-const OPEN_ACTIONS = { 'register-token': registerToken, 'unregister-token': unregisterToken, 'set-avatar': setAvatar, 'remove-avatar': removeAvatar, 'update-profile': updateProfile, ack: acknowledge };
-// Runs unattended on a schedule, so it authenticates with CRON_SECRET rather
-// than an admin's ID token.
+// ── Schedule Closures & Appointment Booking ──────────────────────────────
+function isWeekendInManila(dateStr) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr || '')) return false;
+  const d = new Date(`${dateStr}T12:00:00+08:00`);
+  const day = d.getDay();
+  return day === 0 || day === 6;
+}
+
+async function findActiveClosure(date, time) {
+  const closuresSnap = await db.collection('scheduleClosures').where('active', '==', true).get();
+  for (const cDoc of closuresSnap.docs) {
+    const c = cDoc.data();
+    if (c.startDate <= date && date <= c.endDate) {
+      if (c.type === 'day') return { id: cDoc.id, ...c };
+      if (c.type === 'slots' && Array.isArray(c.slots) && c.slots.includes(time)) return { id: cDoc.id, ...c };
+    }
+  }
+  return null;
+}
+
+async function saveClosure(req, res, caller) {
+  const { id, type, startDate, endDate, slots, reasonPreset, reason, internalNote, notifyAffectedPatients } = req.body || {};
+  if (!['day', 'slots'].includes(type)) {
+    res.status(400).json({ success: false, error: 'Type must be "day" or "slots".' });
+    return;
+  }
+  if (!startDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+    res.status(400).json({ success: false, error: 'Valid startDate is required (YYYY-MM-DD).' });
+    return;
+  }
+  const end = endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate) ? endDate : startDate;
+  if (end < startDate) {
+    res.status(400).json({ success: false, error: 'endDate cannot be before startDate.' });
+    return;
+  }
+  if (!isWeekendInManila(startDate) || !isWeekendInManila(end)) {
+    res.status(400).json({ success: false, error: 'Only Saturdays and Sundays can be closed.' });
+    return;
+  }
+  if (type === 'slots' && (!Array.isArray(slots) || slots.length === 0)) {
+    res.status(400).json({ success: false, error: 'Specific time slots must be selected.' });
+    return;
+  }
+  if (!reason || !String(reason).trim()) {
+    res.status(400).json({ success: false, error: 'Reason for closure is required.' });
+    return;
+  }
+
+  const closureRef = id ? db.collection('scheduleClosures').doc(id) : db.collection('scheduleClosures').doc();
+  const existingSnap = await closureRef.get();
+  const existing = existingSnap.exists ? existingSnap.data() : null;
+
+  const closureData = {
+    type,
+    startDate,
+    endDate: end,
+    slots: type === 'slots' ? slots : [],
+    reasonPreset: reasonPreset || 'other',
+    reason: String(reason).trim().slice(0, 200),
+    hasInternalNote: Boolean(internalNote && String(internalNote).trim()),
+    active: true,
+    createdBy: existing?.createdBy || { uid: caller.uid, name: caller.name || caller.email || 'Staff' },
+    createdAt: existing?.createdAt || Date.now(),
+    updatedBy: { uid: caller.uid, name: caller.name || caller.email || 'Staff' },
+    updatedAt: Date.now(),
+  };
+
+  await closureRef.set(closureData, { merge: true });
+
+  if (internalNote !== undefined) {
+    const metaRef = closureRef.collection('private').doc('meta');
+    if (internalNote && String(internalNote).trim()) {
+      await metaRef.set({
+        internalNote: String(internalNote).trim(),
+        updatedAt: Date.now(),
+        updatedBy: { uid: caller.uid, name: caller.name || caller.email || 'Staff' },
+      });
+    } else {
+      await metaRef.delete().catch(() => {});
+    }
+  }
+
+  let notifiedCount = 0;
+  if (notifyAffectedPatients) {
+    const aptsSnap = await db.collection('appointments')
+      .where('date', '>=', startDate)
+      .where('date', '<=', end)
+      .get();
+
+    const affected = [];
+    for (const d of aptsSnap.docs) {
+      const a = d.data();
+      if (['cancelled', 'declined'].includes(a.status)) continue;
+      if (type === 'slots' && (!Array.isArray(slots) || !slots.includes(a.time))) continue;
+      affected.push({ id: d.id, ref: d.ref, ...a });
+    }
+
+    for (const apt of affected) {
+      await apt.ref.update({
+        affectedByClosure: true,
+        closureId: closureRef.id,
+        closureReason: closureData.reason,
+        updatedAt: Date.now(),
+      });
+
+      let pushTokens = [];
+      let email = apt.email || '';
+      if (apt.patientId) {
+        const vaxSnap = await db.collection('vaccinations').doc(apt.patientId).get();
+        if (vaxSnap.exists) {
+          const vaxData = vaxSnap.data() || {};
+          if (Array.isArray(vaxData.pushTokens)) pushTokens = vaxData.pushTokens;
+          if (vaxData.email) email = vaxData.email;
+        }
+      }
+
+      const notifMsg = `Your appointment on ${apt.date} at ${apt.time || ''} is affected by a schedule closure. Reason: ${closureData.reason}. Your appointment is still on record. Please open the app to reschedule or cancel it.`;
+
+      await db.collection('patientNotifications').add({
+        patientId: apt.patientId || apt.patientUid || '',
+        appointmentId: apt.id,
+        title: 'Schedule closure update',
+        message: notifMsg,
+        source: 'schedule-closure',
+        closureId: closureRef.id,
+        date: apt.date,
+        time: apt.time || '',
+        reason: closureData.reason,
+        read: false,
+        createdAt: Date.now(),
+      });
+
+      if (pushTokens.length > 0) {
+        sendExpoPush(pushTokens, {
+          title: 'Schedule closure update',
+          body: notifMsg,
+          data: {
+            type: 'schedule-closure',
+            closureId: closureRef.id,
+            appointmentId: apt.id,
+            screen: 'appt',
+          },
+        }).catch(err => console.error('Push error:', err));
+      }
+
+      if (email && isValidEmail(email)) {
+        sendMail({
+          to: email,
+          subject: 'K&A Clinic — Appointment update: Schedule closure',
+          html: buildScheduleClosureEmailHtml({
+            patientName: apt.name || '',
+            date: apt.date,
+            time: apt.time || '',
+            reason: closureData.reason,
+          }),
+          text: buildScheduleClosureEmailText({
+            patientName: apt.name || '',
+            date: apt.date,
+            time: apt.time || '',
+            reason: closureData.reason,
+          }),
+          role: 'reminders',
+        }).catch(err => console.error('Email error:', err));
+      }
+
+      notifiedCount++;
+    }
+  }
+
+  res.status(200).json({ success: true, id: closureRef.id, notifiedCount });
+}
+
+async function reopenClosure(req, res, caller) {
+  const { id } = req.body || {};
+  if (!id) {
+    res.status(400).json({ success: false, error: 'Closure id is required.' });
+    return;
+  }
+  const closureRef = db.collection('scheduleClosures').doc(id);
+  const snap = await closureRef.get();
+  if (!snap.exists) {
+    res.status(404).json({ success: false, error: 'Closure not found.' });
+    return;
+  }
+  await closureRef.update({
+    active: false,
+    reopenedBy: { uid: caller.uid, name: caller.name || caller.email || 'Staff' },
+    reopenedAt: Date.now(),
+    updatedAt: Date.now(),
+  });
+
+  const affectedSnap = await db.collection('appointments').where('closureId', '==', id).get();
+  const batch = db.batch();
+  affectedSnap.docs.forEach(d => {
+    batch.update(d.ref, { affectedByClosure: false, updatedAt: Date.now() });
+  });
+  await batch.commit();
+
+  res.status(200).json({ success: true, id });
+}
+
+async function getClosureNote(req, res, caller) {
+  const id = req.query?.id || req.body?.id;
+  if (!id) {
+    res.status(400).json({ success: false, error: 'Closure id is required.' });
+    return;
+  }
+  const metaSnap = await db.collection('scheduleClosures').doc(id).collection('private').doc('meta').get();
+  res.status(200).json({ success: true, internalNote: metaSnap.exists ? (metaSnap.data()?.internalNote || '') : '' });
+}
+
+async function bookAppointment(req, res) {
+  let patientCaller = await requireAuthenticatedPatient(req);
+  let adminCaller = null;
+  if (patientCaller.error) {
+    adminCaller = await requireAuthenticatedAdmin(req);
+    if (adminCaller.error) {
+      res.status(401).json({ success: false, error: 'Authentication required.' });
+      return;
+    }
+  }
+
+  const aptData = req.body?.appointment || req.body || {};
+  const { date, time, name, contactNumber, type, notes } = aptData;
+  if (!date || !time) {
+    res.status(400).json({ success: false, error: 'Date and time are required.' });
+    return;
+  }
+  if (!isWeekendInManila(date)) {
+    res.status(400).json({ success: false, error: 'Appointments are on Saturdays and Sundays only.' });
+    return;
+  }
+
+  const closure = await findActiveClosure(date, time);
+  if (closure) {
+    res.status(409).json({
+      success: false,
+      code: 'SCHEDULE_CLOSED',
+      error: 'Appointments closed',
+      reason: closure.reason || 'This date or slot is closed by the clinic.',
+      closure: {
+        id: closure.id,
+        type: closure.type,
+        startDate: closure.startDate,
+        endDate: closure.endDate,
+        slots: closure.slots || [],
+        reason: closure.reason,
+      },
+    });
+    return;
+  }
+
+  const slotDocId = `${date}_${String(time).replace(/[\s:]/g, '')}`;
+  const slotRef = db.collection('appointmentSlots').doc(slotDocId);
+  const apptRef = db.collection('appointments').doc();
+
+  try {
+    await db.runTransaction(async tx => {
+      const existingSlot = await tx.get(slotRef);
+      if (existingSlot.exists) {
+        throw new Error('SLOT_TAKEN');
+      }
+
+      const isAdm = Boolean(adminCaller && !adminCaller.error);
+      const uid = isAdm ? adminCaller.uid : patientCaller.uid;
+      const mrn = isAdm ? (aptData.patientId || '') : (patientCaller.mrn || '');
+
+      tx.set(slotRef, {
+        date,
+        time,
+        heldBy: uid,
+        createdAt: Date.now(),
+      });
+
+      tx.set(apptRef, {
+        userId: uid,
+        patientUid: uid,
+        patientId: mrn,
+        email: isAdm ? (aptData.email || '') : (patientCaller.email || ''),
+        name: String(name || aptData.name || '').trim(),
+        age: String(aptData.age || '').trim(),
+        gender: String(aptData.gender || ''),
+        address: String(aptData.address || '').trim(),
+        contactNumber: String(contactNumber || aptData.contactNumber || '').trim(),
+        date,
+        time,
+        type: String(type || aptData.type || 'PEP').trim(),
+        status: isAdm ? 'confirmed' : 'pending',
+        source: isAdm ? 'walk-in' : 'app',
+        notes: String(notes || aptData.notes || '').trim().slice(0, 300),
+        createdAt: Date.now(),
+      });
+    });
+
+    res.status(200).json({ success: true, appointmentId: apptRef.id, slotId: slotDocId });
+  } catch (err) {
+    if (err.message === 'SLOT_TAKEN') {
+      res.status(409).json({ success: false, code: 'SLOT_TAKEN', error: 'This time slot is already booked.' });
+    } else {
+      console.error('bookAppointment error:', err);
+      res.status(500).json({ success: false, error: 'Could not book appointment.' });
+    }
+  }
+}
+
+const ADMIN_ACTIONS = {
+  'send-followup': sendFollowUp,
+  backup: backupNow,
+  'warm-mailer': warmReportMailer,
+  'archive-sweep-if-due': archiveSweepIfDue,
+  'save-closure': saveClosure,
+  saveClosure: saveClosure,
+  'reopen-closure': reopenClosure,
+  reopenClosure: reopenClosure,
+  'get-closure-note': getClosureNote,
+  getClosureNote: getClosureNote,
+  'book-appointment': bookAppointment,
+  bookAppointment: bookAppointment,
+};
+const OPEN_ACTIONS = {
+  'register-token': registerToken,
+  'unregister-token': unregisterToken,
+  'set-avatar': setAvatar,
+  'remove-avatar': removeAvatar,
+  'update-profile': updateProfile,
+  ack: acknowledge,
+  'book-appointment': bookAppointment,
+  bookAppointment: bookAppointment,
+};
 const CRON_ACTIONS = { 'dose-sweep': doseSweep, 'backup-cron': backupCron, 'patient-archive-sweep': patientArchiveSweep };
 
 // ══════════════════════════════════════════════════════════════════════════

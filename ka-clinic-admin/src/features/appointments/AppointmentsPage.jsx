@@ -9,6 +9,7 @@ import {
 } from 'firebase/firestore';
 import {
   AlertCircle,
+  AlertTriangle,
   Calendar as CalendarIcon,
   CalendarX,
   Check,
@@ -19,6 +20,7 @@ import {
   Eye,
   Clock,
   Copy,
+  Lock,
   Phone,
   Plus,
   RotateCcw,
@@ -830,7 +832,87 @@ const globalCSS = `
   }
   .toast-success { background: #15803D; }
   .toast-error { background: #B91C1C; }
+
+  /* Schedule Closures */
+  .cal-day-cell.closed-day {
+    background: repeating-linear-gradient(
+      -45deg,
+      #F8FAFC,
+      #F8FAFC 6px,
+      #E2E8F0 6px,
+      #E2E8F0 12px
+    ) !important;
+  }
+  .cal-day-cell.closed-day:hover {
+    background: repeating-linear-gradient(
+      -45deg,
+      #F1F5F9,
+      #F1F5F9 6px,
+      #CBD5E1 6px,
+      #CBD5E1 12px
+    ) !important;
+  }
+  .cal-lock-badge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 17px;
+    height: 17px;
+    border-radius: 9999px;
+    background: #FEF3C7;
+    color: #D97706;
+    border: 1px solid #FCD34D;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  }
+  .cal-lock-badge.full {
+    background: #FEE2E2;
+    color: #DC2626;
+    border-color: #FCA5A5;
+  }
+  .btn-close-schedule {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #FFFBEB;
+    border: 1px solid #FCD34D;
+    color: #B45309;
+    border-radius: 10px;
+    padding: 7px 13px;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .btn-close-schedule:hover {
+    background: #FEF3C7;
+    border-color: #F59E0B;
+    color: #92400E;
+  }
 `;
+
+const CLOSURE_PRESETS = [
+  { id: 'doctor_unavailable', label: 'Doctor unavailable', defaultMsg: 'The doctor is unavailable on this date. Appointments are temporarily suspended.' },
+  { id: 'holiday', label: 'Holiday', defaultMsg: 'The clinic is closed in observance of the holiday.' },
+  { id: 'clinic_event', label: 'Clinic event', defaultMsg: 'The clinic is holding a special event during this time. Regular appointments are suspended.' },
+  { id: 'maintenance', label: 'System maintenance', defaultMsg: 'The clinic is undergoing scheduled facility or system maintenance.' },
+  { id: 'other', label: 'Other', defaultMsg: '' },
+];
+
+const EMPTY_CLOSE_FORM = () => ({
+  id: null,
+  type: 'day', // 'day' | 'slots'
+  startDate: '',
+  endDate: '',
+  isRange: false,
+  slots: [],
+  reasonPreset: 'doctor_unavailable',
+  reason: 'The doctor is unavailable on this date. Appointments are temporarily suspended.',
+  internalNote: '',
+  notifyAffectedPatients: true,
+});
 
 const TIME_SLOTS = [
   "8:00 AM - 9:00 AM",
@@ -997,7 +1079,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
   const [appointments, setAppointments] = useState(() => peekLiveCollection('appointments').rows);
   const [selectedDate, setSelectedDate] = useState(getTodayDateString());
   const [currentViewDate, setCurrentViewDate] = useState(new Date());
-  const [rightPanelTab, setRightPanelTab] = useState('requests'); // 'requests' | 'cancel-requests' | 'cancelled'
+  const [rightPanelTab, setRightPanelTab] = useState('requests'); // 'requests' | 'closures' | 'cancel-requests' | 'cancelled'
   const [monthPickerOpen, setMonthPickerOpen] = useState(false);
   const [pickerYear, setPickerYear] = useState(() => new Date().getFullYear());
   const monthPickerRef = useRef(null);
@@ -1006,6 +1088,25 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingApt, setEditingApt] = useState(null);
+
+  // Schedule Closures state
+  const closureLive = useLiveCollection('scheduleClosures');
+  const closures = closureLive.rows || [];
+  const activeClosures = closures.filter(c => c.active !== false);
+
+  const [closeModalOpen, setCloseModalOpen] = useState(false);
+  const [closeForm, setCloseForm] = useState(EMPTY_CLOSE_FORM);
+  const [savingClosure, setSavingClosure] = useState(false);
+  const [reopenConfirm, setReopenConfirm] = useState(null);
+  const [reopening, setReopening] = useState(false);
+  const [showPastClosures, setShowPastClosures] = useState(false);
+
+  // Ask before closing Close Schedule modal with changes typed in it
+  const [requestCloseClosure, closureDiscardDialog] = useDiscardGuard(
+    closeForm,
+    () => setCloseModalOpen(false),
+    { resetKey: closeModalOpen, enabled: closeModalOpen }
+  );
 
   const [addForm, setAddForm] = useState(EMPTY_ADD_FORM);
   // Ask before closing Add Appointment with something typed in it.
@@ -1053,6 +1154,140 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
       .filter(a => a.date === date && a.id !== exceptId && !INACTIVE_STATUSES.includes(String(a.status || 'pending').toLowerCase()))
       .map(a => a.time),
   ]));
+
+  // Schedule closure lookup for a date
+  const getDayClosure = (dateStr) => {
+    if (!dateStr) return null;
+    const matches = activeClosures.filter(c => c.startDate <= dateStr && dateStr <= (c.endDate || c.startDate));
+    if (!matches.length) return null;
+    const dayClosure = matches.find(c => c.type === 'day');
+    if (dayClosure) return { type: 'day', closure: dayClosure, all: matches };
+    const allSlots = matches.filter(c => c.type === 'slots').flatMap(c => c.slots || []);
+    const uniqueSlots = Array.from(new Set(allSlots));
+    if (uniqueSlots.length >= TIME_SLOTS.length) {
+      return { type: 'day', closure: matches[0], all: matches, slots: uniqueSlots };
+    }
+    return { type: 'slots', closure: matches[0], all: matches, slots: uniqueSlots };
+  };
+
+  const openCloseScheduleModal = async (closureToEdit = null) => {
+    if (closureToEdit) {
+      let internalNote = '';
+      try {
+        const res = await authedPostJson('/api/notifications', { action: 'getClosureNote', id: closureToEdit.id });
+        if (res && res.internalNote) internalNote = res.internalNote;
+      } catch (err) {
+        console.warn('Could not fetch internalNote:', err);
+      }
+      setCloseForm({
+        id: closureToEdit.id,
+        type: closureToEdit.type || 'day',
+        startDate: closureToEdit.startDate || '',
+        endDate: closureToEdit.endDate || closureToEdit.startDate || '',
+        isRange: Boolean(closureToEdit.endDate && closureToEdit.endDate !== closureToEdit.startDate),
+        slots: Array.isArray(closureToEdit.slots) ? [...closureToEdit.slots] : [],
+        reasonPreset: closureToEdit.reasonPreset || 'other',
+        reason: closureToEdit.reason || '',
+        internalNote,
+        notifyAffectedPatients: true,
+      });
+    } else {
+      const defaultDate = isWeekendDate(selectedDate) ? selectedDate : '';
+      setCloseForm({
+        ...EMPTY_CLOSE_FORM(),
+        startDate: defaultDate,
+        endDate: defaultDate,
+      });
+    }
+    setCloseModalOpen(true);
+  };
+
+  const handleSaveClosure = async () => {
+    if (!closeForm.startDate) {
+      showToast('Please select a start date', 'error');
+      return;
+    }
+    if (!isWeekendDate(closeForm.startDate)) {
+      showToast('Start date must be a Saturday or Sunday', 'error');
+      return;
+    }
+    const end = closeForm.isRange && closeForm.endDate ? closeForm.endDate : closeForm.startDate;
+    if (closeForm.isRange && !isWeekendDate(end)) {
+      showToast('End date must be a Saturday or Sunday', 'error');
+      return;
+    }
+    if (end < closeForm.startDate) {
+      showToast('End date cannot be before start date', 'error');
+      return;
+    }
+    if (closeForm.type === 'slots' && (!closeForm.slots || closeForm.slots.length === 0)) {
+      showToast('Please select at least one time slot to close', 'error');
+      return;
+    }
+    if (!closeForm.reason || !closeForm.reason.trim()) {
+      showToast('Message to patients is required', 'error');
+      return;
+    }
+
+    setSavingClosure(true);
+    try {
+      const payload = {
+        action: 'saveClosure',
+        id: closeForm.id || undefined,
+        type: closeForm.type,
+        startDate: closeForm.startDate,
+        endDate: end,
+        slots: closeForm.type === 'slots' ? closeForm.slots : [],
+        reasonPreset: closeForm.reasonPreset,
+        reason: closeForm.reason.trim().slice(0, 150),
+        internalNote: closeForm.internalNote.trim(),
+        notifyAffectedPatients: closeForm.notifyAffectedPatients,
+      };
+      const res = await authedPostJson('/api/notifications', payload);
+      if (!res?.success) throw new Error(res?.error || 'Failed to save closure');
+
+      const action = closeForm.id ? 'closure.update' : 'closure.create';
+      logActivity({
+        action,
+        collection: 'scheduleClosures',
+        docId: res.id || closeForm.id || '',
+        summary: `${closeForm.id ? 'Updated' : 'Created'} schedule closure for ${closeForm.startDate}${end !== closeForm.startDate ? ` to ${end}` : ''}: ${closeForm.reason.slice(0, 50)}`,
+      });
+
+      trackEvent(closeForm.id ? 'schedule_closure_updated' : 'schedule_closure_created');
+      showToast(closeForm.id ? 'Schedule closure updated' : 'Schedule closed successfully');
+      setCloseModalOpen(false);
+    } catch (err) {
+      console.error('Save closure error:', err);
+      showToast(err?.message || 'Failed to close schedule', 'error');
+    } finally {
+      setSavingClosure(false);
+    }
+  };
+
+  const handleReopenClosure = async (closure) => {
+    setReopening(true);
+    try {
+      const res = await authedPostJson('/api/notifications', { action: 'reopenClosure', id: closure.id });
+      if (!res?.success) throw new Error(res?.error || 'Failed to reopen schedule');
+
+      logActivity({
+        action: 'closure.reopen',
+        collection: 'scheduleClosures',
+        docId: closure.id,
+        summary: `Reopened schedule closure for ${closure.startDate}: patients can book again`,
+      });
+
+      trackEvent('schedule_closure_reopened');
+      showToast('Schedule reopened. Patients can book again.');
+      setReopenConfirm(null);
+    } catch (err) {
+      console.error('Reopen error:', err);
+      showToast(err?.message || 'Failed to reopen schedule', 'error');
+    } finally {
+      setReopening(false);
+    }
+  };
 
   // Calendar Generation
   // Always 6 full weeks (42 cells), so the calendar card is the same height
@@ -1208,6 +1443,15 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
       source: 'walk-in',
       createdAt: Date.now(),
     };
+    // Guard against booking on closed schedule
+    const closureInfo = getDayClosure(newApt.date);
+    if (closureInfo) {
+      if (closureInfo.type === 'day' || (closureInfo.type === 'slots' && closureInfo.slots.includes(newApt.time))) {
+        showToast(`Cannot book: This time is closed (${closureInfo.closure.reason})`, 'error');
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       const created = await addDoc(collection(db, 'appointments'), newApt);
@@ -1339,10 +1583,22 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
 
             </div>
 
-            <button className="btn-add-primary" onClick={() => { setSaving(false); setAddForm(EMPTY_ADD_FORM()); addV.clear(); setAddModalOpen(true); }} style={{ padding: '7px 14px', fontSize: '0.8125rem', whiteSpace: 'nowrap', flexShrink: 0 }}>
-              <Plus size={15} />
-              <span>Add Appointment</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="btn-close-schedule"
+                onClick={() => openCloseScheduleModal()}
+                title="Close schedule days or time slots"
+              >
+                <Lock size={15} />
+                <span>Close schedule</span>
+              </button>
+
+              <button className="btn-add-primary" onClick={() => { setSaving(false); setAddForm(EMPTY_ADD_FORM()); addV.clear(); setAddModalOpen(true); }} style={{ padding: '7px 14px', fontSize: '0.8125rem', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                <Plus size={15} />
+                <span>Add Appointment</span>
+              </button>
+            </div>
           </div>
 
           <div style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 600, marginTop: 8 }}>
@@ -1366,21 +1622,36 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
               const isToday = dStr === todayStr;
               const isSelected = selectedDate === dStr;
               const isWeekend = isWeekendDate(dStr);
+              const closureInfo = isWeekend ? getDayClosure(dStr) : null;
+              const isFullyClosed = closureInfo?.type === 'day';
+              const isPartiallyClosed = closureInfo?.type === 'slots';
 
               // Weekdays are closed: shown muted, not clickable, no popup.
               // Weekends (past ones too) open the day's appointments.
               return (
                 <div
                   key={i}
-                  className={`cal-day-cell ${c.isOtherMonth ? 'other-month' : ''} ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''} ${isWeekend ? 'weekend' : 'weekday'}`}
+                  className={`cal-day-cell ${c.isOtherMonth ? 'other-month' : ''} ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''} ${isWeekend ? 'weekend' : 'weekday'} ${isFullyClosed ? 'closed-day' : ''}`}
                   onClick={isWeekend ? () => openDay(dStr, c) : undefined}
                   onKeyDown={isWeekend ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDay(dStr, c); } } : undefined}
                   role={isWeekend ? 'button' : undefined}
                   tabIndex={isWeekend ? 0 : -1}
                   aria-disabled={!isWeekend}
-                  title={isWeekend ? `View appointments on ${formatDateMedium(dStr)}` : 'Closed on weekdays'}
+                  title={isWeekend ? (isFullyClosed ? `Closed: ${closureInfo.closure.reason}` : isPartiallyClosed ? `Partially closed (${closureInfo.slots.length} slots)` : `View appointments on ${formatDateMedium(dStr)}`) : 'Closed on weekdays'}
                 >
                   <span className="cal-num">{c.day}</span>
+
+                  {/* Lock badge for closures */}
+                  {isFullyClosed && (
+                    <span className="cal-lock-badge full" title={`Closed: ${closureInfo.closure.reason}`}>
+                      <Lock size={9} strokeWidth={2.5} />
+                    </span>
+                  )}
+                  {isPartiallyClosed && !isFullyClosed && (
+                    <span className="cal-lock-badge" title={`Partially closed (${closureInfo.slots.length} slots)`}>
+                      <Lock size={9} strokeWidth={2.5} />
+                    </span>
+                  )}
 
                   {dayApts.length > 0 && (
                     <div className="cal-dots-row">
@@ -1397,6 +1668,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
             <div className="legend-item"><div className="dot-status dot-confirmed" /> Confirmed</div>
             <div className="legend-item"><div className="dot-status dot-pending" /> Pending</div>
             <div className="legend-item"><div className="dot-status dot-done" /> Done</div>
+            <div className="legend-item"><Lock size={12} className="text-amber-600 inline mr-1" /> Closed</div>
           </div>
         </div>
 
@@ -1405,15 +1677,16 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
         <div className="right-panel">
           <div className="card queue-card" style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', padding: '16px 18px', overflow: 'hidden' }}>
             {(() => {
-              // Three queues, one card design. Only tabs that need staff action
-              // get an accent on their count.
+              // Queues and closures tabs
               const TABS = [
-                { key: 'requests', label: 'Booking Requests', count: pendingOnlineRequests.length, action: true,
+                { key: 'requests', label: 'Requests', count: pendingOnlineRequests.length, action: true,
                   desc: 'New bookings from the app and website, waiting for you to confirm.' },
+                { key: 'closures', label: 'Closures', count: activeClosures.length, action: false,
+                  desc: 'Closed dates and hours. Patients cannot book closed schedules.' },
                 ...(cancellationRequests.length > 0 ? [{ key: 'cancel-requests', label: 'Cancel Requests', count: cancellationRequests.length, action: true,
-                  desc: 'Patients asked to cancel a confirmed visit. Approve to free the slot, or keep it.' }] : []),
+                  desc: 'Patients asked to cancel a confirmed visit. Staff can keep or review.' }] : []),
                 { key: 'cancelled', label: 'Cancelled', count: allCancelledApts.length, action: false,
-                  desc: 'Cancelled visits (read-only). Each is removed automatically 90 days after its visit date.' },
+                  desc: 'Visits cancelled by the patient, kept here for 90 days.' },
               ];
               const active = TABS.find(t => t.key === rightPanelTab) || TABS[0];
               return (
@@ -1427,6 +1700,101 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
             <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, padding: '2px' }}>
               {(() => {
                 const empty = (Icon, title, text) => <EmptyState icon={Icon} title={title} text={text} className="h-full" />;
+
+                // Closures Panel
+                if (rightPanelTab === 'closures') {
+                  const displayedClosures = showPastClosures
+                    ? [...closures].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+                    : activeClosures.sort((a, b) => String(a.startDate || '').localeCompare(String(b.startDate || '')));
+
+                  return (
+                    <div className="flex flex-col h-full">
+                      <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100 px-1">
+                        <span className="text-xs font-semibold text-slate-500">
+                          {displayedClosures.length} {showPastClosures ? 'total' : 'active'} closure{displayedClosures.length === 1 ? '' : 's'}
+                        </span>
+                        <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            className="rounded border-slate-300 text-[#3B50DF] focus:ring-[#3B50DF]"
+                            checked={showPastClosures}
+                            onChange={e => setShowPastClosures(e.target.checked)}
+                          />
+                          <span>Show past / reopened</span>
+                        </label>
+                      </div>
+
+                      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2.5 p-0.5">
+                        {displayedClosures.length === 0 ? (
+                          <EmptyState
+                            icon={Lock}
+                            title={showPastClosures ? "No closures recorded" : "No active closures"}
+                            text={showPastClosures ? "No schedule closures have been recorded yet." : "All weekend clinic schedules are currently open for booking."}
+                            minHeight={160}
+                          />
+                        ) : (
+                          displayedClosures.map(c => {
+                            const isReopened = c.active === false;
+                            const dateRangeLabel = c.startDate === c.endDate || !c.endDate
+                              ? formatDateMedium(c.startDate)
+                              : `${formatDateMedium(c.startDate)} – ${formatDateMedium(c.endDate)}`;
+                            const isSlots = c.type === 'slots';
+
+                            return (
+                              <div
+                                key={c.id}
+                                className={`p-3.5 rounded-xl border transition-all ${isReopened ? 'bg-slate-50/70 border-slate-200 opacity-75' : 'bg-white border-amber-200 shadow-xs'}`}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-bold text-slate-900">{dateRangeLabel}</span>
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isReopened ? 'bg-slate-200 text-slate-700' : 'bg-amber-100 text-amber-800'}`}>
+                                      {isReopened ? 'Reopened' : isSlots ? 'Specific Slots' : 'Whole Day'}
+                                    </span>
+                                  </div>
+                                  {!isReopened && (
+                                    <div className="flex items-center gap-1.5">
+                                      <button
+                                        type="button"
+                                        className="px-2 py-1 text-[11px] font-semibold rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer"
+                                        onClick={() => openCloseScheduleModal(c)}
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="px-2 py-1 text-[11px] font-semibold rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors cursor-pointer"
+                                        onClick={() => setReopenConfirm(c)}
+                                      >
+                                        Reopen
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {isSlots && Array.isArray(c.slots) && (
+                                  <div className="text-[11px] font-medium text-amber-700 mt-1 flex items-center gap-1 flex-wrap">
+                                    <Clock size={11} /> {c.slots.join(', ')}
+                                  </div>
+                                )}
+
+                                <p className="text-xs text-slate-700 mt-1.5 font-medium">&ldquo;{c.reason}&rdquo;</p>
+
+                                <div className="mt-2 pt-2 border-t border-slate-100 text-[10px] text-slate-400 flex items-center justify-between">
+                                  <span>Closed by {c.createdBy?.name || 'Staff'}</span>
+                                  {isReopened && c.reopenedBy && (
+                                    <span>Reopened by {c.reopenedBy?.name || 'Staff'}</span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
+
                 // Card actions: negative on the left, primary on the right.
                 if (rightPanelTab === 'cancel-requests') {
                   if (cancellationRequests.length === 0) return empty(CheckCircle2, 'No cancel requests', 'When a patient asks to cancel a confirmed visit, it appears here.');
@@ -1436,9 +1804,6 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                       actions={<>
                         <button type="button" className={BTN_SM.outline} onClick={() => promptQuickAction(apt, 'confirmed')} title="Keep this appointment">
                           <RotateCcw size={BTN_SM_ICON} /> Keep appointment
-                        </button>
-                        <button type="button" className={BTN_SM.danger} onClick={() => promptQuickAction(apt, 'cancelled')} title="Cancel this appointment">
-                          <CalendarX size={BTN_SM_ICON} /> Cancel appointment
                         </button>
                       </>} />
                   ));
@@ -1513,6 +1878,57 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
               </div>
               <IconButton icon={X} label="Close" size={36} iconSize={16} onClick={() => setDatePreviewModalOpen(false)} />
             </div>
+
+            {/* Active Closure Banner */}
+            {(() => {
+              const closureInfo = getDayClosure(selectedDate);
+              if (!closureInfo) return null;
+              const c = closureInfo.closure;
+              const isAllDay = closureInfo.type === 'day';
+              return (
+                <div className="mx-4 mt-3 mb-1 p-3.5 rounded-xl border border-amber-300 bg-amber-50 flex flex-col gap-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-2.5">
+                      <div className="w-7 h-7 rounded-lg bg-amber-200 text-amber-800 flex items-center justify-center shrink-0 mt-0.5">
+                        <Lock size={15} />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-amber-900 uppercase tracking-wide">
+                            {isAllDay ? 'Schedule Closed (Whole Day)' : `Closed Slots (${closureInfo.slots.join(', ')})`}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200 text-amber-800">
+                            {c.reasonPreset ? c.reasonPreset.replace('_', ' ') : 'Closed'}
+                          </span>
+                        </div>
+                        <p className="text-xs font-semibold text-amber-950 mt-1">&ldquo;{c.reason}&rdquo;</p>
+                        <div className="text-[11px] text-amber-700 mt-1 flex items-center gap-3 flex-wrap">
+                          <span>Closed by: <strong>{c.createdBy?.name || 'Staff'}</strong></span>
+                          <span>•</span>
+                          <span>{formatDateMedium(new Date(c.createdAt || Date.now()).toISOString().slice(0, 10))}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-white border border-amber-300 text-amber-800 hover:bg-amber-100 transition-colors cursor-pointer"
+                        onClick={() => { setDatePreviewModalOpen(false); openCloseScheduleModal(c); }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-amber-600 text-white hover:bg-amber-700 transition-colors cursor-pointer shadow-xs"
+                        onClick={() => { setDatePreviewModalOpen(false); setReopenConfirm(c); }}
+                      >
+                        Reopen
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Content List Body */}
             <div style={{ padding: '10px 18px', maxHeight: 520, overflowY: 'auto', flex: 1 }}>
@@ -1675,12 +2091,23 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                   onChange={e => setAddForm({ ...addForm, time: e.target.value })}
                 >
                   <option value="">{addForm.date ? 'Select time slot' : 'Choose a date first'}</option>
-                  {/* Taken hours stay selectable — the clinic can deliberately
-                      double-book a walk-in — but are labelled so it is a choice,
-                      not an accident. */}
                   {TIME_SLOTS.map(t => {
                     const taken = takenTimesOn(addForm.date).includes(t);
-                    return <option key={t} value={t}>{taken ? `${t} — booked` : t}</option>;
+                    const closureInfo = getDayClosure(addForm.date);
+                    const isClosed = closureInfo && (
+                      closureInfo.type === 'day' ||
+                      (closureInfo.type === 'slots' && closureInfo.slots.includes(t))
+                    );
+                    const reason = closureInfo?.closure?.reason;
+                    return (
+                      <option key={t} value={t} disabled={isClosed}>
+                        {isClosed
+                          ? `${t} — Closed (${reason || 'Clinic schedule closed'})`
+                          : taken
+                            ? `${t} — booked`
+                            : t}
+                      </option>
+                    );
                   })}
                 </Select>
                 <FieldError v={addV} name="time" />
@@ -1836,9 +2263,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                     <button type="button" className={BTN.outline} onClick={() => { close(); promptQuickAction(apt, 'confirmed'); }}>
                       <RotateCcw size={BTN_ICON} /> Keep appointment
                     </button>
-                    <button type="button" className={BTN.danger} onClick={() => { close(); promptQuickAction(apt, 'cancelled'); }}>
-                      <CalendarX size={BTN_ICON} /> Approve cancellation
-                    </button>
+                    <span className="text-xs text-slate-400 italic">Patients cancel visits directly in app</span>
                   </div>
                 )}
               </div>
@@ -1894,6 +2319,301 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
           />
         );
       })()}
+
+      {/* Close Schedule Modal */}
+      {closeModalOpen && (() => {
+        const affectedBookings = appointments.filter(a => {
+          if (!a.date || INACTIVE_STATUSES.includes(String(a.status || '').toLowerCase())) return false;
+          const end = closeForm.isRange && closeForm.endDate ? closeForm.endDate : closeForm.startDate;
+          if (a.date < closeForm.startDate || a.date > end) return false;
+          if (closeForm.type === 'slots') {
+            return closeForm.slots.includes(a.time);
+          }
+          return true;
+        });
+
+        const CLOSE_TABS = [
+          { key: 'day', label: 'Whole day' },
+          { key: 'slots', label: 'Specific time slots' },
+        ];
+
+        return (
+          <Modal
+            isOpen={closeModalOpen}
+            onClose={requestCloseClosure}
+            title={closeForm.id ? "Edit Schedule Closure" : "Close Schedule"}
+            subtitle="Close specific weekend dates or hours to new patient bookings."
+            maxWidth="max-w-xl"
+            icon={Lock}
+          >
+            <div className="p-6 flex flex-col gap-5">
+              {/* What to close: Whole day / Specific time slots */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+                  What to Close <span className="text-rose-600">*</span>
+                </label>
+                <SegmentedTabs
+                  tabs={CLOSE_TABS}
+                  value={closeForm.type}
+                  onChange={val => setCloseForm(f => ({ ...f, type: val }))}
+                  label="Closure type"
+                  fill
+                />
+              </div>
+
+              {/* Date selection */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    {closeForm.isRange && closeForm.type === 'day' ? 'Date Range' : 'Date'} <span className="text-rose-600">*</span>
+                  </label>
+                  {closeForm.type === 'day' && (
+                    <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={closeForm.isRange}
+                        onChange={e => setCloseForm(f => ({ ...f, isRange: e.target.checked, endDate: e.target.checked ? f.endDate || f.startDate : f.startDate }))}
+                        className="rounded border-slate-300 text-[#3B50DF] focus:ring-[#3B50DF]"
+                      />
+                      <span>Multi-day range</span>
+                    </label>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <span className="text-[11px] text-slate-500 mb-1 block">Start Date (Saturday or Sunday)</span>
+                    <DatePicker
+                      value={closeForm.startDate}
+                      onChange={d => setCloseForm(f => ({ ...f, startDate: d, endDate: f.isRange ? f.endDate : d }))}
+                      filterDate={isWeekendDate}
+                      placeholder="Select weekend date"
+                    />
+                  </div>
+                  {closeForm.isRange && closeForm.type === 'day' && (
+                    <div>
+                      <span className="text-[11px] text-slate-500 mb-1 block">End Date (Saturday or Sunday)</span>
+                      <DatePicker
+                        value={closeForm.endDate}
+                        onChange={d => setCloseForm(f => ({ ...f, endDate: d }))}
+                        filterDate={isWeekendDate}
+                        minDate={closeForm.startDate}
+                        placeholder="Select end weekend date"
+                      />
+                    </div>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1.5">Only Saturdays and Sundays (clinic appointment days) can be closed.</p>
+              </div>
+
+              {/* Time Slots (if specific time slots) */}
+              {closeForm.type === 'slots' && (
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      Time Slots to Close <span className="text-rose-600">*</span>
+                    </label>
+                    <span className="text-xs text-amber-700 font-semibold">
+                      {closeForm.slots.length} of {TIME_SLOTS.length} selected
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1 border border-slate-200 rounded-xl bg-slate-50">
+                    {TIME_SLOTS.map(slot => {
+                      const isSelected = closeForm.slots.includes(slot);
+                      const bookedCount = appointments.filter(a => a.date === closeForm.startDate && a.time === slot && !INACTIVE_STATUSES.includes(String(a.status || '').toLowerCase())).length;
+                      return (
+                        <label
+                          key={slot}
+                          className={`flex items-center justify-between p-2 rounded-lg border cursor-pointer transition-all ${
+                            isSelected
+                              ? 'border-amber-400 bg-amber-50 text-amber-950 font-medium'
+                              : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 text-xs">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {
+                                setCloseForm(f => ({
+                                  ...f,
+                                  slots: isSelected ? f.slots.filter(s => s !== slot) : [...f.slots, slot]
+                                }));
+                              }}
+                              className="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                            />
+                            <span>{slot}</span>
+                          </div>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${bookedCount > 0 ? 'bg-amber-200 text-amber-800' : 'bg-slate-100 text-slate-500'}`}>
+                            {bookedCount} booked
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Reason Presets */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                  Reason Preset
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {CLOSURE_PRESETS.map(preset => {
+                    const active = closeForm.reasonPreset === preset.id;
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => {
+                          setCloseForm(f => ({
+                            ...f,
+                            reasonPreset: preset.id,
+                            reason: preset.defaultMsg || f.reason,
+                          }));
+                        }}
+                        className={`px-3 py-1.5 text-xs rounded-lg font-medium border transition-colors cursor-pointer ${
+                          active
+                            ? 'bg-amber-100 text-amber-800 border-amber-300 font-bold shadow-2xs'
+                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Message to Patients */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label htmlFor="closure-reason" className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Message to Patients <span className="text-rose-600">*</span>
+                  </label>
+                  <span className={`text-xs ${closeForm.reason.length > 140 ? 'text-rose-600 font-bold' : 'text-slate-400'}`}>
+                    {closeForm.reason.length} / 150
+                  </span>
+                </div>
+                <textarea
+                  id="closure-reason"
+                  rows={2}
+                  maxLength={150}
+                  className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none focus:border-amber-500 bg-white font-medium text-slate-800 text-xs transition-all resize-none"
+                  value={closeForm.reason}
+                  onChange={e => setCloseForm(f => ({ ...f, reason: e.target.value }))}
+                  placeholder="Shown to patients before booking..."
+                />
+
+                {/* Patient Live Preview */}
+                <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50/70 p-3 flex flex-col gap-1">
+                  <div className="text-[11px] font-bold text-amber-800 uppercase tracking-wide flex items-center gap-1.5">
+                    <Lock size={12} className="text-amber-600" /> Patient Preview
+                  </div>
+                  <blockquote className="text-xs text-amber-950 font-medium italic border-l-2 border-amber-400 pl-2.5 my-0.5">
+                    &ldquo;Message from K&amp;A Clinic: {closeForm.reason || 'Reason for schedule closure...'}&rdquo;
+                  </blockquote>
+                  <p className="text-[10px] text-amber-700">
+                    Shown when patients select {closeForm.startDate || 'this date'}{closeForm.type === 'slots' && closeForm.slots.length > 0 ? ` (${closeForm.slots.join(', ')})` : ''}.
+                  </p>
+                </div>
+              </div>
+
+              {/* Internal Note (Staff only) */}
+              <div>
+                <label htmlFor="closure-note" className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                  Internal Note <span className="text-slate-400 font-normal lowercase">(staff only, private)</span>
+                </label>
+                <textarea
+                  id="closure-note"
+                  rows={2}
+                  className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800 text-xs transition-all resize-none"
+                  value={closeForm.internalNote}
+                  onChange={e => setCloseForm(f => ({ ...f, internalNote: e.target.value }))}
+                  placeholder="Optional context for clinic staff..."
+                />
+              </div>
+
+              {/* Existing bookings warning card */}
+              {affectedBookings.length > 0 && (
+                <div className="rounded-xl border border-amber-300 bg-amber-50/90 p-3.5 flex flex-col gap-2">
+                  <div className="flex items-center gap-2 text-amber-900 font-bold text-xs">
+                    <AlertTriangle size={15} className="text-amber-600 shrink-0" />
+                    <span>{affectedBookings.length} Existing Appointment{affectedBookings.length === 1 ? '' : 's'} Affected</span>
+                  </div>
+                  <p className="text-xs text-amber-800 leading-relaxed">
+                    Existing appointments stay as they are. Closing only stops new bookings. Affected patients will be notified so they can reschedule or cancel. Staff cannot cancel them.
+                  </p>
+                  <div className="max-h-36 overflow-y-auto flex flex-col gap-1.5 mt-1 border-t border-amber-200 pt-2">
+                    {affectedBookings.map(a => (
+                      <div key={a.id} className="flex items-center justify-between text-xs py-1 px-2 rounded bg-white/70 border border-amber-100">
+                        <span className="font-semibold text-slate-900">{a.name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-500">{a.time}</span>
+                          <StatusBadge status={a.status} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <label className="flex items-center gap-2 text-xs font-semibold text-amber-900 mt-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={closeForm.notifyAffectedPatients}
+                      onChange={e => setCloseForm(f => ({ ...f, notifyAffectedPatients: e.target.checked }))}
+                      className="rounded border-amber-400 text-amber-600 focus:ring-amber-500"
+                    />
+                    <span>Notify affected patients via Push &amp; Email</span>
+                  </label>
+                </div>
+              )}
+
+              {/* Footer buttons */}
+              <div className="flex items-center justify-between pt-3 border-t border-slate-100 mt-1">
+                <button
+                  type="button"
+                  onClick={requestCloseClosure}
+                  className={BTN.outline}
+                  disabled={savingClosure}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveClosure}
+                  disabled={savingClosure}
+                  className="px-5 py-2.5 rounded-xl font-bold text-xs text-white bg-amber-600 hover:bg-amber-700 transition-colors shadow-sm disabled:opacity-50 cursor-pointer flex items-center gap-2"
+                >
+                  <Lock size={14} />
+                  <span>{savingClosure ? 'Saving…' : closeForm.id ? 'Update Schedule Closure' : 'Close Schedule'}</span>
+                </button>
+              </div>
+            </div>
+          </Modal>
+        );
+      })()}
+
+      {/* Discard confirmation dialogs */}
+      {closureDiscardDialog}
+
+      {/* Reopen Closure Confirmation Dialog */}
+      {reopenConfirm && (
+        <ConfirmDialog
+          variant="neutral"
+          icon={Lock}
+          title={`Reopen ${reopenConfirm.startDate === reopenConfirm.endDate || !reopenConfirm.endDate ? formatDateMedium(reopenConfirm.startDate) : `${formatDateMedium(reopenConfirm.startDate)} – ${formatDateMedium(reopenConfirm.endDate)}`}?`}
+          subtitle="Schedule Closure"
+          message={<>Patients will be able to book again on {reopenConfirm.type === 'slots' ? `the selected slots (${reopenConfirm.slots?.join(', ') || ''})` : 'this day'}.</>}
+          confirmLabel="Reopen Schedule"
+          cancelLabel="Keep Closed"
+          busy={reopening}
+          busyLabel="Reopening…"
+          onConfirm={() => handleReopenClosure(reopenConfirm)}
+          onCancel={() => setReopenConfirm(null)}
+        />
+      )}
 
     </div>
   );

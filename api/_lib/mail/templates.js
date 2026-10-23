@@ -476,6 +476,45 @@ export function buildPasswordResetEmailText({ resetUrl, email, name }) {
   return lines.join('\n');
 }
 
+export function buildScheduleClosureEmailHtml({ patientName, date, time, reason }) {
+  const greeting = patientName ? `Hello ${patientName},` : 'Hello,';
+  return shell({
+    title: 'K&amp;A Clinic — Schedule closure update',
+    preheader: `Your appointment on ${date} at ${time} is affected by a clinic schedule closure.`,
+    body: [
+      heading('Appointment Schedule Update'),
+      paragraph(greeting),
+      paragraph(`Your appointment scheduled for <strong>${date} at ${time}</strong> is affected by a clinic schedule closure:`),
+      `<div style="margin:16px 0;padding:16px;background-color:#FFFBEB;border:1px solid #FEF3C7;border-left:4px solid #D97706;border-radius:8px;">
+        <div style="font-size:12px;font-weight:bold;color:#B45309;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Reason from clinic</div>
+        <div style="font-size:14px;color:#92400E;line-height:1.5;">${reason}</div>
+      </div>`,
+      paragraph('<strong>Your appointment is still on record.</strong> Closing this time only prevents new bookings. Please open the K&amp;A Clinic patient app to reschedule your visit to an open slot, or cancel it if you no longer need it.'),
+      footnote('Emergency animal bite walk-in patients are prioritized daily. For questions or urgent care, contact K&amp;A Animal Bite Center directly.')
+    ].join('\n'),
+  });
+}
+
+export function buildScheduleClosureEmailText({ patientName, date, time, reason }) {
+  const greeting = patientName ? `Hello ${patientName},` : 'Hello,';
+  return [
+    'Appointment Schedule Update — K&A Clinic',
+    '========================================',
+    '',
+    greeting,
+    '',
+    `Your appointment scheduled for ${date} at ${time} is affected by a clinic schedule closure:`,
+    '',
+    `Reason: ${reason}`,
+    '',
+    'Your appointment is still on record. Closing this time only prevents new bookings.',
+    'Please open the K&A Clinic patient app to reschedule your visit to an open slot, or cancel it if you no longer need it.',
+    '',
+    'Emergency animal bite walk-in patients are prioritized daily.',
+    'K&A Animal Bite Center — Libon, Albay'
+  ].join('\n');
+}
+
 export function buildInviteEmailText({ inviteUrl, inviterName }) {
   const invitedBy = inviterName ? `${inviterName} has invited you` : 'You have been invited';
   return [
@@ -490,6 +529,6 @@ export function buildInviteEmailText({ inviteUrl, inviterName }) {
     'This link expires in 48 hours.',
     "If you didn't expect this email, you can ignore it.",
     '',
-    `K&A Animal Bite Center · ${CLINIC_ADDRESS}`,
+    `K&A Animal Bite Center · Libon, Albay`,
   ].join('\n');
 }

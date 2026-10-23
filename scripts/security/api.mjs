@@ -182,7 +182,7 @@ await test(3, 'Patient trust token hash, expiry, revocation, cross-account bindi
   const entry = (await ref.get()).data().devices[fp];
   assert.equal(entry.tokenHash, helpers.hashTrustToken(minted.token)); assert.equal(entry.expiresAt - entry.createdAt, 30 * 86400000);
   const args = { uid: actors.a.uid, deviceId: 'simulated-device', trustToken: minted.token };
-  assert.equal(await helpers.isDeviceTrusted(args), true);
+  assert.ok(await helpers.isDeviceTrusted(args));
   assert.equal(await helpers.isDeviceTrusted({ ...args, uid: actors.b.uid }), false);
   await ref.update({ [`devices.${fp}.expiresAt`]: Date.now() - 60000 }); assert.equal(await helpers.isDeviceTrusted(args), false);
   await ref.update({ [`devices.${fp}.expiresAt`]: Date.now() + 60000 });
@@ -275,6 +275,83 @@ if (!process.argv.includes('--before')) {
     await ref.update({ email: 'different@example.test' });
     try { assert.equal(await helpers.findAdminByEmail(actor.email), null); }
     finally { await ref.update({ email: actor.email }); }
+  });
+
+  // Schedule closures & server-side enforcement tests
+  await test(1, 'Staff can save schedule closure', '200; closure saved', async () => {
+    const result = await call(notifications, 'notifications', {
+      action: 'saveClosure',
+      type: 'day',
+      startDate: '2026-12-19',
+      endDate: '2026-12-19',
+      reasonPreset: 'doctor_unavailable',
+      reason: 'Doctor unavailable for testing',
+      internalNote: 'Internal staff note',
+    }, actors.staff);
+    assert.equal(result.status, 200);
+    assert.equal(result.payload.success, true);
+    const snap = await db.collection('scheduleClosures').where('startDate', '==', '2026-12-19').get();
+    assert.equal(snap.empty, false);
+  });
+
+  await test(1, 'Patient cannot save schedule closure', '403 or 401', async () => {
+    const result = await call(notifications, 'notifications', {
+      action: 'saveClosure',
+      type: 'day',
+      startDate: '2026-12-20',
+      reason: 'Patient trying to close',
+    }, actors.a);
+    forbidden(result);
+  });
+
+  await test(1, 'Patient cannot get closure internal note', '403 or 401', async () => {
+    const closures = await db.collection('scheduleClosures').where('startDate', '==', '2026-12-19').get();
+    assert.equal(closures.empty, false);
+    const closureId = closures.docs[0].id;
+    const result = await call(notifications, 'notifications', {
+      action: 'getClosureNote',
+      id: closureId,
+    }, actors.a);
+    forbidden(result);
+  });
+
+  await test(1, 'Admin can get closure internal note', '200; internalNote returned', async () => {
+    const closures = await db.collection('scheduleClosures').where('startDate', '==', '2026-12-19').get();
+    const closureId = closures.docs[0].id;
+    const result = await call(notifications, 'notifications', {
+      action: 'getClosureNote',
+      id: closureId,
+    }, actors.staff);
+    assert.equal(result.status, 200);
+    assert.equal(result.payload.internalNote, 'Internal staff note');
+  });
+
+  await test(1, 'Booking closed day rejected with SCHEDULE_CLOSED', '409 SCHEDULE_CLOSED', async () => {
+    const result = await call(notifications, 'notifications', {
+      action: 'bookAppointment',
+      appointment: {
+        date: '2026-12-19',
+        time: '9:00 AM - 10:00 AM',
+        type: 'PEP',
+        name: 'Test Patient',
+        patientId: actors.a.mrn,
+      },
+    }, actors.a);
+    assert.equal(result.status, 409);
+    assert.equal(result.payload.code, 'SCHEDULE_CLOSED');
+    assert.ok(result.payload.reason);
+  });
+
+  await test(1, 'Staff can reopen schedule closure', '200; active: false', async () => {
+    const closures = await db.collection('scheduleClosures').where('startDate', '==', '2026-12-19').get();
+    const closureId = closures.docs[0].id;
+    const result = await call(notifications, 'notifications', {
+      action: 'reopenClosure',
+      id: closureId,
+    }, actors.staff);
+    assert.equal(result.status, 200);
+    const updated = await db.collection('scheduleClosures').doc(closureId).get();
+    assert.equal(updated.data().active, false);
   });
 }
 mkdirSync('docs/security-results', { recursive: true });

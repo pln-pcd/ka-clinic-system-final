@@ -22,6 +22,7 @@ const QUERIES = {
   inventory: () => query(collection(db, 'inventory'), orderBy('name', 'asc')),
   admins: () => collection(db, 'admins'),
   archived: () => query(collection(db, 'vaccinations'), where('isArchived', '==', true)),
+  scheduleClosures: () => query(collection(db, 'scheduleClosures'), orderBy('createdAt', 'desc')),
 };
 
 // Patient records carry their own `id` field (the MRN), so the Firestore

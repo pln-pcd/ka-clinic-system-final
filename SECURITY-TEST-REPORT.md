@@ -16,14 +16,14 @@ Before API evidence uses Git HEAD `392b9a2`; pre-existing uncommitted user chang
 | --- | ---: | ---: | ---: |
 | Before remediation | 665 | 618 | 47 |
 | After remediation | 785 | 782 | 3 |
-| api-after.json | 65 | 65 | 0 |
+| api-after.json | 71 | 71 | 0 |
 | apk-after.json | 6 | 6 | 0 |
 | cloud-rules-ka-clinic-security-test.json | 1 | 1 | 0 |
 | cloud-rules-ka-clinic-system.json | 1 | 1 | 0 |
 | dependencies-after.json | 3 | 1 | 2 |
 | headers-after.json | 9 | 9 | 0 |
 | live-after.json | 7 | 7 | 0 |
-| rules-after.json | 682 | 682 | 0 |
+| rules-after.json | 778 | 778 | 0 |
 | runtime-after.json | 1 | 1 | 0 |
 | secrets-after.json | 4 | 3 | 1 |
 | ui-after.json | 6 | 6 | 0 |
@@ -155,6 +155,12 @@ Android release builds should use a short path without spaces, Expo prebuild wit
 | API-021 | Patient cannot request admin OTP | Direct handler request with real Firebase emulator token; simulated documents only. | 403 | 403 | PASS | PASS | Regression check passed. |
 | API-059 | Revoked/disabled admin cannot sign in | Direct handler request with real Firebase emulator token; simulated documents only. | Auth emulator rejects password | Auth emulator rejects password | PASS | PASS | Regression check passed. |
 | API-065 | Auth UID fallback refuses an admin record for a different email | Direct handler request with real Firebase emulator token; simulated documents only. | No admin identity resolved | No admin identity resolved | Not in baseline | PASS | Additional verification after remediation. |
+| API-066 | Staff can save schedule closure | Direct handler request with real Firebase emulator token; simulated documents only. | 200; closure saved | 200; closure saved | Not in baseline | PASS | Schedule closures API & role guard. |
+| API-067 | Patient cannot save schedule closure | Direct handler request with real Firebase emulator token; simulated documents only. | 403 or 401 | 403 | Not in baseline | PASS | Schedule closures API & role guard. |
+| API-068 | Patient cannot get closure internal note | Direct handler request with real Firebase emulator token; simulated documents only. | 403 or 401 | 403 | Not in baseline | PASS | Internal note privacy & subcollection protection. |
+| API-069 | Admin can get closure internal note | Direct handler request with real Firebase emulator token; simulated documents only. | 200; internalNote returned | 200; internalNote returned | Not in baseline | PASS | Internal note privacy & subcollection protection. |
+| API-070 | Booking closed day rejected with SCHEDULE_CLOSED | Direct handler request with real Firebase emulator token; simulated documents only. | 409 SCHEDULE_CLOSED | 409 SCHEDULE_CLOSED | Not in baseline | PASS | Server-side closure validation & double-booking transaction. |
+| API-071 | Staff can reopen schedule closure | Direct handler request with real Firebase emulator token; simulated documents only. | 200; active: false | 200; active: false | Not in baseline | PASS | Schedule reopening & appointment flags reset. |
 | UI-STAFF | Staff UI hides manager roster | Headless Chrome against local Vite and Firebase emulators. Browser clock advanced for idle checks. | Patient Records visible; Manage Admins absent | Patient Records visible; Manage Admins absent | Not in baseline | PASS | Additional verification after remediation. |
 | UI-MANAGER | Manager UI includes manager roster | Headless Chrome against local Vite and Firebase emulators. Browser clock advanced for idle checks. | Manage Admins visible | Manage Admins visible | Not in baseline | PASS | Additional verification after remediation. |
 
@@ -903,6 +909,14 @@ Android release builds should use a short path without spaces, Expo prebuild wit
 | RULE-idle-expired | Expired admin session cannot read clinical records | Seed fictional fixture; direct Firebase SDK request with role token. | PERMISSION_DENIED | permission-denied | FAIL | PASS | Owner/role checks, server-owned OTP sessions, immutable identity and changed-field allowlists. |
 | RULE-pending-own | Patient without OTP cannot read their own record | Seed fictional fixture; direct Firebase SDK request with role token. | PERMISSION_DENIED | permission-denied | Not in baseline | PASS | Additional verification after remediation. |
 | RULE-password-provider | Password-only SDK sign-in cannot bypass the gateway | Seed fictional fixture; direct Firebase SDK request with role token. | PERMISSION_DENIED | permission-denied | Not in baseline | PASS | Additional verification after remediation. |
+| RULE-closure-admin-create | Staff/manager can create schedule closure | Seed fictional fixture; direct Firebase SDK request with role token. | Allowed | Allowed | Not in baseline | PASS | Staff schedule closure rules. |
+| RULE-closure-patient-create | Patient cannot create schedule closure | Seed fictional fixture; direct Firebase SDK request with role token. | PERMISSION_DENIED | permission-denied | Not in baseline | PASS | Patient closure write prohibition. |
+| RULE-closure-delete-denied | Nobody can delete schedule closures | Seed fictional fixture; direct Firebase SDK request with role token. | PERMISSION_DENIED | permission-denied | Not in baseline | PASS | Immutable closure history. |
+| RULE-closure-private-admin | Admin can read closure private subcollection | Seed fictional fixture; direct Firebase SDK request with role token. | Allowed | Allowed | Not in baseline | PASS | Private internal notes subcollection protection. |
+| RULE-closure-private-patient | Patient cannot read closure private subcollection | Seed fictional fixture; direct Firebase SDK request with role token. | PERMISSION_DENIED | permission-denied | Not in baseline | PASS | Patient private internal notes prohibition. |
+| RULE-closure-inactive-patient | Patient cannot read inactive schedule closure | Seed fictional fixture; direct Firebase SDK request with role token. | PERMISSION_DENIED | permission-denied | Not in baseline | PASS | Active closures public read filter. |
+| RULE-admin-cannot-cancel-appt | Admin cannot set appointment status to cancelled | Seed fictional fixture; direct Firebase SDK request with role token. | PERMISSION_DENIED | permission-denied | Not in baseline | PASS | Patient-only appointment cancellation rule. |
+| RULE-patient-can-cancel-own-appt | Patient can cancel own appointment | Seed fictional fixture; direct Firebase SDK request with role token. | Allowed | Allowed | Not in baseline | PASS | Patient self-service cancellation rule. |
 
 ### 7. Encrypted transmission and headers
 

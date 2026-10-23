@@ -197,18 +197,43 @@ function slotStartHour(label) {
   return h;
 }
 
-// Open/booked split for one weekend date. Hours already started today are
-// dropped from "open" — they cannot be booked any more.
-function slotsForDate(iso, taken, now) {
+async function getActiveClosures() {
+  try {
+    const snap = await db.collection('scheduleClosures').where('active', '==', true).get();
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (err) {
+    console.warn('Could not load closures in chatbot:', err);
+    return [];
+  }
+}
+
+function closureForDate(iso, closures) {
+  for (const c of closures) {
+    if (c.startDate <= iso && iso <= c.endDate) {
+      return c;
+    }
+  }
+  return null;
+}
+
+// Open/booked split for one weekend date, taking schedule closures into account.
+function slotsForDate(iso, taken, now, closures = []) {
+  const closure = closureForDate(iso, closures);
+  if (closure && closure.type === 'day') {
+    return { open: [], booked: [], closure, fullyClosed: true };
+  }
+
+  const closedSlots = (closure && closure.type === 'slots' && Array.isArray(closure.slots)) ? closure.slots : [];
   const set = taken.get(iso) || new Set();
   const open = [];
   const booked = [];
   for (const t of CLINIC_TIME_SLOTS) {
+    if (closedSlots.includes(t)) continue;
     if (set.has(normTime(t))) booked.push(t);
     else if (iso === now.iso && slotStartHour(t) <= now.hour) continue;
     else open.push(t);
   }
-  return { open, booked };
+  return { open, booked, closedSlots, closure };
 }
 
 // Next `count` Saturdays/Sundays on or after fromIso.
@@ -222,9 +247,16 @@ function upcomingWeekendDays(fromIso, count) {
 
 const BOOKING_TAIL = 'To book, open the **Appointments** tab in the patient app or tap **Book Appointment** on the website.';
 
-function slotListText(iso, { open, booked }) {
+function slotListText(iso, { open, booked, closure, fullyClosed, closedSlots }) {
   const lines = [`📅 **${formatIso(iso)}**`];
-  if (open.length === 0) lines.push('• All appointment slots are **fully booked** for this day.');
+  if (fullyClosed) {
+    lines.push(`• 🔒 **Appointments Closed:** ${closure?.reason || 'Clinic schedule closed.'}`);
+    return lines.join('\n');
+  }
+  if (closedSlots && closedSlots.length > 0) {
+    lines.push(`• 🔒 **Closed Slots (${closedSlots.length}):** ${closedSlots.join(', ')} (${closure?.reason || 'Closed'})`);
+  }
+  if (open.length === 0) lines.push('• All remaining appointment slots are **fully booked** for this day.');
   else lines.push(`**Open slots (${open.length}):**`, ...open.map(s => `• **${s}**`));
   if (booked.length > 0) lines.push(`(${booked.length} slot${booked.length === 1 ? '' : 's'} already booked)`);
   return lines.join('\n');
@@ -233,12 +265,13 @@ function slotListText(iso, { open, booked }) {
 async function getAvailableAppointmentsReply(targetIso) {
   const now = manilaNow();
   try {
+    const closures = await getActiveClosures();
     // No date given: today if it is a weekend, otherwise the coming weekend.
     if (!targetIso) {
       const days = upcomingWeekendDays(now.iso, 2);
       const taken = await getTakenSlots(days[0], days[1]);
       return `Today is **${formatIso(now.iso)}**. Appointments are booked on **Saturdays & Sundays** only.\n\n` +
-        days.map(iso => slotListText(iso, slotsForDate(iso, taken, now))).join('\n\n') +
+        days.map(iso => slotListText(iso, slotsForDate(iso, taken, now, closures))).join('\n\n') +
         `\n\n${BOOKING_TAIL}`;
     }
 
@@ -247,24 +280,25 @@ async function getAvailableAppointmentsReply(targetIso) {
         'Ask me about an upcoming date and I will check the open slots.';
     }
 
+    const closure = closureForDate(targetIso, closures);
     if (!isWeekendIso(targetIso)) {
       const days = upcomingWeekendDays(targetIso, 2);
       const taken = await getTakenSlots(days[0], days[1]);
       return `**${formatIso(targetIso)}** is a **weekday**, so there are no bookable appointment slots — ` +
         'walk-ins are accepted **Monday to Friday, 8:00 AM – 5:00 PM** (no booking needed).\n\n' +
         'If you prefer a scheduled visit, here are the nearest weekend days:\n\n' +
-        days.map(iso => slotListText(iso, slotsForDate(iso, taken, now))).join('\n\n') +
+        days.map(iso => slotListText(iso, slotsForDate(iso, taken, now, closures))).join('\n\n') +
         `\n\n${BOOKING_TAIL}`;
     }
 
-    // Weekend date: its own slots, plus the next weekend day that still has room if it is full.
+    // Weekend date: its own slots, plus the next weekend day that still has room if it is full/closed.
     const lookahead = upcomingWeekendDays(targetIso, 6);
     const taken = await getTakenSlots(targetIso, lookahead[lookahead.length - 1]);
-    const target = slotsForDate(targetIso, taken, now);
+    const target = slotsForDate(targetIso, taken, now, closures);
     let reply = slotListText(targetIso, target);
     if (target.open.length === 0) {
-      const alt = lookahead.slice(1).find(iso => slotsForDate(iso, taken, now).open.length > 0);
-      if (alt) reply += `\n\nThe next weekend day with open slots:\n\n${slotListText(alt, slotsForDate(alt, taken, now))}`;
+      const alt = lookahead.slice(1).find(iso => slotsForDate(iso, taken, now, closures).open.length > 0);
+      if (alt) reply += `\n\nThe next weekend day with open slots:\n\n${slotListText(alt, slotsForDate(alt, taken, now, closures))}`;
     }
     return `${reply}\n\n${BOOKING_TAIL}`;
   } catch (err) {
@@ -286,14 +320,28 @@ async function buildLiveContext(prompt, history) {
     calendar.push(`${iso} = ${formatIso(iso)}${isWeekendIso(iso) ? ' (appointment day)' : ' (walk-in day)'}`);
   }
   let availability = '';
+  let closuresSummary = '';
   try {
+    const closures = await getActiveClosures();
+    if (closures.length > 0) {
+      closuresSummary = closures.map(c => {
+        const dateDesc = c.startDate === c.endDate ? c.startDate : `${c.startDate} to ${c.endDate}`;
+        const typeDesc = c.type === 'day' ? 'Whole day closed' : `Closed slots: ${(c.slots || []).join(', ')}`;
+        return `• ${dateDesc}: ${typeDesc} — Reason: "${c.reason}"`;
+      }).join('\n');
+    } else {
+      closuresSummary = 'None (no active closures; normal weekend schedule).';
+    }
+
     const days = upcomingWeekendDays(now.iso, 6);
     const mentioned = extractDate(prompt, now.iso) || extractDateFromHistory(history, now.iso);
     if (mentioned && mentioned >= now.iso && isWeekendIso(mentioned) && !days.includes(mentioned)) days.push(mentioned);
     const sorted = [...days].sort();
     const taken = await getTakenSlots(sorted[0], sorted[sorted.length - 1]);
     availability = sorted.map(iso => {
-      const { open } = slotsForDate(iso, taken, now);
+      const { open, fullyClosed, closedSlots, closure } = slotsForDate(iso, taken, now, closures);
+      if (fullyClosed) return `${formatIso(iso)}: CLOSED (${closure?.reason || 'Schedule closed'})`;
+      if (closedSlots && closedSlots.length) return `${formatIso(iso)}: ${open.length ? `open ${open.join(', ')}` : 'fully booked'} (closed: ${closedSlots.join(', ')} — ${closure?.reason || ''})`;
       return `${formatIso(iso)}: ${open.length ? `open ${open.join(', ')}` : 'fully booked'}`;
     }).join('\n');
   } catch (err) {
@@ -305,9 +353,12 @@ LIVE CLINIC CONTEXT (authoritative, computed by the clinic system — Asia/Manil
 Today is ${formatIso(now.iso)}, ${pad2(now.hour)}:${pad2(now.minute)}.
 Calendar (use ONLY this for days of the week; never calculate a weekday yourself):
 ${calendar.join('\n')}
+Active Schedule Closures (clinic appointments are closed on these dates/times; answer from this if asked whether the clinic is open or appointments available):
+${closuresSummary}
 Live appointment slot availability (weekend days):
 ${availability}
 If the user states a weekday that contradicts the calendar, politely correct them using the calendar.
+If the user asks whether the clinic is open on a specific date, answer using the Active Schedule Closures and regular hours (Mon-Fri walk-in 8 AM-5 PM, Sat-Sun appointments 8 AM-12 PM & 1 PM-5 PM). Do not give medical advice.
 Only state slot availability that appears above; never invent times.
 `;
 }
