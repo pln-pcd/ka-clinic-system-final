@@ -1380,6 +1380,79 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                       <p className="text-[11px] text-slate-400 mt-0.5">Tick the next dose, then Confirm dose.</p>
                     </div>
 
+                    {/* Doses Header for Category III */}
+                    {isCategoryIII(p) && (
+                      <div className="px-4 py-2 bg-slate-50/60 border-t border-b border-slate-100 flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Vaccine Regimen</span>
+                        <span className="text-[10px] text-slate-400">Intradermal Sessions</span>
+                      </div>
+                    )}
+
+                    <ol className={`divide-y divide-slate-100 ${isCategoryIII(p) ? '' : 'border-t border-slate-100'}`}>
+                      {doses.map((d, di) => {
+                        const st = doseState(d, di);
+                        const isDone = st === 'given';
+                        const isNext = di === nextIndex;
+                        const isReady = isNext && readyKey === d.key;
+                        const canTick = isNext && !!assignedBrand && !!attendingStaff.trim();
+                        const canUndo = isDone && di === lastDoneIndex && !readyKey;
+                        const usedBrand = d.brand || (isDone ? (d.vaccineBrand || p.vaccineBrand || '') : '');
+                        const busy = !!saving[`${p.firestoreId}_${d.key}`];
+                        const hint = isDone ? 'Given'
+                          : isNext ? (!attendingStaff.trim() ? 'Enter attending nurse/physician first' : assignedBrand ? (isReady ? 'Untick to clear' : `Tick, then Confirm dose (${assignedBrand})`) : 'Select a brand first')
+                          : `Locked until Dose ${nextIndex + 1} is given`;
+                        return (
+                          <li key={d.key || di}>
+                            <label title={hint}
+                              className={`flex items-center gap-3 px-4 py-2.5 transition-colors ${isReady ? 'bg-indigo-50/70' : ''} ${canTick ? 'cursor-pointer hover:bg-slate-50' : 'cursor-default'}`}>
+                              <Chip state={st} n={di + 1} />
+                              <div className="min-w-0 flex-1">
+                                <div className={`text-xs font-semibold leading-5 ${st === 'locked' ? 'text-slate-400' : 'text-slate-900'}`}>{d.label}</div>
+                                <div className="text-[11px] leading-4 text-slate-500 flex items-center gap-1.5 min-w-0">
+                                  {isDone ? (
+                                    <>
+                                      <CheckCircle size={12} className="text-emerald-600 shrink-0" aria-hidden="true" />
+                                      <span className="truncate"><span className="text-emerald-700 font-semibold">Given</span>{usedBrand ? ` · ${usedBrand}` : ''}{d.ml ? ` · ${d.ml} mL` : ''} · {fmtDate(d.date)}</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className="shrink-0">{fmtDate(d.date)}</span>
+                                      {st === 'overdue' && <StatusBadge status="overdue" />}
+                                      {st === 'today' && <StatusBadge status="due_today" />}
+                                      {isNext && assignedBrand && <span className="truncate text-slate-700">· {assignedBrand}</span>}
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                              {canUndo && (
+                                <button type="button" disabled={busy}
+                                  onClick={e => { e.preventDefault(); setUndoTarget({ p, key: d.key, label: d.label, brand: usedBrand, date: d.date, ml: d.ml, deducted: d.stockDeducted !== false }); }}
+                                  className="inline-flex items-center gap-1 h-7 px-2 rounded-lg text-[11px] font-semibold text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer disabled:opacity-50 shrink-0"
+                                  title="Undo this dose (recorded by mistake)">
+                                  <RotateCcw size={12} aria-hidden="true" /> Undo
+                                </button>
+                              )}
+                              {isDone ? (
+                                <span role="img" aria-label={`${d.label}: given`}
+                                  className="w-[18px] h-[18px] rounded bg-emerald-50 border border-emerald-300 text-emerald-600 inline-flex items-center justify-center shrink-0">
+                                  <Check size={12} strokeWidth={3} aria-hidden="true" />
+                                </span>
+                              ) : (
+                                <input
+                                  type="checkbox"
+                                  checked={isReady}
+                                  disabled={!canTick || busy}
+                                  aria-label={`${d.label}: ${isReady ? 'ticked, not confirmed' : 'not given'}`}
+                                  onChange={() => setReadyKey(isReady ? null : d.key)}
+                                  className={`w-[18px] h-[18px] rounded accent-[#3B50DF] shrink-0 ${!canTick ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'}`}
+                                />
+                              )}
+                            </label>
+                          </li>
+                        );
+                      })}
+                    </ol>
+
                     {/* Day 0 Adjunct Treatments (RIG & Anti-Tetanus) for Category III */}
                     {isCategoryIII(p) && (() => {
                       const existingRig = p.rigTreatment || (Array.isArray(p.treatments) ? p.treatments.find(isRigEntry) : null);
@@ -1535,79 +1608,6 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                         </div>
                       );
                     })()}
-
-                    {/* Doses Header for Category III */}
-                    {isCategoryIII(p) && (
-                      <div className="px-4 py-2 bg-slate-50/60 border-t border-b border-slate-100 flex items-center justify-between">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Vaccine Regimen</span>
-                        <span className="text-[10px] text-slate-400">Intradermal Sessions</span>
-                      </div>
-                    )}
-
-                    <ol className={`divide-y divide-slate-100 ${isCategoryIII(p) ? '' : 'border-t border-slate-100'}`}>
-                      {doses.map((d, di) => {
-                        const st = doseState(d, di);
-                        const isDone = st === 'given';
-                        const isNext = di === nextIndex;
-                        const isReady = isNext && readyKey === d.key;
-                        const canTick = isNext && !!assignedBrand && !!attendingStaff.trim();
-                        const canUndo = isDone && di === lastDoneIndex && !readyKey;
-                        const usedBrand = d.brand || (isDone ? (d.vaccineBrand || p.vaccineBrand || '') : '');
-                        const busy = !!saving[`${p.firestoreId}_${d.key}`];
-                        const hint = isDone ? 'Given'
-                          : isNext ? (!attendingStaff.trim() ? 'Enter attending nurse/physician first' : assignedBrand ? (isReady ? 'Untick to clear' : `Tick, then Confirm dose (${assignedBrand})`) : 'Select a brand first')
-                          : `Locked until Dose ${nextIndex + 1} is given`;
-                        return (
-                          <li key={d.key || di}>
-                            <label title={hint}
-                              className={`flex items-center gap-3 px-4 py-2.5 transition-colors ${isReady ? 'bg-indigo-50/70' : ''} ${canTick ? 'cursor-pointer hover:bg-slate-50' : 'cursor-default'}`}>
-                              <Chip state={st} n={di + 1} />
-                              <div className="min-w-0 flex-1">
-                                <div className={`text-xs font-semibold leading-5 ${st === 'locked' ? 'text-slate-400' : 'text-slate-900'}`}>{d.label}</div>
-                                <div className="text-[11px] leading-4 text-slate-500 flex items-center gap-1.5 min-w-0">
-                                  {isDone ? (
-                                    <>
-                                      <CheckCircle size={12} className="text-emerald-600 shrink-0" aria-hidden="true" />
-                                      <span className="truncate"><span className="text-emerald-700 font-semibold">Given</span>{usedBrand ? ` · ${usedBrand}` : ''}{d.ml ? ` · ${d.ml} mL` : ''} · {fmtDate(d.date)}</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <span className="shrink-0">{fmtDate(d.date)}</span>
-                                      {st === 'overdue' && <StatusBadge status="overdue" />}
-                                      {st === 'today' && <StatusBadge status="due_today" />}
-                                      {isNext && assignedBrand && <span className="truncate text-slate-700">· {assignedBrand}</span>}
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                              {canUndo && (
-                                <button type="button" disabled={busy}
-                                  onClick={e => { e.preventDefault(); setUndoTarget({ p, key: d.key, label: d.label, brand: usedBrand, date: d.date, ml: d.ml, deducted: d.stockDeducted !== false }); }}
-                                  className="inline-flex items-center gap-1 h-7 px-2 rounded-lg text-[11px] font-semibold text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer disabled:opacity-50 shrink-0"
-                                  title="Undo this dose (recorded by mistake)">
-                                  <RotateCcw size={12} aria-hidden="true" /> Undo
-                                </button>
-                              )}
-                              {isDone ? (
-                                <span role="img" aria-label={`${d.label}: given`}
-                                  className="w-[18px] h-[18px] rounded bg-emerald-50 border border-emerald-300 text-emerald-600 inline-flex items-center justify-center shrink-0">
-                                  <Check size={12} strokeWidth={3} aria-hidden="true" />
-                                </span>
-                              ) : (
-                                <input
-                                  type="checkbox"
-                                  checked={isReady}
-                                  disabled={!canTick || busy}
-                                  aria-label={`${d.label}: ${isReady ? 'ticked, not confirmed' : 'not given'}`}
-                                  onChange={() => setReadyKey(isReady ? null : d.key)}
-                                  className={`w-[18px] h-[18px] rounded accent-[#3B50DF] shrink-0 ${!canTick ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'}`}
-                                />
-                              )}
-                            </label>
-                          </li>
-                        );
-                      })}
-                    </ol>
                   </section>
                 </div>
               </div>
