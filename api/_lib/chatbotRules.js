@@ -315,7 +315,6 @@ export const SERVICES_REPLY =
   '• Anti-Tetanus prophylaxis & immunization\n' +
   '• Rabies Immunoglobulin (RIG) administration\n' +
   '• Animal bite consultation & exposure assessment\n\n' +
-  'Notice: K&A Clinic is no longer catering or offering Hepatitis vaccines. ' +
   `For questions or consultation, contact the clinic at ${CLINIC.phone} or ${CLINIC.email}.`;
 
 // Vaccine & treatment pricing at K&A Clinic
@@ -324,7 +323,7 @@ export const PRICE_REPLY =
   '• PEP Category 2 (with Anti-Tetanus): ₱1,000 for the 1st session, and ₱800 for each of the next 3 sessions\n' +
   '• PEP Category 3: ₱4,500 for 4 sessions (complete package includes Anti-Tetanus and IRIG)\n' +
   '• Pneumonia Vaccine: ₱4,500\n\n' +
-  `Notice: K&A Clinic is no longer catering or offering Hepatitis vaccines. For other questions, contact the clinic front desk at ${CLINIC.phone} or ${CLINIC.email}.`;
+  `For other questions, contact the clinic front desk at ${CLINIC.phone} or ${CLINIC.email}.`;
 
 // Matches the app's booking flow (patient-app/app/(tabs)/appt.tsx): the
 // Appointments tab, the Book Appointment calendar (weekends only), the
