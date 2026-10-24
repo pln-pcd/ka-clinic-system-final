@@ -52,8 +52,8 @@ export function NotFoundPage({ onDashboard }) {
 // Catches a crash inside a page (render error, or its code failing to
 // download) and shows the 500 page instead of unmounting the whole app.
 // resetKey: the error clears when it changes (e.g. the active page).
-// onReset: called by "Try again" before the page renders again (e.g. to let
-// a failed lazy page download again). onDashboard: "Go to Dashboard".
+// onReset: called by "Try again" before the page reloads. onDashboard:
+// "Go to Dashboard".
 export class PageErrorBoundary extends Component {
   state = { error: null, resetKey: this.props.resetKey };
 
@@ -70,9 +70,11 @@ export class PageErrorBoundary extends Component {
     console.error('[PageErrorBoundary] page crashed:', error, info?.componentStack);
   }
 
+  // A full reload, not a re-render: a tab left open across a deploy is still
+  // running the old code, and only a reload fetches the fixed version.
   tryAgain = () => {
     this.props.onReset?.();
-    this.setState({ error: null });
+    window.location.reload();
   };
 
   goDashboard = () => {
