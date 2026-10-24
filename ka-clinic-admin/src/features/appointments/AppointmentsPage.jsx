@@ -1212,8 +1212,8 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
       showToast('Start date must be a Saturday or Sunday', 'error');
       return;
     }
-    const end = closeForm.isRange && closeForm.endDate ? closeForm.endDate : closeForm.startDate;
-    if (closeForm.isRange && !isWeekendDate(end)) {
+    const end = closeForm.type === 'day' && closeForm.isRange && closeForm.endDate ? closeForm.endDate : closeForm.startDate;
+    if (end !== closeForm.startDate && !isWeekendDate(end)) {
       showToast('End date must be a Saturday or Sunday', 'error');
       return;
     }
@@ -2325,7 +2325,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
       {closeModalOpen && (() => {
         const affectedBookings = appointments.filter(a => {
           if (!a.date || INACTIVE_STATUSES.includes(String(a.status || '').toLowerCase())) return false;
-          const end = closeForm.isRange && closeForm.endDate ? closeForm.endDate : closeForm.startDate;
+          const end = closeForm.type === 'day' && closeForm.isRange && closeForm.endDate ? closeForm.endDate : closeForm.startDate;
           if (a.date < closeForm.startDate || a.date > end) return false;
           if (closeForm.type === 'slots') {
             return closeForm.slots.includes(a.time);
@@ -2405,8 +2405,12 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                       <span className="text-[11px] text-slate-500 mb-1 block">Start Date (Saturday or Sunday)</span>
                       <DatePicker
                         value={closeForm.startDate}
-                        onChange={d => setCloseForm(f => ({ ...f, startDate: d, endDate: f.isRange ? f.endDate : d }))}
-                        filterDate={isWeekendDate}
+                        onChange={e => {
+                          const d = e.target.value;
+                          setCloseForm(f => ({ ...f, startDate: d, endDate: f.isRange && f.endDate >= d ? f.endDate : d }));
+                        }}
+                        isDateDisabled={d => !isWeekendDate(d)}
+                        disabledHint="Only Saturdays and Sundays can be closed"
                         placeholder="Select weekend date"
                       />
                     </div>
@@ -2415,9 +2419,10 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                         <span className="text-[11px] text-slate-500 mb-1 block">End Date (Saturday or Sunday)</span>
                         <DatePicker
                           value={closeForm.endDate}
-                          onChange={d => setCloseForm(f => ({ ...f, endDate: d }))}
-                          filterDate={isWeekendDate}
-                          minDate={closeForm.startDate}
+                          onChange={e => setCloseForm(f => ({ ...f, endDate: e.target.value }))}
+                          isDateDisabled={d => !isWeekendDate(d)}
+                          disabledHint="Only Saturdays and Sundays can be closed"
+                          min={closeForm.startDate || undefined}
                           placeholder="Select end weekend date"
                         />
                       </div>

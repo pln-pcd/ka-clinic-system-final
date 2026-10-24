@@ -1126,7 +1126,7 @@ async function saveClosure(req, res, caller) {
     const affected = [];
     for (const d of aptsSnap.docs) {
       const a = d.data();
-      if (['cancelled', 'declined'].includes(a.status)) continue;
+      if (['cancelled', 'canceled', 'declined'].includes(a.status)) continue;
       if (type === 'slots' && (!Array.isArray(slots) || !slots.includes(a.time))) continue;
       affected.push({ id: d.id, ref: d.ref, ...a });
     }
