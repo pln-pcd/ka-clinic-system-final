@@ -279,6 +279,14 @@ const globalCSS = `
     grid-template-columns: repeat(7, 1fr);
     gap: 4px;
   }
+  /* Day rows share the card's height, so a 6-week month shrinks its rows
+     instead of pushing the legend out of the card. */
+  .cal-grid-fit {
+    min-height: 0;
+    grid-template-rows: auto;
+    grid-auto-rows: minmax(0, 1fr);
+  }
+  .appts-container .cal-grid-fit .cal-day-cell { height: auto; min-height: 0; max-height: 62px; overflow: hidden; }
   .cal-day-name {
     text-align: center;
     font-size: 0.75rem;
@@ -387,7 +395,8 @@ const globalCSS = `
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 14px;
+    flex-wrap: wrap;
+    gap: 6px 14px;
     padding-top: 6px;
     border-top: 1px solid var(--border);
     font-size: 0.75rem;
@@ -872,6 +881,7 @@ const globalCSS = `
     color: #DC2626;
     border-color: #FCA5A5;
   }
+  .cal-lock-badge.inline { position: static; box-shadow: none; }
   .btn-close-schedule {
     display: inline-flex;
     align-items: center;
@@ -1607,7 +1617,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
             <span style={{ marginLeft: 8, color: '#94A3B8', fontWeight: 500 }}>Appointments are on Saturdays &amp; Sundays only.</span>
           </div>
 
-          <div className="cal-grid" style={{ flex: 1, margin: '8px 0', alignContent: 'start' }}>
+          <div className="cal-grid cal-grid-fit" style={{ flex: 1, margin: '8px 0' }}>
             {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
               <div key={d} className="cal-day-name">{d}</div>
             ))}
@@ -1669,7 +1679,8 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
             <div className="legend-item"><div className="dot-status dot-confirmed" /> Confirmed</div>
             <div className="legend-item"><div className="dot-status dot-pending" /> Pending</div>
             <div className="legend-item"><div className="dot-status dot-done" /> Done</div>
-            <div className="legend-item"><Lock size={12} className="text-amber-600 inline mr-1" /> Closed</div>
+            <div className="legend-item"><span className="cal-lock-badge inline full"><Lock size={9} strokeWidth={2.5} /></span> Day closed</div>
+            <div className="legend-item"><span className="cal-lock-badge inline"><Lock size={9} strokeWidth={2.5} /></span> Slots closed</div>
           </div>
         </div>
 
