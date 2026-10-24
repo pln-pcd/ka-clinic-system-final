@@ -1368,148 +1368,183 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                     </div>
                   </section>
 
-                  {/* Two small cards side-by-side: RIG and Anti-Tetanus for Category III only */}
-                  {isCategoryIII(p) && (() => {
-                    const existingRig = p.rigTreatment || (Array.isArray(p.treatments) ? p.treatments.find(isRigEntry) : null);
-                    const existingTetanus = p.antiTetanusTreatment || (Array.isArray(p.treatments) ? p.treatments.find(t => !isRigEntry(t)) : null);
-                    const rigItems = inventoryItems.filter(isRigItem).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-
-                    return (
-                      <div className="grid grid-cols-1 gap-2.5">
-                        {/* RIG Card */}
-                        <div className={`p-3 rounded-2xl border transition-all ${existingRig ? 'bg-emerald-50/60 border-emerald-200' : rigDraftOpen ? 'bg-indigo-50/50 border-indigo-200' : 'bg-white border-slate-200'}`}>
-                          <div className="flex items-center justify-between gap-1.5">
-                            <label className="flex items-center gap-2 cursor-pointer select-none min-w-0">
-                              <input
-                                type="checkbox"
-                                checked={Boolean(existingRig || rigDraftOpen)}
-                                onChange={() => {
-                                  if (existingRig) {
-                                    setTreatmentRemoveAsk({ p, treatment: existingRig });
-                                  } else {
-                                    setRigDraftOpen(o => !o);
-                                  }
-                                }}
-                                className="w-4 h-4 rounded accent-[#3B50DF] cursor-pointer shrink-0"
-                              />
-                              <span className="text-xs font-bold text-slate-900 truncate">RIG</span>
-                            </label>
-                            <span className="text-[10px] font-semibold text-slate-400 shrink-0">Rabies immunoglobulin</span>
-                          </div>
-
-                          {existingRig ? (
-                            <div className="mt-2 text-[11px] text-emerald-800 bg-emerald-100/70 rounded-lg px-2 py-1.5">
-                              <div className="font-bold text-emerald-900 truncate">{existingRig.product}{amountText(existingRig) ? ` · ${amountText(existingRig)}` : ''}</div>
-                              <div className="text-[10px] text-emerald-700 mt-0.5">{fmtDate(existingRig.date)}{existingRig.attendingName || existingRig.recordedByName ? ` · ${existingRig.attendingName || existingRig.recordedByName}` : ''}</div>
-                            </div>
-                          ) : rigDraftOpen ? (
-                            <div className="mt-2.5 space-y-2 pt-2 border-t border-indigo-100">
-                              <div>
-                                <label htmlFor="tracker-rig-product" className="block text-[10px] font-semibold text-slate-500 mb-0.5">RIG vaccine</label>
-                                {/* Inventory items in the RIG category; the one chosen is the stock deducted. */}
-                                <Select
-                                  id="tracker-rig-product"
-                                  aria-label="RIG product"
-                                  value={rigItemId}
-                                  onChange={e => setRigItemId(e.target.value)}
-                                  className="w-full py-1.5 px-2.5 border border-slate-300 rounded-lg outline-none text-[11px] font-semibold bg-white text-slate-800 focus:border-[#3B50DF]"
-                                >
-                                  <option value="">{rigItems.length ? 'Select RIG product' : 'No RIG item in Inventory'}</option>
-                                  {rigItems.map(it => {
-                                    const a = brandAvailability(it, today);
-                                    return <option key={it.id} value={it.id} disabled={a.disabled} data-badge={a.badge || formatVials(it)} data-badge-tone={a.tone}>{it.name}</option>;
-                                  })}
-                                </Select>
-                                {!rigItems.length && <p className="mt-1 text-[10px] text-amber-700">Add the RIG product in Inventory (category: RIG) first.</p>}
-                              </div>
-                              <button
-                                type="button"
-                                disabled={rigBusy || !rigItemId}
-                                onClick={() => handleSaveRig(p)}
-                                className="w-full py-1.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] rounded-lg shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
-                              >
-                                {rigBusy ? 'Saving…' : 'Save RIG'}
-                              </button>
-                            </div>
-                          ) : (
-                            <p className="text-[10px] text-slate-400 mt-1">Optional Day 0</p>
-                          )}
-                        </div>
-
-                        {/* Anti-Tetanus Card */}
-                        <div className={`p-3 rounded-2xl border transition-all ${existingTetanus ? 'bg-emerald-50/60 border-emerald-200' : tetanusDraftOpen ? 'bg-indigo-50/50 border-indigo-200' : 'bg-white border-slate-200'}`}>
-                          <div className="flex items-center justify-between gap-1.5">
-                            <label className="flex items-center gap-2 cursor-pointer select-none min-w-0">
-                              <input
-                                type="checkbox"
-                                checked={Boolean(existingTetanus || tetanusDraftOpen)}
-                                onChange={() => {
-                                  if (existingTetanus) {
-                                    setTreatmentRemoveAsk({ p, treatment: existingTetanus });
-                                  } else {
-                                    setTetanusDraftOpen(o => !o);
-                                  }
-                                }}
-                                className="w-4 h-4 rounded accent-[#3B50DF] cursor-pointer shrink-0"
-                              />
-                              <span className="text-xs font-bold text-slate-900 truncate">Anti-Tetanus</span>
-                            </label>
-                            <span className="text-[10px] font-semibold text-slate-400 shrink-0">TT / Serum</span>
-                          </div>
-
-                          {existingTetanus ? (
-                            <div className="mt-2 text-[11px] text-emerald-800 bg-emerald-100/70 rounded-lg px-2 py-1.5">
-                              <div className="font-bold text-emerald-900 truncate">{existingTetanus.product}</div>
-                              <div className="flex justify-between text-[10px] text-emerald-700 mt-0.5">
-                                <span>{amountText(existingTetanus) || '—'}</span>
-                                <span>{fmtDate(existingTetanus.date)}{existingTetanus.attendingName || existingTetanus.recordedByName ? ` · ${existingTetanus.attendingName || existingTetanus.recordedByName}` : ''}</span>
-                              </div>
-                            </div>
-                          ) : tetanusDraftOpen ? (
-                            <div className="mt-2.5 space-y-2 pt-2 border-t border-indigo-100">
-                              <div>
-                                <label htmlFor="tracker-at-product" className="block text-[10px] font-semibold text-slate-500 mb-0.5">Product</label>
-                                {/* Shared Select: its list is portalled to <body> above the
-                                    modal, so it is never clipped by the card. No default. */}
-                                <Select
-                                  id="tracker-at-product"
-                                  aria-label="Anti-Tetanus product"
-                                  value={tetanusProduct}
-                                  onChange={e => setTetanusProduct(e.target.value)}
-                                  className="w-full py-1.5 px-2.5 border border-slate-300 rounded-lg outline-none text-[11px] font-semibold bg-white text-slate-800 focus:border-[#3B50DF]"
-                                >
-                                  <option value="">Select product</option>
-                                  {ANTI_TETANUS_PRODUCTS.map(name => {
-                                    const it = findMatchingInventoryItem(name, inventoryItems);
-                                    const a = it ? brandAvailability(it, today) : { disabled: false, badge: 'Not in Inventory', tone: 'amber' };
-                                    return <option key={name} value={name} disabled={a.disabled} data-badge={a.badge || (it ? formatVials(it) : '')} data-badge-tone={a.tone}>{name}</option>;
-                                  })}
-                                </Select>
-                              </div>
-                              <button
-                                type="button"
-                                disabled={tetanusBusy || !tetanusProduct}
-                                onClick={() => handleSaveAntiTetanus(p)}
-                                className="w-full py-1.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] rounded-lg shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
-                              >
-                                {tetanusBusy ? 'Saving…' : 'Save Anti-Tetanus'}
-                              </button>
-                            </div>
-                          ) : (
-                            <p className="text-[10px] text-slate-400 mt-1">Optional Day 0</p>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* Dose Checklist Card */}
+                  {/* Dose Checklist Card with Day 0 Adjunct Treatments */}
                   <section className={cardCls}>
-                    <div className="px-4 pt-3 pb-2">
-                      <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Dose Checklist</h4>
+                    <div className="px-4 pt-3.5 pb-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Dose Checklist</h4>
+                        {isCategoryIII(p) && (
+                          <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">Category III Protocol</span>
+                        )}
+                      </div>
                       <p className="text-[11px] text-slate-400 mt-0.5">Tick the next dose, then Confirm dose.</p>
                     </div>
-                    <ol className="divide-y divide-slate-100 border-t border-slate-100">
+
+                    {/* Day 0 Adjunct Treatments (RIG & Anti-Tetanus) for Category III */}
+                    {isCategoryIII(p) && (() => {
+                      const existingRig = p.rigTreatment || (Array.isArray(p.treatments) ? p.treatments.find(isRigEntry) : null);
+                      const existingTetanus = p.antiTetanusTreatment || (Array.isArray(p.treatments) ? p.treatments.find(t => !isRigEntry(t)) : null);
+                      const rigItems = inventoryItems.filter(isRigItem).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+                      return (
+                        <div className="border-t border-slate-100 bg-slate-50/50 p-3.5 space-y-2.5">
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-0.5">
+                            Day 0 Adjunct Treatments
+                          </div>
+
+                          {/* RIG Item */}
+                          <div className="p-3 rounded-xl border border-slate-200/90 bg-white transition-all shadow-2xs">
+                            <div className="flex items-center justify-between gap-2">
+                              <label className="flex items-center gap-2.5 cursor-pointer select-none min-w-0">
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(existingRig || rigDraftOpen)}
+                                  onChange={() => {
+                                    if (existingRig) {
+                                      setTreatmentRemoveAsk({ p, treatment: existingRig });
+                                    } else {
+                                      setRigDraftOpen(o => !o);
+                                    }
+                                  }}
+                                  className="w-4 h-4 rounded accent-[#3B50DF] cursor-pointer shrink-0"
+                                />
+                                <span className="text-xs font-bold text-slate-900 truncate">RIG</span>
+                                <span className="text-[11px] font-medium text-slate-400 truncate">Rabies immunoglobulin</span>
+                              </label>
+                              {existingRig ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/80 shrink-0">
+                                  <Check size={10} strokeWidth={3} /> Given
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-medium text-slate-400 shrink-0">Optional Day 0</span>
+                              )}
+                            </div>
+
+                            {existingRig ? (
+                              <div className="mt-2 text-xs pt-2 border-t border-slate-100 flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="font-semibold text-slate-800 truncate">
+                                    {existingRig.product}{amountText(existingRig) ? ` · ${amountText(existingRig)}` : ''}
+                                  </div>
+                                  <div className="text-[11px] text-slate-500 mt-0.5">
+                                    {fmtDate(existingRig.date)}{existingRig.attendingName || existingRig.recordedByName ? ` · ${existingRig.attendingName || existingRig.recordedByName}` : ''}
+                                  </div>
+                                </div>
+                              </div>
+                            ) : rigDraftOpen ? (
+                              <div className="mt-2.5 space-y-2 pt-2 border-t border-slate-100">
+                                <div>
+                                  <label htmlFor="tracker-rig-product" className="block text-[10px] font-semibold text-slate-500 mb-1">Select RIG Product</label>
+                                  <Select
+                                    id="tracker-rig-product"
+                                    aria-label="RIG product"
+                                    value={rigItemId}
+                                    onChange={e => setRigItemId(e.target.value)}
+                                    className="w-full py-1.5 px-2.5 border border-slate-300 rounded-lg outline-none text-[11px] font-semibold bg-white text-slate-800 focus:border-[#3B50DF]"
+                                  >
+                                    <option value="">{rigItems.length ? 'Select RIG product' : 'No RIG item in Inventory'}</option>
+                                    {rigItems.map(it => {
+                                      const a = brandAvailability(it, today);
+                                      return <option key={it.id} value={it.id} disabled={a.disabled} data-badge={a.badge || formatVials(it)} data-badge-tone={a.tone}>{it.name}</option>;
+                                    })}
+                                  </Select>
+                                  {!rigItems.length && <p className="mt-1 text-[10px] text-amber-700">Add the RIG product in Inventory (category: RIG) first.</p>}
+                                </div>
+                                <button
+                                  type="button"
+                                  disabled={rigBusy || !rigItemId}
+                                  onClick={() => handleSaveRig(p)}
+                                  className="w-full py-1.5 px-3 bg-[#3B50DF] hover:bg-indigo-700 text-white font-bold text-[11px] rounded-lg shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+                                >
+                                  {rigBusy ? 'Saving…' : 'Save RIG'}
+                                </button>
+                              </div>
+                            ) : null}
+                          </div>
+
+                          {/* Anti-Tetanus Item */}
+                          <div className="p-3 rounded-xl border border-slate-200/90 bg-white transition-all shadow-2xs">
+                            <div className="flex items-center justify-between gap-2">
+                              <label className="flex items-center gap-2.5 cursor-pointer select-none min-w-0">
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(existingTetanus || tetanusDraftOpen)}
+                                  onChange={() => {
+                                    if (existingTetanus) {
+                                      setTreatmentRemoveAsk({ p, treatment: existingTetanus });
+                                    } else {
+                                      setTetanusDraftOpen(o => !o);
+                                    }
+                                  }}
+                                  className="w-4 h-4 rounded accent-[#3B50DF] cursor-pointer shrink-0"
+                                />
+                                <span className="text-xs font-bold text-slate-900 truncate">Anti-Tetanus</span>
+                                <span className="text-[11px] font-medium text-slate-400 shrink-0">TT / Serum</span>
+                              </label>
+                              {existingTetanus ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/80 shrink-0">
+                                  <Check size={10} strokeWidth={3} /> Given
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-medium text-slate-400 shrink-0">Optional Day 0</span>
+                              )}
+                            </div>
+
+                            {existingTetanus ? (
+                              <div className="mt-2 text-xs pt-2 border-t border-slate-100 flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="font-semibold text-slate-800 truncate">
+                                    {existingTetanus.product}
+                                  </div>
+                                  <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5">
+                                    {amountText(existingTetanus) && <span>{amountText(existingTetanus)} ·</span>}
+                                    <span>{fmtDate(existingTetanus.date)}{existingTetanus.attendingName || existingTetanus.recordedByName ? ` · ${existingTetanus.attendingName || existingTetanus.recordedByName}` : ''}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : tetanusDraftOpen ? (
+                              <div className="mt-2.5 space-y-2 pt-2 border-t border-slate-100">
+                                <div>
+                                  <label htmlFor="tracker-at-product" className="block text-[10px] font-semibold text-slate-500 mb-1">Select Product</label>
+                                  <Select
+                                    id="tracker-at-product"
+                                    aria-label="Anti-Tetanus product"
+                                    value={tetanusProduct}
+                                    onChange={e => setTetanusProduct(e.target.value)}
+                                    className="w-full py-1.5 px-2.5 border border-slate-300 rounded-lg outline-none text-[11px] font-semibold bg-white text-slate-800 focus:border-[#3B50DF]"
+                                  >
+                                    <option value="">Select product</option>
+                                    {ANTI_TETANUS_PRODUCTS.map(name => {
+                                      const it = findMatchingInventoryItem(name, inventoryItems);
+                                      const a = it ? brandAvailability(it, today) : { disabled: false, badge: 'Not in Inventory', tone: 'amber' };
+                                      return <option key={name} value={name} disabled={a.disabled} data-badge={a.badge || (it ? formatVials(it) : '')} data-badge-tone={a.tone}>{name}</option>;
+                                    })}
+                                  </Select>
+                                </div>
+                                <button
+                                  type="button"
+                                  disabled={tetanusBusy || !tetanusProduct}
+                                  onClick={() => handleSaveAntiTetanus(p)}
+                                  className="w-full py-1.5 px-3 bg-[#3B50DF] hover:bg-indigo-700 text-white font-bold text-[11px] rounded-lg shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+                                >
+                                  {tetanusBusy ? 'Saving…' : 'Save Anti-Tetanus'}
+                                </button>
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Doses Header for Category III */}
+                    {isCategoryIII(p) && (
+                      <div className="px-4 py-2 bg-slate-50/60 border-t border-b border-slate-100 flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Vaccine Regimen</span>
+                        <span className="text-[10px] text-slate-400">Intradermal Sessions</span>
+                      </div>
+                    )}
+
+                    <ol className={`divide-y divide-slate-100 ${isCategoryIII(p) ? '' : 'border-t border-slate-100'}`}>
                       {doses.map((d, di) => {
                         const st = doseState(d, di);
                         const isDone = st === 'given';
