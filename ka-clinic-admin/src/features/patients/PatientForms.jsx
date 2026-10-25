@@ -705,7 +705,7 @@ export function AddPatientModal({ onClose, onAdd, initialPatient = null }) {
                   </div>
                 </FormGroup>
 
-                <FormGroup title="Vitals" hint="Optional. Leave blank if not measured.">
+                <FormGroup title="Vitals">
                   <div className="form-field"><label htmlFor="reg-bp">Blood pressure</label>
                     <input id="reg-bp" type="text" value={form.bloodPressure || ''} onChange={e => set('bloodPressure', e.target.value)} placeholder="e.g. 120/80" />
                   </div>

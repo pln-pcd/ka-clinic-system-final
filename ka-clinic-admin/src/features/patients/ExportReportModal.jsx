@@ -5,8 +5,8 @@ import IconButton from '../../components/IconButton';
 import Select from '../../components/Select';
 import { useEffect, useRef, useState } from "react";
 import { auth } from "../../lib/firebase";
-import { buildDoses, getSchedule } from "../../lib/doseSchedules";
-import { erigStatus, erigStatusLabel } from "../../lib/erig";
+import { buildDoses } from "../../lib/doseSchedules";
+import { erigStatusLabel } from "../../lib/erig";
 import { serviceFieldRows, showsTreatments } from "../../lib/serviceFields";
 import { amountText } from "../../lib/inventoryStock";
 import { LIBON_SEAL_BASE64 } from "../../assets/libonSealBase64";
@@ -19,6 +19,111 @@ import { pdfToBytes, reportGeneratedOn, sendReportInBackground, warmReportMailer
 import { Printer, Download, Mail, Loader2 } from "lucide-react";
 import { X, derivePatientStatus } from "./shared";
 import PreviewViewer from "../../components/PreviewViewer";
+
+// Single-patient record paper: US Letter at 96 px per inch, plus the page
+// padding and the gap between pages in the on-screen preview.
+const LETTER_PX = { w: 816, h: 1056, padY: 36, padX: 40, gap: 16 };
+
+// Cuts a rendered medical record (buildDocumentHtml) into Letter pages, each
+// carrying the same letterhead and footer. Runs on the live document so it
+// measures real heights; a table that will not fit is split between rows and
+// its header row repeated. Returns the page count. Safe to call twice.
+function paginateMedicalRecord(d) {
+  const root = d?.querySelector('.mr-doc');
+  if (!root) return 1;
+  if (root.dataset.paged) return root.querySelectorAll('.mr-page').length || 1;
+  const head = root.querySelector('.mr-head');
+  const flow = root.querySelector('.mr-flow');
+  const foot = root.querySelector('.mr-foot');
+  if (!head || !flow || !foot) return 1;
+
+  const view = d.defaultView;
+  const height = el => el.getBoundingClientRect().height;
+  const outer = el => {
+    const cs = view.getComputedStyle(el);
+    return height(el) + parseFloat(cs.marginTop || 0) + parseFloat(cs.marginBottom || 0);
+  };
+  const PAGE_NO_LINE = 14;
+  const avail = LETTER_PX.h - LETTER_PX.padY * 2 - outer(head) - outer(foot) - PAGE_NO_LINE;
+
+  // Measure everything first: moving rows later changes the layout.
+  const items = [...flow.children].map(el => {
+    const isTable = el.tagName === 'TABLE';
+    const cs = view.getComputedStyle(el);
+    return {
+      el,
+      h: outer(el),
+      title: el.classList.contains('mr-title'),
+      split: isTable && !el.classList.contains('mr-keep') && el.tBodies.length > 0,
+      headH: isTable && el.tHead ? height(el.tHead) : 0,
+      margins: parseFloat(cs.marginTop || 0) + parseFloat(cs.marginBottom || 0),
+      rows: isTable && el.tBodies[0] ? [...el.tBodies[0].rows].map(r => ({ r, h: height(r) })) : [],
+    };
+  });
+
+  const pages = [[]];
+  let used = 0;
+  const newPage = () => { pages.push([]); used = 0; };
+  const onPage = () => pages[pages.length - 1];
+
+  items.forEach((it, i) => {
+    if (it.title) {
+      // Keep a section title with its table's header and first row.
+      const next = items[i + 1];
+      const need = it.h + (next ? next.headH + (next.rows[0]?.h || 0) : 0);
+      if (used + need > avail && onPage().length) newPage();
+      onPage().push(it.el);
+      used += it.h;
+      return;
+    }
+    if (used + it.h <= avail || !it.split) {
+      if (used + it.h > avail && onPage().length) newPage();
+      onPage().push(it.el);
+      used += it.h;
+      return;
+    }
+    let part = null;
+    it.rows.forEach(({ r, h }) => {
+      if (part && used + h > avail) { newPage(); part = null; }
+      if (!part) {
+        if (used + it.headH + h + it.margins > avail && onPage().length) newPage();
+        part = it.el.cloneNode(false);
+        if (it.el.tHead) part.appendChild(it.el.tHead.cloneNode(true));
+        part.appendChild(d.createElement('tbody'));
+        onPage().push(part);
+        used += it.headH + it.margins;
+      }
+      part.tBodies[0].appendChild(r);
+      used += h;
+    });
+  });
+
+  const total = pages.length;
+  root.textContent = '';
+  pages.forEach((els, i) => {
+    const page = d.createElement('div');
+    page.className = 'mr-page';
+    page.appendChild(head.cloneNode(true));
+    const body = d.createElement('div');
+    body.className = 'mr-body';
+    els.forEach(el => body.appendChild(el));
+    page.appendChild(body);
+    const f = foot.cloneNode(true);
+    const no = d.createElement('div');
+    no.className = 'mr-pageno';
+    no.textContent = `Page ${i + 1} of ${total}`;
+    f.appendChild(no);
+    page.appendChild(f);
+    root.appendChild(page);
+  });
+  root.dataset.paged = '1';
+  return total;
+}
+
+// Waits for web fonts (they change text heights) before paginating.
+function whenFontsReady(d) {
+  return (d?.fonts?.ready || Promise.resolve()).catch(() => {});
+}
 
 /* ─────────────────────────── EXPORT REPORT MODAL ─────────────────────────── */
 export function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
@@ -159,6 +264,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
             status: h.status || 'completed',
             doses: h.doses || [],
             treatments: h.treatments || [],
+            reports: h.reports || [],
             service: h.service || p.service || 'PEP',
           });
         });
@@ -924,28 +1030,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
   // measured from the rendered document instead, so it ends where the
   // content ends. Null until the iframe reports back.
   const [docSheetHeight, setDocSheetHeight] = useState(null);
-
-  // Built from the patient's actual schedule (lib/doseSchedules.js), e.g.
-  // PEP "Day 0, 3, 7, 28", PrEP "Day 0, 7", Anti-Tetanus "Day 0, 1 month,
-  // 6 months", Pneumonia "single dose (adult)".
-  function getProtocolLabel(p) {
-    const schedule = getSchedule(p?.service);
-    const doses = buildDoses(p);
-    const doneCount = doses.filter(d => (d.s || d.status) === 'done' || d.done === true).length;
-    let timing;
-    if (schedule.doses.length === 1) {
-      timing = p?.service === 'Pneumonia' ? 'single dose (adult)' : 'single dose';
-    } else {
-      timing = schedule.doses.map((d, i) => (
-        typeof d.month === 'number'
-          ? `${d.month} month${d.month === 1 ? '' : 's'}`
-          : (i === 0 ? `Day ${d.day || 0}` : String(d.day || 0))
-      )).join(', ');
-    }
-    const hasERIG = p?.service === 'PEP' && (erigStatus(p).given || doses.some(d => (d.n || d.label || '').includes('ERIG')));
-    const progress = doses.length ? ` · ${doneCount} of ${doses.length} dose${doses.length === 1 ? '' : 's'} given` : '';
-    return `${hasERIG ? 'ERIG + ' : ''}${schedule.label}: ${timing}${progress}`;
-  }
+  const [docPages, setDocPages] = useState(1);
 
   const PATIENT_HIDDEN_NOTE = 'Wound assessment details are held in your clinical file at K&A Clinic.';
 
@@ -988,10 +1073,10 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     const primaryAttending = resolvePrimaryAttending(p);
 
     const admin = [
-      ['Date', registered, 'MRN', p.id || p.mrn || '—'],
+      ['Registration Date', registered, 'MRN', p.id || p.mrn || '—'],
       ['Account / Case No.', caseNo, 'Ward / Service', `${serviceLabel(p.service || 'PEP')} (Animal Bite Clinic)`],
-      ...(historical ? [['Registration Date', registered, 'Completion Date', completed]] : []),
       ['Primary Attending', primaryAttending, 'Status', st.toUpperCase()],
+      ...(historical ? [['Completion Date', completed, '', '']] : []),
     ];
 
     // Only the fields this service asks (lib/serviceFields.js). The
@@ -1001,18 +1086,23 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     const exposureRows = serviceFieldRows(p, 'exposure', { audience, exclude: ['cat'] }).map(r => [r.label, r.value || '—']);
     const woundWithheld = !showWoundDetail && serviceFieldRows(p, 'exposure').some(r => r.key === 'woundLocation' || r.key === 'woundDepth');
 
-    const clinicalDetailsRows = [
+    // Exposure facts and what was given for them. Notes and visit vitals live
+    // in their own Clinical Notes & Reports section below.
+    const exposureDetailRows = [
       ...(isPEP ? [['Exposure Category', `Category ${p.cat || '—'}`]] : []),
       ...exposureRows,
       ...(woundWithheld ? [['Wound Assessment', PATIENT_HIDDEN_NOTE]] : []),
       ...(showsTreatments(p) ? [['ERIG', erigStatusLabel(p, d => formatDateShort(d) || d)]] : []),
       ...(hasTreatments ? [[isPEP ? 'Cat III Treatments (RIG / Anti-Tetanus)' : 'Treatments Given', p.treatments.map(treatmentText).join('; ')]] : []),
-      ...(p.notes ? [['Clinical Remarks', p.notes]] : []),
     ];
+
+    // Section numbers follow whichever sections this record actually has.
+    let sectionNo = 0;
+    const numbered = title => `${++sectionNo}. ${title}`;
 
     const sections = [
       {
-        title: '1. ENCOUNTER SUMMARY',
+        title: numbered('ENCOUNTER SUMMARY'),
         rows: [
           ['Patient Name', formatTitleCase(p.name)],
           ['Age / Gender', `${p.age || '—'} yrs · ${(p.sex || '—').toUpperCase()}`],
@@ -1020,16 +1110,13 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
           ['Height / Weight', `${p.height ? `${p.height} cm` : '—'} · ${p.weight ? `${p.weight} kg` : '—'}`],
           ['Blood Pressure', p.bloodPressure || '—'],
           ['Contact / Address', `${p.contact || '—'} · ${p.address || '—'}`],
-          ['Encounter Type', 'Outpatient Clinical Consultation & Prophylaxis'],
           ['Protocol / Reason', isPEP ? `Animal Bite Exposure (${p.animal || 'Animal'} Bite)` : `${serviceLabel(p.service) || 'Vaccination'} Protocol`],
           ['Primary Attending', primaryAttending],
-          ['Registration Date', registered],
-          ['Treatment Protocol', getProtocolLabel(p)],
           ['Attending Facility', 'K&A Animal Bite Treatment Center · Municipality of Libon, Province of Albay'],
         ],
       },
       {
-        title: '2. MEDICAL HISTORY & PREVIOUS ENCOUNTERS',
+        title: numbered('MEDICAL HISTORY & PREVIOUS ENCOUNTERS'),
         rows: [
           ...serviceFieldRows(p, 'history', { audience, exclude: ['notes'] }).map(r => [r.label, r.value || '—']),
           ...(Array.isArray(p.caseHistory) && p.caseHistory.length > 0
@@ -1037,10 +1124,9 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
             : []),
         ],
       },
-      {
-        title: '3. CLINICAL DETAILS',
-        rows: clinicalDetailsRows,
-      },
+      ...(exposureDetailRows.length
+        ? [{ title: numbered(isPEP ? 'EXPOSURE DETAILS' : 'CLINICAL DETAILS'), rows: exposureDetailRows }]
+        : []),
     ];
 
     // A historical case lists the stored doses as saved (amount and staff
@@ -1080,6 +1166,43 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
         })
       : [];
 
+    // Logged visit assessments from the record's "Clinical Reports & Nurse
+    // Notes" card (BP, weight, temperature, notes, attending), oldest first,
+    // after any remarks written at registration. The patient-safe copy drops
+    // wound condition, as above.
+    const registrationRemarks = p.notes ? [{
+      date: formatDateShort(rawDate) || registered,
+      title: 'Registration Remarks',
+      vitals: '—',
+      observations: '—',
+      notes: p.notes,
+      author: p.registeredByName || '—',
+    }] : [];
+    const clinicalReportRows = [...registrationRemarks, ...(Array.isArray(p.reports) ? p.reports : [])
+      .slice()
+      .sort((a, b) => String(a.date || a.createdAt || '').localeCompare(String(b.date || b.createdAt || '')))
+      .map(rep => ({
+        date: formatDateShort(rep.date || rep.createdAt) || rep.date || '—',
+        title: rep.title || 'Clinical Assessment',
+        vitals: [
+          rep.bp && `BP ${rep.bp}`,
+          rep.pulse && `Pulse ${rep.pulse}`,
+          rep.temp && `Temp ${rep.temp}°C`,
+          rep.weight && `Wt ${rep.weight} kg`,
+        ].filter(Boolean).join(' · ') || '—',
+        observations: [
+          rep.injectionSite && `Site: ${rep.injectionSite}`,
+          showWoundDetail && rep.woundCondition && `Wound: ${rep.woundCondition}`,
+          rep.adverseEvent && `Adverse event: ${rep.adverseEvent}`,
+        ].filter(Boolean).join('; ') || '—',
+        notes: rep.notes || '—',
+        author: rep.author || '—',
+      }))];
+
+    const clinicalReportsTitle = clinicalReportRows.length ? numbered('CLINICAL NOTES & REPORTS') : '';
+    const doseSectionTitle = numbered('VACCINATION DOSING SCHEDULE');
+    const previousServicesTitle = previousServicesRows.length ? numbered('PREVIOUS SERVICES & CASE HISTORY') : '';
+
     return {
       title: historical ? `PATIENT MEDICAL REPORT (HISTORICAL CASE #${p.historicalIndex})` : 'PATIENT MEDICAL REPORT',
       registered,
@@ -1087,13 +1210,13 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
       doseDetail: true,
       admin,
       sections,
-      doseSectionTitle: '4. VACCINATION DOSING SCHEDULE',
+      clinicalReportsTitle,
+      clinicalReportRows,
+      doseSectionTitle,
       doseRows,
-      previousServicesTitle: '5. PREVIOUS SERVICES & CASE HISTORY',
+      previousServicesTitle,
       previousServicesRows,
       officer: {
-        name: 'Dr. Francis R. Reyes, MD',
-        license: 'PRC License # 0123456 · Animal Bite Treatment Specialist',
         issued: `Date Issued: ${new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}`,
         badge: 'VERIFIED EHR CLINICAL RECORD',
       },
@@ -1165,8 +1288,28 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
         </tbody>
       </table>`;
 
+    const reportCols = [['Date', 11], ['Assessment', 15], ['Vitals', 17], ['Observations', 20], ['Clinical Notes', 23], ['Attending', 14]];
+    const clinicalReportsTable = m.clinicalReportRows.length ? `
+      <div class="mr-title" style="font-size:9.5px;font-weight:800;color:#0F172A;letter-spacing:.3px;margin:10px 0 4px;">${escapeHtml(m.clinicalReportsTitle)}</div>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:8px;table-layout:fixed;">
+        <thead>
+          <tr>${reportCols.map(([h, w]) => `<th style="${CELL}background:#0A1D47;color:#FFFFFF;text-align:left;font-weight:700;width:${w}%;">${h}</th>`).join('')}</tr>
+        </thead>
+        <tbody>
+          ${m.clinicalReportRows.map((r, i) => `
+          <tr style="background:${i % 2 ? '#FAFAFC' : '#FFFFFF'};">
+            <td style="${VALUE_CELL}">${escapeHtml(r.date)}</td>
+            <td style="${VALUE_CELL}font-weight:700;">${escapeHtml(r.title)}</td>
+            <td style="${VALUE_CELL}">${escapeHtml(r.vitals)}</td>
+            <td style="${VALUE_CELL}">${escapeHtml(r.observations)}</td>
+            <td style="${VALUE_CELL}">${escapeHtml(r.notes)}</td>
+            <td style="${VALUE_CELL}">${escapeHtml(r.author)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>` : '';
+
     const prevServicesTable = m.previousServicesRows.length ? `
-      <div style="font-size:9.5px;font-weight:800;color:#0F172A;letter-spacing:.3px;margin:10px 0 4px;">${escapeHtml(m.previousServicesTitle)}</div>
+      <div class="mr-title" style="font-size:9.5px;font-weight:800;color:#0F172A;letter-spacing:.3px;margin:10px 0 4px;">${escapeHtml(m.previousServicesTitle)}</div>
       <table style="width:100%;border-collapse:collapse;margin-bottom:8px;table-layout:fixed;">
         <thead>
           <tr>
@@ -1191,9 +1334,11 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
         </tbody>
       </table>` : '';
 
+    // mr-head / mr-flow / mr-foot are the hooks paginateMedicalRecord uses to
+    // cut the record into Letter pages, each with the same head and foot.
     return `
-      <div style="font-family:'Plus Jakarta Sans','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0F172A;font-size:10px;line-height:1.5;padding:20px 24px;background:#FFFFFF;">
-
+      <div class="mr-doc" style="font-family:'Plus Jakarta Sans','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0F172A;font-size:10px;line-height:1.5;">
+       <div class="mr-head">
         <!-- Institutional letterhead -->
         <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto 4px;border:none;">
           <tr>
@@ -1216,7 +1361,9 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
         <div style="text-align:center;margin-bottom:10px;">
           <h1 style="margin:0;font-size:13px;font-weight:900;color:#0A1D47;letter-spacing:1px;text-transform:uppercase;">${escapeHtml(m.title)}</h1>
         </div>
+       </div>
 
+       <div class="mr-flow">
         <!-- Administrative information -->
         <table style="width:100%;border-collapse:collapse;margin-bottom:8px;table-layout:fixed;">
           <thead>
@@ -1227,17 +1374,17 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
 
         ${m.sections.map(s => sectionHtml(s.title, s.rows)).join('')}
 
-        <div style="font-size:9.5px;font-weight:800;color:#0F172A;letter-spacing:.3px;margin:10px 0 4px;">${escapeHtml(m.doseSectionTitle)}</div>
+        ${clinicalReportsTable}
+
+        <div class="mr-title" style="font-size:9.5px;font-weight:800;color:#0F172A;letter-spacing:.3px;margin:10px 0 4px;">${escapeHtml(m.doseSectionTitle)}</div>
         ${doseTable}
 
         ${prevServicesTable}
 
         <!-- Attending officer & verification -->
-        <table style="width:100%;border-collapse:collapse;margin-top:10px;border-top:1px solid #CBD5E1;">
+        <table class="mr-keep" style="width:100%;border-collapse:collapse;margin-top:10px;border-top:1px solid #CBD5E1;">
           <tr>
             <td style="padding-top:8px;font-size:9px;color:#334155;vertical-align:bottom;">
-              <div><strong>Attending Medical Officer:</strong> ${escapeHtml(m.officer.name)}</div>
-              <div style="font-size:8px;color:#64748B;">${escapeHtml(m.officer.license)}</div>
               <div style="font-size:8px;color:#64748B;">${escapeHtml(m.officer.issued)}</div>
             </td>
             <td style="padding-top:8px;text-align:right;vertical-align:bottom;">
@@ -1245,8 +1392,9 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
             </td>
           </tr>
         </table>
+       </div>
 
-        <div style="margin-top:12px;font-size:7.5px;color:#94A3B8;text-align:center;line-height:1.5;">
+        <div class="mr-foot" style="margin-top:12px;font-size:7.5px;color:#94A3B8;text-align:center;line-height:1.5;">
           ${escapeHtml(m.footer[0])}<br>${escapeHtml(m.footer[1])}
         </div>
       </div>`;
@@ -1262,70 +1410,79 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
       /* Browsers drop table fills when printing unless colour adjustment is
          forced, which is what turned the navy section bars pale grey on paper. */
       *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact;}
-      body{font-family:'Plus Jakarta Sans','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;margin:0;padding:0;background:#FFFFFF;}
+      body{font-family:'Plus Jakarta Sans','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;margin:0;padding:0;background:#EDF0FA;}
+      /* US Letter (8.5 x 11 in) at 96 px per inch. Before paginateMedicalRecord
+         runs, the record is laid out at the page's content width so its
+         measurements match the pages it is cut into. */
+      .mr-doc{width:${LETTER_PX.w}px;padding:${LETTER_PX.padY}px ${LETTER_PX.padX}px;background:#FFFFFF;}
+      .mr-doc[data-paged]{width:auto;padding:0;background:transparent;}
+      .mr-page{width:${LETTER_PX.w}px;height:${LETTER_PX.h}px;padding:${LETTER_PX.padY}px ${LETTER_PX.padX}px;background:#FFFFFF;display:flex;flex-direction:column;overflow:hidden;border-radius:6px;border:1px solid #D8DEF0;box-shadow:0 4px 18px rgba(15,23,42,0.10);}
+      .mr-page + .mr-page{margin-top:${LETTER_PX.gap}px;}
+      .mr-body{flex:1;}
+      .mr-pageno{margin-top:2px;}
       @media print{
-        @page{size:A4 portrait;margin:8mm 10mm;}
+        @page{size:letter portrait;margin:0;}
         html,body{margin:0!important;padding:0!important;background:#FFFFFF!important;}
-        /* Keeps the record on one sheet and stops a section splitting across
-           the page break. */
-        body{zoom:0.88;}
-        table{page-break-inside:avoid;break-inside:avoid;}
-        tr,td,th{page-break-inside:avoid;break-inside:avoid;}
-        thead{display:table-header-group;}
+        .mr-page{margin:0!important;border:none!important;border-radius:0!important;box-shadow:none!important;break-after:page;page-break-after:always;}
+        .mr-page:last-child{break-after:auto;page-break-after:auto;}
       }
     </style>
     </head><body><div>${medicalRecordBodyHtml(p, audience, logoDataUrl || CLINIC_LOGO_BASE64)}</div></body></html>`;
   }
 
-  // `density` scales the table metrics so a long record can be squeezed onto
-  // one sheet — buildDocumentPdf steps through the presets until the whole
-  // report fits, matching the preview, which never paginates.
+  // A long record flows onto further pages, like the preview; every page gets
+  // the same letterhead, title and footer, drawn once the tables are placed.
   function drawMedicalRecordPdf(doc, p, audience = 'clinic', logoDataUrl = clinicLogoBase64Cache || CLINIC_LOGO_BASE64, density = { fontSize: 8, cellPadding: 2.5, gap: 4 }) {
     if (!p) return;
     const m = buildMedicalRecordModel(p, audience);
     const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    // Room above for the letterhead and title, below for the footer.
+    const PAGE_MARGIN = { top: 35, bottom: 18, left: 14, right: 14 };
 
-    if (logoDataUrl) {
-      try {
-        doc.addImage(logoDataUrl, 'PNG', 14, 8, 14, 14);
-      } catch (e) {
-        console.warn('Could not add logo to single report PDF:', e);
+    function drawPageHeader() {
+      if (logoDataUrl) {
+        try {
+          doc.addImage(logoDataUrl, 'PNG', 14, 8, 14, 14);
+        } catch (e) {
+          console.warn('Could not add logo to single report PDF:', e);
+        }
       }
+      // Libon municipal seal, mirrored on the right at the same size and height.
+      try {
+        doc.addImage(LIBON_SEAL_BASE64, 'PNG', pageWidth - 14 - 14, 8, 14, 14);
+      } catch (e) {
+        console.warn('Could not add Libon seal to single report PDF:', e);
+      }
+
+      // Clean institutional header matching report format
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.setTextColor(15, 23, 42);
+      doc.text('K&A ANIMAL BITE CENTER', pageWidth / 2, 13, { align: 'center' });
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(29, 78, 216);
+      doc.text('Caring for Life · Animal Bite Treatment & Care', pageWidth / 2, 17, { align: 'center' });
+
+      doc.setFontSize(7);
+      doc.setTextColor(100, 116, 139);
+      doc.text('Municipality of Libon, Province of Albay | Ph: (052) 742-0123 | ka.animalbitecenter@gmail.com', pageWidth / 2, 21, { align: 'center' });
+
+      // Double divider line
+      doc.setDrawColor(10, 29, 71);
+      doc.setLineWidth(0.6);
+      doc.line(14, 24, pageWidth - 14, 24);
+      doc.setLineWidth(0.2);
+      doc.line(14, 25.5, pageWidth - 14, 25.5);
+
+      // Document Title
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(10, 29, 71);
+      doc.text(m.title, pageWidth / 2, 31, { align: 'center' });
     }
-    // Libon municipal seal, mirrored on the right at the same size and height.
-    try {
-      doc.addImage(LIBON_SEAL_BASE64, 'PNG', pageWidth - 14 - 14, 8, 14, 14);
-    } catch (e) {
-      console.warn('Could not add Libon seal to single report PDF:', e);
-    }
-
-    // Clean institutional header matching report format
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(13);
-    doc.setTextColor(15, 23, 42);
-    doc.text('K&A ANIMAL BITE CENTER', pageWidth / 2, 13, { align: 'center' });
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
-    doc.setTextColor(29, 78, 216);
-    doc.text('Caring for Life · Animal Bite Treatment & Care', pageWidth / 2, 17, { align: 'center' });
-
-    doc.setFontSize(7);
-    doc.setTextColor(100, 116, 139);
-    doc.text('Municipality of Libon, Province of Albay | Ph: (052) 742-0123 | ka.animalbitecenter@gmail.com', pageWidth / 2, 21, { align: 'center' });
-
-    // Double divider line
-    doc.setDrawColor(10, 29, 71);
-    doc.setLineWidth(0.6);
-    doc.line(14, 24, pageWidth - 14, 24);
-    doc.setLineWidth(0.2);
-    doc.line(14, 25.5, pageWidth - 14, 25.5);
-
-    // Document Title
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(10, 29, 71);
-    doc.text(m.title, pageWidth / 2, 31, { align: 'center' });
 
     const baseStyles = { fontSize: density.fontSize, cellPadding: density.cellPadding, overflow: 'linebreak', valign: 'top' };
     const GAP = density.gap;
@@ -1333,19 +1490,20 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
 
     // Administrative Information Box
     autoTable(doc, {
-      startY: 34,
+      startY: PAGE_MARGIN.top,
       head: [['ADMINISTRATIVE INFORMATION', '', '', '']],
       body: m.admin,
       theme: 'grid',
       headStyles: { fillColor: [241, 245, 249], textColor: [10, 29, 71], fontStyle: 'bold', fontSize: density.fontSize, halign: 'center' },
       styles: baseStyles,
+      margin: PAGE_MARGIN,
       columnStyles: {
         0: { fontStyle: 'bold', fillColor: [248, 250, 252], textColor: [71, 85, 105], cellWidth: 35 },
         2: { fontStyle: 'bold', fillColor: [248, 250, 252], textColor: [71, 85, 105], cellWidth: 35 },
       },
     });
 
-    // Sections 1–4, straight off the shared model so the PDF carries every
+    // Summary, history and exposure sections, straight off the shared model so the PDF carries every
     // field the preview shows.
     m.sections.forEach(section => {
       autoTable(doc, {
@@ -1355,57 +1513,82 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
         theme: 'grid',
         headStyles: { fillColor: [10, 29, 71], textColor: 255, fontSize: density.fontSize, fontStyle: 'bold' },
         styles: baseStyles,
+        margin: PAGE_MARGIN,
         columnStyles: labelColumn,
       });
     });
 
-    // 4. Vaccination Dosing Schedule
+    // Numbered section title above a table, as in the preview. Moves to a
+    // new page with its table when too close to the footer.
+    const titled = title => {
+      let y = doc.lastAutoTable.finalY + GAP + 3;
+      if (y + 14 > pageHeight - PAGE_MARGIN.bottom) { doc.addPage(); y = PAGE_MARGIN.top + 3; }
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(density.fontSize + 0.5);
+      doc.setTextColor(15, 23, 42);
+      doc.text(title, PAGE_MARGIN.left, y);
+      return y + 2;
+    };
+
+    // Clinical Notes & Reports (if any): visit vitals and notes.
+    if (m.clinicalReportRows.length) {
+      autoTable(doc, {
+        startY: titled(m.clinicalReportsTitle),
+        head: [['Date', 'Assessment', 'Vitals', 'Observations', 'Clinical Notes', 'Attending']],
+        body: m.clinicalReportRows.map(r => [r.date, r.title, r.vitals, r.observations, r.notes, r.author]),
+        theme: 'grid',
+        headStyles: { fillColor: [10, 29, 71], textColor: 255, fontSize: density.fontSize, fontStyle: 'bold' },
+        styles: baseStyles,
+        margin: PAGE_MARGIN,
+        columnStyles: { 1: { fontStyle: 'bold' } },
+        alternateRowStyles: { fillColor: [250, 250, 252] },
+      });
+    }
+
+    // Vaccination Dosing Schedule
     autoTable(doc, {
-      startY: doc.lastAutoTable.finalY + GAP,
+      startY: titled(m.doseSectionTitle),
       head: [m.doseDetail ? ['Dose', 'Date', 'Status', 'Amount Given', 'Attending Nurse / Physician'] : ['Dose', 'Scheduled Date', 'Status']],
       body: m.doseRows.length
         ? m.doseRows.map(d => (m.doseDetail ? [d.label, d.date, d.status, d.amount, d.by] : [d.label, d.date, d.status]))
         : [m.doseDetail ? ['No dose schedule on file.', '', '', '', ''] : ['No dose schedule on file.', '', '']],
       headStyles: { fillColor: [29, 78, 216], textColor: 255, fontSize: density.fontSize, fontStyle: 'bold' },
       styles: baseStyles,
+      margin: PAGE_MARGIN,
       alternateRowStyles: { fillColor: [250, 250, 252] },
     });
 
-    // 5. Previous Services & Case History (if any)
+    // Previous Services & Case History (if any)
     if (m.previousServicesRows.length) {
       autoTable(doc, {
-        startY: doc.lastAutoTable.finalY + GAP,
+        startY: titled(m.previousServicesTitle),
         head: [['Case', 'Service', 'Date', 'Doses', 'Treatments', 'Status']],
         body: m.previousServicesRows.map(ps => [ps.caseNo, ps.service, ps.date, ps.doses, ps.treatments, ps.status]),
         theme: 'grid',
         headStyles: { fillColor: [10, 29, 71], textColor: 255, fontSize: density.fontSize, fontStyle: 'bold' },
         styles: baseStyles,
+        margin: PAGE_MARGIN,
         alternateRowStyles: { fillColor: [250, 250, 252] },
       });
     }
 
-    // Attending officer & verification. The block is pinned above the footer
-    // rather than pushed to a second page — buildDocumentPdf re-renders at a
-    // tighter density instead, so the report stays a single sheet.
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const y = Math.min(doc.lastAutoTable.finalY + 8, pageHeight - 26);
+    // Issue date & verification, kept in one piece: it moves to a new page
+    // when the last table leaves no room above the footer.
+    const OFFICER_HEIGHT = 12;
+    let y = doc.lastAutoTable.finalY + 8;
+    if (y + OFFICER_HEIGHT > pageHeight - PAGE_MARGIN.bottom) {
+      doc.addPage();
+      y = PAGE_MARGIN.top;
+    }
     doc.setDrawColor(203, 213, 225);
     doc.setLineWidth(0.2);
     doc.line(14, y, pageWidth - 14, y);
 
     const yText = y + 5;
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor(51, 65, 85);
-    doc.text('Attending Medical Officer:', 14, yText);
-    const officerLabelWidth = doc.getTextWidth('Attending Medical Officer: ');
     doc.setFont('helvetica', 'normal');
-    doc.text(m.officer.name, 14 + officerLabelWidth, yText);
-
     doc.setFontSize(7);
     doc.setTextColor(100, 116, 139);
-    doc.text(m.officer.license, 14, yText + 4);
-    doc.text(m.officer.issued, 14, yText + 8);
+    doc.text(m.officer.issued, 14, yText + 4);
 
     // Verified badge, right-aligned against the officer block
     doc.setFontSize(7);
@@ -1418,37 +1601,24 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     doc.setTextColor(29, 78, 216);
     doc.text(m.officer.badge, badgeX + 3, yText + 5);
 
-    // Footer on every page
+    // Letterhead, title and footer on every page, with "Page X of Y".
     const totalPages = doc.internal.getNumberOfPages();
     for (let i = 1; i <= totalPages; i++) {
       doc.setPage(i);
+      drawPageHeader();
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7);
       doc.setTextColor(148, 163, 184);
       doc.text(m.footer[0], pageWidth / 2, pageHeight - 11, { align: 'center' });
       doc.text(m.footer[1], pageWidth / 2, pageHeight - 7.5, { align: 'center' });
+      doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 4, { align: 'center' });
     }
   }
 
-  // Preview and print show the whole record in one continuous sheet, so the
-  // download must not split mid-table. Each preset is drawn into a throwaway
-  // document; the first that lands on a single page is the one returned, and
-  // the tightest is used as-is if even that overflows.
-  const PDF_DENSITIES = [
-    { fontSize: 8, cellPadding: 2.5, gap: 4 },
-    { fontSize: 7.5, cellPadding: 2, gap: 3.5 },
-    { fontSize: 7, cellPadding: 1.6, gap: 3 },
-    { fontSize: 6.5, cellPadding: 1.2, gap: 2.5 },
-    { fontSize: 6, cellPadding: 1, gap: 2 },
-  ];
-
+  // US Letter (8.5 x 11 in), the same paper the preview and print use.
   function buildDocumentPdf(p, type = 'record', audience = 'clinic', logoDataUrl = clinicLogoBase64Cache || CLINIC_LOGO_BASE64) {
-    let doc;
-    for (let i = 0; i < PDF_DENSITIES.length; i++) {
-      doc = new jsPDF({ compress: true });
-      drawMedicalRecordPdf(doc, p, audience, logoDataUrl, PDF_DENSITIES[i]);
-      if (doc.internal.getNumberOfPages() === 1) return doc;
-    }
+    const doc = new jsPDF({ unit: 'mm', format: 'letter', compress: true });
+    drawMedicalRecordPdf(doc, p, audience, logoDataUrl);
     return doc;
   }
 
@@ -1473,8 +1643,11 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     w.document.write(buildDocumentHtml(p, docType, 'clinic'));
     w.document.close();
     w.focus();
+    // Cut into Letter pages (same head and foot on each) once fonts settle.
     setTimeout(() => {
-      try { w.print(); } catch (e) { console.error('Print error:', e); }
+      whenFontsReady(w.document).then(() => {
+        try { paginateMedicalRecord(w.document); w.print(); } catch (e) { console.error('Print error:', e); }
+      });
     }, 250);
     onToast(`Medical Report opened for printing — ${formatTitleCase(p.name)}`, 'success');
   }
@@ -1551,25 +1724,30 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
 
   // The measured height belongs to one specific rendered document; re-measure
   // rather than briefly showing the previous record's sheet size.
-  useEffect(() => { setDocSheetHeight(null); }, [selectedPatient, showEmailInput, mode, exportFormat, period, statusFilter, serviceFilter]);
+  useEffect(() => { setDocSheetHeight(null); setDocPages(1); }, [selectedPatient, showEmailInput, mode, exportFormat, period, statusFilter, serviceFilter]);
 
   const preview = getFilteredPatients();
 
-  // The clinic report is landscape orientation, so the preview sheet turns
-  // landscape for bulk exports and stays portrait for a single patient record.
-  const isLandscapeSheet = mode === 'bulk';
 
   // `allow-same-origin` (with scripts still blocked) is what makes the loaded
   // document readable for the height measurement below.
-  const previewPane = (html, onMeasure) => (
+  // With `paginate`, the single-patient record is cut into Letter pages
+  // (paginateMedicalRecord) before it is measured.
+  const previewPane = (html, onMeasure, paginate = false) => (
     <iframe
       title="Report preview"
       sandbox="allow-same-origin"
       scrolling="no"
       srcDoc={html}
       onLoad={onMeasure ? (e) => {
-        const body = e.currentTarget.contentDocument?.body;
-        if (body) onMeasure(Math.ceil(body.scrollHeight));
+        const d = e.currentTarget.contentDocument;
+        if (!d?.body) return;
+        if (!paginate) { onMeasure(Math.ceil(d.body.scrollHeight)); return; }
+        whenFontsReady(d).then(() => {
+          if (!d.body) return;
+          setDocPages(paginateMedicalRecord(d));
+          onMeasure(Math.ceil(d.body.scrollHeight));
+        });
       } : undefined}
       style={{ display: 'block', width: '100%', height: '100%', border: 'none', background: '#FFFFFF' }}
     />
@@ -1584,16 +1762,15 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     display: 'block', fontSize: '.71875rem', fontWeight: 700, color: '#334155',
     textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 6
   };
-  const previewPages = mode === 'bulk' ? chunkPatientsIntoPages(preview).length : 1;
+  const previewPages = mode === 'bulk' ? chunkPatientsIntoPages(preview).length : docPages;
   // Width is the paper; height comes from whatever the rendered document
-  // actually measured, so a short record has no trailing blank paper and a
-  // multi-page report shows every page stacked.
-  const sheetWidth = mode === 'bulk' ? 1100 : 820;
+  // actually measured, so a multi-page report shows every page stacked.
+  const sheetWidth = mode === 'bulk' ? 1100 : LETTER_PX.w;
   // Full measured height for every document, so the paper never scrolls on
   // its own; the preview area scrolls instead.
   const sheetHeight = mode === 'bulk'
     ? (docSheetHeight || previewPages * 790)
-    : (docSheetHeight || 1060);
+    : (docSheetHeight || LETTER_PX.h);
 
   return (
     <Modal onClose={onClose}>
@@ -1893,16 +2070,13 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
             </div>
           </div>
 
-          {/* RIGHT PANEL: live paper document preview (shared viewer). The bulk
-              report draws its own page chrome and page breaks, so only the
-              single-patient document gets a white sheet drawn around it. */}
+          {/* RIGHT PANEL: live paper document preview (shared viewer). Both
+              documents draw their own page chrome and page breaks. */}
           <PreviewViewer
             pages={previewPages}
             sheetWidth={sheetWidth}
             sheetHeight={sheetHeight}
-            sheetStyle={isLandscapeSheet
-              ? { background: 'transparent' }
-              : { background: '#FFFFFF', borderRadius: 6, border: '1px solid #D8DEF0', boxShadow: '0 6px 24px rgba(15,23,42,0.14)' }}
+            sheetStyle={{ background: 'transparent' }}
           >
             {mode === 'bulk' ? (
               previewPane(
@@ -1914,7 +2088,8 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
             ) : selectedPatient ? (
               previewPane(
                 buildDocumentHtml(selectedPatient, docType, showEmailInput ? 'patient' : 'clinic'),
-                setDocSheetHeight
+                setDocSheetHeight,
+                true
               )
             ) : (
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC', color: '#64748B', fontSize: '.875rem' }}>

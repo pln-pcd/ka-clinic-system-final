@@ -78,8 +78,12 @@ async function verifyAdminOtp(req, res) {
   await caller.ref.update({ failedLoginAttempts: 0, lockedUntil: null });
   if (req.body?.rememberDevice === true) {
     const token = crypto.randomBytes(32).toString('hex'), fp = fingerprintDeviceId(token), now = Date.now();
-    const devices = Object.fromEntries(Object.entries(caller.data.trustedDevices || {}).filter(([, e]) => e?.tokenHash && e.expiresAt > now && !e.revoked));
-    devices[fp] = { tokenHash: secretHash(token, 'admin-device'), deviceName: parseDeviceName(req.headers['user-agent']), createdAt: now, lastActiveAt: now, expiresAt: now + DEVICE_TTL_MS };
+    const deviceName = parseDeviceName(req.headers['user-agent']);
+    // A browser that lost its cookie would otherwise pile up one entry per
+    // sign-in, so the new entry replaces any earlier one with the same name.
+    const devices = Object.fromEntries(Object.entries(caller.data.trustedDevices || {})
+      .filter(([, e]) => e?.tokenHash && e.expiresAt > now && !e.revoked && e.deviceName !== deviceName));
+    devices[fp] = { tokenHash: secretHash(token, 'admin-device'), deviceName, createdAt: now, lastActiveAt: now, expiresAt: now + DEVICE_TTL_MS };
     await caller.ref.update({ trustedDevices: devices });
     res.setHeader('Set-Cookie', buildDeviceCookie(token, DEVICE_TTL_MS, isSecureRequest(req)));
   } else res.setHeader('Set-Cookie', clearDeviceCookie(isSecureRequest(req)));

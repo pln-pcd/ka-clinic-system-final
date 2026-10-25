@@ -167,6 +167,26 @@ function formatDeviceTime(ms) {
   return new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+// One row per device name. Re-remembering a browser that lost its cookie used
+// to leave a fresh entry each time, so the same "Chrome on Windows" showed up
+// over and over. The row keeps every fingerprint so Sign Out clears them all.
+function groupDevices(list) {
+  const groups = new Map();
+  (list || []).forEach(d => {
+    const key = d.deviceName || 'Web browser';
+    const g = groups.get(key);
+    if (!g) {
+      groups.set(key, { ...d, fingerprints: [d.fingerprint], currentFingerprint: d.isCurrentDevice ? d.fingerprint : null });
+      return;
+    }
+    g.fingerprints.push(d.fingerprint);
+    if (d.isCurrentDevice) { g.isCurrentDevice = true; g.currentFingerprint = d.fingerprint; g.fingerprint = d.fingerprint; }
+    g.lastActiveAt = Math.max(g.lastActiveAt || 0, d.lastActiveAt || 0);
+    g.expiresAt = Math.max(g.expiresAt || 0, d.expiresAt || 0);
+  });
+  return [...groups.values()].sort((a, b) => (b.lastActiveAt || 0) - (a.lastActiveAt || 0));
+}
+
 function formatDate(ms) {
   if (!ms) return '';
   return new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -280,7 +300,7 @@ export default function SettingsPage({ onLogout }) {
     setDevicesLoading(true);
     try {
       const data = await authedPostJson('/api/devices', { action: 'list-trusted' });
-      setDevices(data?.success ? data.devices : []);
+      setDevices(data?.success ? groupDevices(data.devices) : []);
     } catch {
       setDevices([]);
     } finally {
@@ -292,13 +312,20 @@ export default function SettingsPage({ onLogout }) {
     loadDevices();
   }, []);
 
-  const handleLogoutDevice = async (fingerprint, isCurrentDevice) => {
+  // A grouped row may hold several entries; every one is signed out, this
+  // browser's own entry last because that call also ends the session.
+  const handleLogoutDevice = async (d) => {
+    const { fingerprint, isCurrentDevice } = d;
     setDeviceActionId(fingerprint);
     try {
-      const data = await authedPostJson('/api/devices', { action: 'logout-device', fingerprint });
-      if (!data?.success) {
-        showToast(data?.error || 'Could not sign out that device.', 'error');
-        return;
+      const order = [...d.fingerprints.filter(fp => fp !== d.currentFingerprint), ...(d.currentFingerprint ? [d.currentFingerprint] : [])];
+      for (const fp of order) {
+        const data = await authedPostJson('/api/devices', { action: 'logout-device', fingerprint: fp });
+        if (!data?.success) {
+          showToast(data?.error || 'Could not sign out that device.', 'error');
+          if (fp !== order[0]) loadDevices();
+          return;
+        }
       }
       if (isCurrentDevice) {
         await signOut(auth).catch(() => {});
@@ -643,7 +670,7 @@ export default function SettingsPage({ onLogout }) {
             confirmLabel="Sign out device"
             busy={deviceActionId === d.fingerprint}
             busyLabel="Signing out…"
-            onConfirm={() => handleLogoutDevice(d.fingerprint, d.isCurrentDevice)}
+            onConfirm={() => handleLogoutDevice(d)}
             onCancel={() => setConfirmFingerprint(null)}
           />
         );
