@@ -1078,7 +1078,9 @@ const monthLabel = (d) => {
 const ADD_APPT_RULES = {
   name: f => (f.name.trim() ? '' : 'Enter the patient name'),
   contactNumber: f => (f.contactNumber.trim() ? '' : 'Enter a contact number'),
-  date: f => (!f.date ? 'Choose a date' : isWeekendDate(f.date) ? '' : 'Choose a Saturday or Sunday'),
+  date: f => (!f.date ? 'Choose a date'
+    : !isWeekendDate(f.date) ? 'Choose a Saturday or Sunday'
+    : f.date < getTodayDateString() ? 'Choose today or a later date' : ''),
   time: f => (f.time ? '' : 'Choose a time slot'),
   type: f => (f.type ? '' : 'Choose the purpose / service'),
 };
@@ -1223,6 +1225,11 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
     }
     if (!isWeekendDate(closeForm.startDate)) {
       showToast('Start date must be a Saturday or Sunday', 'error');
+      return;
+    }
+    // Past days are already over; closing them would only clutter the list.
+    if (closeForm.startDate < getTodayDateString()) {
+      showToast('Start date cannot be in the past', 'error');
       return;
     }
     const end = closeForm.type === 'day' && closeForm.isRange && closeForm.endDate ? closeForm.endDate : closeForm.startDate;
@@ -2099,6 +2106,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                   onChange={e => setAddForm({ ...addForm, date: e.target.value })}
                   isDateDisabled={d => !isWeekendDate(d)}
                   disabledHint="Closed on weekdays"
+                  min={getTodayDateString()}
                 />
                 {addV.error('date')
                   ? <FieldError v={addV} name="date" />
@@ -2433,6 +2441,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                         }}
                         isDateDisabled={d => !isWeekendDate(d)}
                         disabledHint="Only Saturdays and Sundays can be closed"
+                        min={getTodayDateString()}
                         placeholder="Select weekend date"
                       />
                     </div>
@@ -2444,7 +2453,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                           onChange={e => setCloseForm(f => ({ ...f, endDate: e.target.value }))}
                           isDateDisabled={d => !isWeekendDate(d)}
                           disabledHint="Only Saturdays and Sundays can be closed"
-                          min={closeForm.startDate || undefined}
+                          min={closeForm.startDate || getTodayDateString()}
                           placeholder="Select end weekend date"
                         />
                       </div>
