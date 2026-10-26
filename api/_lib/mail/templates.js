@@ -146,13 +146,21 @@ function fallbackLink(href) {
                 </table>`;
 }
 
-export function buildOtpEmailHtml({ otp }) {
+// Patient app code. `purpose` is 'signup' (creating the app account from an
+// MRN) or 'signin' (second step after the password); only the wording differs.
+const OTP_WORDING = {
+  signup: { heading: 'Verify your email', action: 'finish signing up' },
+  signin: { heading: 'Verify your sign-in', action: 'finish signing in' },
+};
+
+export function buildOtpEmailHtml({ otp, purpose = 'signin' }) {
+  const w = OTP_WORDING[purpose] || OTP_WORDING.signin;
   return shell({
     title: 'Your K&amp;A Clinic verification code',
     preheader: `${otp} is your K&amp;A Clinic verification code. It expires in 5 minutes.`,
     body: [
-      heading('Verify your sign-in'),
-      paragraph('Enter this code in the K&amp;A Clinic Patient App to finish signing in.'),
+      heading(w.heading),
+      paragraph(`Enter this code in the K&amp;A Clinic Patient App to ${w.action}.`),
       codeBlock(otp),
       footnote('If you did not request this code, you can safely ignore this email. Never share this code with anyone — clinic staff will never ask you for it.'),
     ].join('\n'),
@@ -482,12 +490,13 @@ export function buildPatientWelcomeEmailHtml({ patientName, mrn, email, download
    and keeps the two halves saying the same thing — which is one of the
    few deliverability levers left when sending from a plain Gmail address. */
 
-export function buildOtpEmailText({ otp }) {
+export function buildOtpEmailText({ otp, purpose = 'signin' }) {
+  const w = OTP_WORDING[purpose] || OTP_WORDING.signin;
   return [
-    'Verify your sign-in',
+    w.heading,
     '',
     `Your K&A Clinic verification code is ${otp}.`,
-    'Enter it in the K&A Clinic Patient App to finish signing in. The code expires in 5 minutes.',
+    `Enter it in the K&A Clinic Patient App to ${w.action}. The code expires in 5 minutes.`,
     '',
     'If you did not request this code, you can ignore this email. Never share it with anyone.',
     '',

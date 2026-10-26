@@ -12,11 +12,11 @@ import { passwordPolicyError } from './passwordPolicy.js';
 
 const validMrn = mrn => /^\d{4}-\d{3,10}$/.test(mrn);
 const deny = (res, result) => res.status(result.status || 400).json({ success: false, error: result.error, ...(result.retryAfter ? { retryAfter: result.retryAfter } : {}) });
-async function mailOtp(ref, email, title, extra) {
+async function mailOtp(ref, email, title, extra, purpose = 'signin') {
   const result = await issueOtp(ref, extra);
   if (result.error) return result;
   const { error } = await sendOtpEmailOrRollback({ otpRef: ref, to: email, subject: title,
-    html: buildOtpEmailHtml({ otp: result.code }), text: buildOtpEmailText({ otp: result.code }) });
+    html: buildOtpEmailHtml({ otp: result.code, purpose }), text: buildOtpEmailText({ otp: result.code, purpose }) });
   return error ? { status: 502, error: 'Unable to send verification email. Please try again.' } : { success: true };
 }
 async function login(req, res) {
@@ -104,7 +104,7 @@ async function sendOtp(req, res) {
   if (!patient || patient.registered || patient.authorized === false || !patient.email || await isPatientRecordArchived(mrn)) return res.status(200).json(GENERIC_RECOVERY);
   const existingAdmin = await db.collection('admins').where('email', '==', patient.email.toLowerCase()).limit(1).get();
   if (!existingAdmin.empty) return res.status(200).json(GENERIC_RECOVERY);
-  await mailOtp(db.collection('otpVerifications').doc(mrn), patient.email, 'Your K&A Clinic verification code', { mrn, verified: false });
+  await mailOtp(db.collection('otpVerifications').doc(mrn), patient.email, 'Your K&A Clinic sign-up code', { mrn, verified: false }, 'signup');
   return res.status(200).json(GENERIC_RECOVERY);
 }
 async function completeSignup(req, res) {
