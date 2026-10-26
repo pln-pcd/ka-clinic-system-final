@@ -15,7 +15,11 @@ const deny = (res, result) => res.status(result.status || 400).json({ success: f
 async function mailOtp(ref, email, title, extra, purpose = 'signin') {
   const result = await issueOtp(ref, extra);
   if (result.error) return result;
-  const { error } = await sendOtpEmailOrRollback({ otpRef: ref, to: email, subject: title,
+  // The code leads the subject: each email gets its own subject, so Gmail
+  // shows every new code as a new message instead of stacking it inside the
+  // previous code's conversation, and the code is readable in the phone's
+  // notification without opening the email.
+  const { error } = await sendOtpEmailOrRollback({ otpRef: ref, to: email, subject: `${result.code} is ${title.replace(/^Your /, 'your ')}`,
     html: buildOtpEmailHtml({ otp: result.code, purpose }), text: buildOtpEmailText({ otp: result.code, purpose }) });
   return error ? { status: 502, error: 'Unable to send verification email. Please try again.' } : { success: true };
 }
