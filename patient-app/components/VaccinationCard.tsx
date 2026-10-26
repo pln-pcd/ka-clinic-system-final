@@ -5,9 +5,9 @@
 //
 // Sizes are the card's original ones (before 1.0.5): padding, logo, fonts,
 // field rows and table cells match the pre-1.0.5 index.tsx styles. Both faces
-// render at ONE height, set by the front: each face's content is measured and
-// the taller one (the front, in practice) sets the height; the back lays its
-// fields out three to a row so they fit inside it, top-aligned. The ViewShot
+// render at ONE height: each face's content is measured and the taller one
+// sets the height; the back lays its fields out three to a row, top-aligned.
+// The ViewShot
 // inside each face has that same fixed size, so the exported front and back
 // images are identical in size. Nothing is clipped: if a back ever held more
 // than the front (very long typed history), the card grows to fit rather
@@ -182,11 +182,13 @@ function NotesBox({ v, text, variant, onContent }: { v: Sizes; text: string; var
   );
 }
 
-function Back({ v, d }: { v: Sizes; d: CardData }) {
+function Back({ v, d, onContent }: { v: Sizes; d: CardData; onContent: (e: LayoutChangeEvent) => void }) {
   return (
     <View style={{ flex: 1, justifyContent: 'flex-start' }}>
-      <Header v={v} title={d.backTitle} subtitle={d.backSubtitle} tag={d.tag} />
-      <Rows v={v} rows={d.backRows} />
+      <View onLayout={onContent}>
+        <Header v={v} title={d.backTitle} subtitle={d.backSubtitle} tag={d.tag} />
+        <Rows v={v} rows={d.backRows} />
+      </View>
       {/* Empty space left blank without moving content per item 14 */}
       <View style={{ flex: 1 }} />
     </View>
@@ -198,11 +200,17 @@ export default function VaccinationCard({ variant, data, flipped, frontRef, back
   const v = sizesFor(variant);
   const { width: winW, height: winH } = useWindowDimensions();
   const [frontH, setFrontH] = useState(0);
-  const measured = frontH > 0;
-  // Fixed outer height matching the standard 4-dose PEP card across all services
+  const [backH, setBackH] = useState(0);
+  const measured = frontH > 0 && backH > 0;
   const BORDER = 1;
+  // First-frame size before the faces report their height. The pop-up keeps
+  // it as a floor (its landscape layout is tuned to it); the inline card sizes
+  // to the taller face's content plus its padding, so no empty band is left
+  // under the dose table and neither face is ever cut off.
   const standardOuterH = verticalScale(variant === 'popup' ? 415 : 346);
-  const outer = measured ? Math.max(standardOuterH, Math.ceil(frontH) + v.padY * 2 + BORDER * 2) : standardOuterH;
+  const floor = variant === 'popup' ? standardOuterH : 0;
+  const contentH = Math.max(frontH, backH);
+  const outer = measured ? Math.max(floor, Math.ceil(contentH) + v.padY * 2 + BORDER * 2) : standardOuterH;
   const inner = outer - BORDER * 2;
 
   const flip = useSharedValue(flipped ? 1 : 0);
@@ -219,6 +227,7 @@ export default function VaccinationCard({ variant, data, flipped, frontRef, back
   const keep = (set: React.Dispatch<React.SetStateAction<number>>) => (h: number) => set(p => (Math.abs(p - h) < 0.5 ? p : h));
   const face = (side: 'front' | 'back') => {
     const onBody = (e: LayoutChangeEvent) => keep(setFrontH)(e.nativeEvent.layout.height);
+    const onBackBody = (e: LayoutChangeEvent) => keep(setBackH)(e.nativeEvent.layout.height);
     const hidden = side === 'front' ? flipped : !flipped;
     return (
       <Animated.View
@@ -235,7 +244,7 @@ export default function VaccinationCard({ variant, data, flipped, frontRef, back
           <View style={[st.cardBody, { paddingHorizontal: v.padX, paddingVertical: v.padY, height: inner }]}>
             {side === 'front'
               ? <View onLayout={onBody}><Front v={v} d={data} /></View>
-              : <Back v={v} d={data} />}
+              : <Back v={v} d={data} onContent={onBackBody} />}
           </View>
         </ViewShot>
       </Animated.View>

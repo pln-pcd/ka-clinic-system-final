@@ -385,8 +385,10 @@ export default function PatientSignupScreen() {
 
               <Text style={styles.title}>Enter Verification Code</Text>
               <Text style={styles.subtitle}>
-                We sent a 6-digit verification code to your registered email{'\n'}
-                <Text style={styles.phoneHighlight}>{maskedEmail}</Text>
+                We sent a 6-digit verification code to{'\n'}
+                <Text style={styles.phoneHighlight}>
+                  {!maskedEmail || maskedEmail === 'the email on file' ? 'the email on file for this MRN' : maskedEmail}
+                </Text>
               </Text>
 
               {error ? (
