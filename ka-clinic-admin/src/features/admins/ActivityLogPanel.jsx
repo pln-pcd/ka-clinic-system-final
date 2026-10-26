@@ -7,6 +7,11 @@
 // (indexed in firestore.indexes.json), 25 entries per page with cursors, so
 // the view stays fast however long the log grows. Search narrows the page
 // that is loaded. A row opens the full entry with before/after values.
+//
+// With no filter set the log shows today's entries only (clinic time) and
+// rolls over to the new day at midnight on its own. Nothing is deleted:
+// earlier days stay reachable through any filter (dates, staff, action, MRN),
+// which searches the whole history.
 import { collection, getDocs, limit, orderBy, query, startAfter, Timestamp, where } from 'firebase/firestore';
 import { History, RefreshCw, Search, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -19,6 +24,7 @@ import { SkeletonRows } from '../../components/Skeleton';
 import { ACTIONS, actionLabel } from '../../lib/activityLog';
 import { BTN, BTN_SM } from '../../lib/buttons';
 import { db } from '../../lib/firebase';
+import { getTodayDateString } from '../../lib/formatters';
 
 const PAGE = 25;
 const FIELD = 'w-full bg-white border border-slate-300 px-3 py-2 rounded-xl text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#3B50DF] focus:ring-1 focus:ring-[#3B50DF] transition-all';
@@ -48,7 +54,23 @@ export default function ActivityLogPanel({ staff = [] }) {
   const [detail, setDetail] = useState(null);
   const [reloadKey, setReloadKey] = useState(0);
 
+  // Today in clinic time. Moves forward at midnight so the unfiltered view
+  // clears and starts the new day without a reload.
+  const [today, setToday] = useState(() => getTodayDateString());
+  useEffect(() => {
+    const msToMidnight = manilaNextDay(today).toMillis() - Date.now();
+    const timer = setTimeout(() => {
+      setToday(getTodayDateString());
+      setPage(0);
+      setCursors([]);
+    }, Math.max(1000, msToMidnight + 1000));
+    return () => clearTimeout(timer);
+  }, [today]);
+
   const setFilter = (k, v) => { setFilters(f => ({ ...f, [k]: v })); setPage(0); setCursors([]); };
+
+  // Any Firestore filter searches the full history; with none, today only.
+  const todayOnly = !Object.values(filters).some(v => String(v).trim());
 
   useEffect(() => {
     let cancelled = false;
@@ -58,8 +80,10 @@ export default function ActivityLogPanel({ staff = [] }) {
     if (filters.actor) c.push(where('actorUid', '==', filters.actor));
     if (filters.action) c.push(where('action', '==', filters.action));
     if (filters.mrn.trim()) c.push(where('mrn', '==', filters.mrn.trim().toUpperCase()));
-    if (filters.from) c.push(where('createdAt', '>=', manilaStart(filters.from)));
-    if (filters.to) c.push(where('createdAt', '<', manilaNextDay(filters.to)));
+    const from = todayOnly ? today : filters.from;
+    const to = todayOnly ? today : filters.to;
+    if (from) c.push(where('createdAt', '>=', manilaStart(from)));
+    if (to) c.push(where('createdAt', '<', manilaNextDay(to)));
     c.push(orderBy('createdAt', 'desc'));
     if (page > 0 && cursors[page - 1]) c.push(startAfter(cursors[page - 1]));
     c.push(limit(PAGE + 1));
@@ -80,7 +104,7 @@ export default function ActivityLogPanel({ staff = [] }) {
     return () => { cancelled = true; };
     // cursors is read, not watched: it is written by this effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters, page, reloadKey]);
+  }, [filters, page, reloadKey, todayOnly, today]);
 
   const shown = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -95,7 +119,10 @@ export default function ActivityLogPanel({ staff = [] }) {
     <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xs overflow-hidden">
       <div className="px-6 py-4 border-b border-slate-200 bg-slate-50/60 space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <p className="text-xs text-slate-500">Every change staff make to patient records, doses, appointments, stock and staff accounts. Entries can't be edited or deleted.</p>
+          <p className="text-xs text-slate-500">
+            Every change staff make to patient records, doses, appointments, stock and staff accounts. Entries can't be edited or deleted.
+            {todayOnly && <span className="block mt-0.5 font-semibold text-slate-600">Showing today's activity. Use the filters to see earlier days.</span>}
+          </p>
           <div className="flex items-center gap-2 shrink-0">
             {anyFilter && (
               <button type="button" className={BTN_SM.outline} onClick={() => { setFilters({ actor: '', action: '', from: '', to: '', mrn: '' }); setSearch(''); setPage(0); setCursors([]); }}>
@@ -131,7 +158,7 @@ export default function ActivityLogPanel({ staff = [] }) {
         ) : error ? (
           <EmptyState icon={History} title="Activity Log unavailable" text={error} />
         ) : shown.length === 0 ? (
-          <EmptyState icon={History} title="No entries" text={anyFilter ? 'No entries match these filters.' : 'Staff actions will appear here as they happen.'} />
+          <EmptyState icon={History} title="No entries" text={anyFilter ? 'No entries match these filters.' : 'No staff activity yet today. Use the filters to see earlier days.'} />
         ) : (
           <div className="overflow-x-auto flex-1">
             <table className="kna-table w-full text-left border-collapse">
