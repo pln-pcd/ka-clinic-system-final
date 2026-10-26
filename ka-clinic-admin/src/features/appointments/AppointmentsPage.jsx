@@ -2103,7 +2103,13 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                   {...addV.field('date')}
                   className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800 text-xs transition-all"
                   value={addForm.date}
-                  onChange={e => setAddForm({ ...addForm, date: e.target.value })}
+                  onChange={e => {
+                    const date = e.target.value;
+                    // A time picked for the previous date may already be
+                    // booked on the new one; clear it so it is chosen again.
+                    const keepTime = addForm.time && !takenTimesOn(date).includes(addForm.time);
+                    setAddForm({ ...addForm, date, time: keepTime ? addForm.time : '' });
+                  }}
                   isDateDisabled={d => !isWeekendDate(d)}
                   disabledHint="Closed on weekdays"
                   min={getTodayDateString()}
@@ -2131,7 +2137,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                     );
                     const reason = closureInfo?.closure?.reason;
                     return (
-                      <option key={t} value={t} disabled={isClosed}>
+                      <option key={t} value={t} disabled={isClosed || taken}>
                         {isClosed
                           ? `${t} — Closed (${reason || 'Clinic schedule closed'})`
                           : taken
