@@ -1239,11 +1239,11 @@ export default function AppointmentsScreen() {
                     {appt.affectedByClosure && (
                       <View style={s.closureCardBanner}>
                         <View style={s.closureCardHeader}>
-                          <Ionicons name="warning" size={14} color="#D97706" />
+                          <Ionicons name="alert-circle-outline" size={14} color="#B45309" />
                           <Text style={s.closureCardTitle}>Affected by schedule closure</Text>
                         </View>
                         <Text style={s.closureCardReason}>
-                          &ldquo;{appt.closureReason || 'The clinic schedule for this time has been closed.'}&rdquo;
+                          {appt.closureReason || 'The clinic schedule for this time has been closed.'}
                         </Text>
                         <Text style={s.closureCardSub}>
                           Your appointment is still on record. Please reschedule or cancel.
@@ -1260,7 +1260,7 @@ export default function AppointmentsScreen() {
                             style={s.closureCardCancelBtn}
                             onPress={() => openCancelModal(appt)}
                           >
-                            <Ionicons name="close-circle-outline" size={13} color="#DC2626" />
+                            <Ionicons name="close-circle-outline" size={13} color="#334155" />
                             <Text style={s.closureCardCancelTxt}>Cancel appointment</Text>
                           </Tap>
                         </View>
@@ -1772,11 +1772,11 @@ export default function AppointmentsScreen() {
                         {selectedApptDetail.affectedByClosure && (
                           <View style={[s.closureCardBanner, { marginHorizontal: 0, marginBottom: verticalScale(14) }]}>
                             <View style={s.closureCardHeader}>
-                              <Ionicons name="warning" size={14} color="#D97706" />
+                              <Ionicons name="alert-circle-outline" size={14} color="#B45309" />
                               <Text style={s.closureCardTitle}>Affected by schedule closure</Text>
                             </View>
                             <Text style={s.closureCardReason}>
-                              &ldquo;{selectedApptDetail.closureReason || 'The clinic schedule for this time has been closed.'}&rdquo;
+                              {selectedApptDetail.closureReason || 'The clinic schedule for this time has been closed.'}
                             </Text>
                             <Text style={s.closureCardSub}>
                               Your appointment is still on record. Please reschedule or cancel.
@@ -1801,7 +1801,7 @@ export default function AppointmentsScreen() {
                                   openCancelModal(target);
                                 }}
                               >
-                                <Ionicons name="close-circle-outline" size={13} color="#DC2626" />
+                                <Ionicons name="close-circle-outline" size={13} color="#334155" />
                                 <Text style={s.closureCardCancelTxt}>Cancel appointment</Text>
                               </Tap>
                             </View>
@@ -2541,10 +2541,11 @@ const s = StyleSheet.create({
   adminNoteTxt: { flex: 1, fontSize: moderateScale(10), color: C.red, fontWeight: '600', lineHeight: moderateScale(14) },
 
   // Schedule closure banner on appointments
+  // Quiet card: neutral surface, one small amber icon as the only accent.
   closureCardBanner: {
-    backgroundColor: '#FFFBEB',
+    backgroundColor: '#F8FAFC',
     borderWidth: 1,
-    borderColor: '#FCD34D',
+    borderColor: '#E2E8F0',
     borderRadius: scale(12),
     padding: scale(12),
     marginTop: verticalScale(8),
@@ -2552,14 +2553,14 @@ const s = StyleSheet.create({
     marginBottom: verticalScale(6),
   },
   closureCardHeader: { flexDirection: 'row', alignItems: 'center', gap: scale(6), marginBottom: verticalScale(4) },
-  closureCardTitle:  { fontSize: moderateScale(11.5), fontWeight: '800', color: '#B45309', textTransform: 'uppercase', letterSpacing: 0.3 },
-  closureCardReason: { fontSize: moderateScale(12), fontWeight: '600', color: '#78350F', fontStyle: 'italic', marginBottom: verticalScale(4) },
-  closureCardSub:    { fontSize: moderateScale(11), color: '#92400E', lineHeight: moderateScale(15), marginBottom: verticalScale(8) },
+  closureCardTitle:  { fontSize: moderateScale(12), fontWeight: '700', color: '#1E293B' },
+  closureCardReason: { fontSize: moderateScale(12), fontWeight: '500', color: '#475569', marginBottom: verticalScale(4) },
+  closureCardSub:    { fontSize: moderateScale(11), color: '#64748B', lineHeight: moderateScale(15), marginBottom: verticalScale(8) },
   closureCardBtnRow: { flexDirection: 'row', gap: scale(8) },
   closureCardRescheduleBtn: { flexDirection: 'row', alignItems: 'center', gap: scale(4), backgroundColor: C.navy, borderRadius: scale(8), paddingHorizontal: scale(12), paddingVertical: verticalScale(6) },
   closureCardRescheduleTxt: { fontSize: moderateScale(11.5), fontWeight: '700', color: '#FFFFFF' },
-  closureCardCancelBtn:     { flexDirection: 'row', alignItems: 'center', gap: scale(4), backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#FCA5A5', borderRadius: scale(8), paddingHorizontal: scale(10), paddingVertical: verticalScale(6) },
-  closureCardCancelTxt:     { fontSize: moderateScale(11.5), fontWeight: '700', color: '#DC2626' },
+  closureCardCancelBtn:     { flexDirection: 'row', alignItems: 'center', gap: scale(4), backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#CBD5E1', borderRadius: scale(8), paddingHorizontal: scale(10), paddingVertical: verticalScale(6) },
+  closureCardCancelTxt:     { fontSize: moderateScale(11.5), fontWeight: '700', color: '#334155' },
 
   // Clear, dedicated action button with 44dp+ tap target via hitSlop.
   cancelPill: { flexDirection: 'row', alignItems: 'center', gap: scale(4), paddingHorizontal: scale(10), paddingVertical: verticalScale(6), borderRadius: scale(8), borderWidth: 1, borderColor: C.border, backgroundColor: C.white, overflow: 'hidden', marginLeft: scale(10), alignSelf: 'center' },

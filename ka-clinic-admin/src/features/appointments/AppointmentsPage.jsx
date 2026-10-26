@@ -1205,7 +1205,9 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
         reasonPreset: closureToEdit.reasonPreset || 'other',
         reason: closureToEdit.reason || '',
         internalNote,
-        notifyAffectedPatients: true,
+        // An edit (e.g. a reworded reason) does not message every patient
+        // again unless staff tick the box.
+        notifyAffectedPatients: false,
       });
     } else {
       const defaultDate = isWeekendDate(selectedDate) ? selectedDate : '';
@@ -1276,7 +1278,10 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
       });
 
       trackEvent(closeForm.id ? 'schedule_closure_updated' : 'schedule_closure_created');
-      showToast(closeForm.id ? 'Schedule closure updated' : 'Schedule closed successfully');
+      const told = closeForm.notifyAffectedPatients && res.notified
+        ? ` · ${res.notified.app} app user${res.notified.app === 1 ? '' : 's'} notified, ${res.notified.email} email${res.notified.email === 1 ? '' : 's'} sent`
+        : '';
+      showToast(`${closeForm.id ? 'Schedule closure updated' : 'Schedule closed successfully'}${told}`);
       setCloseModalOpen(false);
     } catch (err) {
       console.error('Save closure error:', err);
@@ -1641,6 +1646,9 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
             ))}
 
             {generateCalendar().map((c, i) => {
+              // Days from the previous/next month stay as empty cells so the
+              // grid keeps six rows, but show no number, dots or closures.
+              if (c.isOtherMonth) return <div key={i} className="cal-day-cell other-month" aria-hidden="true" style={{ pointerEvents: 'none' }} />;
               const dStr = `${c.year}-${String(c.month + 1).padStart(2, '0')}-${String(c.day).padStart(2, '0')}`;
               const dayApts = appointments.filter(a => a.date === dStr && isActiveApt(a));
 
@@ -1916,23 +1924,23 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
               const c = closureInfo.closure;
               const isAllDay = closureInfo.type === 'day';
               return (
-                <div className="mx-4 mt-3 mb-1 p-3.5 rounded-xl border border-amber-300 bg-amber-50 flex flex-col gap-2">
+                <div className="mx-4 mt-3 mb-1 p-3.5 rounded-xl border border-slate-200 bg-slate-50 flex flex-col gap-2">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-start gap-2.5">
-                      <div className="w-7 h-7 rounded-lg bg-amber-200 text-amber-800 flex items-center justify-center shrink-0 mt-0.5">
+                      <div className="w-7 h-7 rounded-lg bg-white border border-slate-200 text-amber-600 flex items-center justify-center shrink-0 mt-0.5">
                         <Lock size={15} />
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-amber-900 uppercase tracking-wide">
-                            {isAllDay ? 'Schedule Closed (Whole Day)' : `Closed Slots (${closureInfo.slots.join(', ')})`}
+                          <span className="text-xs font-bold text-slate-800">
+                            {isAllDay ? 'Closed all day' : `Closed: ${closureInfo.slots.join(', ')}`}
                           </span>
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200 text-amber-800">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white border border-slate-200 text-slate-600 capitalize">
                             {c.reasonPreset ? c.reasonPreset.replace('_', ' ') : 'Closed'}
                           </span>
                         </div>
-                        <p className="text-xs font-semibold text-amber-950 mt-1">&ldquo;{c.reason}&rdquo;</p>
-                        <div className="text-[11px] text-amber-700 mt-1 flex items-center gap-3 flex-wrap">
+                        <p className="text-xs text-slate-700 mt-1">{c.reason}</p>
+                        <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-3 flex-wrap">
                           <span>Closed by: <strong>{c.createdBy?.name || 'Staff'}</strong></span>
                           <span>•</span>
                           <span>{formatDateMedium(new Date(c.createdAt || Date.now()).toISOString().slice(0, 10))}</span>
@@ -1942,14 +1950,14 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                     <div className="flex items-center gap-1.5 shrink-0">
                       <button
                         type="button"
-                        className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-white border border-amber-300 text-amber-800 hover:bg-amber-100 transition-colors cursor-pointer"
+                        className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
                         onClick={() => { setDatePreviewModalOpen(false); openCloseScheduleModal(c); }}
                       >
                         Edit
                       </button>
                       <button
                         type="button"
-                        className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-amber-600 text-white hover:bg-amber-700 transition-colors cursor-pointer shadow-xs"
+                        className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-800 text-white hover:bg-slate-900 transition-colors cursor-pointer shadow-xs"
                         onClick={() => { setDatePreviewModalOpen(false); setReopenConfirm(c); }}
                       >
                         Reopen
@@ -2598,6 +2606,21 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                   />
                 </div>
 
+                {/* Patient notification: every closure can be announced to all
+                    patients, not only those with a booking in it. */}
+                <label className="flex items-start gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={closeForm.notifyAffectedPatients}
+                    onChange={e => setCloseForm(f => ({ ...f, notifyAffectedPatients: e.target.checked }))}
+                    className="mt-0.5 rounded border-slate-300 text-slate-800 focus:ring-slate-700"
+                  />
+                  <span>
+                    Notify all patients
+                    <span className="block font-normal text-slate-500">App users get a pop-up and a push notification; patients without the app get an email.</span>
+                  </span>
+                </label>
+
                 {/* Existing bookings warning card */}
                 {affectedBookings.length > 0 && (
                   <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 flex flex-col gap-2">
@@ -2620,15 +2643,6 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                       ))}
                     </div>
 
-                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 mt-1 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={closeForm.notifyAffectedPatients}
-                        onChange={e => setCloseForm(f => ({ ...f, notifyAffectedPatients: e.target.checked }))}
-                        className="rounded border-slate-300 text-slate-800 focus:ring-slate-700"
-                      />
-                      <span>Notify affected patients via Push &amp; Email</span>
-                    </label>
                   </div>
                 )}
               </div>

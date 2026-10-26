@@ -79,10 +79,16 @@ export default function TabsLayout() {
       (snap) => {
         const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-        // Initial snapshot: record existing IDs so we only alert on truly new incoming items
+        // Initial snapshot: record existing IDs so only new items alert from
+        // here on. The exception is a schedule closure the patient has not
+        // confirmed yet: it was announced while the app was closed, so it is
+        // shown now (the newest one) instead of never.
         if (seenNotifIds.current === null) {
           seenNotifIds.current = new Set(docs.map(d => d.id));
-          return;
+          const unseenClosure: any = docs.find((d: any) => d.source === 'schedule-closure' && !d.acknowledged);
+          if (!unseenClosure) return;
+          docs.splice(0, docs.length, unseenClosure);
+          seenNotifIds.current.delete(unseenClosure.id);
         }
 
         // Detect newly created notifications

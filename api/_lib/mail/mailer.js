@@ -29,6 +29,16 @@ const ROLES = {
     displayName: 'K&A Animal Bite Center',
     fallbackRoles: ['auth', 'reminders'],
   },
+  // Schedule-closure announcements, which go to every patient without the
+  // app at once. Their own account keeps that burst off the sign-in code and
+  // reminder accounts' daily limits.
+  closures: {
+    name: 'closures',
+    getUser: () => (process.env.GMAIL_CLOSURE_USER || '').trim(),
+    getPass: () => (process.env.GMAIL_CLOSURE_PASSWORD || '').trim().replace(/\s+/g, ''),
+    displayName: 'K&A Animal Bite Center',
+    fallbackRoles: ['reminders', 'auth'],
+  },
 };
 
 // Transports are cached per role for the life of the function instance. A

@@ -544,42 +544,54 @@ export function buildPasswordResetEmailText({ resetUrl, email, name }) {
   return lines.join('\n');
 }
 
-export function buildScheduleClosureEmailHtml({ patientName, date, time, reason }) {
-  const greeting = patientName ? `Hello ${patientName},` : 'Hello,';
+// Schedule-closure email (api/notifications.js saveClosure). Sent to every
+// patient without the app. `when` is the closed period ("Sat, Oct 31" or
+// "Sat, Oct 31, 3:00 PM - 4:00 PM"); `appointment` is the patient's own
+// booking inside it ("Sat, Oct 31 at 3:00 PM - 4:00 PM") or empty when the
+// email is only a notice. Patient and staff text is escaped.
+export function buildScheduleClosureEmailHtml({ patientName, when, reason, appointment }) {
+  const greeting = patientName ? `Hello ${escapeHtml(patientName)},` : 'Hello,';
+  const reasonBox = `                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 22px;">
+                  <tr>
+                    <td style="padding:14px 16px;background-color:${FOOTER_BG};border:1px solid ${DIVIDER};border-radius:10px;">
+                      <div style="font-size:11px;font-weight:bold;color:${MUTED};text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Reason</div>
+                      <div style="font-size:14px;color:${INK};line-height:1.5;">${escapeHtml(reason)}</div>
+                    </td>
+                  </tr>
+                </table>`;
   return shell({
-    title: 'K&amp;A Clinic — Schedule closure update',
-    preheader: `Your appointment on ${date} at ${time} is affected by a clinic schedule closure.`,
+    title: 'K&amp;A Clinic — Schedule closure',
+    preheader: appointment
+      ? `Your appointment on ${appointment} is affected by a clinic closure.`
+      : `The clinic is closed for appointments on ${when}.`,
     body: [
-      heading('Appointment Schedule Update'),
+      heading(appointment ? 'Your appointment is affected' : 'Clinic schedule closure'),
       paragraph(greeting),
-      paragraph(`Your appointment scheduled for <strong>${date} at ${time}</strong> is affected by a clinic schedule closure:`),
-      `<div style="margin:16px 0;padding:16px;background-color:#FFFBEB;border:1px solid #FEF3C7;border-left:4px solid #D97706;border-radius:8px;">
-        <div style="font-size:12px;font-weight:bold;color:#B45309;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Reason from clinic</div>
-        <div style="font-size:14px;color:#92400E;line-height:1.5;">${reason}</div>
-      </div>`,
-      paragraph('<strong>Your appointment is still on record.</strong> Closing this time only prevents new bookings. Please open the K&amp;A Clinic patient app to reschedule your visit to an open slot, or cancel it if you no longer need it.'),
-      footnote('Emergency animal bite walk-in patients are prioritized daily. For questions or urgent care, contact K&amp;A Animal Bite Center directly.')
+      paragraph(`K&amp;A Animal Bite Center is closed for appointments on <strong>${escapeHtml(when)}</strong>.`, 16),
+      reasonBox,
+      appointment
+        ? paragraph(`Your appointment on <strong>${escapeHtml(appointment)}</strong> is still on record. Please contact the clinic to move it to another date, or reschedule it in the K&amp;A Clinic app.`)
+        : paragraph('Please choose another date if you plan to book a visit.'),
+      footnote('Animal bite emergencies are still seen as walk-ins. For questions, reply to this email or contact the clinic.'),
     ].join('\n'),
   });
 }
 
-export function buildScheduleClosureEmailText({ patientName, date, time, reason }) {
-  const greeting = patientName ? `Hello ${patientName},` : 'Hello,';
+export function buildScheduleClosureEmailText({ patientName, when, reason, appointment }) {
   return [
-    'Appointment Schedule Update — K&A Clinic',
-    '========================================',
+    appointment ? 'Your appointment is affected — K&A Clinic' : 'Clinic schedule closure — K&A Clinic',
     '',
-    greeting,
+    patientName ? `Hello ${patientName},` : 'Hello,',
     '',
-    `Your appointment scheduled for ${date} at ${time} is affected by a clinic schedule closure:`,
-    '',
+    `K&A Animal Bite Center is closed for appointments on ${when}.`,
     `Reason: ${reason}`,
     '',
-    'Your appointment is still on record. Closing this time only prevents new bookings.',
-    'Please open the K&A Clinic patient app to reschedule your visit to an open slot, or cancel it if you no longer need it.',
+    appointment
+      ? `Your appointment on ${appointment} is still on record. Please contact the clinic to move it to another date, or reschedule it in the K&A Clinic app.`
+      : 'Please choose another date if you plan to book a visit.',
     '',
-    'Emergency animal bite walk-in patients are prioritized daily.',
-    'K&A Animal Bite Center — Libon, Albay'
+    'Animal bite emergencies are still seen as walk-ins.',
+    'K&A Animal Bite Center — Libon, Albay',
   ].join('\n');
 }
 

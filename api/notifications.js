@@ -1137,94 +1137,149 @@ async function saveClosure(req, res, caller) {
     }
   }
 
-  let notifiedCount = 0;
-  if (notifyAffectedPatients) {
-    const aptsSnap = await db.collection('appointments')
-      .where('date', '>=', startDate)
-      .where('date', '<=', end)
-      .get();
+  // Bookings inside the closed period stay on record but are flagged, so the
+  // app shows them as affected with Reschedule / Cancel.
+  const aptsSnap = await db.collection('appointments')
+    .where('date', '>=', startDate)
+    .where('date', '<=', end)
+    .get();
+  const affected = [];
+  for (const d of aptsSnap.docs) {
+    const a = d.data();
+    if (['cancelled', 'canceled', 'declined'].includes(a.status)) continue;
+    if (type === 'slots' && (!Array.isArray(slots) || !slots.includes(a.time))) continue;
+    affected.push({ id: d.id, ref: d.ref, ...a });
+  }
+  await Promise.all(affected.map(apt => apt.ref.update({
+    affectedByClosure: true,
+    closureId: closureRef.id,
+    closureReason: closureData.reason,
+    updatedAt: Date.now(),
+  })));
 
-    const affected = [];
-    for (const d of aptsSnap.docs) {
-      const a = d.data();
-      if (['cancelled', 'canceled', 'declined'].includes(a.status)) continue;
-      if (type === 'slots' && (!Array.isArray(slots) || !slots.includes(a.time))) continue;
-      affected.push({ id: d.id, ref: d.ref, ...a });
-    }
+  const notified = notifyAffectedPatients
+    ? await announceClosure({ closureId: closureRef.id, closure: closureData, affected })
+    : { app: 0, push: 0, email: 0, failed: 0 };
 
-    for (const apt of affected) {
-      await apt.ref.update({
-        affectedByClosure: true,
-        closureId: closureRef.id,
-        closureReason: closureData.reason,
-        updatedAt: Date.now(),
-      });
+  res.status(200).json({ success: true, id: closureRef.id, notifiedCount: notified.app + notified.email, notified });
+}
 
-      let pushTokens = [];
-      let email = apt.email || '';
-      if (apt.patientId) {
-        const vaxSnap = await db.collection('vaccinations').doc(apt.patientId).get();
-        if (vaxSnap.exists) {
-          const vaxData = vaxSnap.data() || {};
-          if (Array.isArray(vaxData.pushTokens)) pushTokens = vaxData.pushTokens;
-          if (vaxData.email) email = vaxData.email;
-        }
-      }
+// ── Closure announcement ─────────────────────────────────────────────────────
+// Every patient is told about a closure, not only those booked in it:
+//   - app users (an app account exists for the MRN): a patientNotifications
+//     doc, which the app shows as a pop-up, plus a push to each device that
+//     has push turned on;
+//   - patients without the app who have an email on file: an email, sent
+//     from the closures Gmail account.
+// Patients with a booking inside the closure get a message about that
+// booking; everyone else gets a short notice. Archived records are skipped.
+// Every send is awaited: Vercel may freeze the function once the response is
+// sent, so fire-and-forget pushes and emails could silently never go out.
+const fmtClosureDate = (ymd) => new Date(`${ymd}T12:00:00+08:00`)
+  .toLocaleDateString('en-US', { timeZone: 'Asia/Manila', weekday: 'short', month: 'short', day: 'numeric' });
 
-      const notifMsg = `Your appointment on ${apt.date} at ${apt.time || ''} is affected by a schedule closure. Reason: ${closureData.reason}. Your appointment is still on record. Please open the app to reschedule or cancel it.`;
+function closureWhen(c) {
+  const days = c.startDate === c.endDate
+    ? fmtClosureDate(c.startDate)
+    : `${fmtClosureDate(c.startDate)} – ${fmtClosureDate(c.endDate)}`;
+  if (c.type !== 'slots') return days;
+  const times = c.slots.length <= 2 ? c.slots.join(', ') : `${c.slots.length} time slots`;
+  return `${days}, ${times}`;
+}
 
-      await db.collection('patientNotifications').add({
-        patientId: apt.patientId || apt.patientUid || '',
-        appointmentId: apt.id,
-        title: 'Schedule closure update',
-        message: notifMsg,
+const cleanReason = (reason) => String(reason || '').trim().replace(/[.\s]+$/, '');
+
+export async function announceClosure({ closureId, closure, affected }) {
+  const when = closureWhen(closure);
+  const reason = cleanReason(closure.reason);
+  const bookingByMrn = new Map();
+  for (const apt of affected) if (apt.patientId && !bookingByMrn.has(apt.patientId)) bookingByMrn.set(apt.patientId, apt);
+  const bookingText = (apt) => `${fmtClosureDate(apt.date)} at ${apt.time || ''}`.trim();
+
+  const [patientsSnap, vaxSnap] = await Promise.all([
+    db.collection('authorizedPatients').get(),
+    db.collection('vaccinations').get(),
+  ]);
+  const vaxByMrn = new Map(vaxSnap.docs.map(d => [d.id, d.data() || {}]));
+
+  const jobs = [];
+  const counts = { app: 0, push: 0, email: 0, failed: 0 };
+  const seenEmails = new Set();
+
+  for (const pDoc of patientsSnap.docs) {
+    const p = pDoc.data() || {};
+    const mrn = p.mrn || pDoc.id;
+    const vax = vaxByMrn.get(mrn) || {};
+    if (vax.isArchived === true || p.authorized === false) continue;
+    const apt = bookingByMrn.get(mrn);
+    const hasApp = p.registered === true && !!p.uid;
+
+    if (hasApp) {
+      const title = apt ? 'Your appointment is affected' : 'Clinic closed for appointments';
+      const message = apt
+        ? `The clinic is closed on ${when} (${reason}). Please reschedule or cancel your ${bookingText(apt)} appointment.`
+        : `No appointments on ${when} (${reason}).`;
+      counts.app++;
+      jobs.push(db.collection('patientNotifications').add({
+        patientId: mrn,
+        ...(apt ? { appointmentId: apt.id, date: apt.date, time: apt.time || '' } : {}),
+        title,
+        message,
         source: 'schedule-closure',
-        closureId: closureRef.id,
-        date: apt.date,
-        time: apt.time || '',
-        reason: closureData.reason,
+        closureId,
+        reason: closure.reason,
         read: false,
+        acknowledged: false,
         createdAt: Date.now(),
-      });
-
-      if (pushTokens.length > 0) {
-        sendExpoPush(pushTokens, {
-          title: 'Schedule closure update',
-          body: notifMsg,
-          data: {
-            type: 'schedule-closure',
-            closureId: closureRef.id,
-            appointmentId: apt.id,
-            screen: 'appt',
-          },
-        }).catch(err => console.error('Push error:', err));
+      }));
+      const tokens = Array.isArray(vax.pushTokens) ? vax.pushTokens : [];
+      if (tokens.length) {
+        jobs.push(sendExpoPush(tokens, {
+          title,
+          body: message,
+          data: { type: 'schedule-closure', closureId, ...(apt ? { appointmentId: apt.id } : {}), screen: 'appt' },
+        }).then(r => { if (r.sent) counts.push += r.sent; }));
       }
-
-      if (email && isValidEmail(email)) {
-        sendMail({
-          to: email,
-          subject: 'K&A Clinic — Appointment update: Schedule closure',
-          html: buildScheduleClosureEmailHtml({
-            patientName: apt.name || '',
-            date: apt.date,
-            time: apt.time || '',
-            reason: closureData.reason,
-          }),
-          text: buildScheduleClosureEmailText({
-            patientName: apt.name || '',
-            date: apt.date,
-            time: apt.time || '',
-            reason: closureData.reason,
-          }),
-          role: 'reminders',
-        }).catch(err => console.error('Email error:', err));
-      }
-
-      notifiedCount++;
+      continue;
     }
+
+    const email = String(p.email || vax.email || '').trim().toLowerCase();
+    if (!email || !isValidEmail(email) || seenEmails.has(email)) continue;
+    seenEmails.add(email);
+    const content = { patientName: p.name || vax.name || '', when, reason, appointment: apt ? bookingText(apt) : '' };
+    jobs.push(sendMail({
+      to: email,
+      subject: apt ? 'K&A Clinic — Your appointment is affected by a closure' : `K&A Clinic — Closed for appointments on ${when}`,
+      html: buildScheduleClosureEmailHtml(content),
+      text: buildScheduleClosureEmailText(content),
+      role: 'closures',
+    }).then(r => { if (r.error) throw r.error; if (!r.skipped) counts.email++; }));
   }
 
-  res.status(200).json({ success: true, id: closureRef.id, notifiedCount });
+  // Walk-in bookings with an email but no patient record.
+  for (const apt of affected) {
+    if (apt.patientId) continue;
+    const email = String(apt.email || '').trim().toLowerCase();
+    if (!email || !isValidEmail(email) || seenEmails.has(email)) continue;
+    seenEmails.add(email);
+    const content = { patientName: apt.name || '', when, reason, appointment: bookingText(apt) };
+    jobs.push(sendMail({
+      to: email,
+      subject: 'K&A Clinic — Your appointment is affected by a closure',
+      html: buildScheduleClosureEmailHtml(content),
+      text: buildScheduleClosureEmailText(content),
+      role: 'closures',
+    }).then(r => { if (r.error) throw r.error; if (!r.skipped) counts.email++; }));
+  }
+
+  const results = await Promise.allSettled(jobs);
+  for (const r of results) {
+    if (r.status === 'rejected') {
+      counts.failed++;
+      console.error('closure announcement error:', r.reason);
+    }
+  }
+  return counts;
 }
 
 async function reopenClosure(req, res, caller) {
