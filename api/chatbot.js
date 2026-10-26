@@ -405,16 +405,56 @@ const personalNavReplyFor = (channel) => (channel === 'public' ? PERSONAL_NAV_RE
 
 const send = (res, body) => res.status(200).json({ success: true, fallbackReason: null, ...body });
 
+// Per-IP rate limit. The endpoint needs no sign-in (the website chatbot has
+// no session), so this is what stops one caller from burning the Gemini
+// quota for everyone. Best-effort: counts live in this function instance's
+// memory, so a cold start or a second instance starts fresh — enough to stop
+// a script hammering the endpoint without a Firestore write per message.
+// The patient app falls back to its on-device replies on a non-OK response.
+const RATE_WINDOW_MS = 5 * 60 * 1000;
+const RATE_MAX_PER_WINDOW = 30;
+const MAX_PROMPT_CHARS = 1000;
+const MAX_HISTORY_ITEMS = 20;
+const rateBuckets = new Map(); // ip -> request timestamps within the window
+
+function clientIp(req) {
+  const forwarded = String(req.headers?.['x-forwarded-for'] || '').split(',')[0].trim();
+  return forwarded || req.headers?.['x-real-ip'] || req.socket?.remoteAddress || 'unknown';
+}
+
+function isRateLimited(ip, now = Date.now()) {
+  const recent = (rateBuckets.get(ip) || []).filter(t => now - t < RATE_WINDOW_MS);
+  if (recent.length >= RATE_MAX_PER_WINDOW) {
+    rateBuckets.set(ip, recent);
+    return true;
+  }
+  recent.push(now);
+  rateBuckets.set(ip, recent);
+  // Keep the map from growing without bound on a long-lived instance.
+  if (rateBuckets.size > 5000) {
+    for (const [key, times] of rateBuckets) {
+      if (!times.length || now - times[times.length - 1] >= RATE_WINDOW_MS) rateBuckets.delete(key);
+    }
+  }
+  return false;
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ success: false, error: 'Method not allowed.' });
     return;
   }
 
+  if (isRateLimited(clientIp(req))) {
+    res.setHeader('Retry-After', String(Math.ceil(RATE_WINDOW_MS / 1000)));
+    res.status(429).json({ success: false, error: 'You are sending messages too quickly. Please wait a few minutes and try again.' });
+    return;
+  }
+
   try {
     const startTime = Date.now();
-    const prompt = (req.body?.prompt || '').toString();
-    const history = Array.isArray(req.body?.history) ? req.body.history : [];
+    const prompt = (req.body?.prompt || '').toString().slice(0, MAX_PROMPT_CHARS);
+    const history = Array.isArray(req.body?.history) ? req.body.history.slice(-MAX_HISTORY_ITEMS) : [];
     // 'app' (patient app, has a "Talk to clinic staff" button) or 'public'
     // (the website chatbot). Only changes the wording of fixed replies.
     const channel = req.body?.channel === 'public' ? 'public' : 'app';

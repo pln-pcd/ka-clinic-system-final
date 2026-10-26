@@ -21,6 +21,7 @@ export async function askGemini(prompt, history = []) {
     });
     const data = await res.json();
     if (data?.success && data.text) return data.text;
+    if (res.status === 429 && data?.error) return data.error;
   } catch (err) {
     console.warn('Chatbot request failed:', err);
   }

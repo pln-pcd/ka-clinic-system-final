@@ -4,6 +4,7 @@ import { MAP_STUDY_MODE } from '../../lib/studyMode';
 import { arrayUnion, collection, deleteField, doc, getDoc, getDocs, limit, query, runTransaction, serverTimestamp, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { auth, db } from "../../lib/firebase";
+import { authedPostJson } from "../../lib/adminSession";
 import { currentActor, diffFields, logActivity } from "../../lib/activityLog";
 import { peekLiveCollection, useLiveCollection } from '../../lib/liveStore';
 import { buildDoses, buildInitialDoses } from "../../lib/doseSchedules";
@@ -472,6 +473,18 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
         ? `New service (${form.service || 'PEP'}) added for ${fullName} under MRN ${caseNo}`
         : `${fullName} registered and authorized for app login`, 'success');
       handleCloseAddModal();
+      // New patients get a welcome email with the companion app download and
+      // sign-up steps. Not awaited: the record is already saved, and a mail
+      // failure must not read as a failed registration. The server sends it
+      // at most once per MRN.
+      if (!isReturning) {
+        authedPostJson('/api/notifications', { action: 'patient-welcome', mrn: caseNo })
+          .then(data => {
+            if (data?.emailed) showToast(`Welcome email with app instructions sent to ${normalEmail}`, 'success');
+            else if (!data?.success) showToast(`${fullName} was registered, but the welcome email could not be sent`, 'error');
+          })
+          .catch(() => showToast(`${fullName} was registered, but the welcome email could not be sent`, 'error'));
+      }
     } catch (err) {
       console.error('Add patient error:', err);
       const detail = err?.code === 'permission-denied'

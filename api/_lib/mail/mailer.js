@@ -19,6 +19,16 @@ const ROLES = {
     displayName: 'K&A Animal Bite Center',
     fallbackRoles: ['auth'],
   },
+  // Welcome mail sent when the clinic registers a new patient. Its own Gmail
+  // account so onboarding volume never counts against the sign-in code or
+  // reminder accounts' daily sending limits.
+  welcome: {
+    name: 'welcome',
+    getUser: () => (process.env.GMAIL_WELCOME_USER || '').trim(),
+    getPass: () => (process.env.GMAIL_WELCOME_PASSWORD || '').trim().replace(/\s+/g, ''),
+    displayName: 'K&A Animal Bite Center',
+    fallbackRoles: ['auth', 'reminders'],
+  },
 };
 
 // Transports are cached per role for the life of the function instance. A

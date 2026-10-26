@@ -417,6 +417,65 @@ export function buildFollowUpEmailHtml({ patientName, message, ackUrl, doseLabel
   });
 }
 
+// Numbered how-to step for the welcome email: badge left, title and detail right.
+function step(number, title, detail) {
+  return `                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px;">
+                  <tr>
+                    <td valign="top" style="width:34px;">
+                      <div style="width:26px;height:26px;line-height:26px;border-radius:999px;background-color:${BRAND_NAVY};color:#FFFFFF;font-size:13px;font-weight:bold;text-align:center;">${number}</div>
+                    </td>
+                    <td valign="top" style="padding-left:6px;">
+                      <div style="font-size:14px;font-weight:bold;color:${INK};line-height:1.5;">${title}</div>
+                      <div style="font-size:13px;color:${BODY_TEXT};line-height:1.6;margin-top:2px;">${detail}</div>
+                    </td>
+                  </tr>
+                </table>`;
+}
+
+// MRN + email the patient will need, boxed so they are easy to find later.
+function detailsCard(rows) {
+  const cells = rows.map(([label, value]) => `                  <tr>
+                    <td style="padding:10px 18px;font-size:11px;font-weight:bold;color:${MUTED};text-transform:uppercase;letter-spacing:1.2px;width:44%;">${label}</td>
+                    <td style="padding:10px 18px;font-size:14px;font-weight:bold;color:${BRAND_NAVY};font-family:'Consolas','Courier New',Courier,monospace;">${value}</td>
+                  </tr>`).join('\n');
+  return `                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 26px;background-color:${ACCENT_SOFT};border:1px solid ${ACCENT_BORDER};border-radius:14px;">
+${cells}
+                </table>`;
+}
+
+// Sent once when the clinic registers a new patient on the admin dashboard
+// (api/notifications.js, action `patient-welcome`). Tells the patient they
+// are on file and walks them through installing the companion app, creating
+// their password and signing in. `downloadUrl` is PATIENT_APP_DOWNLOAD_URL;
+// without it the patient is told to ask the front desk for the link.
+export function buildPatientWelcomeEmailHtml({ patientName, mrn, email, downloadUrl }) {
+  const greeting = patientName ? `Dear ${escapeHtml(patientName)},` : 'Dear Patient,';
+  const safeMrn = escapeHtml(mrn);
+  const downloadDetail = downloadUrl
+    ? 'Tap the <strong>Download the App</strong> button above on your Android phone and install the <strong>K&amp;A Clinic</strong> app. If your phone asks, allow installing apps from this source.'
+    : 'Ask the clinic front desk for the download link or QR code, then install the <strong>K&amp;A Clinic</strong> app on your Android phone.';
+  return shell({
+    title: 'You are registered at K&amp;A Animal Bite Center',
+    preheader: `You are now registered at K&A Animal Bite Center. Your MRN is ${String(mrn || '')}. Get the companion app to follow your vaccination schedule.`,
+    body: [
+      heading('You are registered with the clinic'),
+      paragraph(greeting),
+      paragraph('Your patient record has been created at <strong>K&amp;A Animal Bite Center</strong>. You can follow your vaccination schedule, see your dose record, book appointments and message the clinic using our companion app, <strong>K&amp;A Clinic</strong>.'),
+      detailsCard([
+        ['Medical Record No. (MRN)', safeMrn],
+        ['Email on file', escapeHtml(email)],
+      ]),
+      downloadUrl ? button(downloadUrl, 'Download the App') : '',
+      downloadUrl ? fallbackLink(downloadUrl) : '',
+      `                <h2 style="margin:6px 0 16px;font-size:16px;font-weight:bold;color:${INK};">How to get started</h2>`,
+      step(1, 'Download the app', downloadDetail),
+      step(2, 'Sign up', `Open the app and tap <strong>Sign up</strong>. Enter your MRN <strong>${safeMrn}</strong> and tap <strong>Send OTP</strong>. A 6-digit code is sent to this email address. Enter it, then create your password.`),
+      step(3, 'Sign in', `Enter your MRN <strong>${safeMrn}</strong> and your password, then tap <strong>Sign In</strong>. For your security, a code may be emailed to you to confirm it is really you.`),
+      footnote('Keep your MRN private. Clinic staff will never ask for your password or your sign-in code. If you did not visit K&amp;A Animal Bite Center, reply to this email and let us know.'),
+    ].filter(Boolean).join('\n'),
+  });
+}
+
 /* ─────────────────────── PLAINTEXT ALTERNATIVES ───────────────────────
    Every message is multipart. mailer.js can scrape the HTML when nothing
    better is supplied, but a hand-written part reads like a real message
@@ -530,5 +589,36 @@ export function buildInviteEmailText({ inviteUrl, inviterName }) {
     "If you didn't expect this email, you can ignore it.",
     '',
     `K&A Animal Bite Center · Libon, Albay`,
+  ].join('\n');
+}
+
+export function buildPatientWelcomeEmailText({ patientName, mrn, email, downloadUrl }) {
+  return [
+    'K&A Animal Bite Center — You are registered',
+    '===========================================',
+    '',
+    patientName ? `Dear ${patientName},` : 'Dear Patient,',
+    '',
+    'Your patient record has been created at K&A Animal Bite Center. You can follow your',
+    'vaccination schedule, see your dose record, book appointments and message the clinic',
+    'using our companion app, K&A Clinic.',
+    '',
+    `Medical Record No. (MRN): ${mrn}`,
+    `Email on file: ${email}`,
+    '',
+    'HOW TO GET STARTED',
+    '',
+    downloadUrl
+      ? `1. Download the app: open this link on your Android phone and install K&A Clinic:\n   ${downloadUrl}`
+      : '1. Download the app: ask the clinic front desk for the download link or QR code,\n   then install K&A Clinic on your Android phone.',
+    `2. Sign up: open the app, tap "Sign up", enter your MRN ${mrn} and tap "Send OTP".`,
+    '   A 6-digit code is sent to this email address. Enter it, then create your password.',
+    `3. Sign in: enter your MRN ${mrn} and your password, then tap "Sign In".`,
+    '   For your security, a code may be emailed to you to confirm it is really you.',
+    '',
+    'Keep your MRN private. Clinic staff will never ask for your password or sign-in code.',
+    'If you did not visit K&A Animal Bite Center, reply to this email and let us know.',
+    '',
+    'K&A Animal Bite Center — Libon, Albay',
   ].join('\n');
 }

@@ -1,5 +1,5 @@
 // ka-clinic-admin/src/features/vaccination/VaccinationTrackerPage.jsx
-import { collection, deleteField, doc, getDocs, limit, orderBy, query, runTransaction, updateDoc, where } from 'firebase/firestore';
+import { collection, deleteField, doc, getDocs, limit, query, runTransaction, updateDoc, where } from 'firebase/firestore';
 import Modal from '../../components/Modal';
 import Select from '../../components/Select';
 import StatusBadge from '../../components/StatusBadge';
@@ -300,60 +300,23 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
     }
   }, [initialPatients]);
 
+  // Without a list from the dashboard, read the shared live collection
+  // (lib/liveStore.js) instead of opening a second listener on vaccinations.
+  const vaxLive = useLiveCollection('vaccinations');
+  const hasInitialPatients = !!(initialPatients && initialPatients.length > 0);
   useEffect(() => {
-    if (initialPatients && initialPatients.length > 0) return;
-    let unsub;
-    const fetchVaccinations = () => {
-      try {
-        const q = query(collection(db, 'vaccinations'), orderBy('createdAt', 'desc'));
-        unsub = listen(q, snap => {
-          const data = snap.docs.map(d => ({ id: d.id, firestoreId: d.id, ...d.data() }));
-          cachedVaccinationPatients = data;
-          setPatients(data);
-          setDetailPt(prev => {
-            if (!prev) return null;
-            const targetId = prev.firestoreId || prev.id;
-            const updated = data.find(p => (p.firestoreId && p.firestoreId === targetId) || (p.id && p.id === targetId));
-            return updated || prev;
-          });
-          setLoading(false);
-        }, err => {
-          console.warn('Ordered query failed, falling back to unordered query:', err);
-          const fallbackQ = query(collection(db, 'vaccinations'));
-          unsub = listen(fallbackQ, snap => {
-            const data = snap.docs.map(d => ({ id: d.id, firestoreId: d.id, ...d.data() }));
-            cachedVaccinationPatients = data;
-            setPatients(data);
-            setDetailPt(prev => {
-              if (!prev) return null;
-              const targetId = prev.firestoreId || prev.id;
-              const updated = data.find(p => (p.firestoreId && p.firestoreId === targetId) || (p.id && p.id === targetId));
-              return updated || prev;
-            });
-            setLoading(false);
-          });
-        });
-      } catch (err) {
-        console.warn('Query catch fallback:', err);
-        const fallbackQ = query(collection(db, 'vaccinations'));
-        unsub = listen(fallbackQ, snap => {
-          const data = snap.docs.map(d => ({ id: d.id, firestoreId: d.id, ...d.data() }));
-          cachedVaccinationPatients = data;
-          setPatients(data);
-          setDetailPt(prev => {
-            if (!prev) return null;
-            const targetId = prev.firestoreId || prev.id;
-            const updated = data.find(p => (p.firestoreId && p.firestoreId === targetId) || (p.id && p.id === targetId));
-            return updated || prev;
-          });
-          setLoading(false);
-        });
-      }
-    };
-
-    fetchVaccinations();
-    return () => { if (unsub) unsub(); };
-  }, []);
+    if (hasInitialPatients || !vaxLive.loaded) return;
+    const data = vaxLive.rows;
+    cachedVaccinationPatients = data;
+    setPatients(data);
+    setDetailPt(prev => {
+      if (!prev) return null;
+      const targetId = prev.firestoreId || prev.id;
+      const updated = data.find(p => (p.firestoreId && p.firestoreId === targetId) || (p.id && p.id === targetId));
+      return updated || prev;
+    });
+    setLoading(false);
+  }, [vaxLive, hasInitialPatients]);
 
   const [toast, setToast] = useState({ msg: '', type: '' });
   const [inventoryItems, setInventoryItems] = useState(() => peekLiveCollection('inventory').rows);

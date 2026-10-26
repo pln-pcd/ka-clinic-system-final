@@ -1,10 +1,9 @@
 // ka-clinic-admin/src/features/appointments/AppointmentsPage.jsx
 import {
-  addDoc,
   collection,
   deleteDoc,
   doc,
-  setDoc,
+  runTransaction,
   updateDoc,
 } from 'firebase/firestore';
 import {
@@ -947,13 +946,17 @@ const slotId = (date, time) => `${date}_${String(time).replace(/[\s:]/g, '')}`;
 
 // Frees an hour so another patient can take it. Slot holds are deliberately
 // NOT released when a patient cancels — the clinic clears them explicitly,
-// which is what deleting or rescheduling an appointment does here.
+// which is what deleting or rescheduling an appointment does here. Returns
+// false when the delete failed, so the caller can tell staff the hour is
+// still blocked instead of failing silently.
 const releaseSlot = async (date, time) => {
-  if (!date || !time) return;
+  if (!date || !time) return true;
   try {
     await deleteDoc(doc(db, 'appointmentSlots', slotId(date, time)));
+    return true;
   } catch (err) {
     console.error('Slot release error:', err);
+    return false;
   }
 };
 
@@ -1422,14 +1425,15 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
           summary: `${actionLabel(action)}: ${formatServiceType(target.type)} on ${target.date} ${target.time || ''} for ${target.name}`.trim(),
           changes: [{ field: 'status', before: target.status || 'pending', after: newStatus }] });
       }
-      if (newStatus === 'cancelled' && target) {
-        await releaseSlot(target.date, target.time);
-      }
+      const released = newStatus === 'cancelled' && target
+        ? await releaseSlot(target.date, target.time)
+        : true;
       if ((newStatus === 'confirmed' || newStatus === 'accepted') && target) {
         await notifyAppointmentConfirmed(target);
       }
       trackEvent(`appointment_${newStatus}`);
-      showToast(newStatus === 'confirmed' ? 'Appointment confirmed' : `Appointment status updated to ${newStatus}`);
+      if (!released) showToast(`Appointment cancelled, but the ${target.time} slot could not be freed. Try again or check your connection.`, 'error');
+      else showToast(newStatus === 'confirmed' ? 'Appointment confirmed' : `Appointment status updated to ${newStatus}`);
     } catch (err) {
       console.error('Error updating status:', err);
       showToast('Failed to update status', 'error');
@@ -1465,27 +1469,34 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
 
     setSaving(true);
     try {
-      const created = await addDoc(collection(db, 'appointments'), newApt);
-      logActivity({ action: 'appointment.create', collection: 'appointments', docId: created.id,
-        summary: `Booked ${formatServiceType(newApt.type)} on ${newApt.date} ${newApt.time} for ${newApt.name} (${sourceLabel(newApt.source)})`,
-        changes: diffFields({}, newApt, ['name', 'date', 'time', 'type', 'notes', 'status']) });
-      try {
-        await setDoc(doc(db, 'appointmentSlots', slotId(newApt.date, newApt.time)), {
+      // Claim the hour and write the appointment in one transaction, the same
+      // way the patient app books: if a patient already holds this hour, stop
+      // instead of overwriting their hold and double-booking it.
+      const slotRef = doc(db, 'appointmentSlots', slotId(newApt.date, newApt.time));
+      const created = doc(collection(db, 'appointments'));
+      await runTransaction(db, async tx => {
+        const existing = await tx.get(slotRef);
+        if (existing.exists()) throw new Error('SLOT_TAKEN');
+        tx.set(slotRef, {
           date:      newApt.date,
           time:      newApt.time,
           heldBy:    auth.currentUser?.uid || 'admin',
           createdAt: Date.now(),
         });
-      } catch (err) {
-        console.error('Slot claim error:', err);
-      }
+        tx.set(created, newApt);
+      });
+      logActivity({ action: 'appointment.create', collection: 'appointments', docId: created.id,
+        summary: `Booked ${formatServiceType(newApt.type)} on ${newApt.date} ${newApt.time} for ${newApt.name} (${sourceLabel(newApt.source)})`,
+        changes: diffFields({}, newApt, ['name', 'date', 'time', 'type', 'notes', 'status']) });
       trackEvent('appointment_added_by_staff');
       showToast(`${sourceLabel(newApt.source)} appointment added for ${newApt.name}`);
       setAddModalOpen(false);
       setAddForm(EMPTY_ADD_FORM());
     } catch (err) {
       console.error('Add error:', err);
-      showToast(err?.message || 'Failed to add appointment', 'error');
+      showToast(err?.message === 'SLOT_TAKEN'
+        ? `${newApt.time} on this date is already booked. Pick another time.`
+        : 'Failed to add appointment', 'error');
     } finally {
       setSaving(false);
     }

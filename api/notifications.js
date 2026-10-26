@@ -41,7 +41,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { auth, db, storageBucket } from './_lib/firebaseAdmin.js';
 import { requireAuthenticatedAdmin, requireAuthenticatedPatient } from './_lib/auth.js';
 import { isValidEmail, sendMail, warmMailer } from './_lib/mail/mailer.js';
-import { buildFollowUpEmailHtml, buildReportEmailHtml, buildReportEmailText, buildScheduleClosureEmailHtml, buildScheduleClosureEmailText } from './_lib/mail/templates.js';
+import { buildFollowUpEmailHtml, buildPatientWelcomeEmailHtml, buildPatientWelcomeEmailText, buildReportEmailHtml, buildReportEmailText, buildScheduleClosureEmailHtml, buildScheduleClosureEmailText } from './_lib/mail/templates.js';
 import { logoAttachment } from './_lib/mail/logo.js';
 import { getArchiveDueDate, getCompletionDate, isSeriesCompleted, lastDoseDate, manilaToday } from './_lib/patientCompletion.js';
 import { routeName } from './_lib/router.js';
@@ -454,10 +454,15 @@ async function sendFollowUp(req, res, caller) {
 
 // ── Patient confirms receipt ────────────────────────────────────────────────
 // Reached two ways: the app's "I received this" button (POST), and the email
-// button (GET, no session — see the auth note at the top of this file).
+// button (no session — see the auth note at the top of this file).
+//
+// The email link is a GET, and mail security scanners and link previewers
+// open every link in a message on their own. So a GET never records
+// anything: it shows a page with a confirm button, and only that button's
+// POST (?via=email) marks the notification acknowledged.
 async function acknowledge(req, res) {
-  const id = (req.query?.id || req.body?.id || '').trim();
-  const via = req.method === 'GET' ? 'email' : 'app';
+  const id = String(req.query?.id || req.body?.id || '').trim();
+  const fromEmail = req.method === 'GET' || req.query?.via === 'email';
 
   if (!id) {
     res.status(400).json({ success: false, error: 'Missing notification id.' });
@@ -467,38 +472,53 @@ async function acknowledge(req, res) {
   const ref = db.collection('patientNotifications').doc(id);
   const snap = await ref.get();
   if (!snap.exists) {
-    if (via === 'email') { res.status(404).send(ackPage(false)); return; }
+    if (fromEmail) { res.setHeader('Content-Type', 'text/html; charset=utf-8'); res.status(404).send(ackPage('missing')); return; }
     res.status(404).json({ success: false, error: 'Notification not found.' });
+    return;
+  }
+
+  const alreadyAcknowledged = !!snap.data()?.acknowledged;
+  if (req.method === 'GET') {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.status(200).send(ackPage(alreadyAcknowledged ? 'done' : 'confirm', id));
     return;
   }
 
   // First acknowledgement wins — a second click must not overwrite the
   // original timestamp or channel.
-  if (!snap.data()?.acknowledged) {
+  if (!alreadyAcknowledged) {
     await ref.update({
       acknowledged: true,
       acknowledgedAt: Date.now(),
-      acknowledgedVia: via,
+      acknowledgedVia: fromEmail ? 'email' : 'app',
       read: true,
     });
   }
 
-  if (via === 'email') {
+  if (fromEmail) {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.status(200).send(ackPage(true));
+    res.status(200).send(ackPage('done'));
     return;
   }
   res.status(200).json({ success: true });
 }
 
-// Standalone confirmation page shown after tapping the email button. Inline
-// styles only — this renders in whatever browser the mail client opens.
-function ackPage(ok) {
-  const title = ok ? 'Thank you — confirmation received' : 'Notification not found';
-  const msg = ok
-    ? 'Your clinic has been notified that you received this reminder. No further action is needed.'
+// Standalone page for the email button. Inline styles only — this renders in
+// whatever browser the mail client opens. `state` is 'confirm' (shows the
+// button that records the acknowledgement), 'done' or 'missing'.
+function ackPage(state, id = '') {
+  const ok = state !== 'missing';
+  const title = state === 'confirm' ? 'Confirm you received this reminder'
+    : state === 'done' ? 'Thank you — confirmation received'
+    : 'Notification not found';
+  const msg = state === 'confirm' ? 'Tap the button below to let K&amp;A Clinic know this reminder reached you.'
+    : state === 'done' ? 'Your clinic has been notified that you received this reminder. No further action is needed.'
     : 'This confirmation link is no longer valid. If you have questions, please contact the clinic directly.';
-  const color = ok ? '#059669' : '#B91C1C';
+  const color = state === 'confirm' ? '#0A1D47' : ok ? '#059669' : '#B91C1C';
+  const action = `/api/notifications?action=ack&amp;via=email&amp;id=${encodeURIComponent(id)}`;
+  const form = state === 'confirm'
+    ? `<form method="post" action="${action}" style="margin:24px 0 0;"><button type="submit" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:bold;color:#FFFFFF;background:#0A1D47;border:0;border-radius:10px;cursor:pointer;">I received this notification</button></form>`
+    : '';
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title></head>
 <body style="margin:0;padding:0;background:#F4F5F7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
@@ -512,6 +532,7 @@ function ackPage(ok) {
         <tr><td style="padding:32px;">
           <h1 style="margin:0 0 12px;font-size:20px;color:${color};">${title}</h1>
           <p style="margin:0;font-size:14px;color:#334155;line-height:1.6;">${msg}</p>
+          ${form}
         </td></tr>
       </table>
     </td></tr>
@@ -1339,7 +1360,63 @@ async function bookAppointment(req, res) {
   }
 }
 
+// ── Welcome email when the clinic registers a patient ───────────────────────
+// Called by the dashboard right after Add Patient saves a new record. The
+// name and address come from the saved authorizedPatients row, never the
+// request, so this cannot be used to send clinic-branded mail to arbitrary
+// addresses. Sent at most once per MRN (welcomeEmailSentAt).
+async function patientWelcome(req, res) {
+  const mrn = String(req.body?.mrn || '').trim();
+  if (!mrn) {
+    res.status(400).json({ success: false, error: 'Missing MRN.' });
+    return;
+  }
+
+  const ref = db.collection('authorizedPatients').doc(mrn);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    res.status(404).json({ success: false, error: 'Patient record not found.' });
+    return;
+  }
+  const patient = snap.data() || {};
+  if (patient.welcomeEmailSentAt) {
+    res.status(200).json({ success: true, emailed: false, alreadySent: true });
+    return;
+  }
+
+  const email = String(patient.email || '').trim().toLowerCase();
+  if (!email || !isValidEmail(email)) {
+    res.status(422).json({ success: false, error: 'This patient has no valid email address on file.' });
+    return;
+  }
+
+  const downloadUrl = (process.env.PATIENT_APP_DOWNLOAD_URL || '').trim();
+  const content = { patientName: patient.name || '', mrn, email, downloadUrl: /^https:\/\//i.test(downloadUrl) ? downloadUrl : '' };
+  const { error, skipped } = await sendMail({
+    to: email,
+    subject: 'You are registered at K&A Animal Bite Center — get the companion app',
+    html: buildPatientWelcomeEmailHtml(content),
+    text: buildPatientWelcomeEmailText(content),
+    role: 'welcome',
+  });
+
+  if (skipped) {
+    res.status(200).json({ success: true, emailed: false, skipped: true });
+    return;
+  }
+  if (error) {
+    console.error('patient-welcome mail error:', error);
+    await ref.set({ welcomeEmailError: 'Email delivery failed.', welcomeEmailAttemptedAt: Date.now() }, { merge: true });
+    res.status(502).json({ success: false, error: 'The welcome email could not be sent. Please try again later.' });
+    return;
+  }
+
+  await ref.set({ welcomeEmailSentAt: Date.now(), welcomeEmailError: null }, { merge: true });
+  res.status(200).json({ success: true, emailed: true });
+}
+
 const ADMIN_ACTIONS = {
+  'patient-welcome': patientWelcome,
   'send-followup': sendFollowUp,
   backup: backupNow,
   'warm-mailer': warmReportMailer,
@@ -1445,7 +1522,7 @@ async function sendPatientReport(req, res) {
     });
     if (sendError) {
       console.error('send-patient-report mail error:', sendError);
-      res.status(502).json({ success: false, error: 'Failed to send the email: ' + (sendError.message || 'SMTP transport failure') });
+      res.status(502).json({ success: false, error: 'Failed to send the email. Please try again, or check the clinic email settings.' });
       return;
     }
 
@@ -1453,7 +1530,7 @@ async function sendPatientReport(req, res) {
     res.status(200).json({ success: true, messageId });
   } catch (err) {
     console.error('send-patient-report error:', err);
-    res.status(500).json({ success: false, error: 'Something went wrong sending the report: ' + (err?.message || 'Server error') });
+    res.status(500).json({ success: false, error: 'Something went wrong sending the report. Please try again.' });
   }
 }
 
