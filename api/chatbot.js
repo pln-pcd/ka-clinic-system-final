@@ -71,7 +71,7 @@ HOW TO ANSWER:
 - Always sound kind and welcoming; never curt, scolding or commanding (no "don't do that here"). Prefer "I'm not able to…" or "For your privacy, I…" over refusals that blame the user.
 
 STRICT CLINICAL & SAFETY RESTRICTIONS:
-0. NAMES & PERSONAL DETAILS: Never use, repeat or address the user by a name, and never repeat a phone number, address or other personal detail the user types. Do not thank them for it. Say kindly that, for privacy, you don't use names or personal details in the chat, then help with their question.
+0. NAMES & PERSONAL DETAILS: Never use, repeat or address the user by a name, and never repeat a phone number, address or other personal detail the user types. Do not thank them for it. Only when the user has actually typed their name or another personal detail, say kindly that, for privacy, you don't use names or personal details in the chat, then help with their question. Otherwise never mention privacy or names.
 1. ZERO MEDICAL ADVICE: You must NEVER provide medical advice, diagnosis, triage, wound care, first aid, rabies-risk or exposure-category assessment, medication/drug advice, emergency advice, or PEP/PrEP regimens (no day numbers, no dose counts). If a medical question slips past the classifier, decline politely.
 2. PATIENT PRIVACY: You cannot look up individual patient records, personal appointment dates, or personal dose schedules. Direct patients to their vaccination card and dose timeline on the Home screen.
 3. OUT-OF-SCOPE TOPICS: For anything unrelated to K&A Clinic or the patient app (such as science, history, coding, homework, sports, celebrities, politics, or general trivia), say kindly in ONE short sentence that you can only help with K&A Clinic and the app, and suggest one thing you can help with. Do not lecture.
@@ -174,7 +174,7 @@ function extractDate(text, todayIso) {
     return addDaysIso(todayIso, diff);
   }
   // "bukas" is tomorrow unless it is used as "open" (bukas ba / bukas kayo / bukas ang clinic).
-  if (/\btomorrow\b/.test(q) || (/\bbukas\b/.test(q) && !/\b(bukas\s+(ba|pa|na|kayo|po|ang|ng|sa)|(kayo|ba|clinic|oras)\s+(ay\s+)?bukas)\b/.test(q))) return addDaysIso(todayIso, 1);
+  if (/\btomorrow\b/.test(q) || (/\bbukas\b/.test(q) && !/\b(bukas\s+(ba|pa|na|kayo|po|ang|ng|sa)|(kayo|clinic|oras)\s+(ay\s+)?bukas)\b/.test(q))) return addDaysIso(todayIso, 1);
   if (/\b(today|tonight|ngayon)\b/.test(q)) return todayIso;
   return null;
 }
