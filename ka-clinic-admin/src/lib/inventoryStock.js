@@ -93,9 +93,21 @@ const wasMlEra = (x) => x?.ml !== undefined && x?.ml !== null;
  * @param readDoses (savedRecord) => doses with { key, label, date, status, brand, note },
  *                  status 'done' for given doses (the tracker's buildDoses)
  * @param today     YYYY-MM-DD (clinic date), stamped as completedAt
+ * @param shiftLater when a dose is given late: also move every later dose
+ *                  still pending by the same number of days, so the gaps
+ *                  between doses stay as scheduled (staff confirm this)
+ *
+ * A dose given after its date is saved with the day it was actually given
+ * (`date`); the planned day is kept as `scheduledDate`. A later dose that was
+ * moved remembers its date before the move (`preShiftDate`, `shiftedBy`), so
+ * undoing the late dose puts everything back.
  */
+const addDaysIso = (iso, n) => new Date(new Date(`${iso}T00:00:00Z`).getTime() + n * 86400000).toISOString().slice(0, 10);
+const daysBetween = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000);
+
 export async function recordDoseChange(fs, db, {
   patientId, doseKey, give, brand = '', stockItemId = null, byUid = null, byName = '', attendingName = '', readDoses, today,
+  shiftLater = false,
 }) {
   const { runTransaction, doc, collection, deleteField } = fs;
   const vaxRef = doc(db, 'vaccinations', patientId);
@@ -129,17 +141,45 @@ export async function recordDoseChange(fs, db, {
     if (item && give) move = moveVials(item, -1, brand, today);
     else if (item && !give && stockOf(idx).stockDeducted !== false && !wasMlEra(stockOf(idx))) move = moveVials(item, +1, brand);
 
+    // Dates: a late dose takes the day it was given; with shiftLater the
+    // later pending doses move by the same delay. Undo reverses both.
+    const dateKeep = (i) => ({
+      scheduledDate: rawSaved[i]?.scheduledDate, preShiftDate: rawSaved[i]?.preShiftDate, shiftedBy: rawSaved[i]?.shiftedBy,
+      dueDate: rawSaved[i]?.dueDate,
+    });
+    const givenOn = today || new Date().toISOString().slice(0, 10);
+    const delay = give && savedDoses[idx].date && savedDoses[idx].date < givenOn ? daysBetween(savedDoses[idx].date, givenOn) : 0;
+    let shifted = 0;
+
     const nextDoses = savedDoses.map((d, i) => {
-      const base = { key: d.key, n: d.label, date: d.date, note: d.note || '', ...stockOf(i) };
+      const base = { key: d.key, n: d.label, date: d.date, note: d.note || '', ...stockOf(i), ...dateKeep(i) };
       if (i !== idx) {
         const st = d.status === 'done' ? 'done' : 'pending';
+        if (i > idx && st === 'pending' && d.date) {
+          if (give && delay > 0 && shiftLater) {
+            shifted++;
+            return { ...base, status: st, s: st, brand: d.brand || '', date: addDaysIso(d.date, delay),
+              scheduledDate: base.scheduledDate || d.date, preShiftDate: d.date, shiftedBy: doseKey };
+          }
+          // Undoing the dose that moved this one: back to its earlier date.
+          if (!give && base.shiftedBy === doseKey && base.preShiftDate) {
+            return { ...base, status: st, s: st, brand: d.brand || '', date: base.preShiftDate,
+              scheduledDate: base.scheduledDate === base.preShiftDate ? undefined : base.scheduledDate,
+              preShiftDate: undefined, shiftedBy: undefined };
+          }
+        }
         return { ...base, status: st, s: st, brand: d.brand || '' };
       }
       return give
         ? { ...base, status: 'done', s: 'done', brand, stockItemId: item ? stockItemId : '', stockDeducted: Boolean(move),
-            ml: undefined, givenAt: Date.now(), givenBy: byUid || '', givenByName: byName || '', attendingName: attendingName || byName || '' }
+            ml: undefined, givenAt: Date.now(), givenBy: byUid || '', givenByName: byName || '', attendingName: attendingName || byName || '',
+            // dueDate: the day it was due when given, for undo.
+            ...(delay > 0 ? { date: givenOn, dueDate: d.date, scheduledDate: base.scheduledDate || d.date } : {}) }
         : { ...base, status: 'pending', s: 'pending', brand: '', stockItemId: '', stockDeducted: false,
-            ml: undefined, givenAt: undefined, givenBy: undefined, givenByName: undefined, attendingName: undefined };
+            ml: undefined, givenAt: undefined, givenBy: undefined, givenByName: undefined, attendingName: undefined,
+            // Undo: back to the day it was due.
+            date: base.dueDate || d.date, dueDate: undefined,
+            scheduledDate: base.scheduledDate && base.scheduledDate !== (base.dueDate || d.date) ? base.scheduledDate : undefined };
     }).map(d => Object.fromEntries(Object.entries(d).filter(([, v]) => v !== undefined)));
 
     const doneN = nextDoses.filter(d => d.status === 'done').length;
@@ -172,7 +212,8 @@ export async function recordDoseChange(fs, db, {
       });
     }
     return { before: move?.before ?? null, after: move?.after ?? null, itemName: item?.name || '', allDone, wasDone, moved: Boolean(move),
-      doseLabel: savedDoses[idx].label || doseKey, statusBefore: savedDoses[idx].status === 'done' ? 'done' : 'pending' };
+      doseLabel: savedDoses[idx].label || doseKey, statusBefore: savedDoses[idx].status === 'done' ? 'done' : 'pending',
+      delay, shifted, dueDate: savedDoses[idx].date };
   });
   logActivity({
     action: 'dose.update', collection: 'vaccinations', docId: patientId, mrn: patientId,
@@ -181,6 +222,8 @@ export async function recordDoseChange(fs, db, {
       { field: `doses.${doseKey}.status`, before: result.statusBefore, after: give ? 'done' : 'pending' },
       ...(give && brand ? [{ field: `doses.${doseKey}.brand`, before: null, after: brand }] : []),
       ...(result.moved ? [{ field: `stock (${result.itemName})`, before: String(result.before), after: String(result.after) }] : []),
+      ...(result.delay > 0 ? [{ field: `doses.${doseKey}.date`, before: result.dueDate, after: today }] : []),
+      ...(result.shifted > 0 ? [{ field: 'later doses', before: 'as scheduled', after: `moved ${result.delay} day${result.delay === 1 ? '' : 's'} later` }] : []),
     ],
   });
   return result;

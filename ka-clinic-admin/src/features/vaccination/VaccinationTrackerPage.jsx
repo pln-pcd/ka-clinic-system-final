@@ -160,6 +160,10 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
 
   // The next dose ticked as READY (not saved until "Confirm dose").
   const [readyKey, setReadyKey] = useState(null);
+  // A late dose: also move the later doses by the same delay (staff choice,
+  // on by default, shown with the new dates before Confirm dose).
+  const [shiftLater, setShiftLater] = useState(true);
+  useEffect(() => { setShiftLater(true); }, [readyKey]);
   const [discardAsk, setDiscardAsk] = useState(false);
   const [confirmBusy, setConfirmBusy] = useState(false);
   // Latest reminder per patient: undefined = not loaded, null = none.
@@ -568,6 +572,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
         attendingName: attendingStaff.trim(),
         readDoses: saved => buildDoses(saved),
         today: getTodayStr(),
+        shiftLater,
       });
     } catch (err) {
       setPatients(prev => prev.map(x => (x.firestoreId === p.firestoreId ? fresh : x)));
@@ -593,7 +598,8 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
         ? `Dose saved. "${brandToUse}" is not in Inventory, so no stock was deducted.`
         : 'Dose undone. No stock was deducted for it, so none was restored.', nextStatus === 'done' ? 'warning' : 'info');
     } else if (nextStatus === 'done') {
-      showToast(`Dose ${di + 1} saved. ${outcome.itemName}: ${outcome.before} → ${outcome.after} vials.`, 'success');
+      const moved = outcome.shifted > 0 ? ` The next ${outcome.shifted} dose${outcome.shifted === 1 ? '' : 's'} moved ${outcome.delay} day${outcome.delay === 1 ? '' : 's'} later.` : '';
+      showToast(`Dose ${di + 1} saved. ${outcome.itemName}: ${outcome.before} → ${outcome.after} vials.${moved}`, 'success');
     } else {
       showToast(`Dose ${di + 1} undone. 1 vial returned to ${outcome.itemName} (${outcome.before} → ${outcome.after} vials).`, 'info');
     }
@@ -1384,7 +1390,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                                   {isDone ? (
                                     <>
                                       <CheckCircle size={12} className="text-emerald-600 shrink-0" aria-hidden="true" />
-                                      <span className="truncate"><span className="text-emerald-700 font-semibold">Given</span>{usedBrand ? ` · ${usedBrand}` : ''}{d.ml ? ` · ${d.ml} mL` : ''} · {fmtDate(d.date)}</span>
+                                      <span className="truncate"><span className="text-emerald-700 font-semibold">Given</span>{usedBrand ? ` · ${usedBrand}` : ''}{d.ml ? ` · ${d.ml} mL` : ''} · {fmtDate(d.date)}{d.dueDate ? ` (due ${fmtDate(d.dueDate)})` : ''}</span>
                                     </>
                                   ) : (
                                     <>
@@ -1424,6 +1430,40 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                         );
                       })}
                     </ol>
+
+                    {/* Late dose ticked: it is saved with today's date, and the
+                        later doses can move by the same delay so the gaps
+                        between doses stay as scheduled. Staff decide. */}
+                    {(() => {
+                      if (!readyDose) return null;
+                      const due = (readyDose.date || '').slice(0, 10);
+                      if (!due || due >= today) return null;
+                      const delay = Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${due}T00:00:00Z`)) / 86400000);
+                      const ri = doses.findIndex(d => d.key === readyDose.key);
+                      const later = doses.slice(ri + 1).filter(d => d.status !== 'done' && d.date);
+                      const plus = iso => new Date(Date.parse(`${iso.slice(0, 10)}T00:00:00Z`) + delay * 86400000).toISOString().slice(0, 10);
+                      return (
+                        <div className="mx-4 mb-3 mt-1 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-[11.5px] text-slate-700">
+                          <p>
+                            <strong className="font-semibold text-slate-900">Given {delay} day{delay === 1 ? '' : 's'} late.</strong>{' '}
+                            It will be saved as given today ({fmtDate(today)}); it was due {fmtDate(due)}.
+                          </p>
+                          {later.length > 0 && (
+                            <label className="mt-2 flex items-start gap-2 cursor-pointer">
+                              <input type="checkbox" checked={shiftLater} onChange={e => setShiftLater(e.target.checked)}
+                                className="mt-0.5 rounded border-slate-300 accent-[#3B50DF]" />
+                              <span>
+                                Move the next {later.length} dose{later.length === 1 ? '' : 's'} {delay} day{delay === 1 ? '' : 's'} later, keeping the gaps between doses:
+                                <span className="block mt-1 text-slate-500">
+                                  {later.map(d => `${d.label}: ${fmtDate(d.date)} → ${fmtDate(plus(d.date))}`).join(' · ')}
+                                </span>
+                                <span className="block mt-1 text-slate-400">Confirm the new dates with the attending physician.</span>
+                              </span>
+                            </label>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {/* Day 0 Adjunct Treatments (RIG & Anti-Tetanus) for Category III */}
                     {isCategoryIII(p) && (() => {

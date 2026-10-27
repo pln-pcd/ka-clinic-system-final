@@ -262,6 +262,8 @@ export const buildDoses = (p) => {
         ml:         status === 'done' ? (d.ml ?? d.mg ?? null) : null,
         stockDeducted: d.stockDeducted,
         givenByName: d.givenByName || '',
+        // A dose given late: the day it was due (date is the day it was given).
+        dueDate: status === 'done' && d.dueDate ? d.dueDate : null,
         autoMissed: overdueFlag && status !== 'done',
       };
     });
