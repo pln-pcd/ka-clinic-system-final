@@ -1128,13 +1128,13 @@ export default function AppointmentsScreen() {
                       s.calTile,
                       isToday && !isSelected && s.calTileToday,
                       isSelected && s.calTileSelected,
-                      isClosedDay && { backgroundColor: '#FEF3C7', borderColor: '#FCD34D' },
+                      isClosedDay && { backgroundColor: '#F1F5F9', borderColor: '#CBD5E1' },
                     ]}>
                       {isClosedDay && (
-                        <Ionicons name="lock-closed" size={10} color="#D97706" style={{ position: 'absolute', top: 3, right: 3 }} />
+                        <Ionicons name="lock-closed" size={10} color="#64748B" style={{ position: 'absolute', top: 3, right: 3 }} />
                       )}
                       {isPartiallyClosed && !isClosedDay && (
-                        <Ionicons name="lock-closed" size={8} color="#F59E0B" style={{ position: 'absolute', top: 3, right: 3 }} />
+                        <Ionicons name="lock-closed" size={8} color="#94A3B8" style={{ position: 'absolute', top: 3, right: 3 }} />
                       )}
                       <Text style={[
                         s.calDayTxt,
@@ -1142,7 +1142,7 @@ export default function AppointmentsScreen() {
                         !isPast && !hasSlots && s.calDayNoSlot,
                         tappable && !isSelected && !isClosedDay && s.calDayOpen,
                         !isPast && isFull && !isSelected && !isClosedDay && s.calDayFull,
-                        isClosedDay && { color: '#B45309', fontWeight: '800' },
+                        isClosedDay && { color: '#475569', fontWeight: '800' },
                         isToday && !isSelected && s.calDayToday,
                         isSelected           && s.calDaySelected,
                       ]}>
@@ -1157,7 +1157,7 @@ export default function AppointmentsScreen() {
             <View style={s.legend}>
               <View style={s.legendItem}><Text style={s.legendNum}>5</Text><Text style={s.legendTxt}>Open to book</Text></View>
               <View style={s.legendItem}><Text style={[s.legendNum, s.calDayFull]}>6</Text><Text style={s.legendTxt}>Fully booked</Text></View>
-              <View style={s.legendItem}><Ionicons name="lock-closed" size={12} color="#D97706" /><Text style={s.legendTxt}>Closed</Text></View>
+              <View style={s.legendItem}><Ionicons name="lock-closed" size={12} color="#64748B" /><Text style={s.legendTxt}>Closed</Text></View>
               <View style={s.legendItem}><View style={s.legendToday}/><Text style={s.legendTxt}>Today</Text></View>
             </View>
           </View>
@@ -1255,14 +1255,14 @@ export default function AppointmentsScreen() {
                     {appt.affectedByClosure && (
                       <View style={s.closureCardBanner}>
                         <View style={s.closureCardHeader}>
-                          <Ionicons name="alert-circle-outline" size={14} color="#B45309" />
+                          <Ionicons name="alert-circle-outline" size={14} color="#64748B" />
                           <Text style={s.closureCardTitle}>Affected by schedule closure</Text>
                         </View>
                         <Text style={s.closureCardReason}>
                           {appt.closureReason || 'The clinic schedule for this time has been closed.'}
                         </Text>
                         <Text style={s.closureCardSub}>
-                          Your appointment is still on record. Please pick another date or time slot.
+                          Please pick another date or time slot.
                         </Text>
                         <View style={s.closureCardBtnRow}>
                           <Tap
@@ -1416,7 +1416,7 @@ export default function AppointmentsScreen() {
                             s.timeChip,
                             active && s.timeChipActive,
                             isTaken && s.timeChipOff,
-                            isClosed && { backgroundColor: '#FEF3C7', borderColor: '#FCD34D' }
+                            isClosed && { backgroundColor: '#F1F5F9', borderColor: '#CBD5E1' }
                           ]}
                           onPress={() => {
                             if (isClosed) {
@@ -1438,7 +1438,7 @@ export default function AppointmentsScreen() {
                           <Ionicons
                             name={active ? 'time' : isClosed ? 'lock-closed' : 'time-outline'}
                             size={12}
-                            color={active ? C.white : isClosed ? '#D97706' : isTaken ? '#CBD5E1' : C.slate}
+                            color={active ? C.white : isClosed ? '#64748B' : isTaken ? '#CBD5E1' : C.slate}
                           />
                           <Text
                             numberOfLines={1}
@@ -1447,7 +1447,7 @@ export default function AppointmentsScreen() {
                               s.timeTxt,
                               active && { color: C.white, fontWeight: '800' },
                               isTaken && { color: '#CBD5E1', textDecorationLine: 'line-through' },
-                              isClosed && { color: '#B45309', fontWeight: '700' }
+                              isClosed && { color: '#475569', fontWeight: '700' }
                             ]}
                           >
                             {slot.time}
@@ -1458,7 +1458,7 @@ export default function AppointmentsScreen() {
                             </View>
                           )}
                           {isClosed && (
-                            <View style={[s.fullPill, { backgroundColor: '#FDE68A' }]}>
+                            <View style={[s.fullPill, { backgroundColor: '#E2E8F0' }]}>
                               <Text style={[s.fullPillTxt, { color: '#92400E' }]}>Closed</Text>
                             </View>
                           )}
@@ -1781,14 +1781,14 @@ export default function AppointmentsScreen() {
                         {selectedApptDetail.affectedByClosure && (
                           <View style={[s.closureCardBanner, { marginHorizontal: 0, marginBottom: verticalScale(14) }]}>
                             <View style={s.closureCardHeader}>
-                              <Ionicons name="alert-circle-outline" size={14} color="#B45309" />
+                              <Ionicons name="alert-circle-outline" size={14} color="#64748B" />
                               <Text style={s.closureCardTitle}>Affected by schedule closure</Text>
                             </View>
                             <Text style={s.closureCardReason}>
                               {selectedApptDetail.closureReason || 'The clinic schedule for this time has been closed.'}
                             </Text>
                             <Text style={s.closureCardSub}>
-                              Your appointment is still on record. Please pick another date or time slot.
+                              Please pick another date or time slot.
                             </Text>
                             <View style={s.closureCardBtnRow}>
                               <Tap
@@ -2169,8 +2169,10 @@ export default function AppointmentsScreen() {
                             <Text
                               numberOfLines={1}
                               adjustsFontSizeToFit
+                              minimumFontScale={0.7}
                               style={[
                                 s.timeTxt,
+                                { flexShrink: 1 },
                                 active && { color: C.white, fontWeight: '800' },
                                 disabled && !isCurrentSlot && { color: '#CBD5E1', textDecorationLine: 'line-through' },
                                 isCurrentSlot && { color: C.navy, fontWeight: '700' },
@@ -2216,7 +2218,7 @@ export default function AppointmentsScreen() {
 
                       <View style={[s.summaryRow, { marginBottom: verticalScale(8) }]}>
                         <Ionicons name="time-outline" size={15} color={C.slate} style={{ marginRight: scale(8) }} />
-                        <Text style={{ fontSize: moderateScale(13), color: C.slate }}>
+                        <Text style={{ flex: 1, fontSize: moderateScale(13), color: C.slate }}>
                           <Text style={{ fontWeight: '700' }}>Current Time: </Text>
                           {reschedulingAppt && displayKey(reschedulingAppt.date)} · {reschedulingAppt?.time}
                         </Text>
@@ -2224,7 +2226,7 @@ export default function AppointmentsScreen() {
 
                       <View style={[s.summaryRow, { marginBottom: verticalScale(8) }]}>
                         <Ionicons name="calendar-outline" size={15} color={C.navy} style={{ marginRight: scale(8) }} />
-                        <Text style={{ fontSize: moderateScale(13), color: C.navy, fontWeight: '700' }}>
+                        <Text style={{ flex: 1, fontSize: moderateScale(13), color: C.navy, fontWeight: '700' }}>
                           <Text style={{ fontWeight: '800' }}>New Time: </Text>
                           {rescheduleDate && displayKey(rescheduleDate)} · {rescheduleTime}
                         </Text>
@@ -2232,17 +2234,10 @@ export default function AppointmentsScreen() {
 
                       <View style={[s.summaryRow, { marginTop: verticalScale(4) }]}>
                         <Ionicons name="person-outline" size={15} color={C.slate} style={{ marginRight: scale(8) }} />
-                        <Text style={{ fontSize: moderateScale(13), color: C.slate }}>
+                        <Text style={{ flex: 1, fontSize: moderateScale(13), color: C.slate }}>
                           Patient: {reschedulingAppt?.name}
                         </Text>
                       </View>
-                    </View>
-
-                    <View style={[s.noteBox, { marginTop: verticalScale(12), backgroundColor: C.orangeFaint, borderColor: C.orange }]}>
-                      <Ionicons name="alert-circle-outline" size={16} color={C.orange} />
-                      <Text style={[s.noteTxt, { color: C.orange, fontWeight: '600' }]}>
-                        Your new time is waiting for the clinic's confirmation.
-                      </Text>
                     </View>
 
                     <View style={{ marginTop: verticalScale(16) }}>
@@ -2349,7 +2344,7 @@ export default function AppointmentsScreen() {
                 <View style={{ paddingHorizontal: scale(18), paddingTop: verticalScale(18), paddingBottom: verticalScale(14), borderBottomWidth: 1, borderColor: '#F1F5F9', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(10), flex: 1 }}>
                     <View style={{ width: scale(36), height: scale(36), borderRadius: scale(10), backgroundColor: '#F1F5F9', alignItems: 'center', justifyContent: 'center' }}>
-                      <Ionicons name="lock-closed-outline" size={18} color="#B45309" />
+                      <Ionicons name="lock-closed-outline" size={18} color="#475569" />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={{ fontSize: moderateScale(15), fontWeight: '800', color: '#0F172A' }}>
@@ -2379,19 +2374,11 @@ export default function AppointmentsScreen() {
                 {/* Footer buttons */}
                 <View style={{ paddingHorizontal: scale(18), paddingVertical: verticalScale(14), borderTopWidth: 1, borderColor: '#F1F5F9', backgroundColor: '#F8FAFC', flexDirection: 'row', gap: scale(8), justifyContent: 'flex-end' }}>
                   <Tap
-                    style={{ paddingHorizontal: scale(12), paddingVertical: verticalScale(10), borderRadius: scale(10), borderWidth: 1, borderColor: '#CBD5E1', backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' }}
+                    style={{ paddingHorizontal: scale(16), paddingVertical: verticalScale(10), borderRadius: scale(10), backgroundColor: C.navy, alignItems: 'center', justifyContent: 'center' }}
                     onPress={jumpToNextAvailable}
                   >
-                    <Text style={{ fontSize: moderateScale(12), fontWeight: '700', color: C.slate }}>
-                      Show next available
-                    </Text>
-                  </Tap>
-                  <Tap
-                    style={{ paddingHorizontal: scale(16), paddingVertical: verticalScale(10), borderRadius: scale(10), backgroundColor: C.navy, alignItems: 'center', justifyContent: 'center' }}
-                    onPress={() => setClosureModal(null)}
-                  >
                     <Text style={{ fontSize: moderateScale(12), fontWeight: '700', color: '#FFFFFF' }}>
-                      Pick another date
+                      Pick another date/time
                     </Text>
                   </Tap>
                 </View>
@@ -2534,7 +2521,7 @@ const s = StyleSheet.create({
   adminNoteTxt: { flex: 1, fontSize: moderateScale(10), color: C.red, fontWeight: '600', lineHeight: moderateScale(14) },
 
   // Schedule closure banner on appointments
-  // Quiet card: neutral surface, one small amber icon as the only accent.
+  // Quiet card: neutral surface and icon.
   closureCardBanner: {
     backgroundColor: '#F8FAFC',
     borderWidth: 1,
@@ -2671,6 +2658,6 @@ const sm = StyleSheet.create({
   confirmTxt: { fontSize: moderateScale(13), fontWeight: '800', color: C.white },
   secondaryBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: verticalScale(12), borderRadius: scale(12), borderWidth: 1.5, borderColor: C.navy, backgroundColor: C.white },
   secondaryTxt: { fontSize: moderateScale(13), fontWeight: '800', color: C.navy },
-  currentPill: { backgroundColor: C.navyFaint, paddingHorizontal: scale(6), paddingVertical: verticalScale(2), borderRadius: scale(6), borderWidth: 1, borderColor: C.navy },
-  currentPillTxt: { fontSize: moderateScale(9), fontWeight: '800', color: C.navy, textTransform: 'uppercase' },
+  currentPill: { backgroundColor: '#E2E8F0', paddingHorizontal: scale(4), paddingVertical: verticalScale(2), borderRadius: scale(4), marginLeft: scale(2) },
+  currentPillTxt: { fontSize: moderateScale(8.5), fontWeight: '800', color: C.navy },
 });

@@ -417,22 +417,24 @@ const s = StyleSheet.create({
     borderColor: '#E2E8F0',
     overflow: 'hidden',
     shadowColor: '#0F172A',
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
+    shadowOpacity: 0.02,
+    shadowRadius: 3,
     shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    elevation: 1,
   },
   tableHeaderRow: {
     flexDirection: 'row',
-    backgroundColor: '#0F172A',
+    backgroundColor: '#F8FAFC',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
     paddingVertical: verticalScale(10),
     paddingHorizontal: scale(10),
     alignItems: 'center',
   },
   tableHeaderCell: {
     fontSize: moderateScale(10),
-    fontWeight: '800',
-    color: '#94A3B8',
+    fontWeight: '700',
+    color: '#64748B',
     letterSpacing: 0.5,
   },
   recordTableRow: {
@@ -445,7 +447,7 @@ const s = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   recordTableRowAlt: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FFFFFF',
   },
   recordTableCellLabel: {
     fontSize: moderateScale(11.5),
@@ -463,23 +465,23 @@ const s = StyleSheet.create({
     borderRadius: scale(6),
   },
   miniBadgeDone: {
-    backgroundColor: '#ECFDF5',
+    backgroundColor: '#F1F5F9',
   },
   miniBadgePending: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0',
   },
   miniBadgeTxt: {
     fontSize: moderateScale(9.5),
     fontWeight: '800',
   },
   miniBadgeTxtDone: {
-    color: '#059669',
+    color: '#334155',
   },
   miniBadgeTxtPending: {
-    color: '#3B50DF',
+    color: '#64748B',
   },
-  miniBadgeToday: { backgroundColor: '#FFFBEB' },
-  miniBadgeTxtToday: { color: '#B45309' },
+  miniBadgeToday: { backgroundColor: '#E2E8F0' },
+  miniBadgeTxtToday: { color: '#0F172A' },
   miniBadgeMissed: {
     backgroundColor: '#FEF2F2',
   },

@@ -794,7 +794,7 @@ export default function RabiesRecoveryApp() {
                   </View>
                   <View style={[s.recordsTableRow, s.recordsTableRowAlt]}>
                     <Text style={[s.recordsTableCellLabel, { flex: 1.2 }]}>Exposure Category</Text>
-                    <Text style={[s.recordsTableCellValue, { flex: 1.8, color: '#3B50DF', fontWeight: '700' }]}>{catVal}</Text>
+                    <Text style={[s.recordsTableCellValue, { flex: 1.8, fontWeight: '700' }]}>{catVal}</Text>
                   </View>
                   <View style={s.recordsTableRow}>
                     <Text style={[s.recordsTableCellLabel, { flex: 1.2 }]}>Biting Animal</Text>
@@ -3036,32 +3036,34 @@ const s = StyleSheet.create({
   // ══ MEDICAL RECORDS INLINE CARD STYLES ══
   recordsSection: { marginTop: verticalScale(20), width: '100%' },
   recordsSectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: verticalScale(10), gap: scale(8) },
-  recordsSectionAccent: { width: scale(4), height: verticalScale(18), borderRadius: scale(2), backgroundColor: '#3B50DF' },
+  recordsSectionAccent: { width: scale(4), height: verticalScale(18), borderRadius: scale(2), backgroundColor: '#334155' },
   recordsSectionTitle: { fontSize: moderateScale(17), fontWeight: '900', color: C.charcoal, flex: 1 },
 
   recordsTableCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: scale(16),
+    borderRadius: scale(14),
     borderWidth: 1,
     borderColor: '#E2E8F0',
     overflow: 'hidden',
     shadowColor: '#0F172A',
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    shadowOpacity: 0.02,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
   },
   recordsTableHeaderRow: {
     flexDirection: 'row',
-    backgroundColor: '#0F172A',
+    backgroundColor: '#F8FAFC',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
     paddingVertical: verticalScale(10),
     paddingHorizontal: scale(10),
     alignItems: 'center',
   },
   recordsTableHeaderCell: {
     fontSize: moderateScale(10),
-    fontWeight: '800',
-    color: '#94A3B8',
+    fontWeight: '700',
+    color: '#64748B',
     letterSpacing: 0.5,
   },
   recordsTableRow: {
@@ -3074,7 +3076,7 @@ const s = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   recordsTableRowAlt: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FFFFFF',
   },
   recordsTableCellLabel: {
     fontSize: moderateScale(11.5),

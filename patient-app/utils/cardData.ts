@@ -41,7 +41,7 @@ const CASE_KEYS = [
   'service', 'date', 'status', 'completedAt', 'closedAt',
   'cat', 'animal', 'typeOfExposure', 'sourceOfExposure', 'woundWashed', 'numberOfBites', 'vaccineBrand',
   'pastVaccines', 'pastVaccinesOther', 'allergies', 'allergiesOther', 'woundType', 'lastTetanus',
-  'pneumoHistory', 'pneumoHistoryOther', 'riskCondition', 'doses', 'route', 'patientNote',
+  'pneumoHistory', 'pneumoHistoryOther', 'riskCondition', 'riskConditionOther', 'doses', 'route', 'patientNote',
 ];
 export function historicalRecord(patient: any, entry: any): any {
   const p = patient || {};

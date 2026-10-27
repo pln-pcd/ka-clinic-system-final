@@ -24,7 +24,7 @@ type FieldKey =
 const FIELD_DEFS: Record<FieldKey, { label: string; value: (r: any) => string }> = {
   pastVaccines: { label: 'Past Vaccines', value: withOther('pastVaccines', 'pastVaccinesOther') },
   pneumoHistory: { label: 'Past Pneumococcal Vaccination', value: withOther('pneumoHistory', 'pneumoHistoryOther') },
-  riskCondition: { label: 'High-Risk Condition', value: r => r?.riskCondition || '' },
+  riskCondition: { label: 'High-Risk Condition', value: withOther('riskCondition', 'riskConditionOther') },
   woundType: { label: 'Wound / Injury Type', value: r => r?.woundType || '' },
   lastTetanus: { label: 'Last Tetanus Shot', value: r => r?.lastTetanus || '' },
   allergies: { label: 'Known Allergies', value: withOther('allergies', 'allergiesOther') },

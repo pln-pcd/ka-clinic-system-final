@@ -1057,35 +1057,10 @@ export default function ProfileScreen() {
             <SubHeader title="Privacy Policy & Data Notice" />
             <ScrollView contentContainerStyle={{ paddingHorizontal: scale(20), paddingBottom: verticalScale(120) + insets.bottom }} showsVerticalScrollIndicator={false}>
 
-              {/* Data Protection Banner */}
-              <View style={s.privacyNoticeCard}>
-                <Ionicons name="shield-checkmark" size={24} color={MEDICAL_RED} />
-                <View style={{ flex: 1 }}>
-                  <Text style={s.privacyNoticeTitle}>Data Privacy Act Compliance (RA 10173)</Text>
-                  <Text style={s.privacyNoticeSub}>K&A Animal Bite Center is committed to protecting your personal and sensitive health information.</Text>
-                </View>
-              </View>
-
-              {/* Data Collection */}
-              <SectionLabel title="1. DATA COLLECTION & MEDICAL PURPOSE" />
-              <View style={s.card}>
-                {[
-                  { title: 'Personal Demographics', body: 'We collect your full name, age, date of birth, sex, address, and contact details to establish your official medical record.' },
-                  { title: 'Clinical Incident Data', body: 'Bite incident location, exposure category (Category II or III), biting animal status, and anatomical wound site are recorded to determine your PEP vaccine regimen.' },
-                  { title: 'Immunization Records', body: 'All vaccine brand names, lot numbers, administration dates, and dosages are stored to ensure complete rabies prophylaxis tracking.' },
-                ].map((p, i, arr) => (
-                  <View key={i} style={[s.policyBlock, i === arr.length - 1 && { borderBottomWidth: 0 }]}>
-                    <Text style={s.policyTitle}>{p.title}</Text>
-                    <Text style={s.policyText}>{p.body}</Text>
-                  </View>
-                ))}
-              </View>
-
               {/* Data Protection & Security */}
-              <SectionLabel title="2. DATA SECURITY & ENCRYPTION" />
+              <SectionLabel title="DATA SECURITY & ENCRYPTION" />
               <View style={s.card}>
                 {[
-                  { title: 'AES-256 Encryption', body: 'All patient data transmitted between the app and clinic database is encrypted using industry-standard SSL/TLS protocols and AES-256 encryption at rest.' },
                   { title: 'Strict Access Controls', body: 'Only authorized healthcare professionals and registered clinic staff have access to your medical history for clinical care purposes.' },
                   { title: 'No Commercial Sharing', body: 'Your personal data is never sold, rented, or shared with third-party advertisers or insurance companies.' },
                 ].map((p, i, arr) => (
@@ -1094,33 +1069,6 @@ export default function ProfileScreen() {
                     <Text style={s.policyText}>{p.body}</Text>
                   </View>
                 ))}
-              </View>
-
-              {/* Your Rights */}
-              <SectionLabel title="3. RIGHTS OF THE DATA SUBJECT" />
-              <View style={s.card}>
-                {[
-                  { title: 'Right to Access & Rectification', body: 'You have the right to view your full immunization history and update your contact information or request corrections at any time.' },
-                  { title: 'Right to Erasure / Blocking', body: 'You may ask the clinic to close your app account. Your clinic vaccination record itself is kept permanently so your dose history stays available.' },
-                ].map((p, i, arr) => (
-                  <View key={i} style={[s.policyBlock, i === arr.length - 1 && { borderBottomWidth: 0 }]}>
-                    <Text style={s.policyTitle}>{p.title}</Text>
-                    <Text style={s.policyText}>{p.body}</Text>
-                  </View>
-                ))}
-              </View>
-
-              {/* Contact Information */}
-              <SectionLabel title="4. DATA PRIVACY OFFICER & CONTACT" />
-              <View style={s.card}>
-                <View style={s.policyBlock}>
-                  <Text style={s.policyTitle}>Contact DPO</Text>
-                  <Text style={s.policyText}>For questions or privacy concerns, contact our Data Privacy Officer at privacy@kavaccineclinic.ph or visit K&A Animal Bite Center during clinic hours.</Text>
-                </View>
-                <View style={[s.policyBlock, { borderBottomWidth: 0 }]}>
-                  <Text style={s.policyTitle}>National Privacy Commission (NPC)</Text>
-                  <Text style={s.policyText}>You have the right to lodge a complaint with the National Privacy Commission at www.privacy.gov.ph if your data rights are violated.</Text>
-                </View>
               </View>
 
               <Text style={s.versionText}>Last Updated: August 2026 · K&A Animal Bite Center & Clinic</Text>
