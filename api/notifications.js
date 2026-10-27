@@ -175,11 +175,11 @@ async function pruneDeadTokens(tokens, tickets) {
 
 // ── Patient App edits its own contact / emergency details ───────────────────
 // Only the fields a patient can reasonably own. Identity (name, age, sex,
-// email, MRN) and anything clinical stay staff-only — the app shows those
-// read-only. Same ownership check as set-avatar.
+// email, MRN), physical info (height, weight, blood pressure) and anything
+// clinical stay staff-only — the app shows those read-only. Same ownership
+// check as set-avatar.
 const PATIENT_EDITABLE_FIELDS = [
   'contact', 'address', 'religion', 'education', 'occupation',
-  'height', 'weight', 'bloodPressure',
   'emergencyName', 'emergencyRel', 'emergencyPhone', 'emergencyAltPhone',
 ];
 

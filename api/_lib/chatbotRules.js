@@ -290,9 +290,8 @@ export const VAGUE_REPLY =
 // "Carl", "my name is Carl", "ako si Carl": KAI does not use or keep names
 // or other personal details, and never repeats them back.
 export const INTRO_REPLY =
-  "Thanks. For your privacy, please don't share personal details such as your name in this chat; I don't keep or use them. " +
-  'I can help with clinic hours, services, booking an appointment, and using the app. ' +
-  'For other questions, you can talk to the clinic staff.';
+  "I can't respond to names or other personal details, so please don't share them here. " +
+  'I can help with clinic hours, services and prices, booking an appointment, and using the app.';
 const INTRO_RE = /^(my\s+name\s+is|my\s+name'?s|i\s+am|i'?m|im|this\s+is|call\s+me|it'?s\s+me|ako\s+(po\s+)?si|ako\s+(po\s+)?ay|ang\s+pangalan\s+ko\s+(ay\s+)?)\s+\S+/;
 export function vagueReply(text) {
   const q = norm(text);
@@ -331,9 +330,13 @@ export const SERVICES_REPLY =
   '• Anti-tetanus vaccine\n\n' +
   'To book a visit, open the Appointments tab. For other questions, you can talk to the clinic staff.';
 
-// Prices are not given in the study (docs/STUDY_MODE.md): the staff give them.
+// The clinic's rates. Services without a listed rate are referred to staff.
 export const PRICE_REPLY =
-  "I can't give prices here. Please talk to the clinic staff for the current rates.";
+  '💵 **K&A Clinic rates**\n' +
+  '• PEP Category II (with anti-tetanus): ₱1,000 for the first session, then ₱800 for each of the next 3 sessions\n' +
+  '• PEP Category III: ₱4,500 for the full 4-session package (includes anti-tetanus and RIG)\n' +
+  '• Pneumonia (pneumococcal) vaccine: ₱4,500\n\n' +
+  'For PrEP or anti-tetanus on its own, please ask the clinic staff for the current rate.';
 
 // Matches the app's booking flow (patient-app/app/(tabs)/appt.tsx): the
 // Appointments tab, the Book Appointment calendar (weekends only), the
@@ -369,9 +372,10 @@ export function fixedInScopeReply(text) {
   if (THANKS_RE.test(q)) return THANKS_REPLY;
   if (PRICE_RE.test(q)) return PRICE_REPLY;
   if (SERVICES_RE.test(q)) return SERVICES_REPLY;
-  // A longer, specific question ("can I bring my kid on Saturday?") gets a
-  // tailored answer from the model instead of a generic fixed list.
-  if (q.split(' ').length > 7) return null;
+  // A real question ("what is the name of this app?", "can I bring my kid
+  // on Saturday?") gets a tailored answer from the model; only short,
+  // keyword-style messages ("clinic hours?", "contact") get a fixed list.
+  if (q.split(' ').length > 4) return null;
   if (CONTACT_RE.test(q)) return CONTACT_REPLY;
   if (APP_NAV_RE.test(q) && !BOOKING_RE.test(q)) return APP_NAV_REPLY;
   if (HOURS_RE.test(q) && !BOOKING_RE.test(q)) return HOURS_REPLY;
@@ -381,4 +385,4 @@ export function fixedInScopeReply(text) {
 
 // Final check on any model-written reply: if it drifted into medical
 // content, schedules, or advice, it is replaced with the blocked reply.
-export const MEDICAL_OUTPUT_RE = /\b(day\s*0|day\s*3|day\s*7|day\s*14|day\s*28|regimen|wound|rabies|vaccinat\w*\s+(schedule|course|series)|dose\s+schedule|immunoglobulin|tetanus|category\s*(i{1,3}|[123])|symptom|fever|treatment|medicine|medication|first\s*aid|emergency|nearest\s+(hospital|animal\s+bite|abtc|er)|consult\s+a\s+(doctor|physician))\b/i;
+export const MEDICAL_OUTPUT_RE = /\b(day\s*0|day\s*3|day\s*7|day\s*14|day\s*28|regimen|wound|vaccinat\w*\s+(schedule|course|series)|dose\s+schedule|symptom|fever|medicine|medication|first\s*aid|emergency|nearest\s+(hospital|animal\s+bite|abtc|er)|consult\s+a\s+(doctor|physician)|you\s+(should|need\s+to|must)\s+(get|take|receive)|risk\s+of\s+rabies)\b/i;

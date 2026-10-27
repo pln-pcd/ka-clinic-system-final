@@ -4,9 +4,9 @@ These rules come from the thesis ethics approval and apply to the whole system d
 
 ## Chatbot (KAI)
 
-**Allowed:** general clinic information (services by name, location, phone, email), office hours (walk-in Monday–Friday, appointments Saturday–Sunday, 8 AM–5 PM, lunch 12–1), appointment procedures (how to book or cancel in the app), and app navigation.
+**Allowed:** general clinic information (services by name, location, phone, email), office hours (walk-in Monday–Friday, appointments Saturday–Sunday, 8 AM–5 PM, lunch 12–1), appointment procedures (how to book or cancel in the app), app navigation, and the clinic's listed rates (quoted, never as advice on which service is needed). Names and other personal details typed in the chat are never used or repeated.
 
-**Not allowed:** diagnosis, treatment, wound care, rabies-risk assessment, vaccine recommendations, PEP schedules or regimens, medication advice, emergency advice, prices, and the patient's own dates, dose counts or treatment status.
+**Not allowed:** diagnosis, treatment, wound care, rabies-risk assessment, vaccine recommendations, PEP schedules or regimens, medication advice, emergency advice, and the patient's own dates, dose counts or treatment status.
 
 How it is enforced:
 
