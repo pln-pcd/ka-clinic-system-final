@@ -1258,33 +1258,6 @@ export function EditPatientModal({ patient, onClose, onSave, inventoryItems = []
                   </div>
                 </div>
 
-                {/* Info about the chosen service: only once one is picked. */}
-                {form.service && form.service !== 'PrEP' && (() => {
-                  const sel = SERVICE_TYPES.find(s => s.key === form.service);
-                  return sel && (
-                    <div className="bg-indigo-50/70 border border-indigo-200/80 rounded-xl p-3 text-xs text-indigo-900 mt-2">
-                      <p className="font-bold flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-[#3B50DF]" />
-                        {sel.label} · {sel.desc}
-                      </p>
-                      <p className="mt-1 text-slate-600 font-normal leading-relaxed">{sel.when} {sel.schedule}.</p>
-                    </div>
-                  );
-                })()}
-
-                {/* PrEP Information Notice */}
-                {form.service === 'PrEP' && (
-                  <div className="bg-indigo-50/70 border border-indigo-200/80 rounded-xl p-3 text-xs text-indigo-900 mt-2">
-                    <p className="font-bold flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-[#3B50DF]" />
-                      Pre-Exposure Prophylaxis (PrEP)
-                    </p>
-                    <p className="mt-1 text-slate-600 font-normal leading-relaxed">
-                      Preventive rabies immunization schedule before exposure (2 doses: Days 0 and 7). No animal bite exposure details required.
-                    </p>
-                  </div>
-                )}
-
                 {/* PEP Exposure Details */}
                 {isPep && (
                   <div className="pt-2 border-t border-slate-200/70 space-y-3">

@@ -672,7 +672,17 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
 
   // Memoized (declared above the `if (selected)` early return, like every hook): recomputed only when the records, filters, search or sort change.
   const todayIso = getTodayDateString();
-  const processedPatients = useMemo(() => patients
+  const processedPatients = useMemo(() => {
+  // 1 when a record has a dose past its date and not given (worked out once per record).
+  const overdueCache = new Map();
+  const isOverdueRecord = p => {
+    if (!overdueCache.has(p)) {
+      const live = derivePatientStatus(p);
+      overdueCache.set(p, live !== 'completed' && (live === 'overdue' || p.status === 'overdue' || buildDoses(p).some(d => d.status === 'miss')) ? 1 : 0);
+    }
+    return overdueCache.get(p);
+  };
+  return patients
     .filter(p => {
       // Completed records stay here until the nightly sweep archives them a
       // year after completion (or after their latest restore). Archived
@@ -693,7 +703,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
       // Same rule as the "Restored" note (lib/patientArchive.js).
       if (filter === 'restored') return showsRestoredLabel(p);
       const liveStatus = derivePatientStatus(p);
-      const isOverdue = liveStatus !== 'completed' && (liveStatus === 'overdue' || p.status === 'overdue' || buildDoses(p).some(d => d.status === 'miss'));
+      const isOverdue = isOverdueRecord(p) === 1;
       if (filter === 'ongoing') return liveStatus !== 'completed' && !isOverdue;
       if (filter === 'overdue') return isOverdue;
       if (filter === 'completed') return liveStatus === 'completed';
@@ -720,6 +730,10 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
       );
     })
     .sort((a, b) => {
+      // Overdue records always come first; the chosen sort applies within
+      // the overdue group and within the rest.
+      const od = isOverdueRecord(b) - isOverdueRecord(a);
+      if (od) return od;
       if (sortBy === 'newest') return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0) || (b.id || '').localeCompare(a.id || '');
       if (sortBy === 'oldest') return (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0) || (a.id || '').localeCompare(b.id || '');
       if (sortBy === 'completed_recent') {
@@ -737,7 +751,8 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
       if (sortBy === 'name_asc') return (a.name || '').localeCompare(b.name || '');
       if (sortBy === 'mrn_asc') return (a.id || '').localeCompare(b.id || '');
       return 0;
-    }), [patients, yearFilter, filter, debouncedSearch, sortBy, todayIso]);
+    });
+  }, [patients, yearFilter, filter, debouncedSearch, sortBy, todayIso]);
 
   if (selected) {
     const livePatient = patients.find(p => p.firestoreId === selected.firestoreId) || selected;

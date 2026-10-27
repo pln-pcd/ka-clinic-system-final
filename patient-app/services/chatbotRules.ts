@@ -297,21 +297,32 @@ export const VAGUE_REPLY =
 // "Carl", "my name is Carl", "ako si Carl": KAI does not use or keep names
 // or other personal details, and never repeats them back.
 export const INTRO_REPLY =
-  "I can't respond to names or other personal details, so please don't share them here. " +
-  'I can help with clinic hours, services and prices, booking an appointment, and using the app.';
+  "For your privacy, I don't use names or other personal details in this chat. " +
+  'How can I help you today? I can answer questions about clinic hours, services and prices, booking an appointment, and using the app.';
 const INTRO_RE = /^(my\s+name\s+is|my\s+name'?s|i\s+am|i'?m|im|this\s+is|call\s+me|it'?s\s+me|ako\s+(po\s+)?si|ako\s+(po\s+)?ay|ang\s+pangalan\s+ko\s+(ay\s+)?)\s+\S+/;
 export function vagueReply(text: string): string {
   const q = norm(text);
   // An introduction, or one or two bare words that are not a known topic
   // (most often a name typed on its own).
   if (INTRO_RE.test(q) || /^[a-zñ.'-]+(\s+[a-zñ.'-]+)?[\s!.]*$/.test(q) && !GREETING_RE.test(q) && !/^(help|hmm+|huh|what|ano|yes|no|oo|hindi|test|po|ok)\b/.test(q)) return INTRO_REPLY;
+  if (GREETING_RE.test(q)) return GREETING_REPLY;
   return VAGUE_REPLY;
 }
-/** A vague message short enough to answer without the model. */
+// A message that asks something, in English or Filipino.
+export const QUESTION_WORD_RE = /^(who|whom|whose|what|what's|whats|which|why|how|when|where|can|could|do|does|did|is|are|was|will|would|should|may|ano|anong|sino|paano|pano|bakit|saan|kailan|ilan|pwede|puwede|meron|mayroon)\b/;
+/** A vague message short enough to answer without the model (not a question). */
 export function isShortVague(text: string): boolean {
   const q = norm(text);
-  return INTRO_RE.test(q) || q.split(' ').filter(Boolean).length <= 4;
+  return INTRO_RE.test(q) || (!QUESTION_WORD_RE.test(q) && q.split(' ').filter(Boolean).length <= 4);
 }
+
+// A greeting on its own: a friendly hello and what KAI can help with.
+export const GREETING_REPLY =
+  "Hello! I'm KAI, K&A Clinic's virtual assistant. How can I help you today? I can help with:\n" +
+  '• Clinic hours and walk-in days\n' +
+  '• Services and prices\n' +
+  '• Booking or cancelling an appointment\n' +
+  '• Finding something in the app';
 
 export const THANKS_REPLY = "You're welcome. Is there anything else about the clinic or the app I can help with?";
 
@@ -379,10 +390,10 @@ export function fixedInScopeReply(text: string): string | null {
   if (THANKS_RE.test(q)) return THANKS_REPLY;
   if (PRICE_RE.test(q)) return PRICE_REPLY;
   if (SERVICES_RE.test(q)) return SERVICES_REPLY;
-  // A real question ("what is the name of this app?", "can I bring my kid
-  // on Saturday?") gets a tailored answer from the model; only short,
-  // keyword-style messages ("clinic hours?", "contact") get a fixed list.
-  if (q.split(' ').length > 4) return null;
+  // A real question ("who created this app?", "what time do you open?")
+  // gets a tailored answer from the model; only short, keyword-style
+  // messages ("clinic hours?", "contact") get a fixed list.
+  if (QUESTION_WORD_RE.test(q) || q.split(' ').length > 4) return null;
   if (CONTACT_RE.test(q)) return CONTACT_REPLY;
   if (APP_NAV_RE.test(q) && !BOOKING_RE.test(q)) return APP_NAV_REPLY;
   if (HOURS_RE.test(q) && !BOOKING_RE.test(q)) return HOURS_REPLY;
