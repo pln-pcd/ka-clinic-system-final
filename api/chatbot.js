@@ -160,14 +160,22 @@ function extractDate(text, todayIso) {
   }
   if ((m = q.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(20\d\d))?\b/))) return withInferredYear(+m[1], +m[2], m[3], todayIso);
   if (/\b(day\s+after\s+tomorrow|samakalawa)\b/.test(q)) return addDaysIso(todayIso, 2);
-  if (/\b(tomorrow|bukas)\b/.test(q)) return addDaysIso(todayIso, 1);
-  if (/\b(today|tonight|ngayon)\b/.test(q)) return todayIso;
+  // A named day wins over "bukas", which in Filipino also means "open"
+  // ("anong oras kayo bukas sa sabado?" asks about Saturday).
+  const fil = q.match(/\b(linggo|lunes|martes|miyerkules|huwebes|biyernes|sabado)\b/);
+  if (fil) {
+    const target = ['linggo', 'lunes', 'martes', 'miyerkules', 'huwebes', 'biyernes', 'sabado'].indexOf(fil[1]);
+    return addDaysIso(todayIso, (target - isoDow(todayIso) + 7) % 7);
+  }
   if ((m = q.match(WEEKDAY_RE))) {
     const target = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'].indexOf(m[2].slice(0, 3));
     let diff = (target - isoDow(todayIso) + 7) % 7;
     if (m[1] && /next/.test(m[1]) && diff === 0) diff = 7;
     return addDaysIso(todayIso, diff);
   }
+  // "bukas" is tomorrow unless it is used as "open" (bukas ba / bukas kayo / bukas ang clinic).
+  if (/\btomorrow\b/.test(q) || (/\bbukas\b/.test(q) && !/\b(bukas\s+(ba|pa|na|kayo|po|ang|ng|sa)|(kayo|ba|clinic|oras)\s+(ay\s+)?bukas)\b/.test(q))) return addDaysIso(todayIso, 1);
+  if (/\b(today|tonight|ngayon)\b/.test(q)) return todayIso;
   return null;
 }
 
