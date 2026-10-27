@@ -270,7 +270,7 @@ export const PERSONAL_NAV_REPLY_PUBLIC =
 
 export const OUT_OF_SCOPE_REPLY =
   "That's outside what I can help with. I can help with clinic information, office hours, contact details, " +
-  'appointments, and using the app.';
+  'appointments, and using the app. For other questions, you can talk to the clinic staff.';
 
 export const PERSONAL_INFO_REPLY_APP =
   "I can't look up your personal details. I can help with clinic information, office hours, contact details, appointments, and using the app.\n\n" +
@@ -284,7 +284,28 @@ export const VAGUE_REPLY =
   '• Clinic hours and walk-in days\n' +
   '• Booking or cancelling an appointment\n' +
   '• Clinic location and contact details\n' +
-  '• Finding something in the app';
+  '• Finding something in the app\n\n' +
+  'For other questions, you can talk to the clinic staff.';
+
+// "Carl", "my name is Carl", "ako si Carl": KAI does not use or keep names
+// or other personal details, and never repeats them back.
+export const INTRO_REPLY =
+  "Thanks. For your privacy, please don't share personal details such as your name in this chat; I don't keep or use them. " +
+  'I can help with clinic hours, services, booking an appointment, and using the app. ' +
+  'For other questions, you can talk to the clinic staff.';
+const INTRO_RE = /^(my\s+name\s+is|my\s+name'?s|i\s+am|i'?m|im|this\s+is|call\s+me|it'?s\s+me|ako\s+(po\s+)?si|ako\s+(po\s+)?ay|ang\s+pangalan\s+ko\s+(ay\s+)?)\s+\S+/;
+export function vagueReply(text) {
+  const q = norm(text);
+  // An introduction, or one or two bare words that are not a known topic
+  // (most often a name typed on its own).
+  if (INTRO_RE.test(q) || /^[a-zñ.'-]+(\s+[a-zñ.'-]+)?[\s!.]*$/.test(q) && !GREETING_RE.test(q) && !/^(help|hmm+|huh|what|ano|yes|no|oo|hindi|test|po|ok)\b/.test(q)) return INTRO_REPLY;
+  return VAGUE_REPLY;
+}
+/** A vague message short enough to answer without the model. */
+export function isShortVague(text) {
+  const q = norm(text);
+  return INTRO_RE.test(q) || q.split(' ').filter(Boolean).length <= 4;
+}
 
 export const THANKS_REPLY = "You're welcome. Is there anything else about the clinic or the app I can help with?";
 
@@ -303,27 +324,16 @@ export const CONTACT_REPLY =
   '• Hours: Monday to Friday walk-in, Saturday and Sunday by appointment, 8:00 AM – 5:00 PM (lunch 12:00 – 1:00 PM)';
 
 export const SERVICES_REPLY =
-  '🏥 **Vaccines & Services at K&A Clinic**\n\n' +
-  '💉 **Vaccines Offered:**\n' +
-  '• Anti-Rabies Vaccines (Verorab, Speeda, Rabipur)\n' +
-  '• Rabies Immunoglobulin (RIG / ERIG)\n' +
-  '• Anti-Tetanus Vaccines (Tetanus Toxoid, ATS)\n' +
-  '• Pneumococcal (Pneumonia) Vaccine\n\n' +
-  '🩺 **Clinical Services:**\n' +
-  '• Post-Exposure Prophylaxis (PEP) after animal bites & scratches\n' +
-  '• Pre-Exposure Prophylaxis (PrEP) preventive immunization\n' +
-  '• Anti-Tetanus prophylaxis & immunization\n' +
-  '• Rabies Immunoglobulin (RIG) administration\n' +
-  '• Animal bite consultation & exposure assessment\n\n' +
-  `For questions or consultation, contact the clinic at ${CLINIC.phone} or ${CLINIC.email}.`;
+  '🏥 **Services at K&A Clinic**\n' +
+  '• Post-Exposure Prophylaxis (PEP)\n' +
+  '• Pre-Exposure Prophylaxis (PrEP)\n' +
+  '• Pneumonia (pneumococcal) vaccine\n' +
+  '• Anti-tetanus vaccine\n\n' +
+  'To book a visit, open the Appointments tab. For other questions, you can talk to the clinic staff.';
 
-// Vaccine & treatment pricing at K&A Clinic
+// Prices are not given in the study (docs/STUDY_MODE.md): the staff give them.
 export const PRICE_REPLY =
-  '💉 **K&A Clinic Vaccine Pricing**\n' +
-  '• PEP Category 2 (with Anti-Tetanus): ₱1,000 for the 1st session, and ₱800 for each of the next 3 sessions\n' +
-  '• PEP Category 3: ₱4,500 for 4 sessions (complete package includes Anti-Tetanus and IRIG)\n' +
-  '• Pneumonia Vaccine: ₱4,500\n\n' +
-  `For other questions, contact the clinic front desk at ${CLINIC.phone} or ${CLINIC.email}.`;
+  "I can't give prices here. Please talk to the clinic staff for the current rates.";
 
 // Matches the app's booking flow (patient-app/app/(tabs)/appt.tsx): the
 // Appointments tab, the Book Appointment calendar (weekends only), the
@@ -359,6 +369,9 @@ export function fixedInScopeReply(text) {
   if (THANKS_RE.test(q)) return THANKS_REPLY;
   if (PRICE_RE.test(q)) return PRICE_REPLY;
   if (SERVICES_RE.test(q)) return SERVICES_REPLY;
+  // A longer, specific question ("can I bring my kid on Saturday?") gets a
+  // tailored answer from the model instead of a generic fixed list.
+  if (q.split(' ').length > 7) return null;
   if (CONTACT_RE.test(q)) return CONTACT_REPLY;
   if (APP_NAV_RE.test(q) && !BOOKING_RE.test(q)) return APP_NAV_REPLY;
   if (HOURS_RE.test(q) && !BOOKING_RE.test(q)) return HOURS_REPLY;

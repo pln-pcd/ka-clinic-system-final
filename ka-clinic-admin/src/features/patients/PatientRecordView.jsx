@@ -258,23 +258,6 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
             Export Patient Record
           </button>
-          {/* Add Another Service is only shown for records that are active or already restored, and whose series is completed */}
-          {!patient.isArchived && isCompletedOrArchived && (
-            <button
-              className="px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 cursor-pointer flex items-center gap-1.5 transition-colors"
-              onClick={() => {
-                if (onAddAnotherService) {
-                  onAddAnotherService(patient);
-                } else {
-                  window.dispatchEvent(new CustomEvent('open-add-patient-modal', { detail: patient }));
-                }
-              }}
-              title="Add another vaccination service for this patient (reuses MRN)"
-            >
-              <Plus size={14} />
-              Add Another Service
-            </button>
-          )}
           {readOnly ? (
             onRestore && (
               <button
@@ -295,6 +278,23 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
               Edit Record
             </button>
           ) : null}
+          {/* Add Another Service is only shown for records that are active or already restored, and whose series is completed */}
+          {!patient.isArchived && isCompletedOrArchived && (
+            <button
+              className="px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 cursor-pointer flex items-center gap-1.5 transition-colors"
+              onClick={() => {
+                if (onAddAnotherService) {
+                  onAddAnotherService(patient);
+                } else {
+                  window.dispatchEvent(new CustomEvent('open-add-patient-modal', { detail: patient }));
+                }
+              }}
+              title="Add another vaccination service for this patient (reuses MRN)"
+            >
+              <Plus size={14} />
+              Add Another Service
+            </button>
+          )}
         </div>
       </div>
 

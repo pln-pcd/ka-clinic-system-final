@@ -18,6 +18,8 @@ import {
   VAGUE_REPLY,
   classifyMessage,
   fixedInScopeReply,
+  isShortVague,
+  vagueReply,
 } from './_lib/chatbotRules.js';
 
 const APP_GUIDE_TEXT = fs.readFileSync(new URL('./_lib/appGuide.md', import.meta.url), 'utf8');
@@ -49,12 +51,12 @@ You are KAI, the official virtual assistant of ${CLINIC.name} (${CLINIC.address}
 OFFICIAL CLINIC & PATIENT APP KNOWLEDGE BASE:
 ${APP_GUIDE_TEXT}
 
-VACCINE & TREATMENT PRICING:
-• PEP Category 2 (with Anti-Tetanus): ₱1,000 for 1st session, ₱800 for each of next 3 sessions
-• PEP Category 3 (with Anti-Tetanus and IRIG): ₱4,500 complete package for 4 sessions
-• Pneumonia Vaccine: ₱4,500 single-dose
+SERVICES OFFERED (name only these, never describe them clinically): Post-Exposure Prophylaxis (PEP), Pre-Exposure Prophylaxis (PrEP), Pneumonia (pneumococcal) vaccine, Anti-tetanus vaccine.
 
 STRICT CLINICAL & SAFETY RESTRICTIONS:
+0. PRICES: Never state any price, fee or cost. Say the clinic staff can give the current rates.
+0b. NAMES & PERSONAL DETAILS: Never address the user by any name and never repeat a name, number, address or other personal detail the user types. A single word or a name on its own is NOT the user's name; do not treat it as one. If the user shares personal details, ask them not to share personal details in this chat.
+0c. ANYTHING YOU CANNOT ANSWER from the knowledge base: say so in one sentence and add that they can talk to the clinic staff. Never guess or invent facts.
 1. ZERO MEDICAL ADVICE: You must NEVER provide medical advice, diagnosis, triage, wound care, first aid, rabies-risk or exposure-category assessment, medication/drug advice, emergency advice, or PEP/PrEP regimens (no day numbers, no dose counts). If a medical question slips past the classifier, decline politely.
 2. PATIENT PRIVACY: You cannot look up individual patient records, personal appointment dates, or personal dose schedules. Direct patients to their vaccination card and dose timeline on the Home screen.
 3. OUT-OF-SCOPE TOPICS: For anything unrelated to K&A Clinic or the patient app (such as science, history, coding, homework, sports, politics, or general trivia), politely decline in ONE short sentence and redirect back to K&A Clinic matters. Do not lecture.
@@ -445,6 +447,12 @@ function isRateLimited(ip, now = Date.now()) {
 }
 
 export default async function handler(req, res) {
+  // Warm-up ping: the app calls this when the chat opens, so the first real
+  // message does not wait for a cold start.
+  if (req.method === 'GET' && req.query?.warm !== undefined) {
+    res.status(204).end();
+    return;
+  }
   if (req.method !== 'POST') {
     res.status(405).json({ success: false, error: 'Method not allowed.' });
     return;
@@ -500,21 +508,23 @@ export default async function handler(req, res) {
       send(res, { text: OUT_OF_SCOPE_REPLY, source: 'classifier', category, needsEscalation: false });
       return;
     }
-    // Only return vague boilerplate for punctuation-only or empty/help tokens;
-    // let conversational, multi-turn, and in-depth clinic questions reach the model.
-    if (category === 'vague' && /^[\s.?!,;:-]*$|^(\?|hmm|help)$/i.test(prompt.trim())) {
+    // A short vague message, a bare name or an introduction gets a fixed
+    // reply (names are never passed on or repeated); longer conversational
+    // questions still reach the model.
+    if (category === 'vague' && isShortVague(prompt)) {
       const duration = Date.now() - startTime;
       console.log(`[chatbot] source=classifier category=vague duration=${duration}ms`);
-      send(res, { text: VAGUE_REPLY, source: 'classifier', category, needsEscalation: false });
+      send(res, { text: vagueReply(prompt), source: 'classifier', category, needsEscalation: false });
       return;
     }
 
-    // 2. Deterministic replies for pricing to guarantee exact fees without hallucination
-    const q = prompt.toLowerCase().trim();
-    if (PRICE_RE.test(q)) {
+    // 2. Fixed answers for allowed topics (hours, contact, services, prices,
+    //    booking steps, app help): instant, and never reworded by the model.
+    const fixed = category === 'in_scope' ? fixedInScopeReply(prompt) : null;
+    if (fixed) {
       const duration = Date.now() - startTime;
       console.log(`[chatbot] source=fixed category=in_scope duration=${duration}ms`);
-      send(res, { text: PRICE_REPLY, source: 'fixed', category: 'in_scope', needsEscalation: false });
+      send(res, { text: fixed, source: 'fixed', category: 'in_scope', needsEscalation: fixed === PRICE_REPLY });
       return;
     }
 

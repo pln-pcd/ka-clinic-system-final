@@ -30,7 +30,6 @@ import {
 } from 'lucide-react';
 import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { auth, db, listen } from '../../lib/firebase';
-import { useIncidents } from '../incidents/useIncidents';
 import { authedPostJson, useAuth } from '../../lib/adminSession';
 import Avatar from '../../components/Avatar';
 import { useAdminAvatar } from '../../lib/adminAvatars';
@@ -360,7 +359,6 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [allAppointments, setAllAppointments] = useState([]);
   const [inventoryList, setInventoryList] = useState([]);
-  const { incidents: incidentList, loading: incidentsLoading } = useIncidents();
   const closuresLive = useLiveCollection('scheduleClosures');
 
   const [notifOpen, setNotifOpen] = useState(false);
@@ -1599,7 +1597,7 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
               </div>
             )}
             {activePage === 'inventory'    && <div className="page-scroll"><VaccineInventoryPage/></div>}
-            {activePage === 'incidents'    && <div className="page-scroll"><IncidentMapPage incidents={incidentList} loading={incidentsLoading}/></div>}
+            {activePage === 'incidents'    && <div className="page-scroll"><IncidentMapPage /></div>}
             {activePage === 'messages'     && <div className="page-scroll"><MessagesPage/></div>}
             {activePage === 'archive'      && <div className="page-scroll"><ArchivePage/></div>}
             {activePage === 'settings'     && <div className="page-scroll"><SettingsPage onLogout={onLogout}/></div>}

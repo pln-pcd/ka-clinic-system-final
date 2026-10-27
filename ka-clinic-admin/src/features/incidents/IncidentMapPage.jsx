@@ -1,16 +1,16 @@
 // ka-clinic-admin/src/features/incidents/IncidentMapPage.jsx
-// Incident Map, demo only (thesis ethics rules, docs/STUDY_MODE.md).
-//
-// Shows ONLY simulated, non-identifiable test incidents (isSimulated: true,
-// see lib/simulatedIncidents.js): no addresses, barangays, zones, patients
-// or coordinates appear anywhere on this page (the barangay filter places
-// each pin by its coordinates on the page; nothing is stored), a banner says the data is simulated, and the map area
-// carries a "SIMULATED DATA" watermark so any screenshot is marked. Only
-// signed-in admins reach it (dashboard route + firestore.rules).
-import { CheckCircle2, ChevronDown, Layers, MapPin, ShieldAlert } from 'lucide-react';
+// Incident Map. One pin per open PEP (bite / scratch) case in the patient
+// records, placed at the record's barangay (or Poblacion zone) point, never a
+// house. Pins are worked out on this page from the live records and nothing
+// is stored: a case that is completed or archived simply drops off the map,
+// with no notice sent. The records are simulated test data (study rules), and
+// the page says so. The map is locked to Libon's municipal boundary. Only
+// signed-in staff reach it (dashboard route + firestore.rules).
+import { CheckCircle2, ChevronDown, Info, Layers, MapPin, ShieldAlert } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { SIM_BOUNDS, simulatedIncidentLabel, simulatedMonthLabel } from '../../lib/simulatedIncidents';
-import { LIBON_BARANGAYS, LIBON_BARANGAY_COORDS } from '../../lib/libonGeo';
+import { useLiveCollection } from '../../lib/liveStore';
+import { serviceKey } from '../../lib/serviceFields';
+import { LIBON_BARANGAYS, LIBON_BOUNDARY, POBLACION, geocodeLibonAddress, insideLibon, knownBarangay, poblacionZone, recordBarangay } from '../../lib/libonGeo';
 
 import { SkeletonRows } from '../../components/Skeleton';
 // Severity colors mirror the Category II/III convention used across the
@@ -21,22 +21,45 @@ const CATEGORY_COLOR = { 'Category II': '#EA7A0C', 'Category III': '#D81B25' };
 // Anything else is grey and not in the legend.
 const UNKNOWN_COLOR = '#64748B';
 
-// Barangay filter: Libon's barangays (Poblacion as one). A pin stores no
-// barangay; the page places it in the barangay whose map point is nearest.
+// Barangay filter: Libon's barangays (Poblacion as one).
 const MAP_BARANGAYS = LIBON_BARANGAYS;
-const nearestBarangay = (lat, lng) => {
-  if (!lat || !lng) return '';
-  const k = Math.cos((lat * Math.PI) / 180); // degrees of longitude are shorter
-  let best = '', bestD = Infinity;
-  for (const b of MAP_BARANGAYS) {
-    const c = LIBON_BARANGAY_COORDS[b];
-    if (!c) continue;
-    const d = (c.lat - lat) ** 2 + ((c.lng - lng) * k) ** 2;
-    if (d < bestD) { bestD = d; best = b; }
-  }
-  return best;
-};
 const categoryColor = (cat) => CATEGORY_COLOR[cat] || UNKNOWN_COLOR;
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const monthLabel = (ymd) => {
+  const m = /^(\d{4})-(\d{2})/.exec(String(ymd || ''));
+  return m ? `${MONTHS[Number(m[2]) - 1]} ${m[1]}` : '';
+};
+const isDoneDose = d => d?.done === true || ['done', 'completed'].includes(String(d?.s || d?.status || '').toLowerCase());
+// A case still on the map: PEP, not archived, not completed (every dose given).
+const isOpenCase = r => serviceKey(r.service) === 'PEP' && !r.isArchived && r.status !== 'completed'
+  && !(Array.isArray(r.doses) && r.doses.length > 0 && r.doses.every(isDoneDose));
+
+/** Pins for the open PEP cases, oldest first numbered from 1; no names or MRNs. */
+function incidentsFromRecords(records) {
+  return records
+    .filter(isOpenCase)
+    .map(r => {
+      const barangay = knownBarangay(recordBarangay(r));
+      if (!barangay) return null; // not a Libon barangay: cannot be placed
+      const zone = barangay === POBLACION ? (poblacionZone(r.zone) || poblacionZone(r.barangay)) : (r.zone || '');
+      const { lat, lng } = geocodeLibonAddress(barangay, zone || r.firestoreId);
+      if (!insideLibon(lat, lng)) return null;
+      const animal = String(r.animal || 'Animal').trim();
+      const how = String(r.typeOfExposure || 'Bite').trim().toLowerCase();
+      const cat = String(r.cat || '').replace('Category ', '').trim();
+      return {
+        id: r.firestoreId || r.id, lat, lng, barangay,
+        type: `${animal.charAt(0).toUpperCase()}${animal.slice(1).toLowerCase()} ${how}`,
+        category: cat ? `Category ${cat}` : '',
+        date: String(r.date || '').slice(0, 10),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.date.localeCompare(b.date) || String(a.id).localeCompare(String(b.id)))
+    .map((inc, i) => ({ ...inc, no: i + 1 }))
+    .reverse();
+}
 
 // Cases closer than about 150 m would draw on top of each other, so each
 // group is fanned out on a small ring around its first case. Every case keeps
@@ -60,13 +83,14 @@ const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<'
 const popupHtml = (inc, color) => `
   <div class="kna-pop">
     <div class="kna-pop-eyebrow">Exposure Incident</div>
-    <div class="kna-pop-loc">Incident #${esc(inc.simNo ?? '?')}</div>
+    <div class="kna-pop-loc">Incident #${esc(inc.no)}</div>
     <div class="kna-pop-grid">
       <div class="kna-pop-cell"><span>Type</span><b>${esc(inc.type || 'Animal bite')}</b></div>
       <div class="kna-pop-cell"><span>Category</span><b style="color:${color}"><i style="background:${color}"></i>${esc(inc.category || '—')}</b></div>
-      <div class="kna-pop-cell kna-pop-wide"><span>Month</span><b>${esc(simulatedMonthLabel(inc.month) || '—')}</b></div>
+      <div class="kna-pop-cell"><span>Barangay</span><b>${esc(inc.barangay)}</b></div>
+      <div class="kna-pop-cell"><span>Month</span><b>${esc(monthLabel(inc.date) || '—')}</b></div>
     </div>
-    <div class="kna-pop-anon">Barangay-level surveillance point</div>
+    <div class="kna-pop-anon">Simulated data · barangay-level point</div>
   </div>`;
 
 // Crisp SVG teardrop, 28×36, tip at the bottom centre (the marker anchor),
@@ -109,9 +133,12 @@ const MAP_CSS = `
   .kna-map .kna-pin-tip { font: 600 11px/1.3 'Plus Jakarta Sans', system-ui, sans-serif; color: #0F172A; border-radius: 8px; border: 1px solid #E2E8F0; box-shadow: 0 4px 12px rgba(15,23,42,.18); padding: 4px 8px; }
 `;
 
-// `incidents` and `loading` come from the dashboard's shared listener
-// (useIncidents), which the global search reads too.
-export default function IncidentMapPage({ incidents, loading }) {
+// Pins come from the live patient records (the same shared listener the
+// Patients page uses), not from stored incident documents.
+export default function IncidentMapPage() {
+  const vaxLive = useLiveCollection('vaccinations');
+  const loading = !vaxLive.loaded;
+  const incidents = useMemo(() => incidentsFromRecords(vaxLive.rows || []), [vaxLive]);
   const mapRef = useRef(null);
   const leafletMapRef = useRef(null);
   const layerGroupRef = useRef([]);
@@ -153,8 +180,8 @@ export default function IncidentMapPage({ incidents, loading }) {
     const L = window.L;
     if (!L) return;
 
-    // The box the simulated pins are spread over.
-    const bounds = L.latLngBounds([SIM_BOUNDS.south, SIM_BOUNDS.west], [SIM_BOUNDS.north, SIM_BOUNDS.east]);
+    // Libon's municipal boundary.
+    const bounds = L.latLngBounds(LIBON_BOUNDARY);
 
     // Locked to Libon: the view can never leave the area (a small margin
     // around the pins, so an edge pin's popup still fits) and cannot zoom out
@@ -187,6 +214,13 @@ export default function IncidentMapPage({ incidents, loading }) {
       maxZoom: 19,
     }).addTo(map);
 
+    // Everything outside Libon is dimmed (a world-sized shape with Libon cut
+    // out of it), and the boundary is outlined.
+    L.polygon([[[-90, -180], [-90, 180], [90, 180], [90, -180]], LIBON_BOUNDARY], {
+      stroke: false, fillColor: '#0B1220', fillOpacity: 0.62, interactive: false,
+    }).addTo(map);
+    L.polygon(LIBON_BOUNDARY, { color: '#FFFFFF', weight: 2, opacity: 0.9, fill: false, dashArray: '6 4', interactive: false }).addTo(map);
+
     leafletMapRef.current = map;
 
     setTimeout(() => {
@@ -194,12 +228,8 @@ export default function IncidentMapPage({ incidents, loading }) {
     }, 200);
   }, [mapLoaded]);
 
-  // Simulated incidents only (useIncidents already queries for them; this is
-  // a second guard), newest month first. Old Category I pins are left out.
-  const shownIncidents = useMemo(() => incidents
-    .filter(inc => inc.isSimulated === true && inc.mapHidden !== true && inc.category !== 'Category I')
-    .sort((a, b) => String(b.month || '').localeCompare(String(a.month || '')) || (b.simNo ?? 0) - (a.simNo ?? 0)),
-  [incidents]);
+  // Newest case first. Old Category I cases are left out.
+  const shownIncidents = useMemo(() => incidents.filter(inc => inc.category !== 'Category I'), [incidents]);
 
   // Barangay dropdown, applied to both the map and the list.
   const [barangayFilter, setBarangayFilter] = useState('all');
@@ -210,16 +240,11 @@ export default function IncidentMapPage({ incidents, loading }) {
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
   }, []);
-  const barangayOf = useMemo(() => {
-    const m = new Map();
-    shownIncidents.forEach(inc => m.set(inc.id, nearestBarangay(inc.lat, inc.lng)));
-    return m;
-  }, [shownIncidents]);
   const activeFilters = barangayFilter === 'all' ? 0 : 1;
   const filteredIncidents = useMemo(() => (barangayFilter === 'all'
     ? shownIncidents
-    : shownIncidents.filter(inc => barangayOf.get(inc.id) === barangayFilter)),
-  [shownIncidents, barangayFilter, barangayOf]);
+    : shownIncidents.filter(inc => inc.barangay === barangayFilter)),
+  [shownIncidents, barangayFilter]);
 
   // ── Memoize Leaflet Incident Marker Data ─────────────────────
   const memoizedIncidentLayers = useMemo(() => {
@@ -227,7 +252,7 @@ export default function IncidentMapPage({ incidents, loading }) {
       const { lat, lng } = inc;
       if (!lat || !lng) return null;
       const color = categoryColor(inc.category);
-      return { id: inc.id, lat, lng, color, category: inc.category, popup: popupHtml(inc, color), tooltip: `Incident #${inc.simNo ?? '?'} · ${inc.category || ''}` };
+      return { id: inc.id, lat, lng, color, category: inc.category, popup: popupHtml(inc, color), tooltip: `Incident #${inc.no} · ${inc.category || ''}` };
     }).filter(Boolean);
     return spreadOverlapping(placed);
   }, [filteredIncidents]);
@@ -361,6 +386,15 @@ export default function IncidentMapPage({ incidents, loading }) {
         </div>
       </div>
 
+      {/* Simulated-data note */}
+      <div className="flex items-start gap-2 px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-[11.5px] text-slate-600">
+        <Info size={14} className="text-slate-500 mt-px shrink-0" />
+        <span>
+          <strong className="font-semibold text-slate-800">Simulated data.</strong> Pins come from simulated test patient records for demonstration only, not real cases.
+          Each pin marks an open PEP case at its barangay, not a house, and is removed once the case is completed.
+        </span>
+      </div>
+
       {/* ── Main Map & List Grid ── */}
       <div className="grid grid-cols-12 gap-4 flex-1 min-h-0">
 
@@ -368,6 +402,9 @@ export default function IncidentMapPage({ incidents, loading }) {
         <div className="col-span-8 bg-white rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden flex flex-col relative">
           <style>{MAP_CSS}</style>
           <div ref={mapRef} className="kna-map w-full h-full z-10" />
+          <span className="absolute top-3 right-3 z-20 pointer-events-none px-2 py-1 rounded-md bg-white/90 text-[10px] font-extrabold tracking-wider text-slate-700 shadow-sm">
+            SIMULATED DATA
+          </span>
         </div>
 
         {/* Incident List Sidebar — iOS Notes-Style List */}
@@ -401,19 +438,21 @@ export default function IncidentMapPage({ incidents, loading }) {
                   onMouseEnter={() => hoverPin(inc.id, true)}
                   onMouseLeave={() => hoverPin(inc.id, false)}
                   className={`px-4 py-3 transition-colors group cursor-pointer relative ${selectedId === inc.id ? 'bg-indigo-50/70 shadow-[inset_3px_0_0_#3B50DF]' : 'hover:bg-slate-50/90'}`}
-                  title={simulatedIncidentLabel(inc)}
+                  title={`Incident #${inc.no} · ${inc.type} · ${inc.category || '—'} · Brgy. ${inc.barangay}`}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-[13px] font-bold text-slate-900 group-hover:text-red-600 transition-colors truncate">
-                      Incident #{inc.simNo ?? '?'}
+                      Incident #{inc.no}
                     </span>
-                    <span className="text-[10px] font-normal text-slate-400 flex-shrink-0">{simulatedMonthLabel(inc.month)}</span>
+                    <span className="text-[10px] font-normal text-slate-400 flex-shrink-0">{monthLabel(inc.date)}</span>
                   </div>
                   <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 mt-1">
                     <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: catColor }} />
                     <span>{inc.type || 'Animal bite'}</span>
                     <span className="text-slate-300">•</span>
                     <span>{inc.category || '—'}</span>
+                    <span className="text-slate-300">•</span>
+                    <span className="truncate">Brgy. {inc.barangay}</span>
                   </div>
                 </div>
               );

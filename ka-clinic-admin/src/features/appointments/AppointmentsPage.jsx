@@ -968,7 +968,6 @@ const SERVICE_TYPES = [
   "Anti-Tetanus Vaccine",
   "Pneumococcal Vaccine",
   "General Consultation",
-  "Walk-in Emergency",
 ];
 
 // How a booking reached the clinic. Staff-entered bookings are 'walk-in' or
@@ -1074,16 +1073,43 @@ const monthLabel = (d) => {
 };
 
 // Add Appointment checks, shown inline under each field (FormValidation).
+// Strict: a name is letters only (with spaces, periods, hyphens,
+// apostrophes, commas), and a contact number is a PH mobile number with
+// nothing else typed in it ("09067785552w" is refused, not cleaned up).
+const NAME_MAX = 80;
+const NOTES_MAX = 300;
+const NAME_RE = /^[A-Za-zÀ-ÖØ-öø-ÿÑñ][A-Za-zÀ-ÖØ-öø-ÿÑñ .,'-]*$/;
+const PH_MOBILE_RE = /^(09\d{9}|\+639\d{9}|639\d{9})$/;
+const phoneDigits = v => String(v || '').replace(/[\s-]/g, '');
+/** 09171234567 / +639171234567 / 639171234567 → +639171234567. */
+const toE164 = v => {
+  const d = phoneDigits(v).replace(/^\+/, '');
+  return d.startsWith('09') ? `+63${d.slice(1)}` : `+${d}`;
+};
 const ADD_APPT_RULES = {
-  name: f => (f.name.trim() ? '' : 'Enter the patient name'),
-  contactNumber: f => (f.contactNumber.trim() ? '' : 'Enter a contact number'),
+  name: f => {
+    const n = f.name.trim();
+    if (!n) return 'Enter the patient name';
+    if (!NAME_RE.test(n)) return 'Use letters only (spaces, periods, hyphens and apostrophes are allowed)';
+    if ((n.match(/[A-Za-zÀ-ÖØ-öø-ÿÑñ]/g) || []).length < 2) return 'Enter the full name';
+    if (n.length > NAME_MAX) return `Keep the name under ${NAME_MAX} characters`;
+    return '';
+  },
+  contactNumber: f => {
+    const c = f.contactNumber.trim();
+    if (!c) return 'Enter a contact number';
+    if (/[^\d\s+-]/.test(c)) return 'Use numbers only, e.g. 0917 123 4567';
+    if (!PH_MOBILE_RE.test(phoneDigits(c))) return 'Enter an 11-digit PH mobile number, e.g. 0917 123 4567';
+    return '';
+  },
   date: f => (!f.date ? 'Choose a date'
     : !isWeekendDate(f.date) ? 'Choose a Saturday or Sunday'
     : f.date < getTodayDateString() ? 'Choose today or a later date' : ''),
   time: f => (f.time ? '' : 'Choose a time slot'),
   type: f => (f.type ? '' : 'Choose the purpose / service'),
+  notes: f => ((f.notes || '').trim().length > NOTES_MAX ? `Keep notes under ${NOTES_MAX} characters` : ''),
 };
-const ADD_APPT_FIELDS = ['name', 'contactNumber', 'date', 'time', 'type'];
+const ADD_APPT_FIELDS = ['name', 'contactNumber', 'date', 'time', 'type', 'notes'];
 
 const INACTIVE_STATUSES = ['cancelled', 'canceled', 'declined'];
 
@@ -1459,9 +1485,18 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
   // patient app, with the same approval notification a request gets.
   const handleSaveAdd = async () => {
     if (!addV.validate(ADD_APPT_FIELDS)) return;
+    // The slot may have been booked or closed since it was picked.
+    const closureNow = getDayClosure(addForm.date);
+    if (takenTimesOn(addForm.date).includes(addForm.time)
+      || closureNow?.type === 'day'
+      || (closureNow?.type === 'slots' && closureNow.slots.includes(addForm.time))) {
+      showToast('That time slot is no longer available. Choose another one.', 'error');
+      setAddForm(f => ({ ...f, time: '' }));
+      return;
+    }
     const newApt = {
-      name: addForm.name.trim(),
-      contactNumber: addForm.contactNumber.trim(),
+      name: addForm.name.trim().replace(/\s+/g, ' '),
+      contactNumber: toE164(addForm.contactNumber),
       date: addForm.date,
       time: addForm.time,
       type: addForm.type,
@@ -1811,14 +1846,14 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                                   <div className="flex items-center gap-1.5 shrink-0">
                                     <button
                                       type="button"
-                                      className="px-2 py-1 text-[11px] font-semibold rounded-lg text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                                      className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
                                       onClick={() => openCloseScheduleModal(c)}
                                     >
                                       Edit
                                     </button>
                                     <button
                                       type="button"
-                                      className="px-2 py-1 text-[11px] font-semibold rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+                                      className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 text-white hover:bg-slate-900 transition-colors cursor-pointer shadow-xs"
                                       onClick={() => setReopenConfirm(c)}
                                     >
                                       Reopen
@@ -2085,6 +2120,8 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                   {...addV.field('name')}
                   className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800 text-xs transition-all"
                   placeholder="e.g. Juan Dela Cruz"
+                  maxLength={NAME_MAX}
+                  autoComplete="off"
                   value={addForm.name}
                   onChange={e => setAddForm({ ...addForm, name: e.target.value })}
                 />
@@ -2097,7 +2134,10 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                   type="text"
                   {...addV.field('contactNumber')}
                   className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800 text-xs transition-all"
-                  placeholder="e.g. +639123456789"
+                  placeholder="e.g. 0917 123 4567"
+                  inputMode="tel"
+                  maxLength={16}
+                  autoComplete="off"
                   value={addForm.contactNumber}
                   onChange={e => setAddForm({ ...addForm, contactNumber: e.target.value })}
                 />
@@ -2174,15 +2214,20 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
               </div>
 
               <div>
-                <label className="block mb-1.5 text-slate-500">Notes <span className="font-normal text-slate-400">(optional)</span></label>
+                <label htmlFor="appt-notes" className="block mb-1.5 text-slate-500">Notes <span className="font-normal text-slate-400">(optional)</span></label>
                 <textarea
+                  {...addV.field('notes')}
                   className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800 text-xs transition-all"
                   rows={3}
+                  maxLength={NOTES_MAX}
                   placeholder="Any relevant details for this visit…"
                   value={addForm.notes}
                   onChange={e => setAddForm({ ...addForm, notes: e.target.value })}
                   style={{ resize: 'vertical', fontFamily: 'inherit' }}
                 />
+                {addV.error('notes')
+                  ? <FieldError v={addV} name="notes" />
+                  : <span className="block mt-1 text-[11px] font-medium text-slate-400">{(addForm.notes || '').length}/{NOTES_MAX} characters</span>}
               </div>
             </div>
 
@@ -2592,20 +2637,8 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                   </div>
                 </div>
 
-                {/* Internal Note (Staff only) */}
-                <div>
-                  <label htmlFor="closure-note" className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-                    Internal Note <span className="text-slate-400 font-normal lowercase">(staff only, private)</span>
-                  </label>
-                  <textarea
-                    id="closure-note"
-                    rows={2}
-                    className="w-full py-2 px-3 border border-slate-300 rounded-xl outline-none focus:border-slate-400 bg-white font-medium text-slate-800 text-xs transition-all resize-none"
-                    value={closeForm.internalNote}
-                    onChange={e => setCloseForm(f => ({ ...f, internalNote: e.target.value }))}
-                    placeholder="Optional context for clinic staff..."
-                  />
-                </div>
+                {/* No internal note field: a closure saved earlier keeps its
+                    note (loaded on edit and saved back unchanged). */}
 
                 {/* Existing bookings warning card */}
                 {affectedBookings.length > 0 && (
