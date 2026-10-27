@@ -212,7 +212,14 @@ export function classifyMessage(text: string): ScopeCategory {
   // ("forgot my password" is an account question, not a missed dose.)
   const accountOnly = /\b(password|passcode|log\s*-?\s*in|login|sign\s*-?\s*in|mrn|account|otp|verification\s+code)\b/.test(q)
     && !mentionsMedical(q) && !BLOCKED_DOMAIN.some(re => re.test(q));
-  if (!accountOnly && BLOCKED_STRICT.some(re => re.test(q))) return 'clinical';
+  // "How much is one session of PEP Category 2?" asks for a listed rate, not
+  // an assessment: the category and service words are set aside, and it is
+  // only blocked if something medical is left.
+  const priceOnly = PRICE_RE.test(q) && (() => {
+    const rest = q.replace(PRICE_RE, ' ').replace(/\b(categor(y|ies)|cat|i{1,3}|[123]|one|first|1st|next|each|per|full|package|sessions?|vaccin\w*|bakuna|shots?|doses?|pep|prep|rig|erig|tetan\w*|anti-?tetano|anti-?rabies|rabies|pneumo\w*|the|a|an|of|for|is|are|it|in|at|po|ng|sa|ang|and|with|without|only|whole|complete)\b/g, ' ');
+    return !BLOCKED_STRICT.some(re => re.test(rest)) && !BLOCKED_DOMAIN.some(re => re.test(rest)) && !mentionsMedical(rest);
+  })();
+  if (!accountOnly && !priceOnly && BLOCKED_STRICT.some(re => re.test(q))) return 'clinical';
   // 2. The patient's own schedule / doses / status: navigation only.
   if (PERSONAL_SCHEDULE_PATTERNS.some(re => re.test(q))) return 'personal_nav';
   // 2b. The user's own name / MRN / contact details: say where they are shown.
@@ -225,7 +232,7 @@ export function classifyMessage(text: string): ScopeCategory {
   }
   // 3b. Pricing inquiries: "How much does a visit cost?", "How much is the anti-rabies vaccine?", "Price of treatment"
   if (PRICE_RE.test(q)) {
-    const rest = q.replace(PRICE_RE, ' ').replace(/\b(vaccin\w*|bakuna|shot|shots|dose|doses|treatment|gamutan|rabies|anti-?rabies|pep|prep|tetan\w*|anti-?tetano|pneumo\w*|hepatitis|hepa|visit|session|sessions|for|of|the|a|an|in|at|ng|sa|ang|is|are|it|po)\b/g, ' ');
+    const rest = q.replace(PRICE_RE, ' ').replace(/\b(vaccin\w*|bakuna|shot|shots|dose|doses|treatment|gamutan|rabies|anti-?rabies|pep|prep|rig|erig|tetan\w*|anti-?tetano|pneumo\w*|hepatitis|hepa|visit|session|sessions|categor(y|ies)|cat|i{1,3}|[123]|one|first|1st|next|each|per|full|package|for|of|the|a|an|in|at|ng|sa|ang|is|are|it|po|and|with)\b/g, ' ');
     if (!BLOCKED_DOMAIN.some(re => re.test(rest)) && !mentionsMedical(rest)) return 'in_scope';
   }
   // 4. Rabies, vaccines, doses, regimens, even as a single word: blocked.
