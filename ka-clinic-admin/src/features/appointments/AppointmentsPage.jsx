@@ -278,14 +278,14 @@ const globalCSS = `
     grid-template-columns: repeat(7, 1fr);
     gap: 4px;
   }
-  /* Day rows share the card's height, so a 6-week month shrinks its rows
-     instead of pushing the legend out of the card. */
+  /* Day rows share the card's height: rows stretch to fill the card, and a
+     6-week month shrinks them instead of pushing the legend out. */
   .cal-grid-fit {
     min-height: 0;
     grid-template-rows: auto;
     grid-auto-rows: minmax(0, 1fr);
   }
-  .appts-container .cal-grid-fit .cal-day-cell { height: auto; min-height: 0; max-height: 62px; overflow: hidden; }
+  .appts-container .cal-grid-fit .cal-day-cell { height: auto; min-height: 0; overflow: hidden; }
   .cal-day-name {
     text-align: center;
     font-size: 0.75rem;
@@ -1322,7 +1322,10 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
     const year = currentViewDate.getFullYear();
     const month = currentViewDate.getMonth();
     const startDay = new Date(year, month, 1).getDay();
-    return Array.from({ length: 42 }, (_, i) => {
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    // Only the weeks this month touches, so no row is all next-month days.
+    const weeks = Math.ceil((startDay + daysInMonth) / 7);
+    return Array.from({ length: weeks * 7 }, (_, i) => {
       const d = new Date(year, month, 1 - startDay + i);
       return { day: d.getDate(), month: d.getMonth(), year: d.getFullYear(), isOtherMonth: d.getMonth() !== month };
     });
@@ -1646,8 +1649,8 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
             ))}
 
             {generateCalendar().map((c, i) => {
-              // Days from the previous/next month stay as empty cells so the
-              // grid keeps six rows, but show no number, dots or closures.
+              // Days from the previous/next month stay as empty cells to fill
+              // the first and last week, but show no number, dots or closures.
               if (c.isOtherMonth) return <div key={i} className="cal-day-cell other-month" aria-hidden="true" style={{ pointerEvents: 'none' }} />;
               const dStr = `${c.year}-${String(c.month + 1).padStart(2, '0')}-${String(c.day).padStart(2, '0')}`;
               const dayApts = appointments.filter(a => a.date === dStr && isActiveApt(a));
@@ -1762,7 +1765,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                         </label>
                       </div>
 
-                      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2.5 p-0.5">
+                      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col divide-y divide-slate-100">
                         {displayedClosures.length === 0 ? (
                           <EmptyState
                             icon={Lock}
@@ -1781,49 +1784,50 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                             return (
                               <div
                                 key={c.id}
-                                className={`p-3.5 rounded-xl border transition-all ${isReopened ? 'bg-slate-50/70 border-slate-200 opacity-75' : 'bg-white border-amber-200 shadow-xs'}`}
+                                className={`flex items-start justify-between gap-3 px-1 py-3 ${isReopened ? 'opacity-60' : ''}`}
                               >
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="flex items-center gap-2">
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
                                     <span className="text-xs font-bold text-slate-900">{dateRangeLabel}</span>
-                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isReopened ? 'bg-slate-200 text-slate-700' : 'bg-amber-100 text-amber-800'}`}>
-                                      {isReopened ? 'Reopened' : isSlots ? 'Specific Slots' : 'Whole Day'}
+                                    <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">
+                                      {isReopened ? 'Reopened' : isSlots ? 'Specific slots' : 'Whole day'}
                                     </span>
                                   </div>
-                                  {!isReopened && (
-                                    <div className="flex items-center gap-1.5">
-                                      <button
-                                        type="button"
-                                        className="px-2 py-1 text-[11px] font-semibold rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer"
-                                        onClick={() => openCloseScheduleModal(c)}
-                                      >
-                                        Edit
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="px-2 py-1 text-[11px] font-semibold rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors cursor-pointer"
-                                        onClick={() => setReopenConfirm(c)}
-                                      >
-                                        Reopen
-                                      </button>
+
+                                  {isSlots && Array.isArray(c.slots) && (
+                                    <div className="text-[11px] font-medium text-slate-600 mt-1 flex items-center gap-1 flex-wrap">
+                                      <Clock size={11} /> {c.slots.join(', ')}
                                     </div>
                                   )}
-                                </div>
 
-                                {isSlots && Array.isArray(c.slots) && (
-                                  <div className="text-[11px] font-medium text-amber-700 mt-1 flex items-center gap-1 flex-wrap">
-                                    <Clock size={11} /> {c.slots.join(', ')}
-                                  </div>
-                                )}
+                                  <p className="text-xs text-slate-600 mt-1">{c.reason}</p>
 
-                                <p className="text-xs text-slate-700 mt-1.5 font-medium">&ldquo;{c.reason}&rdquo;</p>
-
-                                <div className="mt-2 pt-2 border-t border-slate-100 text-[10px] text-slate-400 flex items-center justify-between">
+                                  <div className="mt-1 text-[10px] text-slate-400 flex items-center gap-3">
                                   <span>Closed by {c.createdBy?.name || 'Staff'}</span>
                                   {isReopened && c.reopenedBy && (
                                     <span>Reopened by {c.reopenedBy?.name || 'Staff'}</span>
                                   )}
+                                  </div>
                                 </div>
+
+                                {!isReopened && (
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <button
+                                      type="button"
+                                      className="px-2 py-1 text-[11px] font-semibold rounded-lg text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                                      onClick={() => openCloseScheduleModal(c)}
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="px-2 py-1 text-[11px] font-semibold rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+                                      onClick={() => setReopenConfirm(c)}
+                                    >
+                                      Reopen
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             );
                           })

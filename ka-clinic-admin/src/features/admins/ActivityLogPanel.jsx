@@ -141,8 +141,8 @@ export default function ActivityLogPanel({ staff = [] }) {
             <option value="">All actions</option>
             {Object.entries(ACTIONS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
           </Select>
-          <DatePicker value={filters.from} onChange={e => setFilter('from', e.target.value)} max={filters.to || undefined} placeholder="From date" className={FIELD} aria-label="From date" clearable />
-          <DatePicker value={filters.to} onChange={e => setFilter('to', e.target.value)} min={filters.from || undefined} placeholder="To date" className={FIELD} aria-label="To date" clearable />
+          <DatePicker value={filters.from} onChange={e => setFilter('from', e.target.value)} max={filters.to || today} placeholder="From date" className={FIELD} aria-label="From date" clearable />
+          <DatePicker value={filters.to} onChange={e => setFilter('to', e.target.value)} min={filters.from || undefined} max={today} placeholder="To date" className={FIELD} aria-label="To date" clearable />
           <input value={filters.mrn} onChange={e => setFilter('mrn', e.target.value)} placeholder="MRN, e.g. 2026-014" className={FIELD} aria-label="MRN" />
           <div className="relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
