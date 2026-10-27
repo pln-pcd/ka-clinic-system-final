@@ -9,8 +9,9 @@
 // Pure data and math (no Firebase), so the seed scripts and the dashboard
 // share it.
 
-// A rough box around the municipality; pins land anywhere inside it.
-export const SIM_BOUNDS = { south: 13.270, north: 13.350, west: 123.405, east: 123.480 };
+// A box around the municipality's barangays (lib/libonGeo.js); pins land
+// anywhere inside it.
+export const SIM_BOUNDS = { south: 13.140, north: 13.320, west: 123.295, east: 123.460 };
 
 const TYPES = ['Dog bite', 'Dog bite', 'Dog bite', 'Cat bite', 'Cat scratch', 'Dog scratch'];
 // Category I is not used at the clinic: exposures start at Category II.

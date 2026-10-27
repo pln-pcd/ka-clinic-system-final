@@ -35,7 +35,9 @@ export const PNEUMO_HISTORY_OPTIONS = [
   OTHERS,
 ];
 
-export const RISK_CONDITION_OPTIONS = ['None', 'Asthma / COPD', 'Diabetes', 'Heart disease', 'Immunocompromised', 'Chronic kidney disease', 'Smoker', 'Age ≥ 65', 'Other'];
+export const RISK_CONDITION_OPTIONS = ['None', 'Asthma / COPD', 'Diabetes', 'Heart disease', 'Immunocompromised', 'Chronic kidney disease', 'Smoker', 'Age ≥ 65', OTHERS];
+// Chosen before "Others" took typed text; older records keep it as saved.
+export const LEGACY_RISK_CONDITION_OPTIONS = ['Other'];
 export const WOUND_TYPE_OPTIONS = ['Laceration', 'Puncture', 'Abrasion', 'Burn', 'Crush injury', 'Other'];
 export const LAST_TETANUS_OPTIONS = ['Unknown', 'Less than 5 years ago', '5–10 years ago', 'More than 10 years ago', 'Never vaccinated'];
 
@@ -57,7 +59,7 @@ export const FIELD_DEFS = {
   woundWashed: { label: 'Wound Washed', value: r => r?.woundWashed || '' },
   pastVaccines: { label: 'Past Vaccines', value: withOther('pastVaccines', 'pastVaccinesOther') },
   pneumoHistory: { label: 'Past Pneumococcal Vaccination', value: withOther('pneumoHistory', 'pneumoHistoryOther') },
-  riskCondition: { label: 'High-Risk Condition', value: r => r?.riskCondition || '' },
+  riskCondition: { label: 'High-Risk Condition', value: withOther('riskCondition', 'riskConditionOther') },
   woundType: { label: 'Wound / Injury Type', value: r => r?.woundType || '' },
   lastTetanus: { label: 'Last Tetanus Shot', value: r => r?.lastTetanus || '' },
   allergies: { label: 'Known Allergies', value: withOther('allergies', 'allergiesOther') },
@@ -157,6 +159,7 @@ export function showsTreatments(record) {
  *   pastVaccinesOther   typed text when "Others" is chosen
  *   pneumoHistory       required for Pneumonia
  *   pneumoHistoryOther  typed text when "Others" is chosen
+ *   riskConditionOther  typed text when "Others" is chosen
  */
 export function historyErrors(f) {
   const cfg = serviceFields(f?.service);
@@ -171,6 +174,8 @@ export function historyErrors(f) {
       ? 'Choose the past pneumococcal vaccination' : '',
     pneumoHistoryOther: asks('pneumoHistory') && f?.pneumoHistory === OTHERS && !filled('pneumoHistoryOther')
       ? 'Type the pneumococcal history' : '',
+    riskConditionOther: asks('riskCondition') && f?.riskCondition === OTHERS && !filled('riskConditionOther')
+      ? 'Type the high-risk condition' : '',
     allergiesOther: asks('allergies') && f?.allergies === OTHERS && !filled('allergiesOther')
       ? 'Type the specific allergy' : '',
   };

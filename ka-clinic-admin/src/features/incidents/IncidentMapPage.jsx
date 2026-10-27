@@ -21,10 +21,9 @@ const CATEGORY_COLOR = { 'Category II': '#EA7A0C', 'Category III': '#D81B25' };
 // Anything else is grey and not in the legend.
 const UNKNOWN_COLOR = '#64748B';
 
-// Barangay filter: the named Libon barangays (the Zone 1–11 poblacion zones
-// are left out, as before). A pin stores no barangay; the page places it in
-// the barangay whose map point is nearest to the pin.
-const MAP_BARANGAYS = LIBON_BARANGAYS.filter(b => !/^Zone \d+$/.test(b)).sort((a, b) => a.localeCompare(b));
+// Barangay filter: Libon's barangays (Poblacion as one). A pin stores no
+// barangay; the page places it in the barangay whose map point is nearest.
+const MAP_BARANGAYS = LIBON_BARANGAYS;
 const nearestBarangay = (lat, lng) => {
   if (!lat || !lng) return '';
   const k = Math.cos((lat * Math.PI) / 180); // degrees of longitude are shorter

@@ -41,7 +41,7 @@ export const isExpired = (item, today) => {
   const e = expiryOf(item);
   return Boolean(e && today && e < today);
 };
-export const EXPIRED_NOTE = 'Expired, cannot be used';
+export const EXPIRED_NOTE = 'Expired';
 
 // ══════════════════════════════════════════════════════════════════════════
 // Giving or undoing a dose moves stock (Vaccination Tracker)

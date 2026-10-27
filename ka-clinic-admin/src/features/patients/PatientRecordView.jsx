@@ -59,25 +59,31 @@ export function isRabiesOrBiteIncident(patient) {
 // Label + value pair. A missing value shows an em dash rather than a guess —
 // the record view previously filled gaps with plausible defaults ("Female",
 // "Rabipur", "10:00 am"), which put data on screen that nobody entered.
-// size 'lg': the General Information card, larger text at normal weight.
-function InfoField({ label, value, full = false, size = 'sm' }) {
-  const lg = size === 'lg';
+// Shown like the Edit form's fields: a label above a read-only box.
+const FIELD_LABEL = 'block mb-1.5 text-xs font-semibold text-slate-500';
+const FIELD_BOX = 'block py-2.5 px-3 rounded-xl border border-slate-200 bg-white text-xs font-medium break-words';
+function InfoField({ label, value, full = false }) {
   return (
-    <div className={full ? 'col-span-2 min-w-0' : 'min-w-0'}>
-      <span className={`${lg ? 'text-[11px]' : 'text-[10px]'} font-medium text-slate-500 uppercase tracking-wider block`}>{label}</span>
-      <span className={`${lg ? 'text-sm font-normal' : 'text-xs font-medium'} text-slate-900 mt-1 block break-words`}>{value || '—'}</span>
+    <div className={full ? 'sm:col-span-2 min-w-0' : 'min-w-0'}>
+      <span className={FIELD_LABEL}>{label}</span>
+      <span className={`${FIELD_BOX} ${value ? 'text-slate-800' : 'text-slate-400'}`}>{value || '—'}</span>
     </div>
   );
 }
 
 function SectionTitle({ title, subtitle, action }) {
   return (
-    <div className="flex items-start justify-between gap-2 mb-4">
-      <div>
-        <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
-        {subtitle && <p className="text-[11px] text-slate-500 mt-0.5">{subtitle}</p>}
-      </div>
-      {action}
+    <div className="flex items-center justify-between gap-3 pb-2 mb-4 border-b border-slate-200 min-h-[30px]">
+      <h3 className="text-[11px] font-extrabold uppercase tracking-wider text-[#0a1d47] flex items-center gap-1.5 shrink-0">
+        <span className="w-2 h-2 rounded-full bg-[#1D4ED8]" aria-hidden="true" />
+        {title}
+      </h3>
+      {(subtitle || action) && (
+        <div className="flex items-center gap-2.5 min-w-0">
+          {subtitle && <span className="text-[10px] text-slate-400 font-normal truncate">{subtitle}</span>}
+          {action}
+        </div>
+      )}
     </div>
   );
 }
@@ -210,7 +216,7 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
   // One card style for the whole record: white, one hairline border, no
   // rings or hover lift. Colour is reserved for the single accent (#3B50DF)
   // and for states that need attention (missed doses, overdue).
-  const card = 'bg-white rounded-2xl border border-slate-200';
+  const card = 'bg-slate-50/70 rounded-2xl border border-slate-200/80 shadow-2xs';
   const btnSecondary = 'px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 transition-colors cursor-pointer flex items-center gap-2';
 
   return (
@@ -317,12 +323,12 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
           </p>
         </div>
         <div className="flex items-center gap-2.5 shrink-0">
-          <div className="rounded-xl border border-slate-200 px-3 py-1.5 text-center min-w-[92px]">
-            <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wider block">Patient ID</span>
+          <div className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-center min-w-[92px]">
+            <span className="text-[10px] font-semibold text-slate-500 block">Patient ID</span>
             <span className="text-xs font-semibold text-slate-900 mt-0.5 block">{rec.id || patient.id || '—'}</span>
           </div>
-          <div className="rounded-xl border border-slate-200 px-3 py-1.5 text-center min-w-[92px]">
-            <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wider block">Appointments</span>
+          <div className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-center min-w-[92px]">
+            <span className="text-[10px] font-semibold text-slate-500 block">Appointments</span>
             <span className="text-xs font-semibold text-slate-900 mt-0.5 block">{patientApts.length}</span>
           </div>
         </div>
@@ -347,9 +353,9 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
             const hasAllergy = Boolean(allergies) && !/^(none|no known allergies|n\/?a|unknown|—)$/i.test(String(allergies).trim());
             const warnOf = k => (k === 'cat' ? String(merged.cat || '').includes('III') : k === 'allergies' ? hasAllergy : false);
             const fact = (key, label, value, warn) => (
-              <div key={key} className={`rounded-xl border px-3.5 py-3 ${warn ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-slate-50'}`}>
-                <span className={`text-[10px] font-medium uppercase tracking-wider block ${warn ? 'text-amber-700' : 'text-slate-500'}`}>{label}</span>
-                <span className={`text-sm font-semibold mt-1 block break-words ${value ? (warn ? 'text-amber-900' : 'text-slate-900') : 'text-slate-400'}`}>{value || '—'}</span>
+              <div key={key} className="min-w-0">
+                <span className={FIELD_LABEL}>{label}</span>
+                <span className={`${FIELD_BOX} font-semibold ${warn ? 'border-amber-300 bg-amber-50 text-amber-900' : value ? 'text-slate-800' : 'text-slate-400'}`}>{value || '—'}</span>
               </div>
             );
             const treatments = Array.isArray(merged.treatments) ? merged.treatments : [];
@@ -358,17 +364,17 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
             return (
               <>
                 <SectionTitle title={isPepCard ? 'Medical History & Exposure' : 'Medical History'} />
-                <div className={`grid grid-cols-1 ${facts.length === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-3 mb-5`}>
+                <div className={`grid grid-cols-1 ${facts.length === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-3 mb-3`}>
                   {facts.map(r => fact(r.key, r.label, r.value, warnOf(r.key)))}
                 </div>
                 {(rest.length > 0 || showTreat) && (
-                  <div className="grid grid-cols-3 gap-x-4 gap-y-3.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {rest.map(r => <InfoField key={r.key} label={r.label} value={r.value} />)}
                     {showTreat && (
-                      <div className="col-span-3 min-w-0">
-                        <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wider block">Category III Treatments</span>
+                      <div className="sm:col-span-2 min-w-0">
+                        <span className={FIELD_LABEL}>Category III Treatments</span>
                         {treatments.length > 0 ? (
-                          <div className="mt-1.5 flex flex-wrap gap-2">
+                          <div className="flex flex-wrap gap-2">
                             {treatments.map((t, idx) => (
                               <span key={t.id || idx} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-100 text-xs font-semibold text-slate-800">
                                 <span className="text-[#3B50DF] font-bold">{t.product}</span>
@@ -378,19 +384,19 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
                             ))}
                           </div>
                         ) : s.given ? (
-                          <span className="text-xs font-medium mt-1 block text-slate-900">
+                          <span className={`${FIELD_BOX} text-slate-800`}>
                             {erigStatusLabel(merged, formatDateMedium)}
                           </span>
                         ) : (
-                          <span className="text-xs font-medium mt-1 block text-amber-700">Required (Category III), not yet recorded</span>
+                          <span className={`${FIELD_BOX} border-amber-300 bg-amber-50 text-amber-800`}>Required (Category III), not yet recorded</span>
                         )}
                       </div>
                     )}
                   </div>
                 )}
-                <div className="pt-4 mt-4 border-t border-slate-100">
-                  <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wider block mb-1.5">Doctor / Nurse Remarks</span>
-                  <p className="text-xs text-slate-700 leading-relaxed bg-slate-50 px-3 py-2.5 rounded-lg border border-slate-200">
+                <div className="mt-3">
+                  <span className={FIELD_LABEL}>Doctor / Nurse Remarks</span>
+                  <p className={`${FIELD_BOX} min-h-[64px] leading-relaxed ${merged.notes ? 'text-slate-700' : 'text-slate-400'}`}>
                     {merged.notes || 'No clinical remarks recorded.'}
                   </p>
                 </div>
@@ -413,17 +419,17 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
               </button>
             )}
           />
-          <div className="grid grid-cols-2 gap-x-4 gap-y-4">
-            <InfoField size="lg" label="Sex" value={rec.sex || patient.sex} />
-            <InfoField size="lg" label="Birth Date / Age" value={[rec.dob ? fmtDate(rec.dob) : '', rec.age ? `${rec.age} yrs old` : ''].filter(Boolean).join(' · ')} />
-            <InfoField size="lg" label="Height / Weight" value={[rec.height ? `${rec.height} cm` : '', rec.weight ? `${rec.weight} kg` : ''].filter(Boolean).join(' · ')} />
-            <InfoField size="lg" label="Blood Pressure" value={rec.bloodPressure} />
-            <InfoField size="lg" label="Mobile Number" value={rec.contact || patient.contact} />
-            <InfoField size="lg" label="Registration Date" value={rec.date ? fmtDate(rec.date) : ''} />
-            <InfoField size="lg" label="Primary Attending" value={resolvePrimaryAttending(rec || patient)} />
-            <InfoField size="lg" label="Address" value={rec.address && rec.address !== '—' ? rec.address : ''} full />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <InfoField label="Sex" value={rec.sex || patient.sex} />
+            <InfoField label="Birth Date / Age" value={[rec.dob ? fmtDate(rec.dob) : '', rec.age ? `${rec.age} yrs old` : ''].filter(Boolean).join(' · ')} />
+            <InfoField label="Height / Weight" value={[rec.height ? `${rec.height} cm` : '', rec.weight ? `${rec.weight} kg` : ''].filter(Boolean).join(' · ')} />
+            <InfoField label="Blood Pressure" value={rec.bloodPressure} />
+            <InfoField label="Mobile Number" value={rec.contact || patient.contact} />
+            <InfoField label="Registration Date" value={rec.date ? fmtDate(rec.date) : ''} />
+            <InfoField label="Primary Attending" value={resolvePrimaryAttending(rec || patient)} />
+            <InfoField label="Address" value={rec.address && rec.address !== '—' ? rec.address : ''} full />
             {(rec.emergencyName || rec.emergencyPhone || rec.guardian || rec.emergencyContact) && (
-              <InfoField size="lg"
+              <InfoField
                 label="Emergency Contact"
                 full
                 value={rec.emergencyName
@@ -475,7 +481,7 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
                   <span className="text-slate-300">·</span>
                   <span>Next due <strong className={`font-semibold ${nextOpen?.isMiss ? 'text-rose-600' : 'text-slate-900'}`}>{nextOpen ? (nextOpen.date ? formatDateMedium(nextOpen.date) : 'Not scheduled') : 'Complete'}</strong></span>
                 </div>
-                <ol className="relative overflow-y-auto min-h-0 pr-1 flex-1" aria-label="Dose timeline">
+                <ol className="relative overflow-y-auto min-h-0 p-1.5 flex-1 rounded-xl border border-slate-200 bg-white" aria-label="Dose timeline">
                   {normalizedDoses.map((d, i) => {
                     const isNext = i === nextDoseIndex;
                     const tone = d.isDone
@@ -516,10 +522,9 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
         {/* Appointments: tabs when there are some; an empty state if not. Sized to
             show about six visits before the list scrolls. */}
         <div className={`lg:col-span-6 ${card} flex flex-col overflow-hidden`} style={{ minHeight: 400, maxHeight: 560 }}>
-          <div className="px-5 pt-5 flex items-start justify-between gap-2 flex-wrap shrink-0">
-            <SectionTitle title="Appointments" subtitle={`Booked for ${patient.name}`} />
-            {patientApts.length > 0 && (
-              <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-lg text-[11px]">
+          <div className="px-5 pt-5 shrink-0">
+            <SectionTitle title="Appointments" subtitle={`Booked for ${patient.name}`} action={patientApts.length > 0 && (
+              <div className="flex items-center gap-0.5 bg-slate-200/60 p-0.5 rounded-lg text-[11px] shrink-0">
                 {[['all', 'All'], ['upcoming', 'Upcoming'], ['completed', 'Completed']].map(([key, label]) => (
                   <button
                     key={key}
@@ -532,10 +537,10 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
                   </button>
                 ))}
               </div>
-            )}
+            )} />
           </div>
 
-          <div className="overflow-auto flex-1 min-h-0">
+          <div className="overflow-auto flex-1 min-h-0 mx-5 mb-5 rounded-xl border border-slate-200 bg-white">
             {aptsLoading ? (
               <div className="py-8 text-center text-xs text-slate-500">Loading appointments…</div>
             ) : patientApts.length === 0 ? (
@@ -574,18 +579,17 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
 
       {/* ── CLINICAL REPORTS ── */}
       <div className={`${card} p-6 flex flex-col`} style={{ minHeight: 240 }}>
-        <div className="flex items-start justify-between gap-2 flex-wrap mb-4">
-          <SectionTitle title="Clinical Reports & Nurse Notes" subtitle="Logged vitals, wound assessments, and doctor/nurse notes" />
-          {!readOnly && <button
+        <SectionTitle title="Clinical Reports & Nurse Notes" subtitle="Logged vitals, wound assessments, and doctor/nurse notes" action={!readOnly && (
+          <button
             onClick={() => setShowAddReportModal(true)}
-            className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-[#3B50DF] hover:bg-[#2F40B5] transition-colors cursor-pointer flex items-center gap-1.5"
+            className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-white bg-[#3B50DF] hover:bg-[#2F40B5] transition-colors cursor-pointer flex items-center gap-1.5 shrink-0"
           >
             + Add Report
-          </button>}
-        </div>
+          </button>
+        )} />
 
         {reportsList.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center py-12 text-center rounded-xl border border-dashed border-slate-200">
+          <div className="flex-1 flex flex-col items-center justify-center py-12 text-center rounded-xl border border-dashed border-slate-300 bg-white">
             <p className="text-sm font-medium text-slate-700">No clinical reports logged</p>
             <p className="text-xs text-slate-500 mt-0.5">Use + Add Report to log BP, vitals, injection route and observations.</p>
           </div>
@@ -640,7 +644,7 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
               title="Previous Services"
               subtitle={`Earlier cases registered under this patient's MRN (${patient.id || patient.mrn || '—'})`}
             />
-            <div className="rounded-xl border border-slate-200 overflow-hidden overflow-x-auto">
+            <div className="rounded-xl border border-slate-200 bg-white overflow-hidden overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead className="bg-slate-50 text-[10.5px] uppercase font-semibold text-slate-500 border-b border-slate-200">
                   <tr>
@@ -791,7 +795,7 @@ const CASE_KEYS = [
   'cat', 'animal', 'placeOfExposure', 'typeOfExposure', 'sourceOfExposure',
   'woundLocation', 'woundDepth', 'woundWashed', 'numberOfBites', 'vaccineBrand',
   'erig', 'rigGiven', 'rigTreatment', 'antiTetanusTreatment', 'notes', 'patientNote', 'pastVaccines', 'pastVaccinesOther', 'allergies', 'allergiesOther', 'registeredByName',
-  'woundType', 'lastTetanus', 'pneumoHistory', 'pneumoHistoryOther', 'riskCondition',
+  'woundType', 'lastTetanus', 'pneumoHistory', 'pneumoHistoryOther', 'riskCondition', 'riskConditionOther',
   'height', 'weight', 'bloodPressure', ...CASE_ARRAY_KEYS,
 ];
 

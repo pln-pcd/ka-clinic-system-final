@@ -456,6 +456,12 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
         return;
       }
 
+      // A dose cannot be given before its scheduled date.
+      if ((cur.date || '').slice(0, 10) > getTodayStr()) {
+        showToast(`${cur.label} is not due yet. It can be given from ${fmtDate(cur.date)}.`, 'warning');
+        return;
+      }
+
       // User wants to check Dose di -> ALL previous doses (0 .. di - 1) MUST be 'done'
       for (let k = 0; k < di; k++) {
         if (doses[k].status !== 'done') {
@@ -1127,7 +1133,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
         const nextDate = (next?.date || '').slice(0, 10);
         const daysToNext = nextDate ? Math.round((Date.parse(`${nextDate}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000) : null;
         const daysLabel = !next ? '' : daysToNext == null ? '' : daysToNext === 0 ? 'due today' : daysToNext < 0 ? `${-daysToNext}d overdue` : `in ${daysToNext} day${daysToNext === 1 ? '' : 's'}`;
-        const daysTone = !next ? 'text-emerald-700' : daysToNext < 0 ? 'text-rose-600' : daysToNext === 0 ? 'text-amber-700' : 'text-slate-500';
+        const daysTone = !next ? 'text-emerald-700' : daysToNext < 0 ? 'text-rose-600' : daysToNext === 0 ? 'text-slate-800' : 'text-slate-500';
         const readyDose = readyKey ? doses.find(d => d.key === readyKey) : null;
         const erig = erigStatus(p);
         const createdRaw = p.createdAt?.toDate ? p.createdAt.toDate() : (typeof p.createdAt === 'number' ? new Date(p.createdAt) : null);
@@ -1143,7 +1149,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
         const CHIP = {
           given: 'bg-emerald-50 text-emerald-700 border-emerald-200',
           overdue: 'bg-rose-50 text-rose-700 border-rose-200',
-          today: 'bg-amber-50 text-amber-800 border-amber-200',
+          today: 'bg-white text-slate-800 border-slate-400',
           next: 'bg-indigo-50 text-[#3B50DF] border-indigo-200',
           locked: 'bg-white text-slate-400 border-slate-200',
         };
@@ -1283,7 +1289,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                   <section className={cardCls}>
                     <div className="flex items-center justify-between pr-4">
                       <h4 className={cardHead}>Attending Nurse / Physician</h4>
-                      <span className="text-[11px] font-semibold text-amber-700">Required</span>
+                      <span className="text-[11px] font-semibold text-slate-500">Required</span>
                     </div>
                     <div className="px-4 pb-4">
                       <div className="text-xs text-slate-500 mb-1.5">
@@ -1357,11 +1363,14 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                         const isDone = st === 'given';
                         const isNext = di === nextIndex;
                         const isReady = isNext && readyKey === d.key;
-                        const canTick = isNext && !!assignedBrand && !!attendingStaff.trim();
+                        // A dose can only be given on or after its scheduled date.
+                        const notYetDue = (d.date || '').slice(0, 10) > today;
+                        const canTick = isNext && !notYetDue && !!assignedBrand && !!attendingStaff.trim();
                         const canUndo = isDone && di === lastDoneIndex && !readyKey;
                         const usedBrand = d.brand || (isDone ? (d.vaccineBrand || p.vaccineBrand || '') : '');
                         const busy = !!saving[`${p.firestoreId}_${d.key}`];
                         const hint = isDone ? 'Given'
+                          : isNext && notYetDue ? `Not due yet: can be given from ${fmtDate(d.date)}`
                           : isNext ? (!attendingStaff.trim() ? 'Enter attending nurse/physician first' : assignedBrand ? (isReady ? 'Untick to clear' : `Tick, then Confirm dose (${assignedBrand})`) : 'Select a brand first')
                           : `Locked until Dose ${nextIndex + 1} is given`;
                         return (
@@ -1381,7 +1390,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
                                     <>
                                       <span className="shrink-0">{fmtDate(d.date)}</span>
                                       {st === 'overdue' && <StatusBadge status="overdue" />}
-                                      {st === 'today' && <StatusBadge status="due_today" />}
+                                      {st === 'today' && <span className="shrink-0 font-semibold text-slate-700">· Due today</span>}
                                       {isNext && assignedBrand && <span className="truncate text-slate-700">· {assignedBrand}</span>}
                                     </>
                                   )}

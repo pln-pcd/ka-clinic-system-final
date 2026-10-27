@@ -40,7 +40,7 @@ const SIZES = {
   default: {
     box: 'max-w-[420px] 2xl:max-w-[460px]',
     header: 'px-5 py-4', iconBox: 'w-10 h-10', iconSize: 18,
-    titleWrap: 'pt-0.5', title: 'text-lg 2xl:text-xl leading-6',
+    titleWrap: 'pt-0.5', title: 'text-base 2xl:text-lg leading-6',
     close: 'w-9 h-9 -mr-1.5 -mt-1', closeIcon: 18,
     body: 'px-5 py-5', message: 'text-[15px] 2xl:text-base', note: 'text-[13px] mt-3', noteIcon: 14,
     details: 'text-[13px] mt-3', detailRow: 'px-3.5 py-2',

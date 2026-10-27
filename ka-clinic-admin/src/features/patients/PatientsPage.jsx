@@ -16,7 +16,7 @@ import { useTableReserve } from "../../components/Pager";
 import EmptyState from "../../components/EmptyState";
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye, Pencil, Plus, Users } from "lucide-react";
 import { trackEvent } from "../../lib/analytics";
-import { geocodeLibonAddress, recordBarangay } from '../../lib/libonGeo';
+import { geocodeLibonAddress, libonAddress, recordBarangay } from '../../lib/libonGeo';
 import { ExportReportModal, ServiceBadge, derivePatientStatus, globalCSS } from "./shared";
 import { AddPatientModal, DuplicatePatientModal, EditPatientModal, PinMapConfirmModal, findSimilarPatients, isValidPHPhone } from "./PatientForms";
 import { FollowUpModal, MedicalRecordDetail } from "./PatientRecordView";
@@ -91,9 +91,9 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
     }
     setPinning(true);
     try {
-      const barangayVal = patientToPin.barangay || (patientToPin.address ? (patientToPin.address.match(/Brgy\.\s*([^,]+)/)?.[1] || 'San Juan') : 'San Juan');
-      const zoneVal = patientToPin.zone || (patientToPin.address ? patientToPin.address.split(',')[0].replace(/Brgy\..*/, '').trim() : 'Zone 1');
-      const locationStr = patientToPin.address || `${zoneVal ? zoneVal + ', ' : ''}Brgy. ${barangayVal}, Libon, Albay`;
+      const barangayVal = recordBarangay(patientToPin);
+      const zoneVal = patientToPin.zone || '';
+      const locationStr = patientToPin.address || libonAddress(barangayVal, zoneVal);
       const exposureTypeVal = patientToPin.service === 'PEP' ? `${patientToPin.animal || 'Dog'} Bite` : (patientToPin.service || 'Dog Bite');
       const categoryVal = patientToPin.cat ? `Category ${patientToPin.cat}` : 'Category III';
       const exposureDateVal = patientToPin.date || getTodayDateString();
@@ -357,6 +357,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
           pneumoHistory: returningPatient.pneumoHistory || '',
           pneumoHistoryOther: returningPatient.pneumoHistoryOther || '',
           riskCondition: returningPatient.riskCondition || '',
+          riskConditionOther: returningPatient.riskConditionOther || '',
           // No longer asked; kept on the snapshot so an old value is not lost.
           ...(returningPatient.pneumoVaccine ? { pneumoVaccine: returningPatient.pneumoVaccine } : {}),
           woundImages: Array.isArray(returningPatient.woundImages) ? returningPatient.woundImages : [],
@@ -385,7 +386,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
         bloodPressure: form.bloodPressure || '',
         barangay: selectedBarangay,
         zone: enteredZone,
-        address: form.address || (selectedBarangay ? `${enteredZone ? enteredZone + ', ' : ''}Brgy. ${selectedBarangay}, Libon, Albay` : ''),
+        address: form.address || libonAddress(selectedBarangay, enteredZone),
         service: form.service || 'PEP',
         vaccineBrand: form.vaccineBrand || '',
         placeOfExposure: pep('placeOfExposure'),
@@ -414,6 +415,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
         pneumoHistory: asked('pneumoHistory'),
         pneumoHistoryOther: asked('pneumoHistory') === 'Others' ? (form.pneumoHistoryOther || '').trim() : '',
         riskCondition: asked('riskCondition'),
+        riskConditionOther: asked('riskCondition') === 'Others' ? (form.riskConditionOther || '').trim() : '',
         // The old vaccine-variant field is no longer asked. A returning
         // patient's old value moved to the case snapshot above.
         ...(isReturning ? { pneumoVaccine: '', priorPneumo: '' } : {}),
@@ -545,6 +547,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
       pneumoHistory: form.pneumoHistory || '',
       pneumoHistoryOther: form.pneumoHistory === 'Others' ? (form.pneumoHistoryOther || '').trim() : '',
       riskCondition: form.riskCondition || '',
+      riskConditionOther: form.riskCondition === 'Others' ? (form.riskConditionOther || '').trim() : '',
       // pneumoVaccine (the old vaccine variant) and the never-asked hepa /
       // priorPneumo fields are left untouched, so an old record keeps them.
     };

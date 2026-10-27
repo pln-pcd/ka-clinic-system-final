@@ -1239,7 +1239,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     const CELL = 'padding:4.5px 8px;border:1px solid #CBD5E1;font-size:9.5px;line-height:1.45;';
     const LABEL_CELL = `${CELL}background:#F8FAFC;color:#475569;font-weight:700;width:26%;vertical-align:top;`;
     const VALUE_CELL = `${CELL}color:#0F172A;vertical-align:top;`;
-    const statusColor = m.status === 'completed' ? '#15803D' : m.status === 'overdue' ? '#DC2626' : '#1D4ED8';
+    const statusColor = m.status === 'overdue' ? '#DC2626' : '#0F172A';
 
     // Administrative box: two label/value pairs per row, the same 4-column
     // shape autoTable draws in the PDF.
@@ -1254,7 +1254,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     const sectionHtml = (title, rows) => `
       <table style="width:100%;border-collapse:collapse;margin-bottom:8px;table-layout:fixed;">
         <thead>
-          <tr><th colspan="2" style="${CELL}background:#0A1D47;color:#FFFFFF;text-align:left;font-weight:700;letter-spacing:.3px;">${escapeHtml(title)}</th></tr>
+          <tr><th colspan="2" style="${CELL}background:#F1F5F9;color:#0F172A;text-align:left;font-weight:700;letter-spacing:.3px;">${escapeHtml(title)}</th></tr>
         </thead>
         <tbody>
           ${rows.map(([label, value]) => `
@@ -1266,7 +1266,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
       </table>`;
 
     // A historical case adds the amount given and who gave each dose.
-    const HEAD = `${CELL}background:#1D4ED8;color:#FFFFFF;text-align:left;font-weight:700;`;
+    const HEAD = `${CELL}background:#F1F5F9;color:#0F172A;text-align:left;font-weight:700;`;
     const doseCols = m.doseDetail
       ? [['Dose', 24], ['Date', 18], ['Status', 16], ['Amount Given', 16], ['Attending Nurse / Physician', 26]]
       : [['Dose', 40], ['Scheduled Date', 35], ['Status', 25]];
@@ -1293,7 +1293,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
       <div class="mr-title" style="font-size:9.5px;font-weight:800;color:#0F172A;letter-spacing:.3px;margin:10px 0 4px;">${escapeHtml(m.clinicalReportsTitle)}</div>
       <table style="width:100%;border-collapse:collapse;margin-bottom:8px;table-layout:fixed;">
         <thead>
-          <tr>${reportCols.map(([h, w]) => `<th style="${CELL}background:#0A1D47;color:#FFFFFF;text-align:left;font-weight:700;width:${w}%;">${h}</th>`).join('')}</tr>
+          <tr>${reportCols.map(([h, w]) => `<th style="${CELL}background:#F1F5F9;color:#0F172A;text-align:left;font-weight:700;width:${w}%;">${h}</th>`).join('')}</tr>
         </thead>
         <tbody>
           ${m.clinicalReportRows.map((r, i) => `
@@ -1313,12 +1313,12 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
       <table style="width:100%;border-collapse:collapse;margin-bottom:8px;table-layout:fixed;">
         <thead>
           <tr>
-            <th style="${CELL}background:#0A1D47;color:#FFFFFF;text-align:left;font-weight:700;width:15%;">Case</th>
-            <th style="${CELL}background:#0A1D47;color:#FFFFFF;text-align:left;font-weight:700;width:24%;">Service</th>
-            <th style="${CELL}background:#0A1D47;color:#FFFFFF;text-align:left;font-weight:700;width:15%;">Date</th>
-            <th style="${CELL}background:#0A1D47;color:#FFFFFF;text-align:left;font-weight:700;width:12%;">Doses</th>
-            <th style="${CELL}background:#0A1D47;color:#FFFFFF;text-align:left;font-weight:700;width:20%;">Treatments</th>
-            <th style="${CELL}background:#0A1D47;color:#FFFFFF;text-align:left;font-weight:700;width:14%;">Status</th>
+            <th style="${CELL}background:#F1F5F9;color:#0F172A;text-align:left;font-weight:700;width:15%;">Case</th>
+            <th style="${CELL}background:#F1F5F9;color:#0F172A;text-align:left;font-weight:700;width:24%;">Service</th>
+            <th style="${CELL}background:#F1F5F9;color:#0F172A;text-align:left;font-weight:700;width:15%;">Date</th>
+            <th style="${CELL}background:#F1F5F9;color:#0F172A;text-align:left;font-weight:700;width:12%;">Doses</th>
+            <th style="${CELL}background:#F1F5F9;color:#0F172A;text-align:left;font-weight:700;width:20%;">Treatments</th>
+            <th style="${CELL}background:#F1F5F9;color:#0F172A;text-align:left;font-weight:700;width:14%;">Status</th>
           </tr>
         </thead>
         <tbody>
@@ -1329,7 +1329,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
             <td style="${VALUE_CELL}">${escapeHtml(ps.date)}</td>
             <td style="${VALUE_CELL}">${escapeHtml(ps.doses)}</td>
             <td style="${VALUE_CELL}">${escapeHtml(ps.treatments)}</td>
-            <td style="${VALUE_CELL}font-weight:700;color:#15803D;">${escapeHtml(ps.status)}</td>
+            <td style="${VALUE_CELL}font-weight:700;">${escapeHtml(ps.status)}</td>
           </tr>`).join('')}
         </tbody>
       </table>` : '';
@@ -1347,7 +1347,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
             </td>
             <td style="vertical-align:middle;text-align:center;padding:0 6px;">
               <div style="font-size:15px;font-weight:900;color:#0F172A;letter-spacing:0.6px;text-transform:uppercase;">K&amp;A ANIMAL BITE CENTER</div>
-              <div style="font-size:8.5px;color:#1D4ED8;font-weight:700;margin-top:2px;">Caring for Life &bull; Animal Bite Treatment &amp; Care</div>
+              <div style="font-size:8.5px;color:#475569;font-weight:700;margin-top:2px;">Caring for Life &bull; Animal Bite Treatment &amp; Care</div>
               <div style="font-size:8px;color:#64748B;margin-top:2px;">Municipality of Libon, Province of Albay | Ph: (052) 742-0123 | ka.animalbitecenter@gmail.com</div>
             </td>
             <td style="vertical-align:middle;padding-left:14px;width:62px;text-align:left;">
@@ -1388,7 +1388,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
               <div style="font-size:8px;color:#64748B;">${escapeHtml(m.officer.issued)}</div>
             </td>
             <td style="padding-top:8px;text-align:right;vertical-align:bottom;">
-              <span style="display:inline-block;padding:3px 8px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:4px;font-size:8px;font-weight:700;color:#1D4ED8;">${escapeHtml(m.officer.badge)}</span>
+              <span style="display:inline-block;padding:3px 8px;background:#F8FAFC;border:1px solid #CBD5E1;border-radius:4px;font-size:8px;font-weight:700;color:#334155;">${escapeHtml(m.officer.badge)}</span>
             </td>
           </tr>
         </table>
@@ -1463,7 +1463,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
 
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7.5);
-      doc.setTextColor(29, 78, 216);
+      doc.setTextColor(71, 85, 105);
       doc.text('Caring for Life · Animal Bite Treatment & Care', pageWidth / 2, 17, { align: 'center' });
 
       doc.setFontSize(7);
@@ -1511,7 +1511,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
         head: [[section.title, '']],
         body: section.rows,
         theme: 'grid',
-        headStyles: { fillColor: [10, 29, 71], textColor: 255, fontSize: density.fontSize, fontStyle: 'bold' },
+        headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontSize: density.fontSize, fontStyle: 'bold' },
         styles: baseStyles,
         margin: PAGE_MARGIN,
         columnStyles: labelColumn,
@@ -1537,7 +1537,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
         head: [['Date', 'Assessment', 'Vitals', 'Observations', 'Clinical Notes', 'Attending']],
         body: m.clinicalReportRows.map(r => [r.date, r.title, r.vitals, r.observations, r.notes, r.author]),
         theme: 'grid',
-        headStyles: { fillColor: [10, 29, 71], textColor: 255, fontSize: density.fontSize, fontStyle: 'bold' },
+        headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontSize: density.fontSize, fontStyle: 'bold' },
         styles: baseStyles,
         margin: PAGE_MARGIN,
         columnStyles: { 1: { fontStyle: 'bold' } },
@@ -1552,7 +1552,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
       body: m.doseRows.length
         ? m.doseRows.map(d => (m.doseDetail ? [d.label, d.date, d.status, d.amount, d.by] : [d.label, d.date, d.status]))
         : [m.doseDetail ? ['No dose schedule on file.', '', '', '', ''] : ['No dose schedule on file.', '', '']],
-      headStyles: { fillColor: [29, 78, 216], textColor: 255, fontSize: density.fontSize, fontStyle: 'bold' },
+      headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontSize: density.fontSize, fontStyle: 'bold' },
       styles: baseStyles,
       margin: PAGE_MARGIN,
       alternateRowStyles: { fillColor: [250, 250, 252] },
@@ -1565,7 +1565,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
         head: [['Case', 'Service', 'Date', 'Doses', 'Treatments', 'Status']],
         body: m.previousServicesRows.map(ps => [ps.caseNo, ps.service, ps.date, ps.doses, ps.treatments, ps.status]),
         theme: 'grid',
-        headStyles: { fillColor: [10, 29, 71], textColor: 255, fontSize: density.fontSize, fontStyle: 'bold' },
+        headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontSize: density.fontSize, fontStyle: 'bold' },
         styles: baseStyles,
         margin: PAGE_MARGIN,
         alternateRowStyles: { fillColor: [250, 250, 252] },
@@ -1595,10 +1595,10 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     doc.setFont('helvetica', 'bold');
     const badgeWidth = doc.getTextWidth(m.officer.badge) + 6;
     const badgeX = pageWidth - 14 - badgeWidth;
-    doc.setFillColor(239, 246, 255);
-    doc.setDrawColor(191, 219, 254);
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(203, 213, 225);
     doc.roundedRect(badgeX, yText + 1, badgeWidth, 6, 1, 1, 'FD');
-    doc.setTextColor(29, 78, 216);
+    doc.setTextColor(51, 65, 85);
     doc.text(m.officer.badge, badgeX + 3, yText + 5);
 
     // Letterhead, title and footer on every page, with "Page X of Y".

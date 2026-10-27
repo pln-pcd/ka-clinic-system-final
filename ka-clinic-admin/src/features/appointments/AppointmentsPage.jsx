@@ -921,7 +921,6 @@ const EMPTY_CLOSE_FORM = () => ({
   reasonPreset: 'doctor_unavailable',
   reason: 'The doctor is unavailable on this date. Appointments are temporarily suspended.',
   internalNote: '',
-  notifyAffectedPatients: true,
 });
 
 const TIME_SLOTS = [
@@ -1205,9 +1204,6 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
         reasonPreset: closureToEdit.reasonPreset || 'other',
         reason: closureToEdit.reason || '',
         internalNote,
-        // An edit (e.g. a reworded reason) does not message every patient
-        // again unless staff tick the box.
-        notifyAffectedPatients: false,
       });
     } else {
       const defaultDate = isWeekendDate(selectedDate) ? selectedDate : '';
@@ -1264,7 +1260,8 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
         reasonPreset: closeForm.reasonPreset,
         reason: closeForm.reason.trim().slice(0, 150),
         internalNote: closeForm.internalNote.trim(),
-        notifyAffectedPatients: closeForm.notifyAffectedPatients,
+        // Every new or edited closure is announced to all patients.
+        notifyAffectedPatients: true,
       };
       const res = await authedPostJson('/api/notifications', payload);
       if (!res?.success) throw new Error(res?.error || 'Failed to save closure');
@@ -1278,7 +1275,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
       });
 
       trackEvent(closeForm.id ? 'schedule_closure_updated' : 'schedule_closure_created');
-      const told = closeForm.notifyAffectedPatients && res.notified
+      const told = res.notified
         ? ` · ${res.notified.app} app user${res.notified.app === 1 ? '' : 's'} notified, ${res.notified.email} email${res.notified.email === 1 ? '' : 's'} sent`
         : '';
       showToast(`${closeForm.id ? 'Schedule closure updated' : 'Schedule closed successfully'}${told}`);
@@ -2609,21 +2606,6 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                     placeholder="Optional context for clinic staff..."
                   />
                 </div>
-
-                {/* Patient notification: every closure can be announced to all
-                    patients, not only those with a booking in it. */}
-                <label className="flex items-start gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={closeForm.notifyAffectedPatients}
-                    onChange={e => setCloseForm(f => ({ ...f, notifyAffectedPatients: e.target.checked }))}
-                    className="mt-0.5 rounded border-slate-300 text-slate-800 focus:ring-slate-700"
-                  />
-                  <span>
-                    Notify all patients
-                    <span className="block font-normal text-slate-500">App users get a pop-up and a push notification; patients without the app get an email.</span>
-                  </span>
-                </label>
 
                 {/* Existing bookings warning card */}
                 {affectedBookings.length > 0 && (

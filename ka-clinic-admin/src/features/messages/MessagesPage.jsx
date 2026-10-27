@@ -1,5 +1,5 @@
 // ka-clinic-admin/src/features/messages/MessagesPage.jsx
-import { addDoc, collection, deleteField, doc, limit, orderBy, query, updateDoc, where } from 'firebase/firestore';
+import { addDoc, collection, deleteField, doc, getDoc, limit, orderBy, query, updateDoc, where } from 'firebase/firestore';
 import { Archive, AlertCircle, CheckCheck, Clock, Inbox, MessageSquare, RotateCcw, Search, Send, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { db, listen } from '../../lib/firebase';
@@ -22,6 +22,17 @@ const avatarColor = (name = '') => {
   for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
   return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
 };
+
+// The patient's profile photo from the app (patientAvatars/{mrn}), or their
+// initials when they have none.
+function ThreadAvatar({ name, photo, className, textClass }) {
+  if (photo) return <img src={photo} alt={name || 'Patient'} className={`${className} object-cover shadow-xs`} />;
+  return (
+    <div className={`${className} flex items-center justify-center text-white font-bold ${textClass} shadow-xs`} style={{ backgroundColor: avatarColor(name) }}>
+      {initials(name)}
+    </div>
+  );
+}
 
 /* ─── time formatter ────────────────────────────────────────── */
 const formatTime = (ts) => {
@@ -79,6 +90,20 @@ export default function MessagesPage() {
 
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
+
+  // Profile photos by MRN, fetched once per patient in the thread list.
+  const [photos, setPhotos] = useState({});
+  const requestedPhotos = useRef(new Set());
+  useEffect(() => {
+    threads.forEach(t => {
+      const mrn = t.patientMrn;
+      if (!mrn || requestedPhotos.current.has(mrn)) return;
+      requestedPhotos.current.add(mrn);
+      getDoc(doc(db, 'patientAvatars', mrn))
+        .then(snap => { if (snap.exists() && snap.data()?.dataUrl) setPhotos(p => ({ ...p, [mrn]: snap.data().dataUrl })); })
+        .catch(() => {});
+    });
+  }, [threads]);
 
   /* ── real-time chatThreads listener ────────────────────────── */
   useEffect(() => {
@@ -408,7 +433,6 @@ export default function MessagesPage() {
             ) : (
               filteredThreads.map(t => {
                 const selected = selectedThread?.id === t.id;
-                const color = avatarColor(t.patientName);
                 const isArchived = !!t.archived;
 
                 return (
@@ -426,12 +450,7 @@ export default function MessagesPage() {
                           view, so "All" shows at a glance what is unread
                           rather than hiding it behind the Unread filter. */}
                       <div className="relative flex-shrink-0">
-                        <div
-                          className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-xs"
-                          style={{ backgroundColor: color }}
-                        >
-                          {initials(t.patientName)}
-                        </div>
+                        <ThreadAvatar name={t.patientName} photo={photos[t.patientMrn]} className="w-9 h-9 rounded-full" textClass="text-xs" />
                         {t.unread && !isArchived && (
                           <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-[#3B50DF] ring-2 ring-white" />
                         )}
@@ -488,12 +507,7 @@ export default function MessagesPage() {
               {/* Top Header Bar */}
               <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-white flex-shrink-0">
                 <div className="flex items-center gap-3">
-                  <div
-                    className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-xs"
-                    style={{ backgroundColor: avatarColor(selectedThread.patientName) }}
-                  >
-                    {initials(selectedThread.patientName)}
-                  </div>
+                  <ThreadAvatar name={selectedThread.patientName} photo={photos[selectedThread.patientMrn]} className="w-10 h-10 rounded-full" textClass="text-sm" />
                   <div>
                     <h2 className="text-sm font-bold text-gray-900">{selectedThread.patientName}</h2>
                     <p className="text-[11px] text-gray-400 flex items-center gap-2">

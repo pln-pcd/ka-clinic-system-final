@@ -11,26 +11,20 @@ import { AlertTriangle, AlertCircle, CalendarDays, Check, MapPin, Pencil, Shield
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { brandAvailability } from "../../lib/inventoryStock";
 import { BTN, BTN_ICON } from "../../lib/buttons";
-import { LIBON_BARANGAYS } from '../../lib/libonGeo';
+import { LIBON_BARANGAYS, POBLACION, POBLACION_ZONES, geocodeLibonAddress, knownBarangay, libonAddress, poblacionZone, recordBarangay } from '../../lib/libonGeo';
 import { weekdayName } from '../../lib/clinicDays';
 import DatePicker from '../../components/DatePicker';
 import { FieldError, FormErrorNote, useFieldErrors } from '../../components/FormValidation';
 import { SERVICE_ICON_STROKE, SERVICE_TYPES, X } from "./shared";
 import {
   OTHERS, OTHER_TEXT_MAX, PAST_VACCINE_OPTIONS, LEGACY_PAST_VACCINE_OPTIONS, PNEUMO_HISTORY_OPTIONS,
-  RISK_CONDITION_OPTIONS, WOUND_TYPE_OPTIONS, LAST_TETANUS_OPTIONS, serviceFields, fieldLabel, fieldValue, historyErrors,
+  RISK_CONDITION_OPTIONS, LEGACY_RISK_CONDITION_OPTIONS, WOUND_TYPE_OPTIONS, LAST_TETANUS_OPTIONS, serviceFields, fieldLabel, fieldValue, historyErrors,
 } from "../../lib/serviceFields";
 
-/* ─────────────────────────── LIBON GEODATA DICTIONARY ─────────────────────────── */
-// Standard option lists for the patient intake form. Free-text fields were
-// converted to dropdowns so records stay consistent and searchable; each list
-// keeps an "Other" escape hatch where clinical reality demands one.
-export const ZONE_OPTIONS = [
-  'Zone 1', 'Zone 2', 'Zone 3', 'Zone 4', 'Zone 5', 'Zone 6', 'Zone 7',
-  'Zone 8', 'Zone 9', 'Zone 10', 'Zone 11',
-  'Purok 1', 'Purok 2', 'Purok 3', 'Purok 4', 'Purok 5', 'Purok 6',
-  'Sitio Proper', 'Poblacion',
-];
+/* ─────────────────────────── LIBON ADDRESS ─────────────────────────── */
+// Barangays and Poblacion zones come from lib/libonGeo.js (official list).
+// Puroks have no official list, so they are typed in.
+const PUROK_MAX = 60;
 
 export const WOUND_LOCATION_OPTIONS = [
   'Right Hand', 'Left Hand', 'Right Arm', 'Left Arm',
@@ -260,6 +254,7 @@ const REGISTER_RULES = {
   contact: f => (f.contact && !isValidPHPhone(f.contact) ? 'Enter a PH mobile number, e.g. 0917 123 4567' : ''),
   sex: f => (f.sex ? '' : 'Choose the sex'),
   barangay: f => (f.barangay ? '' : 'Choose the barangay'),
+  zone: f => (f.barangay === POBLACION && !f.zone ? 'Choose the zone' : ''),
   service: f => (f.service ? '' : 'Choose a service'),
   typeOfExposure: f => (f.typeOfExposure ? '' : 'Choose the type of exposure'),
   animal: f => (f.animal ? '' : 'Choose the animal'),
@@ -273,14 +268,15 @@ const REGISTER_RULES = {
   pastVaccinesOther: f => historyErrors(f).pastVaccinesOther,
   pneumoHistory: f => historyErrors(f).pneumoHistory,
   pneumoHistoryOther: f => historyErrors(f).pneumoHistoryOther,
+  riskConditionOther: f => historyErrors(f).riskConditionOther,
   allergiesOther: f => historyErrors(f).allergiesOther,
 };
 // Checked on Next, in on-screen order (the first invalid one gets focus).
 const STEP_FIELDS = {
-  identity: ['fname', 'lname', 'sex', 'dob', 'age', 'email', 'contact', 'barangay'],
+  identity: ['fname', 'lname', 'sex', 'dob', 'age', 'email', 'contact', 'barangay', 'zone'],
   services: ['service'],
   pep_details: ['date', 'typeOfExposure', 'animal', 'cat', 'woundWashed'],
-  history: ['pneumoHistory', 'pneumoHistoryOther', 'pastVaccinesOther', 'allergiesOther', 'history'],
+  history: ['pneumoHistory', 'pneumoHistoryOther', 'riskConditionOther', 'pastVaccinesOther', 'allergiesOther', 'history'],
 };
 
 function parsePatientName(p) {
@@ -381,7 +377,11 @@ function HistoryFields({ form, set, v, variant = 'wizard' }) {
           {otherBox(k, 'allergiesOther', 'Type the specific allergy')}
         </>);
       case 'riskCondition':
-        return wrap(k, false, <>{label(k, `${p}-riskCondition`)}{select(k, RISK_CONDITION_OPTIONS, 'Select condition')}</>);
+        return wrap(k, false, <>
+          {label(k, `${p}-riskCondition`)}
+          {select(k, RISK_CONDITION_OPTIONS, 'Select condition', { legacy: isEdit ? LEGACY_RISK_CONDITION_OPTIONS : [] })}
+          {otherBox(k, 'riskConditionOther', 'Type the high-risk condition')}
+        </>);
       case 'woundType':
         return wrap(k, false, <>{label(k, `${p}-woundType`)}{select(k, WOUND_TYPE_OPTIONS, 'Select injury type')}</>);
       case 'lastTetanus':
@@ -432,8 +432,10 @@ export function AddPatientModal({ onClose, onAdd, initialPatient = null }) {
     height: '',
     weight: '',
     bloodPressure: '',
-    barangay: initialPatient?.barangay || '',
-    zone: initialPatient?.zone || '',
+    barangay: knownBarangay(recordBarangay(initialPatient)),
+    zone: knownBarangay(recordBarangay(initialPatient)) === POBLACION
+      ? (poblacionZone(initialPatient?.zone) || poblacionZone(initialPatient?.barangay))
+      : (poblacionZone(initialPatient?.zone) ? '' : initialPatient?.zone || ''),
     address: initialPatient?.address || '',
     contact: initialPatient?.contact || initialPatient?.phone || '',
     guardian: initialPatient?.guardian || initialPatient?.emergencyName || '',
@@ -467,6 +469,7 @@ export function AddPatientModal({ onClose, onAdd, initialPatient = null }) {
     pneumoHistory: '',
     pneumoHistoryOther: '',
     riskCondition: '',
+    riskConditionOther: '',
   });
 
   const [saving, setSaving] = useState(false);
@@ -525,7 +528,10 @@ export function AddPatientModal({ onClose, onAdd, initialPatient = null }) {
     onAdd(form, setSaving, initialPatient);
   };
 
-  const setAddress = (barangay, zone) => setForm(f => ({ ...f, barangay, zone, address: barangay ? `${zone ? zone + ', ' : ''}Brgy. ${barangay}, Libon, Albay` : '' }));
+  const setAddress = (barangay, zone) => setForm(f => {
+    const z = (barangay === POBLACION) === (f.barangay === POBLACION) ? zone : '';
+    return { ...f, barangay, zone: z, address: libonAddress(barangay, z) };
+  });
   const fullDisplayName = [form.fname, form.mname, form.lname].filter(Boolean).join(' ') + (form.suffix ? `, ${form.suffix}` : '');
   const ageFromBirth = ageFromDob(form.dob);
   const serviceLabel = SERVICE_TYPES.find(s => s.key === form.service)?.label || form.service;
@@ -694,14 +700,23 @@ export function AddPatientModal({ onClose, onAdd, initialPatient = null }) {
                     </Select>
                     <FieldError v={v} name="barangay" />
                   </div>
-                  <div className="form-field"><label htmlFor="reg-zone">Zone / street / purok</label>
-                    <Select id="reg-zone" value={form.zone || ''} onChange={e => setAddress(form.barangay || '', e.target.value)}>
-                      <option value="">Select zone / purok</option>
-                      {ZONE_OPTIONS.map(z => <option key={z} value={z}>{z}</option>)}
-                    </Select>
-                  </div>
+                  {form.barangay === POBLACION ? (
+                    <div className="form-field"><label htmlFor="reg-zone">Zone <Req /></label>
+                      <Select {...v.field('zone', { withBlur: false })} value={form.zone || ''} onChange={e => setAddress(POBLACION, e.target.value)}>
+                        <option value="">Select zone</option>
+                        {POBLACION_ZONES.map(z => <option key={z} value={z}>{z}</option>)}
+                      </Select>
+                      <FieldError v={v} name="zone" />
+                    </div>
+                  ) : (
+                    <div className="form-field"><label htmlFor="reg-zone">Purok / sitio / street <Opt /></label>
+                      <input id="reg-zone" type="text" value={form.zone || ''} maxLength={PUROK_MAX} disabled={!form.barangay}
+                        onChange={e => setAddress(form.barangay || '', e.target.value)}
+                        placeholder={form.barangay ? 'e.g. Purok 3' : 'Choose the barangay first'} autoComplete="off" />
+                    </div>
+                  )}
                   <div className="form-field span-2"><label htmlFor="reg-address">Full address <Opt>auto-filled</Opt></label>
-                    <input id="reg-address" type="text" value={form.address} placeholder="Fills in from the barangay and zone" readOnly tabIndex={-1} />
+                    <input id="reg-address" type="text" value={form.address} placeholder="Fills in from the barangay and zone / purok" readOnly tabIndex={-1} />
                   </div>
                 </FormGroup>
 
@@ -852,7 +867,7 @@ export function AddPatientModal({ onClose, onAdd, initialPatient = null }) {
                     <dt>Service</dt><dd>{serviceLabel}</dd>
                     {isPep && <><dt>Category</dt><dd>{form.cat || '—'}{form.animal ? ` · ${form.animal}` : ''}</dd></>}
                     {isPep && <><dt>Exposure</dt><dd>{formatDateMedium(form.date || today())}</dd></>}
-                    <dt>Barangay</dt><dd>{form.barangay || '—'}</dd>
+                    <dt>Barangay</dt><dd>{form.barangay ? (form.barangay === POBLACION && form.zone ? `${form.zone}, ${POBLACION}` : form.barangay) : '—'}</dd>
                   </dl>
                   <button type="button" className="apw-link" onClick={() => jumpToStepId('identity')}><Pencil size={12} aria-hidden="true" /> Edit patient identity</button>
                 </aside>
@@ -996,6 +1011,7 @@ const EDIT_RULES = {
   // here, so older Pneumonia records saved before it existed stay editable.
   pastVaccinesOther: REGISTER_RULES.pastVaccinesOther,
   pneumoHistoryOther: REGISTER_RULES.pneumoHistoryOther,
+  riskConditionOther: REGISTER_RULES.riskConditionOther,
   allergiesOther: REGISTER_RULES.allergiesOther,
 };
 
@@ -1014,7 +1030,7 @@ export function EditPatientModal({ patient, onClose, onSave, inventoryItems = []
     allergies: patient.allergies || '', allergiesOther: patient.allergiesOther || '', notes: patient.notes || '', patientNote: patient.patientNote || '',
     woundType: patient.woundType || '', lastTetanus: patient.lastTetanus || '',
     pneumoHistory: patient.pneumoHistory || '', pneumoHistoryOther: patient.pneumoHistoryOther || '',
-    riskCondition: patient.riskCondition || '',
+    riskCondition: patient.riskCondition || '', riskConditionOther: patient.riskConditionOther || '',
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const editDobAge = ageFromDob(form.dob);
@@ -1032,7 +1048,7 @@ export function EditPatientModal({ patient, onClose, onSave, inventoryItems = []
   // handleEditSave (parent) persists and closes this modal itself; the
   // checks here are the same inline ones as the Register wizard.
   const v = useFieldErrors(EDIT_RULES, form, 'edit');
-  const editFields = ['name', 'age', 'dob', 'email', 'contact', 'service', 'vaccineBrand', ...(isPep ? ['date', 'animal', 'cat'] : []), 'pastVaccinesOther', 'pneumoHistoryOther', 'allergiesOther'];
+  const editFields = ['name', 'age', 'dob', 'email', 'contact', 'service', 'vaccineBrand', ...(isPep ? ['date', 'animal', 'cat'] : []), 'pastVaccinesOther', 'pneumoHistoryOther', 'riskConditionOther', 'allergiesOther'];
   function handleSave() {
     if (!v.validate(editFields)) return;
     onSave(form);
@@ -1188,7 +1204,7 @@ export function EditPatientModal({ patient, onClose, onSave, inventoryItems = []
                     type="text"
                     value={form.address}
                     onChange={e => set('address', e.target.value)}
-                    placeholder="Zone, Brgy., Libon, Albay"
+                    placeholder="Purok, Brgy., Libon, Albay"
                     className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
                   />
                 </div>
@@ -1518,9 +1534,9 @@ export function DuplicatePatientModal({ form, matches, onProceed, onCancel }) {
 
 export function PinMapConfirmModal({ patient, saving, onConfirm, onCancel }) {
   if (!patient) return null;
-  const barangayVal = patient.barangay || (patient.address ? (patient.address.match(/Brgy\.\s*([^,]+)/)?.[1] || 'San Juan') : 'San Juan');
-  const zoneVal = patient.zone || (patient.address ? patient.address.split(',')[0].replace(/Brgy\..*/, '').trim() : 'Zone 1');
-  const locationStr = `${zoneVal ? zoneVal + ', ' : ''}Brgy. ${barangayVal}, Libon, Albay`;
+  const barangayVal = recordBarangay(patient);
+  const zoneVal = patient.zone || '';
+  const locationStr = patient.address || libonAddress(barangayVal, zoneVal);
   const exposureTypeVal = patient.service === 'PEP' ? `${patient.animal || 'Dog'} Bite` : (patient.service || 'Bite Incident');
   return (
     <ConfirmDialog

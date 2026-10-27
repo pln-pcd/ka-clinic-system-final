@@ -1,81 +1,132 @@
-// Libon, Albay barangay list and approximate map coordinates, shared by the
-// patient intake form, the Incident Map and the demo seed script
-// (scripts/demo). Pure data and math, no React, so Node can import it.
+// Libon, Albay barangays and their map points, shared by the patient intake
+// form, the Patients list, the Incident Map and the seed scripts. Pure data
+// and math, no React, so Node can import it.
+//
+// Source: the 47 barangays of Libon as listed by PSA (via PhilAtlas,
+// philatlas.com/luzon/r05/albay/libon.html), with each barangay's point from
+// its PhilAtlas page. The seven Poblacion barangays (Zone I to Zone VII) are
+// chosen as "Poblacion" plus a zone, so the barangay list has no zone entries.
+// Puroks and sitios are set by each barangay and have no official published
+// list, so they are typed in, not chosen.
 
-export const LIBON_BARANGAYS = [
-  'San Juan', 'San Rafael', 'Matacon', 'Bulusan', 'Bonavista', 'Carisac East',
-  'Carisac West', 'Rawis', 'Pantao', 'Bap-bap', 'Bambon', 'Barbon', 'Burabod',
-  'Cagbulos', 'Harigue', 'Liberacion', 'Izcala', 'Labnig', 'Linao', 'Magcawayan',
-  'Malabag', 'Maroba', 'Molosbolos', 'Nino Jesus', 'Nogpo', 'San Agustin',
-  'San Antonio', 'San Isidro', 'San Jose', 'San Roque', 'San Vicente', 'Santa Cruz',
-  'Sogo', 'Talin-talin', 'Tambo', 'Tipa-tipa', 'Zone 1', 'Zone 2', 'Zone 3',
-  'Zone 4', 'Zone 5', 'Zone 6', 'Zone 7', 'Zone 8', 'Zone 9', 'Zone 10', 'Zone 11'
-];
+export const POBLACION = 'Poblacion';
+export const POBLACION_ZONES = ['Zone I', 'Zone II', 'Zone III', 'Zone IV', 'Zone V', 'Zone VI', 'Zone VII'];
+
+const BARANGAY_POINTS = {
+  'Alongong':        { lat: 13.2825, lng: 123.3231 },
+  'Apud':            { lat: 13.1378, lng: 123.2979 },
+  'Bacolod':         { lat: 13.2699, lng: 123.4353 },
+  'Bariw':           { lat: 13.2788, lng: 123.3617 },
+  'Bonbon':          { lat: 13.2823, lng: 123.3928 },
+  'Buga':            { lat: 13.2944, lng: 123.3540 },
+  'Bulusan':         { lat: 13.2899, lng: 123.4063 },
+  'Burabod':         { lat: 13.2667, lng: 123.4128 },
+  'Caguscos':        { lat: 13.2293, lng: 123.3440 },
+  'East Carisac':    { lat: 13.2988, lng: 123.4538 },
+  'Harigue':         { lat: 13.2538, lng: 123.3480 },
+  'Libtong':         { lat: 13.2677, lng: 123.3674 },
+  'Linao':           { lat: 13.2525, lng: 123.4415 },
+  'Mabayawas':       { lat: 13.2202, lng: 123.4098 },
+  'Macabugos':       { lat: 13.2437, lng: 123.3148 },
+  'Magallang':       { lat: 13.2627, lng: 123.3871 },
+  'Malabiga':        { lat: 13.2186, lng: 123.3654 },
+  'Marayag':         { lat: 13.2825, lng: 123.4564 },
+  'Matara':          { lat: 13.1963, lng: 123.3778 },
+  'Molosbolos':      { lat: 13.2670, lng: 123.3357 },
+  'Natasan':         { lat: 13.2244, lng: 123.3848 },
+  'Niño Jesus':      { lat: 13.2503, lng: 123.4054 },
+  'Nogpo':           { lat: 13.2903, lng: 123.3764 },
+  'Pantao':          { lat: 13.1953, lng: 123.3373 },
+  'Rawis':           { lat: 13.1501, lng: 123.3117 },
+  'Sagrada Familia': { lat: 13.2708, lng: 123.3897 },
+  'Salvacion':       { lat: 13.2055, lng: 123.3880 },
+  'Sampongan':       { lat: 13.2041, lng: 123.3680 },
+  'San Agustin':     { lat: 13.3177, lng: 123.4249 },
+  'San Antonio':     { lat: 13.2379, lng: 123.3961 },
+  'San Isidro':      { lat: 13.2765, lng: 123.4427 },
+  'San Jose':        { lat: 13.2413, lng: 123.3628 },
+  'San Pascual':     { lat: 13.2150, lng: 123.3960 },
+  'San Ramon':       { lat: 13.2349, lng: 123.4253 },
+  'San Vicente':     { lat: 13.2574, lng: 123.4290 },
+  'Santa Cruz':      { lat: 13.3184, lng: 123.3949 },
+  'Talin-talin':     { lat: 13.1656, lng: 123.3245 },
+  'Tambo':           { lat: 13.2634, lng: 123.2939 },
+  'Villa Petrona':   { lat: 13.2544, lng: 123.3774 },
+  'West Carisac':    { lat: 13.3107, lng: 123.4428 },
+};
+
+export const POBLACION_ZONE_COORDS = {
+  'Zone I':   { lat: 13.2884, lng: 123.4459 },
+  'Zone II':  { lat: 13.2924, lng: 123.4407 },
+  'Zone III': { lat: 13.2989, lng: 123.4434 },
+  'Zone IV':  { lat: 13.2954, lng: 123.4213 },
+  'Zone V':   { lat: 13.3043, lng: 123.4430 },
+  'Zone VI':  { lat: 13.3069, lng: 123.4157 },
+  'Zone VII': { lat: 13.3084, lng: 123.4322 },
+};
+
+// The town proper (PhilAtlas' point for Libon), used for Poblacion without a
+// zone and for anything that cannot be placed.
+export const LIBON_CENTER = { lat: 13.2998, lng: 123.4384 };
+
+/** The barangay dropdown: the 40 named barangays and Poblacion, A–Z. */
+export const LIBON_BARANGAYS = [...Object.keys(BARANGAY_POINTS), POBLACION].sort((a, b) => a.localeCompare(b));
+
+export const LIBON_BARANGAY_COORDS = { ...BARANGAY_POINTS, [POBLACION]: LIBON_CENTER };
+
+// Names older records were saved with, mapped to today's list. Barangays
+// that are not in Libon at all (San Rafael, Matacon, ...) have no mapping
+// and are shown as saved.
+const ALIASES = {
+  'carisac east': 'East Carisac',
+  'carisac west': 'West Carisac',
+  'nino jesus': 'Niño Jesus',
+  'santo niño jesus': 'Niño Jesus',
+  'santo nino jesus': 'Niño Jesus',
+  'tambo walis': 'Tambo',
+};
+const ROMAN = { 1: 'Zone I', 2: 'Zone II', 3: 'Zone III', 4: 'Zone IV', 5: 'Zone V', 6: 'Zone VI', 7: 'Zone VII' };
+
+/** "Zone 3", "zone iii", "Zone III (Poblacion)" → "Zone III"; '' when not a Poblacion zone. */
+export function poblacionZone(name) {
+  const s = String(name || '').trim().replace(/\s*\(pob(lacion|\.)?\)\s*$/i, '');
+  const m = s.match(/^zone\s+([0-9]+|[ivx]+)$/i);
+  if (!m) return '';
+  if (/^\d+$/.test(m[1])) return ROMAN[Number(m[1])] || '';
+  return POBLACION_ZONES.find(z => z.toLowerCase() === `zone ${m[1].toLowerCase()}`) || '';
+}
+
+/** An official barangay name for `name` (old spellings and Poblacion zones included), or ''. */
+export function knownBarangay(name) {
+  const s = String(name || '').trim();
+  if (!s) return '';
+  const lower = s.toLowerCase();
+  if (lower === 'poblacion' || poblacionZone(s)) return POBLACION;
+  return LIBON_BARANGAYS.find(b => b.toLowerCase() === lower) || ALIASES[lower] || '';
+}
+
+/** The address line a registration saves: "Zone II, Poblacion, Libon, Albay" or "Purok 3, Brgy. Linao, Libon, Albay". */
+export function libonAddress(barangay, zone) {
+  if (!barangay) return '';
+  if (barangay === POBLACION) return `${zone ? `${zone}, ` : ''}${POBLACION}, Libon, Albay`;
+  return `${zone ? `${zone}, ` : ''}Brgy. ${barangay}, Libon, Albay`;
+}
 
 /**
  * The barangay of a patient record for lists: the `barangay` saved at
- * registration; for older records without it, the barangay named in the
- * registration address ("Zone 4, Brgy. San Rafael, Libon, Albay") when that
- * is exactly one of Libon's barangays. Otherwise '' (shown as "—"); it is
- * never guessed from other free text.
+ * registration (old spellings mapped to the official name); for older records
+ * without it, the barangay named in the registration address. A saved name
+ * that is not a Libon barangay is shown as saved; nothing is guessed from
+ * other free text.
  */
 export function recordBarangay(p) {
-  const known = (name) => LIBON_BARANGAYS.find(b => b.toLowerCase() === String(name || '').trim().toLowerCase()) || '';
   const saved = String(p?.barangay || '').trim();
-  if (saved) return known(saved) || saved;
-  const m = String(p?.address || '').match(/\bBrgy\.?\s+([^,]+)/i);
-  return m ? known(m[1]) : '';
+  if (saved) return knownBarangay(saved) || saved;
+  const address = String(p?.address || '');
+  const m = address.match(/\bBrgy\.?\s+([^,]+)/i);
+  if (m) return knownBarangay(m[1]);
+  return /\bPoblacion\b/i.test(address) ? POBLACION : '';
 }
-
-export const LIBON_BARANGAY_COORDS = {
-  'San Juan':       { lat: 13.3000, lng: 123.4350 },
-  'San Rafael':     { lat: 13.2920, lng: 123.4280 },
-  'Matacon':        { lat: 13.2850, lng: 123.4210 },
-  'Bulusan':        { lat: 13.3150, lng: 123.4420 },
-  'Bonavista':      { lat: 13.3210, lng: 123.4500 },
-  'Carisac East':   { lat: 13.3100, lng: 123.4600 },
-  'Carisac West':   { lat: 13.3080, lng: 123.4520 },
-  'Rawis':          { lat: 13.3320, lng: 123.4650 },
-  'Pantao':         { lat: 13.3450, lng: 123.4750 },
-  'Bap-bap':        { lat: 13.2750, lng: 123.4100 },
-  'Bambon':         { lat: 13.2980, lng: 123.4250 },
-  'Barbon':         { lat: 13.2820, lng: 123.4310 },
-  'Burabod':        { lat: 13.3040, lng: 123.4400 },
-  'Cagbulos':       { lat: 13.3120, lng: 123.4310 },
-  'Harigue':        { lat: 13.3180, lng: 123.4220 },
-  'Liberacion':     { lat: 13.3010, lng: 123.4370 },
-  'Izcala':         { lat: 13.2900, lng: 123.4480 },
-  'Labnig':         { lat: 13.3250, lng: 123.4380 },
-  'Linao':          { lat: 13.3300, lng: 123.4420 },
-  'Magcawayan':     { lat: 13.3350, lng: 123.4550 },
-  'Malabag':        { lat: 13.2950, lng: 123.4500 },
-  'Maroba':         { lat: 13.2880, lng: 123.4600 },
-  'Molosbolos':     { lat: 13.3060, lng: 123.4680 },
-  'Nino Jesus':     { lat: 13.2990, lng: 123.4290 },
-  'Nogpo':          { lat: 13.3400, lng: 123.4600 },
-  'San Agustin':    { lat: 13.3050, lng: 123.4200 },
-  'San Antonio':    { lat: 13.3100, lng: 123.4150 },
-  'San Isidro':     { lat: 13.2920, lng: 123.4390 },
-  'San Jose':       { lat: 13.2960, lng: 123.4440 },
-  'San Roque':      { lat: 13.3020, lng: 123.4460 },
-  'San Vicente':    { lat: 13.3080, lng: 123.4410 },
-  'Santa Cruz':     { lat: 13.3150, lng: 123.4510 },
-  'Sogo':           { lat: 13.3220, lng: 123.4620 },
-  'Talin-talin':    { lat: 13.3280, lng: 123.4710 },
-  'Tambo':          { lat: 13.3360, lng: 123.4800 },
-  'Tipa-tipa':      { lat: 13.3420, lng: 123.4880 },
-  'Zone 1':         { lat: 13.3005, lng: 123.4355 },
-  'Zone 2':         { lat: 13.3015, lng: 123.4365 },
-  'Zone 3':         { lat: 13.3025, lng: 123.4375 },
-  'Zone 4':         { lat: 13.3035, lng: 123.4385 },
-  'Zone 5':         { lat: 13.3045, lng: 123.4395 },
-  'Zone 6':         { lat: 13.2995, lng: 123.4345 },
-  'Zone 7':         { lat: 13.2985, lng: 123.4335 },
-  'Zone 8':         { lat: 13.2975, lng: 123.4325 },
-  'Zone 9':         { lat: 13.2965, lng: 123.4315 },
-  'Zone 10':        { lat: 13.2955, lng: 123.4305 },
-  'Zone 11':        { lat: 13.2945, lng: 123.4295 },
-};
 
 function getHashOffset(str) {
   if (!str) return { latOffset: 0, lngOffset: 0 };
@@ -89,8 +140,15 @@ function getHashOffset(str) {
   return { latOffset, lngOffset };
 }
 
+/**
+ * A map point for a barangay (and, in Poblacion, its zone): the barangay's
+ * point plus a small fixed offset (up to ~170 m) from the zone/purok text, so
+ * cases from one barangay do not all sit on one spot.
+ */
 export function geocodeLibonAddress(barangay, zone) {
-  const base = LIBON_BARANGAY_COORDS[barangay] || { lat: 13.3000, lng: 123.4350 };
+  const brgy = knownBarangay(barangay);
+  const pobZone = brgy === POBLACION ? (poblacionZone(zone) || poblacionZone(barangay)) : '';
+  const base = (pobZone && POBLACION_ZONE_COORDS[pobZone]) || LIBON_BARANGAY_COORDS[brgy] || LIBON_CENTER;
   const { latOffset, lngOffset } = getHashOffset(zone || barangay);
   return {
     lat: +(base.lat + latOffset).toFixed(6),
