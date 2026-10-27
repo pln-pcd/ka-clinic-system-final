@@ -6,19 +6,23 @@
 // (removable with scripts/sample-patients.js remove). Emails use
 // example.com, so the mailer never sends to them.
 //
-//   node --env-file=.env scripts/seed-more-patients.mjs [--dry-run]
+// --overdue adds 3 different patients instead, each with a dose whose date
+// has passed without being given (2 PEP, 1 Tetanus), so they show as Overdue.
+//
+//   node --env-file=.env scripts/seed-more-patients.mjs [--overdue] [--dry-run]
 import { Timestamp } from 'firebase-admin/firestore';
 import { buildInitialDoses } from '../ka-clinic-admin/src/lib/doseSchedules.js';
 import { addDaysToDateString, getTodayDateString } from '../ka-clinic-admin/src/lib/formatters.js';
 import { LIBON_BARANGAYS, libonAddress } from '../ka-clinic-admin/src/lib/libonGeo.js';
 
 const DRY = process.argv.includes('--dry-run');
+const OVERDUE = process.argv.includes('--overdue');
 const { db } = await import('../api/_lib/firebaseAdmin.js');
 
 const TODAY = getTodayDateString();
 const YEAR = TODAY.slice(0, 4);
 const STAFF = { uid: 'NPSrGHIQs4N7ULnKMhx9AzWeTZA2', name: 'Paulina Dela Cruz' };
-const MARK = { isSeedData: true, sampleBatch: 'more-2026-10' };
+const MARK = { isSeedData: true, sampleBatch: OVERDUE ? 'overdue-2026-10' : 'more-2026-10' };
 const ms = (d, t = '09:00') => Date.parse(`${d}T${t}:00+08:00`);
 const ago = n => addDaysToDateString(TODAY, -n);
 
@@ -73,7 +77,25 @@ const PATIENTS = [
     pastVaccines: 'None', allergies: 'None', notes: 'Agriculture student handling farm animals during practicum.', vitals: ['171', '63', '118/72'] },
 ];
 
-for (const p of PATIENTS) {
+// Overdue: `given` = how many doses were given; the next one's date has
+// already passed, so the tracker and the app show it as Overdue.
+const OVERDUE_PATIENTS = [
+  // Day 0 and Day 3 given; Day 7 (5 days ago) missed.
+  { name: 'Rodrigo B. Salazar', sex: 'Male', dob: '1987-03-02', barangay: 'Bacolod', zone: 'Purok 4', service: 'PEP', day0: ago(12), given: 2,
+    cat: 'III', animal: 'Dog', typeOfExposure: 'Bite', source: 'Stray animal', place: 'Farm', wound: 'Left Leg', depth: 'Deep / Penetrating', bites: '1',
+    pastVaccines: 'None', allergies: 'None', notes: 'Bitten while tending carabaos. Did not return for the Day 7 session; follow-up message sent.', vitals: ['167', '68', '125/80'] },
+  // Day 0 given; Day 3 (3 days ago) missed.
+  { name: 'Lourdes F. Pineda', sex: 'Female', dob: '2001-11-23', barangay: 'Poblacion', zone: 'Zone II', service: 'PEP', day0: ago(6), given: 1,
+    cat: 'II', animal: 'Cat', typeOfExposure: 'Scratch', source: 'Owned pet', place: 'Own residence', wound: 'Right Hand', depth: 'Superficial', bites: '1',
+    pastVaccines: 'None', allergies: 'Others', allergiesOther: 'Shellfish', notes: 'Scratched by own cat. Missed the Day 3 session due to work.', vitals: ['158', '50', '110/70'] },
+  // Dose 1 given; Dose 2 (1 month, already past) missed.
+  { name: 'Teodoro C. Abarquez', sex: 'Male', dob: '1975-06-14', barangay: 'Matara', zone: 'Purok 1', service: 'Tetanus', day0: ago(40), given: 1,
+    pastVaccines: 'Tetanus Toxoid only', allergies: 'None', woundType: 'Puncture', lastTetanus: 'More than 10 years ago',
+    notes: 'Puncture wound from barbed wire. Dose 2 not yet received.', vitals: ['170', '74', '135/85'] },
+];
+const SELECTED = OVERDUE ? OVERDUE_PATIENTS : PATIENTS;
+
+for (const p of SELECTED) {
   if (!LIBON_BARANGAYS.includes(p.barangay)) throw new Error(`${p.name}: ${p.barangay} is not in LIBON_BARANGAYS`);
 }
 
@@ -93,15 +115,15 @@ function treatment(kind, product, date) {
 }
 
 function buildRecord(p, i, mrn) {
-  const contact = `+63917555${String(3100 + i).padStart(4, '0')}`;
+  const contact = `+63917555${String((OVERDUE ? 3200 : 3100) + i).padStart(4, '0')}`;
   const [first, ...rest] = p.name.split(' ');
   const email = `${first.toLowerCase()}.${rest.pop().toLowerCase()}@example.com`;
   const vaccine = VACCINE[p.pneumo || p.service];
   const isPep = p.service === 'PEP';
   const pep = v => (isPep ? v : '');
 
-  // Doses on or before today are given (today's at 9 AM if already past).
-  const doses = buildInitialDoses(p.service, { day0: p.day0 }).map(d => (d.date < TODAY
+  // Doses before today are given (only the first `given` for an overdue patient).
+  const doses = buildInitialDoses(p.service, { day0: p.day0 }).map((d, di) => (d.date < TODAY && (p.given === undefined || di < p.given)
     ? { ...d, status: 'done', s: 'done', statusText: 'Completed', done: true, brand: vaccine.brand, stockDeducted: false,
         givenAt: ms(d.date), givenBy: STAFF.uid, givenByName: STAFF.name, attendingName: STAFF.name }
     : d));
@@ -126,7 +148,10 @@ function buildRecord(p, i, mrn) {
     allergies: p.allergies, allergiesOther: p.allergiesOther || '',
     woundType: p.woundType || '', lastTetanus: p.lastTetanus || '',
     pneumoHistory: p.pneumoHistory || '', pneumoHistoryOther: '', riskCondition: p.riskCondition || '',
-    notes: p.notes, patientNote: completed ? 'Vaccination complete. Keep this card for your records.' : 'Please come back on your next scheduled date.',
+    notes: p.notes,
+    patientNote: completed ? 'Vaccination complete. Keep this card for your records.'
+      : p.given !== undefined ? 'Your next dose is overdue. Please visit the clinic as soon as you can.'
+      : 'Please come back on your next scheduled date.',
     woundImages: [], reports: [], caseHistory: [],
     treatments,
     ...(treatments.length ? { rigTreatment: treatments[0], antiTetanusTreatment: treatments[1], rigGiven: 'Yes (ERIG)' } : isPep ? { rigGiven: 'No' } : {}),
@@ -152,7 +177,7 @@ const used = [
 let seq = Math.max(Number(counter.currentYear) === Number(YEAR) ? counter.lastSequence || 0 : 0, ...used, 0);
 
 const batch = db.batch();
-for (const [i, p] of PATIENTS.entries()) {
+for (const [i, p] of SELECTED.entries()) {
   const mrn = `${YEAR}-${String(++seq).padStart(3, '0')}`;
   const { vax, authz, reg } = buildRecord(p, i, mrn);
   console.log(`${mrn}  ${p.name.padEnd(26)} ${p.service.padEnd(9)} ${vax.status.padEnd(9)} ${vax.dose}  ${p.barangay}`);
