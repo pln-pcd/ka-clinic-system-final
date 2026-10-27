@@ -134,21 +134,23 @@ function Rows({ v, rows }: { v: Sizes; rows: CardRow[] }) {
 // Keeps "Session 1 (Day 0)" on one line while giving extra room to long vaccine names.
 const COLS = [1.65, 1.65, 1.05, 0.8];
 
-function Front({ v, d }: { v: Sizes; d: CardData }) {
+// `fill` (Enlarge pop-up): the dose table grows to the bottom of the card and
+// its rows share the extra height, so there is no empty band under it.
+function Front({ v, d, fill }: { v: Sizes; d: CardData; fill?: boolean }) {
   return (
-    <View>
+    <View style={fill ? { flexGrow: 1 } : undefined}>
       <Header v={v} title={d.frontTitle} subtitle={d.frontSubtitle} tag={d.tag} />
       <Rows v={v} rows={d.frontRows} />
-      <View style={[st.table, { marginTop: v.tableTop, borderRadius: v.tableRadius }]}>
+      <View style={[st.table, { marginTop: v.tableTop, borderRadius: v.tableRadius }, fill && { flexGrow: 1 }]}>
         <View style={st.tableHead}>
           {['Dose', 'Vaccine / Dosage', 'Date', 'Status'].map((h, i) => (
             <Text key={h} style={[st.th, { fontSize: v.th, flex: COLS[i], paddingHorizontal: v.thPadX, paddingVertical: v.thPadY }, i === 3 && st.lastCell]}>{h}</Text>
           ))}
         </View>
         {d.doses.map((r, idx) => (
-          <View key={r.key} style={[st.tr, idx % 2 === 1 && st.trAlt]}>
+          <View key={r.key} style={[st.tr, idx % 2 === 1 && st.trAlt, fill && { flexGrow: 1 }]}>
             {[r.label, r.vaccine, r.date, r.status].map((c, i) => (
-              <Text key={i} style={[st.td, { fontSize: v.td, flex: COLS[i], paddingHorizontal: v.tdPadX, paddingVertical: v.tdPadY }, i === 0 && st.tdStrong, i === 1 && st.tdMid, i === 3 && st.lastCell]}>{c}</Text>
+              <Text key={i} style={[st.td, { fontSize: v.td, flex: COLS[i], paddingHorizontal: v.tdPadX, paddingVertical: v.tdPadY }, fill && st.tdFill, i === 0 && st.tdStrong, i === 1 && st.tdMid, i === 3 && st.lastCell]}>{c}</Text>
             ))}
           </View>
         ))}
@@ -243,7 +245,7 @@ export default function VaccinationCard({ variant, data, flipped, frontRef, back
           <View testID={`shot-${variant}-${side}`} style={StyleSheet.absoluteFill} pointerEvents="none" />
           <View style={[st.cardBody, { paddingHorizontal: v.padX, paddingVertical: v.padY, height: inner }]}>
             {side === 'front'
-              ? <View onLayout={onBody}><Front v={v} d={data} /></View>
+              ? <View onLayout={onBody} style={variant === 'popup' ? { flexGrow: 1 } : undefined}><Front v={v} d={data} fill={variant === 'popup'} /></View>
               : <Back v={v} d={data} onContent={onBackBody} />}
           </View>
         </ViewShot>
@@ -308,6 +310,7 @@ const st = StyleSheet.create({
   tr: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#E2E8F0', backgroundColor: '#FFFFFF' },
   trAlt: { backgroundColor: '#F8FAFC' },
   td: { color: '#334155', borderRightWidth: 1, borderRightColor: '#CBD5E1' },
+  tdFill: { textAlignVertical: 'center' },
   tdStrong: { fontWeight: '700', color: '#0F172A' },
   tdMid: { fontWeight: '600' },
   lastCell: { borderRightWidth: 0 },

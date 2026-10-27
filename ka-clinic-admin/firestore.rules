@@ -77,9 +77,11 @@ service cloud.firestore {
             && request.resource.data.status != 'accepted'
             && request.resource.data.status != 'done'
             && (
-              // Patient direct cancellation
+              // Patient direct cancellation. Not for an appointment inside a
+              // clinic closure: the patient reschedules it instead.
               (
                 request.resource.data.status == 'cancelled'
+                && resource.data.get('affectedByClosure', false) != true
                 && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
                   'status', 'cancelledAt', 'cancelledBy', 'cancelReason', 'cancellationReason', 'updatedAt'
                 ])
@@ -92,8 +94,14 @@ service cloud.firestore {
                 && request.resource.data.time is string && request.resource.data.time.size() > 0
                 && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
                   'date', 'time', 'status', 'notes', 'previousDate', 'previousTime',
-                  'rescheduledAt', 'rescheduledCount', 'rescheduleHistory', 'updatedAt'
+                  'rescheduledAt', 'rescheduledCount', 'rescheduleHistory', 'updatedAt',
+                  'affectedByClosure', 'closureId', 'closureReason'
                 ])
+                // A patient may clear the closure flag when moving out of a
+                // closure (1.0.18+), or leave it as is (older apps), but
+                // never set it.
+                && (request.resource.data.get('affectedByClosure', false) != true
+                  || resource.data.get('affectedByClosure', false) == true)
                 && (!('notes' in request.resource.data) || (request.resource.data.notes is string && request.resource.data.notes.size() <= 300))
               )
             )

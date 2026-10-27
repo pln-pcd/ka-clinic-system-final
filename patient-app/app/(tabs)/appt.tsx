@@ -309,6 +309,18 @@ export default function AppointmentsScreen() {
   const [submittingCancellation, setSubmittingCancellation] = useState(false);
 
   const openCancelModal = (appt: FirestoreAppt) => {
+    if (appt.affectedByClosure) {
+      showAlert({
+        type: 'info',
+        title: 'Reschedule instead',
+        message: 'The clinic is closed at this time. Please reschedule your appointment to another date or time slot.',
+        primaryButtonText: 'Reschedule',
+        onPrimaryPress: () => { hideAlert(); openReschedule(appt); },
+        secondaryButtonText: 'Not now',
+        onSecondaryPress: hideAlert,
+      });
+      return;
+    }
     if (appt.status === 'cancelled' || appt.status === 'done' || appt.date < todayKey) {
       showAlert({
         type: 'warning',
@@ -526,6 +538,8 @@ export default function AppointmentsScreen() {
           rescheduledAt: Date.now(),
           rescheduledCount: prevCount + 1,
           rescheduleHistory: [...prevHistory, historyItem],
+          // The new date/time is open, so the closure no longer applies.
+          ...(target.affectedByClosure ? { affectedByClosure: false, closureId: null, closureReason: null } : {}),
           updatedAt: Date.now(),
         });
       });
@@ -1184,7 +1198,9 @@ export default function AppointmentsScreen() {
             <View style={s.apptListCard}>
               {upcomingApts.map((appt, idx) => {
                 const confirmedLike = appt.status === 'confirmed' || appt.status === 'accepted' || appt.status === 'done';
-                const canCancel = appt.status === 'pending' || appt.status === 'confirmed' || appt.status === 'accepted';
+                // An appointment inside a clinic closure can only be moved, not
+                // cancelled (firestore.rules refuses the cancel too).
+                const canCancel = (appt.status === 'pending' || appt.status === 'confirmed' || appt.status === 'accepted') && !appt.affectedByClosure;
                 return (
                   <View key={appt.id}>
                     <Tap style={s.apptListItem} activeOpacity={0.85} onPress={() => setSelectedApptDetail(appt)}
@@ -1246,7 +1262,7 @@ export default function AppointmentsScreen() {
                           {appt.closureReason || 'The clinic schedule for this time has been closed.'}
                         </Text>
                         <Text style={s.closureCardSub}>
-                          Your appointment is still on record. Please reschedule or cancel.
+                          Your appointment is still on record. Please pick another date or time slot.
                         </Text>
                         <View style={s.closureCardBtnRow}>
                           <Tap
@@ -1255,13 +1271,6 @@ export default function AppointmentsScreen() {
                           >
                             <Ionicons name="calendar-outline" size={13} color="#FFFFFF" />
                             <Text style={s.closureCardRescheduleTxt}>Reschedule</Text>
-                          </Tap>
-                          <Tap
-                            style={s.closureCardCancelBtn}
-                            onPress={() => openCancelModal(appt)}
-                          >
-                            <Ionicons name="close-circle-outline" size={13} color="#334155" />
-                            <Text style={s.closureCardCancelTxt}>Cancel appointment</Text>
                           </Tap>
                         </View>
                       </View>
@@ -1779,7 +1788,7 @@ export default function AppointmentsScreen() {
                               {selectedApptDetail.closureReason || 'The clinic schedule for this time has been closed.'}
                             </Text>
                             <Text style={s.closureCardSub}>
-                              Your appointment is still on record. Please reschedule or cancel.
+                              Your appointment is still on record. Please pick another date or time slot.
                             </Text>
                             <View style={s.closureCardBtnRow}>
                               <Tap
@@ -1792,17 +1801,6 @@ export default function AppointmentsScreen() {
                               >
                                 <Ionicons name="calendar-outline" size={13} color="#FFFFFF" />
                                 <Text style={s.closureCardRescheduleTxt}>Reschedule</Text>
-                              </Tap>
-                              <Tap
-                                style={s.closureCardCancelBtn}
-                                onPress={() => {
-                                  const target = selectedApptDetail;
-                                  setSelectedApptDetail(null);
-                                  openCancelModal(target);
-                                }}
-                              >
-                                <Ionicons name="close-circle-outline" size={13} color="#334155" />
-                                <Text style={s.closureCardCancelTxt}>Cancel appointment</Text>
                               </Tap>
                             </View>
                           </View>
@@ -1895,15 +1893,17 @@ export default function AppointmentsScreen() {
                             <Ionicons name="calendar-outline" size={14} color={C.navy} style={{ marginRight: scale(4) }} />
                             <Text style={sm.secondaryTxt}>Reschedule</Text>
                           </Tap>
-                          <Tap
-                            style={[sm.confirmBtn, { flex: 1, backgroundColor: C.navy }]}
-                            activeOpacity={0.85}
-                            accessibilityRole="button"
-                            onPress={() => openCancelModal(selectedApptDetail)}
-                          >
-                            <Ionicons name="close-circle-outline" size={14} color={C.white} style={{ marginRight: scale(4) }} />
-                            <Text style={sm.confirmTxt}>Cancel Appointment</Text>
-                          </Tap>
+                          {!selectedApptDetail.affectedByClosure && (
+                            <Tap
+                              style={[sm.confirmBtn, { flex: 1, backgroundColor: C.navy }]}
+                              activeOpacity={0.85}
+                              accessibilityRole="button"
+                              onPress={() => openCancelModal(selectedApptDetail)}
+                            >
+                              <Ionicons name="close-circle-outline" size={14} color={C.white} style={{ marginRight: scale(4) }} />
+                              <Text style={sm.confirmTxt}>Cancel Appointment</Text>
+                            </Tap>
+                          )}
                         </View>
                       ) : (
                         <View style={sm.footer}>
@@ -2348,8 +2348,8 @@ export default function AppointmentsScreen() {
                 {/* Header with lock icon */}
                 <View style={{ paddingHorizontal: scale(18), paddingTop: verticalScale(18), paddingBottom: verticalScale(14), borderBottomWidth: 1, borderColor: '#F1F5F9', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: scale(10), flex: 1 }}>
-                    <View style={{ width: scale(36), height: scale(36), borderRadius: scale(10), backgroundColor: '#FEF3C7', alignItems: 'center', justifyContent: 'center' }}>
-                      <Ionicons name="lock-closed" size={18} color="#D97706" />
+                    <View style={{ width: scale(36), height: scale(36), borderRadius: scale(10), backgroundColor: '#F1F5F9', alignItems: 'center', justifyContent: 'center' }}>
+                      <Ionicons name="lock-closed-outline" size={18} color="#B45309" />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={{ fontSize: moderateScale(15), fontWeight: '800', color: '#0F172A' }}>
@@ -2365,22 +2365,15 @@ export default function AppointmentsScreen() {
                   </Tap>
                 </View>
 
-                {/* Body with reason quote box and helper */}
-                <View style={{ padding: scale(18), gap: verticalScale(12) }}>
-                  <View style={{ backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FCD34D', borderRadius: scale(12), padding: scale(12) }}>
-                    <Text style={{ fontSize: moderateScale(10), fontWeight: '800', color: '#B45309', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: verticalScale(4) }}>
-                      Message from K&amp;A Clinic
-                    </Text>
-                    <Text style={{ fontSize: moderateScale(13), color: '#78350F', fontWeight: '600', lineHeight: moderateScale(18), fontStyle: 'italic' }}>
-                      &ldquo;{closureModal?.reason}&rdquo;
-                    </Text>
-                  </View>
-
-                  <View style={{ backgroundColor: '#F8FAFC', borderRadius: scale(10), padding: scale(10), borderWidth: 1, borderColor: '#E2E8F0' }}>
-                    <Text style={{ fontSize: moderateScale(11), color: '#64748B', lineHeight: moderateScale(16) }}>
-                      Please choose another date or time. Walk-ins are accepted <Text style={{ color: '#0F172A', fontWeight: '700' }}>Mon–Fri, 8 AM–5 PM</Text>.
-                    </Text>
-                  </View>
+                {/* Body: the clinic's reason, then what to do. Neutral colours;
+                    the lock icon above is the only accent. */}
+                <View style={{ padding: scale(18), gap: verticalScale(10) }}>
+                  <Text style={{ fontSize: moderateScale(13), color: '#334155', lineHeight: moderateScale(19) }}>
+                    {closureModal?.reason}
+                  </Text>
+                  <Text style={{ fontSize: moderateScale(11.5), color: '#64748B', lineHeight: moderateScale(16) }}>
+                    Please choose another date or time. Walk-ins are accepted <Text style={{ color: '#0F172A', fontWeight: '700' }}>Mon–Fri, 8 AM–5 PM</Text>.
+                  </Text>
                 </View>
 
                 {/* Footer buttons */}
@@ -2559,8 +2552,6 @@ const s = StyleSheet.create({
   closureCardBtnRow: { flexDirection: 'row', gap: scale(8) },
   closureCardRescheduleBtn: { flexDirection: 'row', alignItems: 'center', gap: scale(4), backgroundColor: C.navy, borderRadius: scale(8), paddingHorizontal: scale(12), paddingVertical: verticalScale(6) },
   closureCardRescheduleTxt: { fontSize: moderateScale(11.5), fontWeight: '700', color: '#FFFFFF' },
-  closureCardCancelBtn:     { flexDirection: 'row', alignItems: 'center', gap: scale(4), backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#CBD5E1', borderRadius: scale(8), paddingHorizontal: scale(10), paddingVertical: verticalScale(6) },
-  closureCardCancelTxt:     { fontSize: moderateScale(11.5), fontWeight: '700', color: '#334155' },
 
   // Clear, dedicated action button with 44dp+ tap target via hitSlop.
   cancelPill: { flexDirection: 'row', alignItems: 'center', gap: scale(4), paddingHorizontal: scale(10), paddingVertical: verticalScale(6), borderRadius: scale(8), borderWidth: 1, borderColor: C.border, backgroundColor: C.white, overflow: 'hidden', marginLeft: scale(10), alignSelf: 'center' },
