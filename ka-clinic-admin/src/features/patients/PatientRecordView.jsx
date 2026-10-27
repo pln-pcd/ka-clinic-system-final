@@ -59,17 +59,23 @@ export function isRabiesOrBiteIncident(patient) {
 // Label + value pair. A missing value shows an em dash rather than a guess —
 // the record view previously filled gaps with plausible defaults ("Female",
 // "Rabipur", "10:00 am"), which put data on screen that nobody entered.
-// Shown like the Edit form's fields: a label above a read-only box.
-const FIELD_LABEL = 'block mb-1.5 text-xs font-semibold text-slate-500';
-const FIELD_BOX = 'block py-2.5 px-3 rounded-xl border border-slate-200 bg-white text-xs font-medium break-words';
+// Read-only facts: a small label over its value, each on a hairline, so
+// nothing looks like an input to type in.
+const FIELD = 'min-w-0 pb-2.5 border-b border-slate-200/80';
+const FIELD_LABEL = 'block text-[11px] font-medium text-slate-500';
+const FIELD_VALUE = 'block mt-0.5 text-[13px] font-medium break-words';
 function InfoField({ label, value, full = false }) {
   return (
-    <div className={full ? 'sm:col-span-2 min-w-0' : 'min-w-0'}>
+    <div className={`${FIELD}${full ? ' sm:col-span-2' : ''}`}>
       <span className={FIELD_LABEL}>{label}</span>
-      <span className={`${FIELD_BOX} ${value ? 'text-slate-800' : 'text-slate-400'}`}>{value || '—'}</span>
+      <span className={`${FIELD_VALUE} ${value ? 'text-slate-900' : 'text-slate-400'}`}>{value || '—'}</span>
     </div>
   );
 }
+
+// "Equirab (ERIG - Equine Rabies Immunoglobulin)" → "RIG"; tetanus products → "Anti-tetanus".
+const treatmentShort = t => (t?.kind === 'rig' || /\b[eh]?rig\b|immunoglobulin|equirab/i.test(String(t?.product || '')) && !/tetanus|\btig\b/i.test(String(t?.product || ''))
+  ? 'RIG' : 'Anti-tetanus');
 
 function SectionTitle({ title, subtitle, action }) {
   return (
@@ -353,9 +359,9 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
             const hasAllergy = Boolean(allergies) && !/^(none|no known allergies|n\/?a|unknown|—)$/i.test(String(allergies).trim());
             const warnOf = k => (k === 'cat' ? String(merged.cat || '').includes('III') : k === 'allergies' ? hasAllergy : false);
             const fact = (key, label, value, warn) => (
-              <div key={key} className="min-w-0">
+              <div key={key} className={FIELD}>
                 <span className={FIELD_LABEL}>{label}</span>
-                <span className={`${FIELD_BOX} font-semibold ${warn ? 'border-amber-300 bg-amber-50 text-amber-900' : value ? 'text-slate-800' : 'text-slate-400'}`}>{value || '—'}</span>
+                <span className={`${FIELD_VALUE} font-semibold ${warn ? 'text-amber-800' : value ? 'text-slate-900' : 'text-slate-400'}`}>{value || '—'}</span>
               </div>
             );
             const treatments = Array.isArray(merged.treatments) ? merged.treatments : [];
@@ -364,31 +370,30 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
             return (
               <>
                 <SectionTitle title={isPepCard ? 'Medical History & Exposure' : 'Medical History'} />
-                <div className={`grid grid-cols-1 ${facts.length === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-3 mb-3`}>
+                <div className={`grid grid-cols-1 ${facts.length === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-x-5 gap-y-3 mb-3`}>
                   {facts.map(r => fact(r.key, r.label, r.value, warnOf(r.key)))}
                 </div>
                 {(rest.length > 0 || showTreat) && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-3">
                     {rest.map(r => <InfoField key={r.key} label={r.label} value={r.value} />)}
                     {showTreat && (
-                      <div className="sm:col-span-2 min-w-0">
+                      <div className={`${FIELD} sm:col-span-2`}>
                         <span className={FIELD_LABEL}>Category III Treatments</span>
                         {treatments.length > 0 ? (
-                          <div className="flex flex-wrap gap-2">
+                          <span className={`${FIELD_VALUE} text-slate-900`}>
                             {treatments.map((t, idx) => (
-                              <span key={t.id || idx} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-100 text-xs font-semibold text-slate-800">
-                                <span className="text-[#3B50DF] font-bold">{t.product}</span>
-                                {amountText(t) && <span className="text-slate-500">· {amountText(t)}</span>}
-                                <span className="text-slate-400">· {formatDateMedium(t.date)}</span>
+                              <span key={t.id || idx} className="block">
+                                {t.product}
+                                <span className="text-slate-500 font-normal">{amountText(t) ? ` · ${amountText(t)}` : ''} · {formatDateMedium(t.date)}</span>
                               </span>
                             ))}
-                          </div>
+                          </span>
                         ) : s.given ? (
-                          <span className={`${FIELD_BOX} text-slate-800`}>
+                          <span className={`${FIELD_VALUE} text-slate-900`}>
                             {erigStatusLabel(merged, formatDateMedium)}
                           </span>
                         ) : (
-                          <span className={`${FIELD_BOX} border-amber-300 bg-amber-50 text-amber-800`}>Required (Category III), not yet recorded</span>
+                          <span className={`${FIELD_VALUE} text-amber-800`}>Required (Category III), not yet recorded</span>
                         )}
                       </div>
                     )}
@@ -396,7 +401,7 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
                 )}
                 <div className="mt-3">
                   <span className={FIELD_LABEL}>Doctor / Nurse Remarks</span>
-                  <p className={`${FIELD_BOX} min-h-[64px] leading-relaxed ${merged.notes ? 'text-slate-700' : 'text-slate-400'}`}>
+                  <p className={`${FIELD_VALUE} leading-relaxed ${merged.notes ? 'text-slate-700 font-normal' : 'text-slate-400 font-normal'}`}>
                     {merged.notes || 'No clinical remarks recorded.'}
                   </p>
                 </div>
@@ -419,7 +424,7 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
               </button>
             )}
           />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-3">
             <InfoField label="Sex" value={rec.sex || patient.sex} />
             <InfoField label="Birth Date / Age" value={[rec.dob ? fmtDate(rec.dob) : '', rec.age ? `${rec.age} yrs old` : ''].filter(Boolean).join(' · ')} />
             <InfoField label="Height / Weight" value={[rec.height ? `${rec.height} cm` : '', rec.weight ? `${rec.weight} kg` : ''].filter(Boolean).join(' · ')} />
@@ -481,7 +486,7 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
                   <span className="text-slate-300">·</span>
                   <span>Next due <strong className={`font-semibold ${nextOpen?.isMiss ? 'text-rose-600' : 'text-slate-900'}`}>{nextOpen ? (nextOpen.date ? formatDateMedium(nextOpen.date) : 'Not scheduled') : 'Complete'}</strong></span>
                 </div>
-                <ol className="relative overflow-y-auto min-h-0 p-1.5 flex-1 rounded-xl border border-slate-200 bg-white" aria-label="Dose timeline">
+                <ol className="relative overflow-y-auto min-h-0 flex-1 -mx-2" aria-label="Dose timeline">
                   {normalizedDoses.map((d, i) => {
                     const isNext = i === nextDoseIndex;
                     const tone = d.isDone
@@ -540,7 +545,7 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
             )} />
           </div>
 
-          <div className="overflow-auto flex-1 min-h-0 mx-5 mb-5 rounded-xl border border-slate-200 bg-white">
+          <div className="overflow-auto flex-1 min-h-0 px-5 pb-5">
             {aptsLoading ? (
               <div className="py-8 text-center text-xs text-slate-500">Loading appointments…</div>
             ) : patientApts.length === 0 ? (
@@ -550,21 +555,21 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
             ) : (
               <table className="kna-table w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-y border-slate-100 text-[10.5px] font-medium text-slate-500 uppercase tracking-wider sticky top-0 z-10">
-                    <th className="px-6 py-3 bg-slate-50">Date</th>
-                    <th className="px-4 py-3 bg-slate-50">Type</th>
-                    <th className="px-4 py-3 bg-slate-50">Time</th>
-                    <th className="px-6 py-3 bg-slate-50">Status</th>
+                  <tr className="border-b border-slate-200 text-[10.5px] font-medium text-slate-500 uppercase tracking-wider sticky top-0 z-10">
+                    <th className="pl-0 pr-4 py-2.5 bg-[#F9FAFC]">Date</th>
+                    <th className="px-4 py-2.5 bg-[#F9FAFC]">Type</th>
+                    <th className="px-4 py-2.5 bg-[#F9FAFC]">Time</th>
+                    <th className="pl-4 pr-0 py-2.5 bg-[#F9FAFC]">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 text-[13px] text-slate-700">
+                <tbody className="divide-y divide-slate-200/70 text-[13px] text-slate-700">
                   {filteredApts.map((apt) => {
                     return (
                       <tr key={apt.id}>
-                        <td className="px-6 py-3.5 font-medium text-slate-900 whitespace-nowrap">{apt.date ? formatDateMedium(apt.date) : '—'}</td>
-                        <td className="px-4 py-3.5 truncate max-w-[180px]">{formatServiceType(apt.type || apt.purpose, '—')}</td>
-                        <td className="px-4 py-3.5 text-slate-600 whitespace-nowrap">{apt.time || '—'}</td>
-                        <td className="px-6 py-3.5">
+                        <td className="pl-0 pr-4 py-3 font-medium text-slate-900 whitespace-nowrap">{apt.date ? formatDateMedium(apt.date) : '—'}</td>
+                        <td className="px-4 py-3 truncate max-w-[180px]">{formatServiceType(apt.type || apt.purpose, '—')}</td>
+                        <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{apt.time || '—'}</td>
+                        <td className="pl-4 pr-0 py-3">
                           <StatusBadge status={apt.status || 'pending'} />
                         </td>
                       </tr>
@@ -589,17 +594,17 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
         )} />
 
         {reportsList.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center py-12 text-center rounded-xl border border-dashed border-slate-300 bg-white">
+          <div className="flex-1 flex flex-col items-center justify-center py-10 text-center">
             <p className="text-sm font-medium text-slate-700">No clinical reports logged</p>
             <p className="text-xs text-slate-500 mt-0.5">Use + Add Report to log BP, vitals, injection route and observations.</p>
           </div>
         ) : (
-          <div className="rounded-xl border border-slate-200 divide-y divide-slate-200 overflow-hidden">
+          <ul className="divide-y divide-slate-200/80 -mx-2">
             {reportsList.map((rep, idx) => (
-              <div
+              <li
                 key={rep.id || idx}
                 onClick={() => setViewingReport(rep)}
-                className="flex items-center gap-4 px-4 py-3 bg-white hover:bg-slate-50 transition-colors cursor-pointer"
+                className="flex items-center gap-4 px-2 py-3 rounded-lg hover:bg-white transition-colors cursor-pointer"
               >
                 <div className="w-[96px] shrink-0">
                   <p className="text-[11px] font-medium text-slate-900 tabular-nums leading-tight">{formatDateMedium(rep.date || rep.createdAt)}</p>
@@ -623,9 +628,9 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
                 >
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
                 </button>
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </div>
 
@@ -644,80 +649,46 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
               title="Previous Services"
               subtitle={`Earlier cases registered under this patient's MRN (${patient.id || patient.mrn || '—'})`}
             />
-            <div className="rounded-xl border border-slate-200 bg-white overflow-hidden overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead className="bg-slate-50 text-[10.5px] uppercase font-semibold text-slate-500 border-b border-slate-200">
-                  <tr>
-                    <th className="px-4 py-3">Service</th>
-                    <th className="px-3.5 py-3">Date</th>
-                    <th className="px-3.5 py-3">Doses Given</th>
-                    <th className="px-3.5 py-3">RIG / Anti-Tetanus</th>
-                    <th className="px-3.5 py-3">Completion Date</th>
-                    <th className="px-3.5 py-3">Status</th>
-                    <th className="px-4 py-3 text-center">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-slate-700">
-                  {historyList.map((hist, hIdx) => {
-                    const hDoses = Array.isArray(hist.doses) ? hist.doses : [];
-                    const hDone = hDoses.filter(d => d.s === 'done' || d.status === 'done' || d.done).length;
-                    const hTreatments = Array.isArray(hist.treatments) ? hist.treatments : [];
-                    const doseDatesSummary = hDoses
-                      .filter(d => d.date)
-                      .map((d, i) => `D${i + 1}: ${formatDateMedium(d.date)}`)
-                      .join(' · ');
+            {/* One line per earlier case; RIG / Anti-Tetanus in short form
+                (the full product names are in the case's own record). */}
+            <ul className="divide-y divide-slate-200/80 -mx-2">
+              {historyList.map((hist, hIdx) => {
+                const hDoses = Array.isArray(hist.doses) ? hist.doses : [];
+                const hDone = hDoses.filter(d => d.s === 'done' || d.status === 'done' || d.done).length;
+                const hTreatments = Array.isArray(hist.treatments) ? hist.treatments : [];
+                const treatmentsFull = hTreatments.map(t => `${t.product}${amountText(t) ? ` (${amountText(t)})` : ''}`).join(', ');
+                const completed = hist.completedAt || hist.closedAt;
+                const showCat = serviceFields(hist.service).exposure.includes('cat');
 
-                    return (
-                      <tr key={hIdx} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <div className="flex items-center gap-2">
-                            <ServiceBadge service={hist.service || 'PEP'} />
-                            <span className="font-semibold text-slate-900">{serviceLabel(hist.service)}</span>
-                          </div>
-                          {/* Exposure category only for services that ask it (PEP). */}
-                          {serviceFields(hist.service).exposure.includes('cat') && (
-                            <span className="block mt-0.5 text-[10.5px] text-slate-500">{hist.cat ? `Category ${hist.cat}` : 'Category —'}</span>
-                          )}
-                        </td>
-                        <td className="px-3.5 py-3 whitespace-nowrap text-slate-600">
-                          {hist.date ? formatDateMedium(hist.date) : '—'}
-                        </td>
-                        <td className="px-3.5 py-3 whitespace-nowrap" title={doseDatesSummary || undefined}>
-                          <span className="font-semibold text-slate-900">{hDone} of {hDoses.length}</span>
-                          {doseDatesSummary && (
-                            <span className="block text-[10px] text-slate-400 truncate max-w-[160px]">{doseDatesSummary}</span>
-                          )}
-                        </td>
-                        <td className="px-3.5 py-3">
-                          {hTreatments.length ? (
-                            <span className="font-medium text-slate-800">
-                              {hTreatments.map(t => `${t.product}${amountText(t) ? ` (${amountText(t)})` : ''}`).join(', ')}
-                            </span>
-                          ) : showsTreatments(hist) ? (
-                            <span className="text-slate-400">None</span>
-                          ) : null}
-                        </td>
-                        <td className="px-3.5 py-3 whitespace-nowrap text-slate-600">
-                          {hist.completedAt || hist.closedAt ? formatDateMedium(hist.completedAt || hist.closedAt) : '—'}
-                        </td>
-                        <td className="px-3.5 py-3 whitespace-nowrap">
-                          <StatusBadge status={hist.status || 'completed'} size="sm" />
-                        </td>
-                        <td className="px-4 py-3 text-center whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => setViewingCase({ caseData: hist, index: hIdx })}
-                            className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 hover:text-[#3B50DF] hover:border-indigo-200 transition-colors cursor-pointer inline-flex items-center gap-1"
-                          >
-                            <Eye size={12} /> View Record
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                return (
+                  <li key={hIdx} className="flex items-center gap-4 px-2 py-3 rounded-lg hover:bg-white transition-colors text-xs">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-slate-900">
+                        {serviceLabel(hist.service)}
+                        {/* Exposure category only for services that ask it (PEP). */}
+                        {showCat && <span className="font-normal text-slate-500"> · {hist.cat ? `Category ${hist.cat}` : 'Category —'}</span>}
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        {hist.date ? formatDateMedium(hist.date) : '—'}
+                        {completed ? ` – ${formatDateMedium(completed)}` : ''}
+                        {' · '}{hDone} of {hDoses.length} doses
+                        {hTreatments.length > 0
+                          ? <span title={treatmentsFull}> · {[...new Set(hTreatments.map(treatmentShort))].join(', ')}</span>
+                          : showsTreatments(hist) ? ' · No RIG / Anti-tetanus' : ''}
+                      </p>
+                    </div>
+                    <StatusBadge status={hist.status || 'completed'} size="sm" />
+                    <button
+                      type="button"
+                      onClick={() => setViewingCase({ caseData: hist, index: hIdx })}
+                      className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 hover:text-[#3B50DF] hover:border-indigo-200 transition-colors cursor-pointer inline-flex items-center gap-1 shrink-0"
+                    >
+                      <Eye size={12} /> View Record
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
         );
       })()}

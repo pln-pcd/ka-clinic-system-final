@@ -156,20 +156,29 @@ export default function IncidentMapPage({ incidents, loading }) {
     // The box the simulated pins are spread over.
     const bounds = L.latLngBounds([SIM_BOUNDS.south, SIM_BOUNDS.west], [SIM_BOUNDS.north, SIM_BOUNDS.east]);
 
-    // Still restricted to Libon, but the bounds are padded (30%) so a popup
-    // on an edge pin has room to pan fully into view. Whole-number zoom
-    // levels only: fractional zoom is what caused the tile seam lines.
+    // Locked to Libon: the view can never leave the area (a small margin
+    // around the pins, so an edge pin's popup still fits) and cannot zoom out
+    // past it. Whole-number zoom levels only: fractional zoom is what caused
+    // the tile seam lines.
+    const area = bounds.pad(0.08);
     const map = L.map(mapRef.current, {
       center: bounds.getCenter(),
-      zoom: 14,
-      minZoom: 13,
+      zoom: 13,
       maxZoom: 18,
       zoomSnap: 1,
-      maxBounds: bounds.pad(0.3),
-      maxBoundsViscosity: 0.85,
+      maxBounds: area,
+      maxBoundsViscosity: 1.0,
       dragging: true,
       zoomControl: true,
     });
+    // Lowest zoom at which the whole view still fits inside the area.
+    const lockZoom = () => {
+      map.setMinZoom(map.getBoundsZoom(area, true));
+      if (map.getZoom() < map.getMinZoom()) map.setZoom(map.getMinZoom());
+      map.panInsideBounds(area, { animate: false });
+    };
+    lockZoom();
+    map.on('resize', lockZoom);
 
     // Satellite imagery only: no place-name overlay, so the demo map does
     // not label barangays or streets.

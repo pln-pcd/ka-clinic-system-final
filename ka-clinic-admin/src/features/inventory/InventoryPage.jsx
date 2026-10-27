@@ -30,7 +30,7 @@ import { db } from '../../lib/firebase';
 import { diffFields, logActivity } from '../../lib/activityLog';
 import { peekLiveCollection, useLiveCollection } from '../../lib/liveStore';
 import Toast from '../../components/Toast';
-import { EXPIRED_NOTE, deriveStockLabel, deriveStockStatus, fmtUnit, formatVials, isExpired, vialsOf } from '../../lib/inventoryStock';
+import { deriveStockLabel, deriveStockStatus, fmtUnit, formatVials, isExpired, vialsOf } from '../../lib/inventoryStock';
 import { lazyModal } from '../../components/LazyModal';
 import { INVENTORY_CATEGORIES, inventoryCategoryLabel, inventoryCategoryOf } from '../../lib/inventoryCategories';
 import Pager, { paginate, useTableReserve } from '../../components/Pager';
@@ -575,9 +575,10 @@ export default function VaccineInventoryPage() {
                   </td>
                   <td style={{ padding: '16px 12px', color: '#64748B', fontWeight: 400 }}>
                     {item.expiry || '—'}
-                    {isExpiringSoon(item) && (
-                      <span style={{ display: 'block', fontSize: '.6875rem', fontWeight: 600, color: expiryOf(item) < today ? '#DC2626' : '#D97706', marginTop: 2 }}>
-                        {isExpired(item, today) ? EXPIRED_NOTE : 'Expiring soon'}
+                    {/* Expired shows in the Status column only. */}
+                    {isExpiringSoon(item) && !isExpired(item, today) && (
+                      <span style={{ display: 'block', fontSize: '.6875rem', fontWeight: 600, color: '#D97706', marginTop: 2 }}>
+                        Expiring soon
                       </span>
                     )}
                   </td>
