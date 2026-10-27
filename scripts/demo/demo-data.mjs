@@ -13,7 +13,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, Timestamp, FieldPath } from 'firebase-admin/firestore';
 import { buildInitialDoses } from '../../ka-clinic-admin/src/lib/doseSchedules.js';
 import { addDaysToDateString, getTodayDateString } from '../../ka-clinic-admin/src/lib/formatters.js';
-import { geocodeLibonAddress } from '../../ka-clinic-admin/src/lib/libonGeo.js';
+import { geocodeLibonAddress, libonAddress } from '../../ka-clinic-admin/src/lib/libonGeo.js';
 import { buildSimulatedIncidents } from '../../ka-clinic-admin/src/lib/simulatedIncidents.js';
 import { getArchiveDueDate, getCompletionDate } from '../../api/_lib/patientCompletion.js';
 
@@ -172,11 +172,11 @@ const PATIENTS = [
   // than 365 days ago, so the nightly sweep has already archived them.
   P({ key: 'a1', first: 'Rogelio', middle: 'B.', last: 'Santander', sex: 'Male', age: 46, brgy: 'Bulusan', zone: 'Purok 2', service: 'PEP', cat: 'III', animal: 'Dog', reg: -600, done: 'all', brand: 'speeda', group: 'archived' }),
   P({ key: 'a2', first: 'Marites', middle: 'L.', last: 'Cabangon', sex: 'Female', age: 33, brgy: 'Rawis', zone: 'Purok 1', service: 'PEP', cat: 'II', animal: 'Cat', reg: -575, done: 'all', brand: 'rabipur', group: 'archived' }),
-  P({ key: 'a3', first: 'Danilo', middle: 'S.', last: 'Pañares', sex: 'Male', age: 58, brgy: 'Pantao', zone: 'Sitio Proper', service: 'Tetanus', cat: '', animal: '', reg: -610, done: 'all', brand: 'tt', group: 'archived' }),
-  P({ key: 'a4', first: 'Jocelyn', middle: 'R.', last: 'Dimaculangan', sex: 'Female', age: 27, brgy: 'Matacon', zone: 'Purok 4', service: 'PrEP', cat: '', animal: '', reg: -520, done: 'all', brand: 'verorab', group: 'archived' }),
+  P({ key: 'a3', first: 'Danilo', middle: 'S.', last: 'Pañares', sex: 'Male', age: 58, brgy: 'Pantao', zone: 'Purok 1', service: 'Tetanus', cat: '', animal: '', reg: -610, done: 'all', brand: 'tt', group: 'archived' }),
+  P({ key: 'a4', first: 'Jocelyn', middle: 'R.', last: 'Dimaculangan', sex: 'Female', age: 27, brgy: 'Bacolod', zone: 'Purok 4', service: 'PrEP', cat: '', animal: '', reg: -520, done: 'all', brand: 'verorab', group: 'archived' }),
   P({ key: 'a5', first: 'Teodoro', middle: 'M.', last: 'Balasbas', sex: 'Male', age: 71, brgy: 'San Isidro', zone: 'Purok 3', service: 'Pneumonia', cat: '', animal: '', reg: -480, done: 'all', brand: 'ppsv', group: 'archived' }),
-  P({ key: 'a6', first: 'Rowena', middle: 'C.', last: 'Magbanua', sex: 'Female', age: 39, brgy: 'Carisac East', zone: 'Purok 5', service: 'PEP', cat: 'III', animal: 'Dog', reg: -455, done: 'all', brand: 'speeda', group: 'archived' }),
-  P({ key: 'a7', first: 'Ernesto', middle: 'P.', last: 'Villareal', sex: 'Male', age: 12, brgy: 'Bonavista', zone: 'Purok 6', service: 'PEP', cat: 'II', animal: 'Dog', reg: -430, done: 'all', brand: 'rabipur', group: 'archived' }),
+  P({ key: 'a6', first: 'Rowena', middle: 'C.', last: 'Magbanua', sex: 'Female', age: 39, brgy: 'East Carisac', zone: 'Purok 5', service: 'PEP', cat: 'III', animal: 'Dog', reg: -455, done: 'all', brand: 'speeda', group: 'archived' }),
+  P({ key: 'a7', first: 'Ernesto', middle: 'P.', last: 'Villareal', sex: 'Male', age: 12, brgy: 'Bariw', zone: 'Purok 6', service: 'PEP', cat: 'II', animal: 'Dog', reg: -430, done: 'all', brand: 'rabipur', group: 'archived' }),
   P({ key: 'a8', first: 'Lourdes', middle: 'T.', last: 'Quibuyen', sex: 'Female', age: 64, brgy: 'Linao', zone: 'Purok 2', service: 'Pneumonia', cat: '', animal: '', reg: -415, done: 'all', brand: 'prevnar', group: 'archived' }),
   P({ key: 'a9', first: 'Wilfredo', middle: 'G.', last: 'Sarmiento', sex: 'Male', age: 29, brgy: 'Harigue', zone: 'Purok 1', service: 'PEP', cat: 'III', animal: 'Cat', reg: -400, done: 'all', brand: 'verorab', group: 'archived' }),
 
@@ -189,28 +189,28 @@ const PATIENTS = [
   // Completed late last year: still on the Patients list, not due yet.
   P({ key: 'c1', first: 'Arnel', middle: 'F.', last: 'Macaraeg', sex: 'Male', age: 24, brgy: 'Talin-talin', zone: 'Purok 2', service: 'PEP', cat: 'II', animal: 'Dog', reg: -358, done: 'all', brand: 'speeda', group: 'completed' }),
   P({ key: 'c2', first: 'Gloria', middle: 'E.', last: 'Panganiban', sex: 'Female', age: 60, brgy: 'Tambo', zone: 'Purok 1', service: 'Pneumonia', cat: '', animal: '', reg: -310, done: 'all', brand: 'prevnar', group: 'completed' }),
-  P({ key: 'c3', first: 'Nestor', middle: 'J.', last: 'Ilagan', sex: 'Male', age: 37, brgy: 'Tipa-tipa', zone: 'Purok 5', service: 'PrEP', cat: '', animal: '', reg: -298, done: 'all', brand: 'rabipur', group: 'completed' }),
+  P({ key: 'c3', first: 'Nestor', middle: 'J.', last: 'Ilagan', sex: 'Male', age: 37, brgy: 'Caguscos', zone: 'Purok 5', service: 'PrEP', cat: '', animal: '', reg: -298, done: 'all', brand: 'rabipur', group: 'completed' }),
   // Completed this year.
-  P({ key: 'c4', first: 'Herminia', middle: 'O.', last: 'Samonte', sex: 'Female', age: 44, brgy: 'Sogo', zone: 'Purok 3', service: 'Tetanus', cat: '', animal: '', reg: -330, done: 'all', brand: 'tt', group: 'completed' }),
-  P({ key: 'c5', first: 'Ramil', middle: 'V.', last: 'Estrella', sex: 'Male', age: 19, brgy: 'Maroba', zone: 'Purok 2', service: 'PEP', cat: 'III', animal: 'Dog', reg: -90, done: 'all', brand: 'speeda', group: 'completed' }),
-  P({ key: 'c6', first: 'Mara', middle: 'L.', last: 'Villaflor', sex: 'Female', age: 31, brgy: 'San Juan', zone: 'Zone 3', service: 'PEP', cat: 'II', animal: 'Dog', reg: -40, done: 'all', brand: 'speeda', group: 'completed', login: 'demo-patient-full', email: 'demo.patient.full@example.com' }),
-  P({ key: 'c7', first: 'Joel', middle: 'K.', last: 'Mendiola', sex: 'Male', age: 55, brgy: 'Malabag', zone: 'Purok 1', service: 'Pneumonia', cat: '', animal: '', reg: -12, done: 'all', brand: 'prevnar', group: 'completed' }),
-  P({ key: 'c8', first: 'Aileen', middle: 'S.', last: 'Robles', sex: 'Female', age: 26, brgy: 'Liberacion', zone: 'Purok 6', service: 'PrEP', cat: '', animal: '', reg: -20, done: 'all', brand: 'rabipur', group: 'completed' }),
-  P({ key: 'c9', first: 'Crisanto', middle: 'D.', last: 'Olivar', sex: 'Male', age: 48, brgy: 'Labnig', zone: 'Purok 2', service: 'PEP', cat: 'III', animal: 'Cat', reg: -33, done: 'all', brand: 'verorab', group: 'completed' }),
+  P({ key: 'c4', first: 'Herminia', middle: 'O.', last: 'Samonte', sex: 'Female', age: 44, brgy: 'Magallang', zone: 'Purok 3', service: 'Tetanus', cat: '', animal: '', reg: -330, done: 'all', brand: 'tt', group: 'completed' }),
+  P({ key: 'c5', first: 'Ramil', middle: 'V.', last: 'Estrella', sex: 'Male', age: 19, brgy: 'Marayag', zone: 'Purok 2', service: 'PEP', cat: 'III', animal: 'Dog', reg: -90, done: 'all', brand: 'speeda', group: 'completed' }),
+  P({ key: 'c6', first: 'Mara', middle: 'L.', last: 'Villaflor', sex: 'Female', age: 31, brgy: 'Matara', zone: 'Purok 3', service: 'PEP', cat: 'II', animal: 'Dog', reg: -40, done: 'all', brand: 'speeda', group: 'completed', login: 'demo-patient-full', email: 'demo.patient.full@example.com' }),
+  P({ key: 'c7', first: 'Joel', middle: 'K.', last: 'Mendiola', sex: 'Male', age: 55, brgy: 'Malabiga', zone: 'Purok 1', service: 'Pneumonia', cat: '', animal: '', reg: -12, done: 'all', brand: 'prevnar', group: 'completed' }),
+  P({ key: 'c8', first: 'Aileen', middle: 'S.', last: 'Robles', sex: 'Female', age: 26, brgy: 'Libtong', zone: 'Purok 6', service: 'PrEP', cat: '', animal: '', reg: -20, done: 'all', brand: 'rabipur', group: 'completed' }),
+  P({ key: 'c9', first: 'Crisanto', middle: 'D.', last: 'Olivar', sex: 'Male', age: 48, brgy: 'Natasan', zone: 'Purok 2', service: 'PEP', cat: 'III', animal: 'Cat', reg: -33, done: 'all', brand: 'verorab', group: 'completed' }),
 
   // Ongoing: doses given so far, next dose still ahead.
-  P({ key: 'o1', first: 'Princess', middle: 'A.', last: 'Dumlao', sex: 'Female', age: 9, brgy: 'Cagbulos', zone: 'Purok 3', service: 'PEP', cat: 'III', animal: 'Dog', reg: -5, done: 2, brand: 'speeda', group: 'ongoing' }),
-  P({ key: 'o2', first: 'Rodel', middle: 'T.', last: 'Casipit', sex: 'Male', age: 34, brgy: 'Izcala', zone: 'Purok 1', service: 'PEP', cat: 'II', animal: 'Cat', reg: -1, done: 1, brand: 'speeda', group: 'ongoing' }),
+  P({ key: 'o1', first: 'Princess', middle: 'A.', last: 'Dumlao', sex: 'Female', age: 9, brgy: 'Buga', zone: 'Purok 3', service: 'PEP', cat: 'III', animal: 'Dog', reg: -5, done: 2, brand: 'speeda', group: 'ongoing' }),
+  P({ key: 'o2', first: 'Rodel', middle: 'T.', last: 'Casipit', sex: 'Male', age: 34, brgy: 'Sampongan', zone: 'Purok 1', service: 'PEP', cat: 'II', animal: 'Cat', reg: -1, done: 1, brand: 'speeda', group: 'ongoing' }),
   P({ key: 'o3', first: 'Evangeline', middle: 'M.', last: 'Garces', sex: 'Female', age: 50, brgy: 'Burabod', zone: 'Purok 4', service: 'Tetanus', cat: '', animal: '', reg: -20, done: 1, brand: 'tt', group: 'ongoing' }),
-  P({ key: 'o4', first: 'Isagani', middle: 'R.', last: 'Pineda', sex: 'Male', age: 23, brgy: 'Magcawayan', zone: 'Purok 2', service: 'PrEP', cat: '', animal: '', reg: -3, done: 1, brand: 'speeda', group: 'ongoing' }),
-  P({ key: 'o5', first: 'Consuelo', middle: 'B.', last: 'Ferrer', sex: 'Female', age: 67, brgy: 'San Rafael', zone: 'Purok 5', service: 'PEP', cat: 'III', animal: 'Monkey', reg: -12, done: 3, brand: 'speeda', group: 'ongoing' }),
-  P({ key: 'o6', first: 'Julius', middle: 'C.', last: 'Abellera', sex: 'Male', age: 15, brgy: 'Bap-bap', zone: 'Purok 1', service: 'PEP', cat: 'II', animal: 'Dog', reg: -6, done: 2, brand: 'rabipur', group: 'ongoing', emptyOptional: true }),
+  P({ key: 'o4', first: 'Isagani', middle: 'R.', last: 'Pineda', sex: 'Male', age: 23, brgy: 'Salvacion', zone: 'Purok 2', service: 'PrEP', cat: '', animal: '', reg: -3, done: 1, brand: 'speeda', group: 'ongoing' }),
+  P({ key: 'o5', first: 'Consuelo', middle: 'B.', last: 'Ferrer', sex: 'Female', age: 67, brgy: 'San Ramon', zone: 'Purok 5', service: 'PEP', cat: 'III', animal: 'Monkey', reg: -12, done: 3, brand: 'speeda', group: 'ongoing' }),
+  P({ key: 'o6', first: 'Julius', middle: 'C.', last: 'Abellera', sex: 'Male', age: 15, brgy: 'Apud', zone: 'Purok 1', service: 'PEP', cat: 'II', animal: 'Dog', reg: -6, done: 2, brand: 'rabipur', group: 'ongoing', emptyOptional: true }),
 
   // Missed: a scheduled dose date has passed without the dose being given.
-  P({ key: 'm1', first: 'Lorna', middle: 'P.', last: 'Batungbakal', sex: 'Female', age: 42, brgy: 'Bambon', zone: 'Purok 2', service: 'PEP', cat: 'III', animal: 'Dog', reg: -20, done: 2, brand: 'speeda', group: 'missed' }),
-  P({ key: 'm2', first: 'Antonio', middle: 'E.', last: 'Lagdameo', sex: 'Male', age: 38, brgy: 'Barbon', zone: 'Purok 3', service: 'PEP', cat: 'II', animal: 'Cat', reg: -40, done: 1, brand: 'rabipur', group: 'missed' }),
-  P({ key: 'm3', first: 'Divina', middle: 'F.', last: 'Soriano', sex: 'Female', age: 57, brgy: 'Nino Jesus', zone: 'Purok 1', service: 'Tetanus', cat: '', animal: '', reg: -60, done: 1, brand: 'tt', group: 'missed' }),
-  P({ key: 'm4', first: 'Reynaldo', middle: 'H.', last: 'Cuevas', sex: 'Male', age: 30, brgy: 'San Roque', zone: 'Purok 6', service: 'PEP', cat: 'III', animal: 'Dog', reg: -15, done: 1, brand: 'speeda', group: 'missed' }),
+  P({ key: 'm1', first: 'Lorna', middle: 'P.', last: 'Batungbakal', sex: 'Female', age: 42, brgy: 'Bonbon', zone: 'Purok 2', service: 'PEP', cat: 'III', animal: 'Dog', reg: -20, done: 2, brand: 'speeda', group: 'missed' }),
+  P({ key: 'm2', first: 'Antonio', middle: 'E.', last: 'Lagdameo', sex: 'Male', age: 38, brgy: 'Alongong', zone: 'Purok 3', service: 'PEP', cat: 'II', animal: 'Cat', reg: -40, done: 1, brand: 'rabipur', group: 'missed' }),
+  P({ key: 'm3', first: 'Divina', middle: 'F.', last: 'Soriano', sex: 'Female', age: 57, brgy: 'Niño Jesus', zone: 'Purok 1', service: 'Tetanus', cat: '', animal: '', reg: -60, done: 1, brand: 'tt', group: 'missed' }),
+  P({ key: 'm4', first: 'Reynaldo', middle: 'H.', last: 'Cuevas', sex: 'Male', age: 30, brgy: 'San Pascual', zone: 'Purok 6', service: 'PEP', cat: 'III', animal: 'Dog', reg: -15, done: 1, brand: 'speeda', group: 'missed' }),
 
   // Newly registered: schedule set, nothing given yet.
   P({ key: 'n1', first: 'Kristine', middle: 'J.', last: 'Alcantara', sex: 'Female', age: 22, brgy: 'San Vicente', zone: 'Purok 2', service: 'PEP', cat: 'II', animal: 'Dog', reg: 0, done: 0, brand: 'speeda', group: 'new' }),
@@ -254,7 +254,7 @@ function buildPatient(spec, mrn, idx) {
     age: String(spec.age), sex: spec.sex,
     dob: '', height: opt(String(150 + (idx * 7) % 30)), weight: opt(String(45 + (idx * 5) % 35)), bloodPressure: opt('120/80'),
     barangay: spec.brgy, zone: spec.zone,
-    address: `${spec.zone ? spec.zone + ', ' : ''}Brgy. ${spec.brgy}, Libon, Albay`,
+    address: libonAddress(spec.brgy, spec.zone),
     service: spec.service,
     vaccineBrand: given.length ? brand : '',
     placeOfExposure: isPep ? opt(idx % 2 ? 'Own residence' : 'Street / Roadside') : '',

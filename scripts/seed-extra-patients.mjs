@@ -7,6 +7,7 @@
 import { Timestamp } from 'firebase-admin/firestore';
 import { buildInitialDoses } from '../ka-clinic-admin/src/lib/doseSchedules.js';
 import { addDaysToDateString, getTodayDateString } from '../ka-clinic-admin/src/lib/formatters.js';
+import { libonAddress } from '../ka-clinic-admin/src/lib/libonGeo.js';
 
 const DRY = process.argv.includes('--dry-run');
 const { db } = await import('../api/_lib/firebaseAdmin.js');
@@ -18,15 +19,15 @@ const ms = (d, t = '09:00') => Date.parse(`${d}T${t}:00+08:00`);
 
 const PATIENTS = [
   // Active
-  { mrn: '2026-002', name: 'Maria L. Santos', sex: 'Female', dob: '1990-03-14', barangay: 'Bonbon', zone: 'Zone 1', animal: 'Dog', source: 'Owned pet', place: 'Own residence', wound: 'Right Leg', depth: 'Superficial', cat: 'II', day0: addDaysToDateString(TODAY, -4) },
-  { mrn: '2026-003', name: 'Jose R. Bautista', sex: 'Male', dob: '1985-11-02', barangay: 'Centro Poblacion', zone: 'Zone 4', animal: 'Cat', source: 'Stray animal', place: 'Public market', wound: 'Left Hand', depth: 'Deep / Penetrating', cat: 'III', day0: addDaysToDateString(TODAY, -7) },
-  { mrn: '2026-004', name: 'Angelica P. Reyes', sex: 'Female', dob: '2008-06-21', barangay: 'San Isidro', zone: 'Zone 3', animal: 'Dog', source: 'Neighbor\'s pet', place: 'Neighbor\'s residence', wound: 'Left Leg', depth: 'Superficial', cat: 'II', day0: addDaysToDateString(TODAY, -1) },
-  { mrn: '2026-005', name: 'Ramon C. Villanueva', sex: 'Male', dob: '1972-01-30', barangay: 'Pantao', zone: 'Zone 2', animal: 'Dog', source: 'Stray animal', place: 'Roadside', wound: 'Right Hand', depth: 'Deep / Penetrating', cat: 'III', day0: addDaysToDateString(TODAY, -10), skipFrom: 'd3' },
-  { mrn: '2026-006', name: 'Kristine M. Garcia', sex: 'Female', dob: '1996-09-09', barangay: 'Macabugos', zone: 'Zone 5', animal: 'Cat', source: 'Owned pet', place: 'Own residence', wound: 'Right Arm', depth: 'Superficial', cat: 'II', day0: addDaysToDateString(TODAY, -35) },
+  { mrn: '2026-002', name: 'Maria L. Santos', sex: 'Female', dob: '1990-03-14', barangay: 'Bonbon', zone: 'Purok 1', animal: 'Dog', source: 'Owned pet', place: 'Own residence', wound: 'Right Leg', depth: 'Superficial', cat: 'II', day0: addDaysToDateString(TODAY, -4) },
+  { mrn: '2026-003', name: 'Jose R. Bautista', sex: 'Male', dob: '1985-11-02', barangay: 'Poblacion', zone: 'Zone IV', animal: 'Cat', source: 'Stray animal', place: 'Public market', wound: 'Left Hand', depth: 'Deep / Penetrating', cat: 'III', day0: addDaysToDateString(TODAY, -7) },
+  { mrn: '2026-004', name: 'Angelica P. Reyes', sex: 'Female', dob: '2008-06-21', barangay: 'San Isidro', zone: 'Purok 3', animal: 'Dog', source: 'Neighbor\'s pet', place: 'Neighbor\'s residence', wound: 'Left Leg', depth: 'Superficial', cat: 'II', day0: addDaysToDateString(TODAY, -1) },
+  { mrn: '2026-005', name: 'Ramon C. Villanueva', sex: 'Male', dob: '1972-01-30', barangay: 'Pantao', zone: 'Purok 2', animal: 'Dog', source: 'Stray animal', place: 'Roadside', wound: 'Right Hand', depth: 'Deep / Penetrating', cat: 'III', day0: addDaysToDateString(TODAY, -10), skipFrom: 'd3' },
+  { mrn: '2026-006', name: 'Kristine M. Garcia', sex: 'Female', dob: '1996-09-09', barangay: 'Macabugos', zone: 'Purok 5', animal: 'Cat', source: 'Owned pet', place: 'Own residence', wound: 'Right Arm', depth: 'Superficial', cat: 'II', day0: addDaysToDateString(TODAY, -35) },
   // Archived (completed over a year ago, auto-archived 365 days later)
-  { mrn: '2025-041', name: 'Eduardo S. Mendoza', sex: 'Male', dob: '1968-04-17', barangay: 'Tinampo', zone: 'Zone 1', animal: 'Dog', source: 'Stray animal', place: 'Farm', wound: 'Left Leg', depth: 'Deep / Penetrating', cat: 'III', day0: '2025-06-09', archived: true },
-  { mrn: '2025-057', name: 'Liza B. Fernandez', sex: 'Female', dob: '1993-12-05', barangay: 'Rizal', zone: 'Zone 3', animal: 'Cat', source: 'Owned pet', place: 'Own residence', wound: 'Right Hand', depth: 'Superficial', cat: 'II', day0: '2025-07-21', archived: true },
-  { mrn: '2025-063', name: 'Pedro A. Castillo', sex: 'Male', dob: '2001-02-28', barangay: 'Buga', zone: 'Zone 2', animal: 'Dog', source: 'Neighbor\'s pet', place: 'School', wound: 'Left Arm', depth: 'Superficial', cat: 'II', day0: '2025-08-18', archived: true },
+  { mrn: '2025-041', name: 'Eduardo S. Mendoza', sex: 'Male', dob: '1968-04-17', barangay: 'Natasan', zone: 'Purok 1', animal: 'Dog', source: 'Stray animal', place: 'Farm', wound: 'Left Leg', depth: 'Deep / Penetrating', cat: 'III', day0: '2025-06-09', archived: true },
+  { mrn: '2025-057', name: 'Liza B. Fernandez', sex: 'Female', dob: '1993-12-05', barangay: 'Salvacion', zone: 'Purok 3', animal: 'Cat', source: 'Owned pet', place: 'Own residence', wound: 'Right Hand', depth: 'Superficial', cat: 'II', day0: '2025-07-21', archived: true },
+  { mrn: '2025-063', name: 'Pedro A. Castillo', sex: 'Male', dob: '2001-02-28', barangay: 'Buga', zone: 'Purok 2', animal: 'Dog', source: 'Neighbor\'s pet', place: 'School', wound: 'Left Arm', depth: 'Superficial', cat: 'II', day0: '2025-08-18', archived: true },
 ];
 
 function ageOn(dob, on) {
@@ -59,7 +60,7 @@ function buildRecord(p, i) {
   const vax = {
     ...MARK, ...archive,
     id: p.mrn, mrn: p.mrn, name: p.name, sex: p.sex, dob: p.dob, age: String(ageOn(p.dob, p.day0)),
-    contact, email, barangay: p.barangay, zone: p.zone, address: `${p.zone}, Brgy. ${p.barangay}, Libon, Albay`,
+    contact, email, barangay: p.barangay, zone: p.zone, address: libonAddress(p.barangay, p.zone),
     date: p.day0, service: 'PEP', cat: p.cat, animal: p.animal, typeOfExposure: 'Bite', sourceOfExposure: p.source,
     placeOfExposure: p.place, woundLocation: p.wound, woundDepth: p.depth, woundWashed: 'Yes', numberOfBites: '1',
     woundType: '', woundImages: [], height: '', weight: '', bloodPressure: '', allergies: 'None', allergiesOther: '',
