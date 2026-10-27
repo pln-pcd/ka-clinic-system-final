@@ -9,7 +9,7 @@ export async function logStaffActivity(caller, { action, docId = '', summary, ch
   try {
     await db.collection('activityLog').add({
       actorUid: caller.uid,
-      actorName: String(caller.data?.name || caller.data?.email || 'Manager').slice(0, 120),
+      actorName: String(caller.data?.name || caller.data?.email || 'Admin').slice(0, 120),
       actorRole: caller.data?.role || '',
       action,
       collection: 'admins',

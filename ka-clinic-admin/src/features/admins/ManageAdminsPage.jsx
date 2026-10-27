@@ -52,7 +52,7 @@ function formatDate(ts) {
 
 const formatRole = (role) => {
   const r = String(role || '').toLowerCase();
-  if (r === 'manager') return 'Manager';
+  if (r === 'manager') return 'Admin';
   if (r === 'staff' || r === 'nurse') return 'Nurse';
   return role ? String(role).charAt(0).toUpperCase() + String(role).slice(1) : 'Nurse';
 };

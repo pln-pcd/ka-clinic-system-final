@@ -48,7 +48,7 @@ export async function requireActiveManager(req) {
   const caller = await requireAuthenticatedAdmin(req);
   if (caller.error) return caller;
   if (caller.data.role !== 'manager' || caller.data.status !== 'active') {
-    return { error: 'Only an active manager can do this.', status: 403 };
+    return { error: 'Only an active admin can do this.', status: 403 };
   }
   return caller;
 }

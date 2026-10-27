@@ -227,7 +227,7 @@ async function revoke(req, res, caller) {
       .where('status', '==', 'active')
       .get();
     if (managersSnap.size <= 1) {
-      res.status(400).json({ success: false, error: 'Cannot revoke the last active manager.' });
+      res.status(400).json({ success: false, error: 'Cannot revoke the last active admin.' });
       return;
     }
   }
@@ -421,7 +421,7 @@ async function acceptInvite(req, res) {
       return;
     }
     if (Date.now() >= invite.expiresAt) {
-      res.status(400).json({ success: false, error: 'This invite link has expired. Ask your manager to send a new one.' });
+      res.status(400).json({ success: false, error: 'This invite link has expired. Ask your clinic admin to send a new one.' });
       return;
     }
 

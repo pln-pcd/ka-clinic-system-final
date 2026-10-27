@@ -6,7 +6,7 @@
 // with no notice sent. The records are simulated test data (study rules), and
 // the page says so. The map is locked to Libon's municipal boundary. Only
 // signed-in staff reach it (dashboard route + firestore.rules).
-import { CheckCircle2, ChevronDown, Info, Layers, MapPin, ShieldAlert } from 'lucide-react';
+import { CheckCircle2, ChevronDown, Layers, MapPin, ShieldAlert } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveCollection } from '../../lib/liveStore';
 import { serviceKey } from '../../lib/serviceFields';
@@ -384,15 +384,6 @@ export default function IncidentMapPage() {
             )}
           </div>
         </div>
-      </div>
-
-      {/* Simulated-data note */}
-      <div className="flex items-start gap-2 px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-[11.5px] text-slate-600">
-        <Info size={14} className="text-slate-500 mt-px shrink-0" />
-        <span>
-          <strong className="font-semibold text-slate-800">Simulated data.</strong> Pins come from simulated test patient records for demonstration only, not real cases.
-          Each pin marks an open PEP case at its barangay, not a house, and is removed once the case is completed.
-        </span>
       </div>
 
       {/* ── Main Map & List Grid ── */}

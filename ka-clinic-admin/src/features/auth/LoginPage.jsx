@@ -290,7 +290,7 @@ export default function AdminLogin({ onSuccess, onBack }) {
       await requestOtpOrSkip();
     } catch (err) {
       setError(err.message === 'NOT_AUTHORIZED'
-        ? 'This account is not an authorized admin. Contact your clinic manager.'
+        ? 'This account is not an authorized admin. Contact your clinic admin.'
         : 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);

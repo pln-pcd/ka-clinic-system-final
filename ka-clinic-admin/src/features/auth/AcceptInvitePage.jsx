@@ -67,7 +67,7 @@ export default function AcceptInvite({ onDone }) {
         }
         if (Date.now() >= data.expiresAt) {
           setStatus('invalid');
-          setError('This invite link has expired. Ask your manager to send a new one.');
+          setError('This invite link has expired. Ask your clinic admin to send a new one.');
           return;
         }
         setInvite(data);
@@ -127,7 +127,7 @@ export default function AcceptInvite({ onDone }) {
     },
     invalid: {
       title: "This invite isn't available",
-      desc: error || 'Ask your clinic manager to send you a fresh invite link.',
+      desc: error || 'Ask your clinic admin to send you a fresh invite link.',
     },
     valid: {
       title: 'Welcome to the team',

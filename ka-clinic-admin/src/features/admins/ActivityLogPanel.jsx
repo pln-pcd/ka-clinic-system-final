@@ -39,7 +39,7 @@ function formatWhen(ts) {
   if (!d) return 'Just now';
   return d.toLocaleString('en-US', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
-const roleText = (r) => (r === 'manager' ? 'Manager' : (r === 'staff' || r === 'nurse') ? 'Nurse' : r || '—');
+const roleText = (r) => (r === 'manager' ? 'Admin' : (r === 'staff' || r === 'nurse') ? 'Nurse' : r || '—');
 
 export default function ActivityLogPanel({ staff = [] }) {
   const [filters, setFilters] = useState({ actor: '', action: '', from: '', to: '', mrn: '' });
@@ -97,7 +97,7 @@ export default function ActivityLogPanel({ staff = [] }) {
     }).catch(err => {
       if (cancelled) return;
       console.error('Activity log load failed:', err);
-      setError(err?.code === 'permission-denied' ? 'Only managers can view the Activity Log.' : 'Could not load the Activity Log. Please try again.');
+      setError(err?.code === 'permission-denied' ? 'Only the admin can view the Activity Log.' : 'Could not load the Activity Log. Please try again.');
       setRows([]);
       setLoading(false);
     });

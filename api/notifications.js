@@ -871,7 +871,7 @@ async function performBackup(trigger, extraEmail) {
 // attachment is the entire patient database.
 async function backupNow(req, res, caller) {
   if (caller?.data?.role !== 'manager' || caller?.data?.status !== 'active') {
-    res.status(403).json({ success: false, error: 'Only an active manager can run a backup.' });
+    res.status(403).json({ success: false, error: 'Only an active admin can run a backup.' });
     return;
   }
   const result = await performBackup('manual', caller?.data?.email || '');
