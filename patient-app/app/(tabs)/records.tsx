@@ -483,7 +483,7 @@ const s = StyleSheet.create({
   miniBadgeToday: { backgroundColor: '#E2E8F0' },
   miniBadgeTxtToday: { color: '#0F172A' },
   miniBadgeMissed: {
-    backgroundColor: '#FEF2F2',
+    backgroundColor: 'transparent',
   },
   miniBadgeTxtMissed: {
     color: MEDICAL_RED,

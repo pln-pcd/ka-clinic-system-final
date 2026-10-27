@@ -37,7 +37,7 @@ import { db } from '../../config/backend';
 import { usePatientAuth } from '../../context/PatientAuthContext';
 import { moderateScale, scale, verticalScale } from '../../utils/scale';
 import CustomAlertModal, { CustomAlertConfig } from '../../components/CustomAlertModal';
-import { askClinicAssistant, type ChatTurn, type ReplyAction } from '../../services/chatbot';
+import { askClinicAssistant, warmClinicAssistant, type ChatTurn, type ReplyAction } from '../../services/chatbot';
 import { KAI_DISCLAIMER } from '../../config/studyMode';
 
 type BubbleMessage = {
@@ -580,9 +580,11 @@ export default function ChatScreen() {
   // Buttons under KAI's personal-info answers.
   const openReplyAction = (action: ReplyAction) => {
     if (action.target === 'appointments') router.navigate('/appt');
-    // Home, scrolled to the vaccination card (t makes a repeat tap a new navigation).
-    else router.navigate({ pathname: '/', params: { tab: 'Records', t: String(Date.now()) } });
+    // Home, with the vaccination card opened enlarged (t makes a repeat tap a new navigation).
+    else router.navigate({ pathname: '/', params: { tab: 'Records', enlarge: '1', t: String(Date.now()) } });
   };
+  // Wake the chatbot server as soon as the chat opens.
+  useEffect(() => { warmClinicAssistant(); }, []);
 
   const messages = mode === 'admin' ? [...adminMessages, ...pendingMessages] : botMessages;
   const messagesLoaded = mode === 'admin' ? (openThreadId ? adminMessagesLoaded : true) : true;

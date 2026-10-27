@@ -16,11 +16,19 @@ import {
   OUT_OF_SCOPE_REPLY,
   PERSONAL_INFO_REPLY_APP,
   PERSONAL_NAV_REPLY_APP,
-  VAGUE_REPLY,
+  PRICE_REPLY,
   classifyMessage,
   fixedInScopeReply,
+  isShortVague,
+  vagueReply,
   type ScopeCategory,
 } from './chatbotRules';
+
+/** Wakes the chatbot server when the chat opens, so the first message does not wait for a cold start. */
+export function warmClinicAssistant(): void {
+  if (!API_BASE_URL) return;
+  fetch(`${API_BASE_URL}/api/chatbot?warm=1`).catch(() => {});
+}
 
 export type ChatTurn = { role: 'user' | 'bot'; text: string };
 
@@ -44,6 +52,16 @@ export async function askClinicAssistant(prompt: string, history: ChatTurn[] = [
   if (category === 'clinical') return { text: BLOCKED_REPLY_APP, needsEscalation: true, category };
   if (category === 'personal_nav') return { text: PERSONAL_NAV_REPLY_APP, needsEscalation: false, category, action: CARD_ACTION };
   if (category === 'personal_info') return { text: PERSONAL_INFO_REPLY_APP, needsEscalation: false, category, action: CARD_ACTION };
+  if (category === 'out_of_scope') return { text: OUT_OF_SCOPE_REPLY, needsEscalation: false, category };
+  // A bare name, an introduction or a short vague message: answered here, so
+  // a name never leaves the phone and is never repeated back.
+  if (category === 'vague' && isShortVague(prompt)) return { text: vagueReply(prompt), needsEscalation: false, category };
+  // Allowed topics with a fixed answer (hours, contact, services, prices,
+  // booking steps, app help): instant, no network. Same text as the server.
+  if (category === 'in_scope') {
+    const fixedReply = fixedInScopeReply(prompt);
+    if (fixedReply) return { text: fixedReply, needsEscalation: fixedReply === PRICE_REPLY, category: 'in_scope' };
+  }
 
   // 2. Online: Route all clinic questions, app navigation, booking, and conversational queries to backend
   if (API_BASE_URL) {
@@ -70,15 +88,11 @@ export async function askClinicAssistant(prompt: string, history: ChatTurn[] = [
   }
 
   // 3. Offline / Network error fallback
-  if (category === 'out_of_scope') return { text: OUT_OF_SCOPE_REPLY, needsEscalation: false, category };
-
-  const fixed = fixedInScopeReply(prompt);
-  if (fixed) return { text: fixed, needsEscalation: false, category: 'in_scope' };
 
   if (/\b(book|appointment|appt|reserv|cancel|reschedul|slot)/i.test(prompt)) {
     return { text: BOOKING_REPLY, needsEscalation: false, category: 'in_scope', action: { label: 'Open appointments', target: 'appointments' } };
   }
-  if (category === 'vague') return { text: VAGUE_REPLY, needsEscalation: false, category };
+  if (category === 'vague') return { text: vagueReply(prompt), needsEscalation: false, category };
 
   return {
     text: "KAI can't answer right now. Please check your connection or contact K&A Clinic at +63 912 345 6789.",

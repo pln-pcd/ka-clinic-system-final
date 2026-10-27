@@ -61,7 +61,7 @@ const s = StyleSheet.create({
   badge_done: { backgroundColor: '#F1F5F9' },
   badge_pending: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0' },
   badge_today: { backgroundColor: '#E2E8F0' },
-  badge_missed: { backgroundColor: '#FEF2F2' },
+  badge_missed: { backgroundColor: 'transparent' }, // overdue: red text only
   badgeTxt: { fontSize: moderateScale(9.5), fontWeight: '800', textAlign: 'center' },
   badgeTxt_done: { color: '#334155' },
   badgeTxt_pending: { color: '#64748B' },

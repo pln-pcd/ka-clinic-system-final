@@ -193,7 +193,7 @@ const StatusBadge = ({ status, declined = false }: { status: string; declined?: 
 // The same values as the Admin Dashboard's appointment services
 // (ka-clinic-admin/src/features/appointments/AppointmentsPage.jsx
 // SERVICE_TYPES), saved as-is in `type`, so a booking made here reads the same
-// in the clinic's list. "Walk-in Emergency" is staff-only and not offered.
+// in the clinic's list.
 // "PEP" was stored as "PEP Follow-up" before 1.0.5; apptTypeLabel shows those
 // older bookings as "PEP" too.
 const APPT_SERVICES = [
@@ -1269,7 +1269,7 @@ export default function AppointmentsScreen() {
                             style={s.closureCardRescheduleBtn}
                             onPress={() => openReschedule(appt)}
                           >
-                            <Ionicons name="calendar-outline" size={13} color="#FFFFFF" />
+                            <Ionicons name="calendar-outline" size={15} color="#FFFFFF" />
                             <Text style={s.closureCardRescheduleTxt}>Reschedule</Text>
                           </Tap>
                         </View>
@@ -1799,7 +1799,7 @@ export default function AppointmentsScreen() {
                                   openReschedule(target);
                                 }}
                               >
-                                <Ionicons name="calendar-outline" size={13} color="#FFFFFF" />
+                                <Ionicons name="calendar-outline" size={15} color="#FFFFFF" />
                                 <Text style={s.closureCardRescheduleTxt}>Reschedule</Text>
                               </Tap>
                             </View>
@@ -2537,8 +2537,8 @@ const s = StyleSheet.create({
   closureCardReason: { fontSize: moderateScale(12), fontWeight: '500', color: '#475569', marginBottom: verticalScale(4) },
   closureCardSub:    { fontSize: moderateScale(11), color: '#64748B', lineHeight: moderateScale(15), marginBottom: verticalScale(8) },
   closureCardBtnRow: { flexDirection: 'row', gap: scale(8) },
-  closureCardRescheduleBtn: { flexDirection: 'row', alignItems: 'center', gap: scale(4), backgroundColor: C.navy, borderRadius: scale(8), paddingHorizontal: scale(12), paddingVertical: verticalScale(6) },
-  closureCardRescheduleTxt: { fontSize: moderateScale(11.5), fontWeight: '700', color: '#FFFFFF' },
+  closureCardRescheduleBtn: { flexDirection: 'row', alignItems: 'center', gap: scale(4), backgroundColor: C.navy, borderRadius: scale(10), paddingHorizontal: scale(16), paddingVertical: verticalScale(9) },
+  closureCardRescheduleTxt: { fontSize: moderateScale(13), fontWeight: '700', color: '#FFFFFF' },
 
   // Clear, dedicated action button with 44dp+ tap target via hitSlop.
   cancelPill: { flexDirection: 'row', alignItems: 'center', gap: scale(4), paddingHorizontal: scale(10), paddingVertical: verticalScale(6), borderRadius: scale(8), borderWidth: 1, borderColor: C.border, backgroundColor: C.white, overflow: 'hidden', marginLeft: scale(10), alignSelf: 'center' },

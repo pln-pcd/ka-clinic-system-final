@@ -38,7 +38,8 @@ export function doseState(d: any, today: string = clinicToday()): DoseState {
 
 /**
  * The dose status shown to the patient, with the same names and rules as the
- * Admin Dashboard (StatusBadge): Given, Due today, Overdue · Nd, Upcoming.
+ * Admin Dashboard (StatusBadge): Given, Due today, Overdue, Upcoming (the
+ * app shows no day count after Overdue).
  * Counted on the clinic's calendar (Asia/Manila). A dose is only "Given" once
  * staff mark it done, so a future date can never show as given.
  */
@@ -49,12 +50,7 @@ export function doseStatus(d: any, today: string = clinicToday()): { status: Dos
   if (state === 'done') return { status: 'given', label: 'Given' };
   const date = typeof d?.date === 'string' ? d.date.slice(0, 10) : '';
   if (date === today) return { status: 'due_today', label: 'Due today' };
-  if (state === 'missed') {
-    const days = /^\d{4}-\d{2}-\d{2}$/.test(date)
-      ? Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${date}T00:00:00Z`)) / 86400000)
-      : 0;
-    return { status: 'overdue', label: days > 0 ? `Overdue · ${days}d` : 'Overdue' };
-  }
+  if (state === 'missed') return { status: 'overdue', label: 'Overdue' };
   return { status: 'upcoming', label: 'Upcoming' };
 }
 

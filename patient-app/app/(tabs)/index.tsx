@@ -236,7 +236,7 @@ const NotifSwipeToDeleteRow = ({ children, onDelete }: { children: React.ReactNo
 
 export default function RabiesRecoveryApp() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ tab?: string; t?: string }>();
+  const params = useLocalSearchParams<{ tab?: string; t?: string; enlarge?: string }>();
   const { user, mrn, isGuest, mrnLoading, mrnError, sessionKey, loading: authLoading } = usePatientAuth();
   const insets = useSafeAreaInsets();
 
@@ -415,6 +415,8 @@ export default function RabiesRecoveryApp() {
     if (tabParam !== 'Records') return;
     scrollRequest.current = Date.now() + 1500;
     scrollToCard();
+    // From KAI's "Open my vaccination card": show the card enlarged.
+    if (params?.enlarge === '1') { setEnlargeFlipped(false); setShowEnlargeModal(true); }
   }, [tabParam, params?.t]);
 
   useEffect(() => {
@@ -740,7 +742,6 @@ export default function RabiesRecoveryApp() {
                     <Text style={[s.tapProgressHintNavy, s.tapHintText]}>
                       {isGuest ? 'Sign up to track your doses' : mrnError || 'Tap to view protocol tracker'}
                     </Text>
-                    <Ionicons name="arrow-forward" size={moderateScale(12)} color={MEDICAL_RED} />
                   </View>
                 </View>
                 )}
