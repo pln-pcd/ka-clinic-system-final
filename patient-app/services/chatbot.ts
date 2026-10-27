@@ -16,7 +16,6 @@ import {
   OUT_OF_SCOPE_REPLY,
   PERSONAL_INFO_REPLY_APP,
   PERSONAL_NAV_REPLY_APP,
-  PRICE_REPLY,
   classifyMessage,
   fixedInScopeReply,
   isShortVague,
@@ -60,7 +59,7 @@ export async function askClinicAssistant(prompt: string, history: ChatTurn[] = [
   // booking steps, app help): instant, no network. Same text as the server.
   if (category === 'in_scope') {
     const fixedReply = fixedInScopeReply(prompt);
-    if (fixedReply) return { text: fixedReply, needsEscalation: fixedReply === PRICE_REPLY, category: 'in_scope' };
+    if (fixedReply) return { text: fixedReply, needsEscalation: false, category: 'in_scope' };
   }
 
   // 2. Online: Route all clinic questions, app navigation, booking, and conversational queries to backend

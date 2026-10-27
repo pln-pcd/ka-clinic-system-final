@@ -7,6 +7,7 @@ import { resetTo } from '../../utils/navigation';
 import { clinicToday } from '../../utils/patientRecord';
 import {
   collection,
+  deleteDoc,
   doc,
   onSnapshot,
   orderBy,
@@ -635,6 +636,27 @@ export default function AppointmentsScreen() {
 
   const showAlert = (config: Omit<CustomAlertConfig, 'visible'>) => {
     setAlertConfig({ ...config, visible: true });
+  };
+
+  // Removes one of the patient's own cancelled appointments from the list.
+  const confirmDeleteCancelled = (appt: any) => {
+    showAlert({
+      type: 'warning',
+      title: 'Delete this appointment?',
+      message: `Your cancelled ${apptTypeLabel(appt.type)} appointment on ${shortKeyWithDay(appt.date)} will be removed from your list. This can't be undone.`,
+      primaryButtonText: 'Delete',
+      onPrimaryPress: async () => {
+        hideAlert();
+        try {
+          await deleteDoc(doc(db, 'appointments', appt.id));
+        } catch (err) {
+          console.warn('Delete cancelled appointment failed:', err);
+          showAlert({ type: 'error', title: 'Could not delete', message: 'Please check your connection and try again.', primaryButtonText: 'OK', onPrimaryPress: hideAlert });
+        }
+      },
+      secondaryButtonText: 'Keep',
+      onSecondaryPress: hideAlert,
+    });
   };
 
   const hideAlert = () => {
@@ -1372,6 +1394,19 @@ export default function AppointmentsScreen() {
                           </View>
                         ) : null}
                       </View>
+                      {/* firestore.rules lets a patient delete only their own cancelled appointments. */}
+                      {appt.status === 'cancelled' && (
+                        <Tap
+                          style={s.cancelPill}
+                          hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+                          onPress={() => confirmDeleteCancelled(appt)}
+                          accessibilityRole="button"
+                          accessibilityLabel="Delete cancelled appointment"
+                        >
+                          <Ionicons name="trash-outline" size={13} color={C.navy}/>
+                          <Text style={s.cancelPillTxt}>Delete</Text>
+                        </Tap>
+                      )}
                     </Tap>
                     {idx < cancelledApts.length - 1 && <View style={s.apptListDivider} />}
                   </View>

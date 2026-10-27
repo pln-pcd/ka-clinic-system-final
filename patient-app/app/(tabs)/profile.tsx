@@ -362,9 +362,6 @@ export default function ProfileScreen() {
               religion: personalData.religion,
               education: personalData.education,
               occupation: personalData.occupation,
-              height: personalData.height,
-              weight: personalData.weight,
-              bloodPressure: personalData.bp,
               emergencyName: personalData.emergencyName,
               emergencyRel: personalData.emergencyRel,
               emergencyPhone: personalData.emergencyPhone,
@@ -930,23 +927,18 @@ export default function ProfileScreen() {
                 )}
               </View>
 
-              {/* Physical Info */}
+              {/* Physical Info: recorded by the clinic, read-only here (also while editing). */}
               <SectionLabel title="PHYSICAL INFO" />
               <View style={s.card}>
-                {isEditingPersonal ? (
-                  <>
-                    <View style={s.editGroup}><Text style={s.editLabel}>Height (cm)</Text><TextInput style={s.editInput} value={personalData.height} onChangeText={v => setPersonalData(p => ({...p, height: v}))} placeholder="e.g. 160" placeholderTextColor={C.muted} keyboardType="numeric" /></View>
-                    <View style={s.editGroup}><Text style={s.editLabel}>Weight (kg)</Text><TextInput style={s.editInput} value={personalData.weight} onChangeText={v => setPersonalData(p => ({...p, weight: v}))} placeholder="e.g. 55" placeholderTextColor={C.muted} keyboardType="numeric" /></View>
-                    <View style={[s.editGroup, {borderBottomWidth:0}]}><Text style={s.editLabel}>Blood Pressure</Text><TextInput style={s.editInput} value={personalData.bp} onChangeText={v => setPersonalData(p => ({...p, bp: v}))} placeholder="e.g. 120/80" placeholderTextColor={C.muted} /></View>
-                  </>
-                ) : (
-                  <>
-                    <PreviewRow label="Height" value={personalData.height ? `${personalData.height} cm` : undefined} />
-                    <PreviewRow label="Weight" value={personalData.weight ? `${personalData.weight} kg` : undefined} />
-                    <PreviewRow label="Blood Pressure" value={personalData.bp} isLast />
-                  </>
-                )}
+                <PreviewRow label="Height" value={personalData.height ? `${personalData.height} cm` : undefined} />
+                <PreviewRow label="Weight" value={personalData.weight ? `${personalData.weight} kg` : undefined} />
+                <PreviewRow label="Blood Pressure" value={personalData.bp} isLast />
               </View>
+              {isEditingPersonal && (
+                <Text style={{ fontSize: moderateScale(11), color: C.muted, marginTop: verticalScale(6), marginHorizontal: scale(6) }}>
+                  Physical info is recorded by the clinic and can't be changed here.
+                </Text>
+              )}
 
               {/* Emergency Contact */}
               <SectionLabel title="EMERGENCY CONTACT" />
