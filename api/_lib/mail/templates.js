@@ -451,16 +451,20 @@ ${cells}
                 </table>`;
 }
 
+export const DEFAULT_PATIENT_APP_DOWNLOAD_URL = 'https://github.com/pln-pcd/ka-clinic-system-final/releases/download/v1.0.27/ka-clinic-1.0.27.apk';
+
 // Sent once when the clinic registers a new patient on the admin dashboard
 // (api/notifications.js, action `patient-welcome`). Tells the patient they
 // are on file and walks them through installing the companion app, creating
-// their password and signing in. `downloadUrl` is PATIENT_APP_DOWNLOAD_URL;
-// without it the patient is told to ask the front desk for the link.
+// their password and signing in. `downloadUrl` defaults to the latest release APK.
 export function buildPatientWelcomeEmailHtml({ patientName, mrn, email, downloadUrl }) {
+  const activeDownloadUrl = (downloadUrl && /^https:\/\//i.test(downloadUrl))
+    ? downloadUrl.trim()
+    : DEFAULT_PATIENT_APP_DOWNLOAD_URL;
   const greeting = patientName ? `Dear ${escapeHtml(patientName)},` : 'Dear Patient,';
   const safeMrn = escapeHtml(mrn);
-  const downloadDetail = downloadUrl
-    ? 'Tap the <strong>Download the App</strong> button above on your Android phone and install the <strong>K&amp;A Clinic</strong> app. If your phone asks, allow installing apps from this source.'
+  const downloadDetail = activeDownloadUrl
+    ? 'Tap the <strong>Download Android App (APK)</strong> button above on your Android phone to directly download and install the <strong>K&amp;A Clinic</strong> companion app (ka-clinic-1.0.27.apk). If your phone prompts, allow installing apps from this source.'
     : 'Ask the clinic front desk for the download link or QR code, then install the <strong>K&amp;A Clinic</strong> app on your Android phone.';
   return shell({
     title: 'You are registered at K&amp;A Animal Bite Center',
@@ -473,8 +477,8 @@ export function buildPatientWelcomeEmailHtml({ patientName, mrn, email, download
         ['Medical Record No. (MRN)', safeMrn],
         ['Email on file', escapeHtml(email)],
       ]),
-      downloadUrl ? button(downloadUrl, 'Download the App') : '',
-      downloadUrl ? fallbackLink(downloadUrl) : '',
+      activeDownloadUrl ? button(activeDownloadUrl, 'Download Android App (APK)') : '',
+      activeDownloadUrl ? fallbackLink(activeDownloadUrl) : '',
       `                <h2 style="margin:6px 0 16px;font-size:16px;font-weight:bold;color:${INK};">How to get started</h2>`,
       step(1, 'Download the app', downloadDetail),
       step(2, 'Sign up', `Open the app and tap <strong>Sign up</strong>. Enter your MRN <strong>${safeMrn}</strong> and tap <strong>Send OTP</strong>. A 6-digit code is sent to this email address. Enter it, then create your password.`),
@@ -614,6 +618,9 @@ export function buildInviteEmailText({ inviteUrl, inviterName }) {
 }
 
 export function buildPatientWelcomeEmailText({ patientName, mrn, email, downloadUrl }) {
+  const activeDownloadUrl = (downloadUrl && /^https:\/\//i.test(downloadUrl))
+    ? downloadUrl.trim()
+    : DEFAULT_PATIENT_APP_DOWNLOAD_URL;
   return [
     'K&A Animal Bite Center — You are registered',
     '===========================================',
@@ -629,8 +636,8 @@ export function buildPatientWelcomeEmailText({ patientName, mrn, email, download
     '',
     'HOW TO GET STARTED',
     '',
-    downloadUrl
-      ? `1. Download the app: open this link on your Android phone and install K&A Clinic:\n   ${downloadUrl}`
+    activeDownloadUrl
+      ? `1. Download the app: open this link on your Android phone to directly download the APK:\n   ${activeDownloadUrl}`
       : '1. Download the app: ask the clinic front desk for the download link or QR code,\n   then install K&A Clinic on your Android phone.',
     `2. Sign up: open the app, tap "Sign up", enter your MRN ${mrn} and tap "Send OTP".`,
     '   A 6-digit code is sent to this email address. Enter it, then create your password.',

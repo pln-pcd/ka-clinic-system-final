@@ -1475,8 +1475,10 @@ async function patientWelcome(req, res) {
     return;
   }
 
-  const downloadUrl = (process.env.PATIENT_APP_DOWNLOAD_URL || '').trim();
-  const content = { patientName: patient.name || '', mrn, email, downloadUrl: /^https:\/\//i.test(downloadUrl) ? downloadUrl : '' };
+  const DEFAULT_APK_DOWNLOAD_URL = 'https://github.com/pln-pcd/ka-clinic-system-final/releases/download/v1.0.27/ka-clinic-1.0.27.apk';
+  const rawDownloadUrl = (process.env.PATIENT_APP_DOWNLOAD_URL || '').trim();
+  const downloadUrl = /^https:\/\//i.test(rawDownloadUrl) ? rawDownloadUrl : DEFAULT_APK_DOWNLOAD_URL;
+  const content = { patientName: patient.name || '', mrn, email, downloadUrl };
   const { error, skipped } = await sendMail({
     to: email,
     subject: 'You are registered at K&A Animal Bite Center — get the companion app',

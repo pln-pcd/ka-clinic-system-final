@@ -247,7 +247,9 @@ export default function AppSection() {
 
             {/* Simple & Compact APK Download Button */}
             <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-              <button onClick={() => showToast('Downloading K&A Clinic APK... 🚀')}
+              <a href="https://github.com/pln-pcd/ka-clinic-system-final/releases/download/v1.0.27/ka-clinic-1.0.27.apk"
+                download="ka-clinic-1.0.27.apk"
+                onClick={() => showToast('Downloading K&A Clinic APK (v1.0.27)... 🚀')}
                 style={{
                   background: '#EF4444',
                   border: 'none',
@@ -257,6 +259,7 @@ export default function AppSection() {
                   alignItems: 'center',
                   gap: 10,
                   cursor: 'pointer',
+                  textDecoration: 'none',
                   transition: 'all 0.2s ease',
                   boxShadow: '0 4px 14px rgba(239, 68, 68, 0.35)',
                   color: '#FFFFFF',
@@ -274,8 +277,8 @@ export default function AppSection() {
                   e.currentTarget.style.boxShadow = '0 4px 14px rgba(239, 68, 68, 0.35)';
                 }}>
                 <Download size={18} color="#FFFFFF" />
-                <span>Download APK</span>
-              </button>
+                <span>Download APK (v1.0.27)</span>
+              </a>
             </div>
 
           </div>
