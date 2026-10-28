@@ -271,6 +271,13 @@ async function postToApi<T>(path: string, body: unknown, idToken?: string, timeo
   return data as T;
 }
 
+export { postToApi };
+
+export async function callApi<T = any>(path: string, body: any = {}, timeoutMs = 20000): Promise<T> {
+  const idToken = await auth.currentUser?.getIdToken();
+  return postToApi<T>(path, body, idToken, timeoutMs);
+}
+
 export const sendEmailOTP = async (mrnInput: string): Promise<SendOtpResult> => {
   const mrn = normalizeMRN(mrnInput);
   const data = await postToApi<{ maskedEmail: string }>('/api/send-otp', { mrn });

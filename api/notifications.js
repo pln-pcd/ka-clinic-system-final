@@ -304,6 +304,36 @@ async function removeAvatar(req, res) {
   res.status(200).json({ success: true });
 }
 
+// ── Patient App hides its cancelled or declined appointment from its list ────
+// The clinic record remains intact in the database for clinic admin audit, but
+// is marked hiddenByPatient so the patient app list omits it.
+async function hideAppointment(req, res) {
+  const idToken = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+  const appointmentId = (req.body?.appointmentId || '').trim();
+  if (!idToken) { res.status(401).json({ success: false, error: 'Missing authentication token.' }); return; }
+  if (!appointmentId) { res.status(400).json({ success: false, error: 'Missing appointment ID.' }); return; }
+  let decoded;
+  try { decoded = await auth.verifyIdToken(idToken, true); }
+  catch { res.status(401).json({ success: false, error: 'Invalid or expired session.' }); return; }
+
+  const apptRef = db.collection('appointments').doc(appointmentId);
+  const snap = await apptRef.get();
+  if (!snap.exists) { res.status(404).json({ success: false, error: 'Appointment not found.' }); return; }
+  const data = snap.data() || {};
+  const isOwner = (data.patientUid && data.patientUid === decoded.uid)
+    || (data.userId && data.userId === decoded.uid);
+  if (!isOwner) {
+    res.status(403).json({ success: false, error: 'Forbidden.' });
+    return;
+  }
+  await apptRef.update({
+    hiddenByPatient: true,
+    hiddenAt: Date.now(),
+    updatedAt: Date.now(),
+  });
+  res.status(200).json({ success: true });
+}
+
 // Fire-and-report Expo push. A failed push never fails the whole send — the
 // email and the in-app notification doc are independent delivery channels.
 async function sendExpoPush(tokens, { title, body, data }) {
@@ -1494,6 +1524,8 @@ const OPEN_ACTIONS = {
   ack: acknowledge,
   'book-appointment': bookAppointment,
   bookAppointment: bookAppointment,
+  'hide-appointment': hideAppointment,
+  hideAppointment: hideAppointment,
 };
 const CRON_ACTIONS = { 'dose-sweep': doseSweep, 'backup-cron': backupCron, 'patient-archive-sweep': patientArchiveSweep };
 

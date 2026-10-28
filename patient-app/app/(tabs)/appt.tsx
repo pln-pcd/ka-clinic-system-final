@@ -35,7 +35,8 @@ import {
 } from 'react-native';
 import Tap from '../../components/Tap';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { db } from '../../config/backend';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { db, callApi } from '../../config/backend';
 import { GUTTER, moderateScale, scale, verticalScale } from '../../utils/scale';
 import { usePatientAuth } from '../../context/PatientAuthContext';
 import CustomAlertModal, { CustomAlertConfig } from '../../components/CustomAlertModal';
@@ -658,6 +659,25 @@ export default function AppointmentsScreen() {
     setAlertConfig({ ...config, visible: true });
   };
 
+  // Locally hidden appointment IDs (for instant offline removal & resilience)
+  const [hiddenApptIds, setHiddenApptIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!user?.uid) {
+      setHiddenApptIds([]);
+      return;
+    }
+    const storageKey = `@kna_hidden_cancelled_appts_${user.uid}`;
+    AsyncStorage.getItem(storageKey).then(val => {
+      if (val) {
+        try {
+          const parsed = JSON.parse(val);
+          if (Array.isArray(parsed)) setHiddenApptIds(parsed);
+        } catch {}
+      }
+    }).catch(() => {});
+  }, [user?.uid]);
+
   // Removes one of the patient's own cancelled appointments from the list.
   const confirmDeleteCancelled = (appt: any) => {
     showAlert({
@@ -665,17 +685,31 @@ export default function AppointmentsScreen() {
       title: 'Remove from your list?',
       message: `Your cancelled ${apptTypeLabel(appt.type)} appointment on ${shortKeyWithDay(appt.date)} will be removed from your list. The clinic record will not be affected.`,
       primaryButtonText: 'Remove',
-      onPrimaryPress: async () => {
+      onPrimaryPress: () => {
         hideAlert();
-        try {
-          await updateDoc(doc(db, 'appointments', appt.id), {
+        const id = appt.id;
+        // Optimistically hide immediately from UI and device storage
+        setHiddenApptIds(prev => {
+          const next = prev.includes(id) ? prev : [...prev, id];
+          if (user?.uid) {
+            AsyncStorage.setItem(`@kna_hidden_cancelled_appts_${user.uid}`, JSON.stringify(next)).catch(() => {});
+          }
+          return next;
+        });
+
+        // Persist hidden status to server with admin privileges (does not delete record)
+        callApi('/api/notifications', {
+          action: 'hide-appointment',
+          appointmentId: id,
+        }).catch((apiErr: any) => {
+          console.warn('API hide-appointment failed, falling back to updateDoc:', apiErr);
+          updateDoc(doc(db, 'appointments', id), {
             hiddenByPatient: true,
             hiddenAt: Date.now(),
+          }).catch((dbErr: any) => {
+            console.warn('Direct updateDoc also failed (retained locally):', dbErr);
           });
-        } catch (err) {
-          console.warn('Remove cancelled appointment failed:', err);
-          showAlert({ type: 'error', title: 'Could not remove', message: 'Please check your connection and try again.', primaryButtonText: 'OK', onPrimaryPress: hideAlert });
-        }
+        });
       },
       secondaryButtonText: 'Keep',
       onSecondaryPress: hideAlert,
@@ -773,7 +807,7 @@ export default function AppointmentsScreen() {
   const pastApts = myAppointments.filter(a =>
     (a.status === 'confirmed' || a.status === 'accepted' || a.status === 'done') && a.date < todayKey
   );
-  const cancelledApts = myAppointments.filter(a => isEnded(a) && !a.hiddenByPatient);
+  const cancelledApts = myAppointments.filter(a => isEnded(a) && !a.hiddenByPatient && !hiddenApptIds.includes(a.id));
 
   // Slot holds across the visible month, so the calendar can mark a weekend
   // whose every hour is gone as full rather than inviting a tap that leads to
@@ -1066,6 +1100,11 @@ export default function AppointmentsScreen() {
   ];
   while (cells.length % 7 !== 0) cells.push(null);
 
+  const mainWeeks: (number | null)[][] = [];
+  for (let i = 0; i < cells.length; i += 7) {
+    mainWeeks.push(cells.slice(i, i + 7));
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   const closeAppointmentDetail = () => {
     setSelectedApptDetail(null);
@@ -1134,70 +1173,74 @@ export default function AppointmentsScreen() {
             </View>
 
             <View style={s.calGrid}>
-              {cells.map((day, idx) => {
-                if (day === null) return <View key={`b${idx}`} style={s.calCell}/>;
-                const key        = toKey(viewYear, viewMonth, day);
-                const isToday    = key === todayKey;
-                const isSelected = key === selectedKey;
-                const hasSlots   = isWeekendDate(key);
-                const isPast     = key < todayKey; // clinic calendar (Manila)
-                const cInfo      = hasSlots ? getClosureForDate(key) : null;
-                const isClosedDay = cInfo?.type === 'day';
-                const isPartiallyClosed = cInfo?.type === 'slots';
-                // Every hour claimed or closed — still a clinic day, but nothing left to book.
-                const closedCount = isClosedDay ? TIME_SLOTS.length : (cInfo?.slots?.length || 0);
-                const isFull     = hasSlots && !isClosedDay && ((monthSlotCounts[key] || 0) + closedCount >= TIME_SLOTS.length);
-                const tappable   = !isPast && hasSlots && (!isFull || isClosedDay);
+              {mainWeeks.map((week, wIdx) => (
+                <View key={`mw-${wIdx}`} style={s.calGridRow}>
+                  {week.map((day, dIdx) => {
+                    if (day === null) return <View key={`b-${wIdx}-${dIdx}`} style={s.calCell}/>;
+                    const key        = toKey(viewYear, viewMonth, day);
+                    const isToday    = key === todayKey;
+                    const isSelected = key === selectedKey;
+                    const hasSlots   = isWeekendDate(key);
+                    const isPast     = key < todayKey; // clinic calendar (Manila)
+                    const cInfo      = hasSlots ? getClosureForDate(key) : null;
+                    const isClosedDay = cInfo?.type === 'day';
+                    const isPartiallyClosed = cInfo?.type === 'slots';
+                    // Every hour claimed or closed — still a clinic day, but nothing left to book.
+                    const closedCount = isClosedDay ? TIME_SLOTS.length : (cInfo?.slots?.length || 0);
+                    const isFull     = hasSlots && !isClosedDay && ((monthSlotCounts[key] || 0) + closedCount >= TIME_SLOTS.length);
+                    const tappable   = !isPast && hasSlots && (!isFull || isClosedDay);
 
-                return (
-                  <Tap
-                    key={key}
-                    style={s.calCell}
-                    onPress={() => {
-                      if (isClosedDay) {
-                        setClosureModal({
-                          visible: true,
-                          title: 'Appointments closed',
-                          dateStr: displayKey(key),
-                          reason: cInfo.closure.reason,
-                        });
-                      } else if (tappable && !isFull) {
-                        handleDayPress(day);
-                      }
-                    }}
-                    activeOpacity={tappable ? 0.75 : 1}
-                    disabled={!tappable}
-                  >
-                    {/* Bookable dates are marked by red numerals alone — no fill,
-                        so only the selected date carries a background. */}
-                    <View style={[
-                      s.calTile,
-                      isToday && !isSelected && s.calTileToday,
-                      isSelected && s.calTileSelected,
-                      isClosedDay && { backgroundColor: '#F1F5F9', borderColor: '#CBD5E1' },
-                    ]}>
-                      {isClosedDay && (
-                        <Ionicons name="lock-closed" size={10} color="#64748B" style={{ position: 'absolute', top: 3, right: 3 }} />
-                      )}
-                      {isPartiallyClosed && !isClosedDay && (
-                        <Ionicons name="lock-closed" size={8} color="#94A3B8" style={{ position: 'absolute', top: 3, right: 3 }} />
-                      )}
-                      <Text style={[
-                        s.calDayTxt,
-                        isPast               && s.calDayPast,
-                        !isPast && !hasSlots && s.calDayNoSlot,
-                        tappable && !isSelected && !isClosedDay && s.calDayOpen,
-                        !isPast && isFull && !isSelected && !isClosedDay && s.calDayFull,
-                        isClosedDay && { color: '#475569', fontWeight: '800' },
-                        isToday && !isSelected && s.calDayToday,
-                        isSelected           && s.calDaySelected,
-                      ]}>
-                        {day}
-                      </Text>
-                    </View>
-                  </Tap>
-                );
-              })}
+                    return (
+                      <Tap
+                        key={key}
+                        style={s.calCell}
+                        onPress={() => {
+                          if (isClosedDay) {
+                            setClosureModal({
+                              visible: true,
+                              title: 'Appointments closed',
+                              dateStr: displayKey(key),
+                              reason: cInfo.closure.reason,
+                            });
+                          } else if (tappable && !isFull) {
+                            handleDayPress(day);
+                          }
+                        }}
+                        activeOpacity={tappable ? 0.75 : 1}
+                        disabled={!tappable}
+                      >
+                        {/* Bookable dates are marked by red numerals alone — no fill,
+                            so only the selected date carries a background. */}
+                        <View style={[
+                          s.calTile,
+                          isToday && !isSelected && s.calTileToday,
+                          isSelected && s.calTileSelected,
+                          isClosedDay && { backgroundColor: '#F1F5F9', borderColor: '#CBD5E1' },
+                        ]}>
+                          {isClosedDay && (
+                            <Ionicons name="lock-closed" size={10} color="#64748B" style={{ position: 'absolute', top: 3, right: 3 }} />
+                          )}
+                          {isPartiallyClosed && !isClosedDay && (
+                            <Ionicons name="lock-closed" size={8} color="#94A3B8" style={{ position: 'absolute', top: 3, right: 3 }} />
+                          )}
+                          <Text style={[
+                            s.calDayTxt,
+                            isPast               && s.calDayPast,
+                            !isPast && !hasSlots && s.calDayNoSlot,
+                            tappable && !isSelected && !isClosedDay && s.calDayOpen,
+                            !isPast && isFull && !isSelected && !isClosedDay && s.calDayFull,
+                            isClosedDay && { color: '#475569', fontWeight: '800' },
+                            isToday && !isSelected && s.calDayToday,
+                            isSelected           && s.calDaySelected,
+                          ]}>
+                            {day}
+                          </Text>
+                        </View>
+                      </Tap>
+                    );
+                  })}
+                </View>
+              ))}
             </View>
 
             <View style={s.legend}>
@@ -2151,68 +2194,85 @@ export default function AppointmentsScreen() {
 
                     {/* Day Grid */}
                     <View style={s.calGrid}>
-                      {Array.from({ length: firstWeekday(rescheduleYear, rescheduleMonth) }, (_, i) => (
-                        <View key={`empty-${i}`} style={s.calCell} />
-                      ))}
-                      {Array.from({ length: daysInMonth(rescheduleYear, rescheduleMonth) }, (_, i) => {
-                        const day = i + 1;
-                        const key = toKey(rescheduleYear, rescheduleMonth, day);
-                        const isWeekend = isWeekendDate(key);
-                        const isPast = key < todayKey;
-                        const isCurrentApptDate = reschedulingAppt?.date === key;
-                        const cInfo = isWeekend ? getClosureForDate(key) : null;
-                        const isClosedDay = cInfo?.type === 'day';
-                        const isPartiallyClosed = cInfo?.type === 'slots';
-                        const hoursTaken = rescheduleMonthSlotCounts[key] || 0;
-                        const closedCount = isClosedDay ? TIME_SLOTS.length : (cInfo?.slots?.length || 0);
-                        const isFull = isWeekend && !isClosedDay && !isCurrentApptDate && (hoursTaken + closedCount >= TIME_SLOTS.length);
-                        const tappable = isWeekend && !isPast && (!isFull || isClosedDay);
+                      {(() => {
+                        const rTotal = daysInMonth(rescheduleYear, rescheduleMonth);
+                        const rStart = firstWeekday(rescheduleYear, rescheduleMonth);
+                        const rCells: (number | null)[] = [
+                          ...Array(rStart).fill(null),
+                          ...Array.from({ length: rTotal }, (_, i) => i + 1),
+                        ];
+                        while (rCells.length % 7 !== 0) rCells.push(null);
+                        const rWeeks: (number | null)[][] = [];
+                        for (let i = 0; i < rCells.length; i += 7) {
+                          rWeeks.push(rCells.slice(i, i + 7));
+                        }
 
-                        return (
-                          <Tap
-                            key={key}
-                            style={s.calCell}
-                            disabled={!tappable}
-                            onPress={() => {
-                              if (isClosedDay) {
-                                setClosureModal({
-                                  visible: true,
-                                  title: 'Appointments closed',
-                                  dateStr: displayKey(key),
-                                  reason: cInfo.closure.reason,
-                                });
-                              } else if (tappable && !isFull) {
-                                setRescheduleDate(key);
-                                setRescheduleStep('slots');
+                        return rWeeks.map((week, wIdx) => (
+                          <View key={`rw-${wIdx}`} style={s.calGridRow}>
+                            {week.map((day, dIdx) => {
+                              if (day === null) {
+                                return <View key={`rempty-${wIdx}-${dIdx}`} style={s.calCell} />;
                               }
-                            }}
-                          >
-                            <View style={[
-                              s.calTile,
-                              isCurrentApptDate && { backgroundColor: C.navyFaint, borderColor: C.navy, borderWidth: 1.5 },
-                              tappable && !isCurrentApptDate && !isClosedDay && { borderColor: C.navy, borderWidth: 1 },
-                              isClosedDay && { backgroundColor: '#F1F5F9', borderColor: '#CBD5E1', borderWidth: 1 },
-                            ]}>
-                              {isClosedDay && (
-                                <Ionicons name="lock-closed" size={10} color="#64748B" style={{ position: 'absolute', top: 3, right: 3 }} />
-                              )}
-                              {isPartiallyClosed && !isClosedDay && (
-                                <Ionicons name="lock-closed" size={8} color="#94A3B8" style={{ position: 'absolute', top: 3, right: 3 }} />
-                              )}
-                              <Text style={[
-                                s.calDayTxt,
-                                isPast && s.calDayPast,
-                                !isPast && !isWeekend && s.calDayNoSlot,
-                                tappable && !isClosedDay && s.calDayOpen,
-                                isFull && !isClosedDay && s.calDayFull,
-                                isClosedDay && { color: '#475569', fontWeight: '800' },
-                              ]}>
-                                {day}
-                              </Text>
-                            </View>
-                          </Tap>
-                        );
-                      })}
+                              const key = toKey(rescheduleYear, rescheduleMonth, day);
+                              const isWeekend = isWeekendDate(key);
+                              const isPast = key < todayKey;
+                              const isCurrentApptDate = reschedulingAppt?.date === key;
+                              const cInfo = isWeekend ? getClosureForDate(key) : null;
+                              const isClosedDay = cInfo?.type === 'day';
+                              const isPartiallyClosed = cInfo?.type === 'slots';
+                              const hoursTaken = rescheduleMonthSlotCounts[key] || 0;
+                              const closedCount = isClosedDay ? TIME_SLOTS.length : (cInfo?.slots?.length || 0);
+                              const isFull = isWeekend && !isClosedDay && !isCurrentApptDate && (hoursTaken + closedCount >= TIME_SLOTS.length);
+                              const tappable = isWeekend && !isPast && (!isFull || isClosedDay);
+
+                              return (
+                                <Tap
+                                  key={key}
+                                  style={s.calCell}
+                                  disabled={!tappable}
+                                  onPress={() => {
+                                    if (isClosedDay) {
+                                      setClosureModal({
+                                        visible: true,
+                                        title: 'Appointments closed',
+                                        dateStr: displayKey(key),
+                                        reason: cInfo.closure.reason,
+                                      });
+                                    } else if (tappable && !isFull) {
+                                      setRescheduleDate(key);
+                                      setRescheduleStep('slots');
+                                    }
+                                  }}
+                                >
+                                  <View style={[
+                                    s.calTile,
+                                    isCurrentApptDate && { backgroundColor: C.navyFaint, borderColor: C.navy, borderWidth: 1.5 },
+                                    tappable && !isCurrentApptDate && !isClosedDay && { borderColor: C.navy, borderWidth: 1 },
+                                    isClosedDay && { backgroundColor: '#F1F5F9', borderColor: '#CBD5E1', borderWidth: 1 },
+                                  ]}>
+                                    {isClosedDay && (
+                                      <Ionicons name="lock-closed" size={10} color="#64748B" style={{ position: 'absolute', top: 3, right: 3 }} />
+                                    )}
+                                    {isPartiallyClosed && !isClosedDay && (
+                                      <Ionicons name="lock-closed" size={8} color="#94A3B8" style={{ position: 'absolute', top: 3, right: 3 }} />
+                                    )}
+                                    <Text style={[
+                                      s.calDayTxt,
+                                      isPast && s.calDayPast,
+                                      !isPast && !isWeekend && s.calDayNoSlot,
+                                      tappable && !isClosedDay && s.calDayOpen,
+                                      isFull && !isClosedDay && s.calDayFull,
+                                      isClosedDay && { color: '#475569', fontWeight: '800' },
+                                    ]}>
+                                      {day}
+                                    </Text>
+                                  </View>
+                                </Tap>
+                              );
+                            })}
+                          </View>
+                        ));
+                      })()}
                     </View>
 
                     <View style={[s.legend, { marginTop: verticalScale(10), paddingTop: verticalScale(10) }]}>
@@ -2486,25 +2546,13 @@ export default function AppointmentsScreen() {
 
                 {/* Body: the clinic's reason, then what to do. Neutral colours;
                     the lock icon above is the only accent. */}
-                <View style={{ padding: scale(18), gap: verticalScale(10) }}>
+                <View style={{ padding: scale(18), paddingBottom: verticalScale(20), gap: verticalScale(10) }}>
                   <Text style={{ fontSize: moderateScale(13), color: '#334155', lineHeight: moderateScale(19) }}>
                     {closureModal?.reason}
                   </Text>
                   <Text style={{ fontSize: moderateScale(11.5), color: '#64748B', lineHeight: moderateScale(16) }}>
                     Please choose another date or time. Walk-ins are accepted <Text style={{ color: '#0F172A', fontWeight: '700' }}>Mon–Fri, 8 AM–5 PM</Text>.
                   </Text>
-                </View>
-
-                {/* Footer buttons */}
-                <View style={{ paddingHorizontal: scale(18), paddingVertical: verticalScale(14), borderTopWidth: 1, borderColor: '#F1F5F9', backgroundColor: '#F8FAFC', flexDirection: 'row', gap: scale(8), justifyContent: 'flex-end' }}>
-                  <Tap
-                    style={{ paddingHorizontal: scale(16), paddingVertical: verticalScale(10), borderRadius: scale(10), backgroundColor: C.navy, alignItems: 'center', justifyContent: 'center' }}
-                    onPress={jumpToNextAvailable}
-                  >
-                    <Text style={{ fontSize: moderateScale(12), fontWeight: '700', color: '#FFFFFF' }}>
-                      Pick another date/time
-                    </Text>
-                  </Tap>
                 </View>
               </View>
             </TouchableWithoutFeedback>
@@ -2567,17 +2615,12 @@ const s = StyleSheet.create({
   calNavBtnOff: { opacity: 0.45 },
   calMonthTxt:  { fontSize: moderateScale(16), fontWeight: '800', color: C.charcoal },
   calWeekRow:   { flexDirection: 'row', marginBottom: verticalScale(8) },
-  // Percentage widths (not a floored pixel CELL) so 7 columns always consume
-  // exactly one row — a rounded-down pixel width leaves slack that lets an
-  // 8th cell creep onto the row and shifts every following week sideways.
-  calWeekCell:  { width: `${100 / 7}%`, alignItems: 'center' },
+  calWeekCell:  { flex: 1, alignItems: 'center', justifyContent: 'center' },
   calWeekTxt:   { fontSize: moderateScale(10), fontWeight: '700', color: C.muted, textTransform: 'uppercase', letterSpacing: 0.3 },
-  calGrid:      { flexDirection: 'row', flexWrap: 'wrap' },
-  // Outer cell is the grid column and owns no visual styling; the inner tile
-  // draws the state, so a highlight never spans the full column width.
-  // CELL is a live Dimensions.get('window')-derived calculation — left as-is.
-  calCell:      { width: `${100 / 7}%`, height: CELL, justifyContent: 'center', alignItems: 'center', marginBottom: verticalScale(3) },
-  calTile:      { width: CELL - 8, height: CELL - 8, justifyContent: 'center', alignItems: 'center', borderRadius: scale(12) },
+  calGrid:      { width: '100%' },
+  calGridRow:   { flexDirection: 'row', marginBottom: verticalScale(3) },
+  calCell:      { flex: 1, height: CELL, justifyContent: 'center', alignItems: 'center' },
+  calTile:      { width: Math.min(CELL - 8, scale(38)), height: Math.min(CELL - 8, scale(38)), justifyContent: 'center', alignItems: 'center', borderRadius: scale(12) },
   calTileToday: { borderWidth: 1.5, borderColor: C.red },
   calTileSelected: { borderWidth: 2, borderColor: C.navy, backgroundColor: C.navyFaint, shadowColor: C.navy, shadowOpacity: 0.25, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 3 },
   calDayTxt:    { fontSize: moderateScale(14), fontWeight: '600', color: C.charcoal },
