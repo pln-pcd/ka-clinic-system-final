@@ -91,7 +91,6 @@ export function getAdminLastActivity() {
 
 // Same, with the signed-in admin's Firebase ID token attached.
 export async function authedPostJson(url, body) {
-  recordAdminActivity();
   const idToken = await auth.currentUser?.getIdToken();
   return postJson(url, body ?? {}, idToken ? { Authorization: `Bearer ${idToken}` } : {});
 }

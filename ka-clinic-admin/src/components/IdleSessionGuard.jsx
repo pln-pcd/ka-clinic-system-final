@@ -26,13 +26,17 @@ export default function IdleSessionGuard({ onLogout, children }) {
     lastActivity.current = initialActivity;
     recordAdminActivity(initialActivity);
 
+    let lastThrottle = 0;
     const onUserActivity = () => {
       // While warning modal is shown, incidental mouse moves should not dismiss warning.
       // An explicit decision (clicking 'Keep working') is required.
+      const now = Date.now();
+      if (now - lastThrottle < 1000) return;
+      lastThrottle = now;
+
       const currentStored = getAdminLastActivity();
-      const st = idleState(currentStored);
+      const st = idleState(currentStored, now);
       if (!st.warning) {
-        const now = Date.now();
         lastActivity.current = now;
         recordAdminActivity(now);
       }
@@ -81,9 +85,10 @@ export default function IdleSessionGuard({ onLogout, children }) {
 
       setSeconds(state.warning ? Math.ceil(state.remaining / 1000) : null);
 
-      // Send periodic heartbeat to keep server session active while user is not idle
+      // Send periodic heartbeat to keep server session active ONLY if the user was actually active
       const now = Date.now();
-      if (!state.warning && now - lastHeartbeat.current >= 60000) {
+      const hasRecentActivity = latestActivity > lastHeartbeat.current;
+      if (!state.warning && hasRecentActivity && now - lastHeartbeat.current >= 60000) {
         lastHeartbeat.current = now;
         try {
           const data = await authedPostJson('/api/devices', { action: 'heartbeat' });
