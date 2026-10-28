@@ -31,6 +31,8 @@ const PERSON = /(?:^|[^\p{L}])(?:who\s+(?:is|was|are|were)|who's|sino\s+(?:po\s+
 const STAFF_PEOPLE = /\b(?:nurses?|nars|doctors?|doktor|physicians?|vaccinators?|midwi(?:fe|ves)|(?:staff|employees?|workers?)(?:'s)?\s+names?|names?\s+of\s+(?:the\s+)?(?:staff|employees?|workers?)|pangalan\s+ng\s+(?:staff|empleyado))\b/i;
 const CREATOR = /\b(?:who|sino)\b.{0,25}(?:creat|made|make|built|develop|gumawa|program)|\b(?:developers?|creators?|programmers?|gumawa|capstone|bu polangui|bicol university)\b/i;
 const APP_NAME = /\b(?:name\s+of\s+(?:the\s+|this\s+)?(?:app|application)|(?:app|application)(?:'s)?\s+name|(?:what|which)\s+app\s+is\s+this|anong\s+app\s+(?:ito|to)|pangalan\s+ng\s+(?:app|application))\b/i;
+// Attempts to switch KAI's rules off. Refused with fixed copy and never sent to the model.
+const OVERRIDE = /\b(?:ignore|forget|disregard|bypass|override|skip|break|remove|disable|turn\s+off|kalimutan|balewalain|huwag\s+(?:mong\s+)?sundin)\b.{0,40}\b(?:rules?|instructions?|restrictions?|limits?|limitations?|guidelines?|policy|policies|prompt|filters?|patakaran|utos|bawal)\b|\b(?:no|without|walang)\s+(?:more\s+)?(?:rules?|restrictions?|limits?|filters?|patakaran)\b|\b(?:jailbreak\w*|dan\s+mode|developer\s+mode|god\s+mode|unrestricted|unfiltered|system\s+prompt|your\s+(?:instructions|prompt|rules)|pretend\s+(?:you(?:'re|\s+are)|to\s+be)|act\s+as|role-?play|you\s+are\s+now|from\s+now\s+on\s+you)\b/i;
 const CLINIC_TOPIC = /\b(clinic|klinika|parking|requirements?|requirements|payment|gcash|maya|cash|contact|phone|telephone|number|email|address|location|directions?|map|app|account|mrn|appointment|appts|booking|staff|walk[- ]?in|vaccination card)\b/i;
 
 export function containsPersonalDetails(text) {
@@ -90,6 +92,7 @@ export function getKaiDecision(text) {
   if (OFF_TOPIC.test(q)) return reply('off_topic', copy.offTopic, 'out_of_scope');
   if (/\b(?:data|privacy|personal (?:info|information|details)|information|impormasyon|records?|account)\b.{0,25}\b(?:safe|secure|protected|private|ligtas)\b|\bwho can (?:see|view|access) my\b|\bsino (?:ang )?(?:makakakita|nakakakita)\b/.test(q)) return reply('data_privacy', copy.dataPrivacy);
   if (HARD_CLINICAL.some(re => re.test(q))) return reply('blocked', copy.blocked, 'clinical', true);
+  if (OVERRIDE.test(q)) return reply('override', copy.override, 'out_of_scope');
   // KAI talks about the app only: never about people (public figures, the
   // app's makers, clinic staff, nurses or doctors).
   if (/\b(?:who|sino)\b.{0,25}\b(?:kakausapin|kausapin|tatawagan|lalapitan|sasagot|magre-?reply|(?:can|should|do) i (?:talk|speak|ask|contact|message)|will (?:reply|answer|respond))\b/.test(q)) return reply('staff', copy.staff, 'in_scope', true);

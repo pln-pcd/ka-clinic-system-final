@@ -76,7 +76,7 @@ function cleanHistory(history) {
   // turn with personal details or a blocked topic.
   return (Array.isArray(history) ? history : []).slice(-8)
     .filter(t => t && typeof t.text === 'string' && t.text.length <= 1000 && !containsPersonalDetails(t.text))
-    .filter(t => t.role === 'bot' || ['in_scope', 'out_of_scope'].includes(getKaiDecision(t.text).category))
+    .filter(t => t.role === 'bot' || (['in_scope', 'out_of_scope'].includes(getKaiDecision(t.text).category) && getKaiDecision(t.text).intent !== 'override'))
     .map(t => ({ role: t.role === 'bot' ? 'model' : 'user', parts: [{ text: t.text }] }));
 }
 
