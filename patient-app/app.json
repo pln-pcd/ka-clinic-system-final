@@ -2,7 +2,7 @@
   "expo": {
     "name": "K&A Clinic",
     "slug": "kna-rabies-monitoring",
-    "version": "1.0.22",
+    "version": "1.0.23",
     "icon": "./assets/icon.png",
     "plugins": [
       [
@@ -37,6 +37,17 @@
           "backgroundColor": "#FFFFFF"
         }
       ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "buildArchs": ["arm64-v8a", "armeabi-v7a"],
+            "enableMinifyInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "useLegacyPackaging": true
+          }
+        }
+      ],
       "./plugins/withSecureAndroid"
     ],
     "ios": {
@@ -62,7 +73,7 @@
         "backgroundColor": "#FFFFFF"
       },
       "allowBackup": false,
-      "versionCode": 22
+      "versionCode": 23
     },
     "extra": {
       "eas": {
