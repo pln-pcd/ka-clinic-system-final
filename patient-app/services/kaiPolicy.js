@@ -41,7 +41,7 @@ export function containsPersonalDetails(text) {
     || /\b(?:MRN[- :]*\d[\d-]*|20\d\d-\d{3,})\b/i.test(q)
     || /\b(?:\d[\s().-]*){10,}\b/.test(q)) return true;
   if (/\bmy name's\s+\S|\bpangalan ko(?:\s+ay|\s*:)?\s+(?!(?:ba|po|sa|nga|naman)\b)[\p{L}]+/iu.test(q)) return true;
-  if (/\b(?:my (?:name|email|phone|address|mrn|number|birthday|date of birth) is|(?:pangalan|numero|tirahan|kaarawan) ko(?: ay|:)\s*\S|ako si|i live (?:at|in)|(?:i am|i'm)\s+\d+\s*(?:years? old|y\/?o)|(?:name|pangalan|address|mrn|email|phone)\s*:\s*\S|(?:i am|i'm|this is|call me)\s+(?!kai\b|(?:a |an )?(?:patient|user|looking|asking|trying|pregnant|sick|allergic|worried|having|feeling|bleeding|bitten|not|at|in|on|from)\b)[a-z]+(?:\s+[a-z]+){0,3})\b/i.test(q)) return true;
+  if (/\b(?:my (?:name|email|phone|address|mrn|number|birthday|date of birth) is(?!\s+(?:old|new|broken|slow|lost|stolen|not|still|wrong|changed|missing|working|fine|ok|okay|an?\s+(?:android|iphone|samsung|old|new))\b)|(?:pangalan|numero|tirahan|kaarawan) ko(?: ay|:)\s*\S|ako si|i live (?:at|in)|(?:i am|i'm)\s+\d+\s*(?:years? old|y\/?o)|(?:name|pangalan|address|mrn|email|phone)\s*:\s*\S|(?:i am|i'm|this is|call me)\s+(?!kai\b|(?:a |an )?(?:patient|user|looking|asking|trying|pregnant|sick|allergic|worried|having|feeling|bleeding|bitten|not|at|in|on|from|resident|here|new|back|done|okay|ok|fine|sure|ready|interested|confused|unable|able|going|planning|booked|registered|signed|logged)\b)[a-z]+(?:\s+[a-z]+){0,3})\b/i.test(q)) return true;
   // Names typed alone, or following a greeting. Do not mistake ordinary
   // questions or known clinic terms for a person's name.
   const bare = q.replace(/^(?:hello|hi|hey|kumusta|kamusta)[,!\s]+/i, '').split(/[,.!?]/)[0].trim();
@@ -79,10 +79,87 @@ function priceReply(q, language) {
 
 // Every reply is selected from clinic knowledge or fixed copy. No user text
 // is interpolated into a reply or forwarded to a text-generation service.
+// Refusals that a disguised spelling must not get around.
+const REFUSED_INTENTS = new Set(['off_topic', 'override', 'people', 'creator']);
+
 export function getKaiDecision(text) {
+  const decision = decide(text);
+  if (decision.category === 'clinical' || REFUSED_INTENTS.has(decision.intent)) return decision;
+  // The same message with tricks undone ("r4b1es", "w o u n d", "rabiess",
+  // "ign0re the rul3s"): if that copy must be refused, refuse; otherwise the
+  // original message is answered as usual.
+  const plain = deobfuscate(text);
+  if (plain === normalize(text).toLowerCase()) return decision;
+  const alt = decide(plain, decision.language);
+  return alt.category === 'clinical' || REFUSED_INTENTS.has(alt.intent) ? alt : decision;
+}
+
+// Blocked words that are often misspelled. One wrong, missing, extra or
+// swapped letter is read as the word (two for words of nine letters or more);
+// words shorter than six letters are left alone, so "would" is never "wound".
+const FUZZY_TERMS = [
+  'rabies', 'vaccine', 'vaccinate', 'vaccinated', 'vaccination', 'diagnose', 'diagnosis', 'symptom', 'symptoms', 'treatment',
+  'medicine', 'medication', 'injection', 'infection', 'infected', 'bleeding', 'swelling', 'antibiotic', 'antibiotics',
+  'paracetamol', 'ibuprofen', 'amoxicillin', 'emergency', 'hospital', 'pregnant', 'pregnancy', 'dosage', 'booster',
+  'immunoglobulin', 'tetanus', 'scratch', 'scratched', 'bitten', 'nakagat', 'kinagat', 'nakalmot', 'dinilaan', 'nagdurugo',
+  'lagnat', 'namamaga', 'sintomas', 'bakuna', 'basketball', 'president', 'politics', 'celebrity', 'instructions',
+  'restrictions', 'jailbreak', 'lebron',
+];
+// Short Filipino words checked the same way (one letter off). Short English
+// words are not, because too many real words sit one letter away.
+const SHORT_TERMS = ['kagat', 'sugat', 'lagnat', 'bakuna', 'rabis', 'turok', 'rules'];
+// Real words within that distance of a blocked word.
+const FUZZY_ALLOW = new Set([
+  'babies', 'rabbis', 'bitter', 'button', 'kitten', 'mitten', 'breeding', 'dwelling', 'smelling', 'spelling', 'welling',
+  'rooster', 'boosted', 'boaster', 'inspection', 'affection', 'inflection', 'meditation', 'dedication', 'emergence',
+  'construction', 'constructions', 'precedent', 'resident', 'residents', 'scratchy', 'hospitable', 'politic', 'restriction',
+  'instruction', 'treatments', 'medicines', 'vaccines', 'regnant', 'postage', 'dosages', 'boosters',
+  'sugar', 'turon', 'turo', 'roles', 'ruler', 'rulers', 'rubles', 'bakery',
+]);
+const LEET = { 0: 'o', 1: 'i', 3: 'e', 4: 'a', 5: 's', 6: 'g', 7: 't', 8: 'b', 9: 'g', '@': 'a', $: 's', '!': 'i', '|': 'l' };
+
+function distance(a, b, max) {
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+    }
+  }
+  return d[a.length][b.length];
+}
+
+/** The message with common disguises undone, for the refusal checks only. */
+export function deobfuscate(text) {
+  let q = normalize(text).toLowerCase();
+  // Letters spaced or dotted out: "r a b i e s", "r.a.b.i.e.s", "w-o-u-n-d".
+  q = q.replace(/(?:(?<![\p{L}0-9])[\p{L}0-9@$!|][\s._*\-]+){3,}[\p{L}0-9@$!|](?![\p{L}0-9])/gu, m => m.replace(/[\s._*\-]+/g, ''));
+  // Symbols inside a word: "ra*bies", "wo_und", "va.ccine".
+  q = q.replace(/(\p{L})[._*~^]+(?=\p{L})/gu, '$1');
+  // Numbers and symbols used as letters, only inside words that also have letters.
+  // Times, ordinals and codes such as "9am", "2nd" or "pcv20" are left alone.
+  q = q.replace(/[\p{L}0-9@$!|]+/gu, w => (/\p{L}/u.test(w) && /[0-9@$!|]/.test(w) && !/^\d+(?:am|pm|st|nd|rd|th|s|x)$|^\p{L}{2,}\d+$/u.test(w)
+    ? w.replace(/[013456789@$!|]/g, c => LEET[c]) : w));
+  // Stretched letters: "raaabies", "woooound".
+  q = q.replace(/(\p{L})\1{2,}/gu, '$1');
+  // Near-misspellings of blocked words.
+  return q.replace(/\p{L}{4,}/gu, w => {
+    if (FUZZY_ALLOW.has(w) || FUZZY_TERMS.includes(w) || SHORT_TERMS.includes(w)) return w;
+    const hit = (w.length >= 6 ? FUZZY_TERMS.find(term => distance(w, term, 2) <= (term.length >= 9 ? 2 : 1)) : null)
+      || SHORT_TERMS.find(term => distance(w, term, 1) <= 1);
+    return hit || w;
+  });
+}
+
+function decide(text, forcedLanguage) {
   const raw = normalize(text);
-  const q = raw.toLowerCase();
-  const language = detectLanguage(raw);
+  // "Vaccination card" is the app's card, not a vaccine question.
+  // "Previous Treatments" is the app's list on Home, not a treatment question.
+  const q = raw.toLowerCase().replace(/\b(?:vaccination|vaccine|vax|bakuna)\s+(?=cards?\b)/g, '')
+    .replace(/\b(?:previous|past|old|dating)\s+treatments?\b/g, 'previous records');
+  const language = forcedLanguage || detectLanguage(raw);
   const copy = kaiCopy[language];
   const reply = (intent, value, category = 'in_scope', needsEscalation = false) => ({
     intent, language, text: value, category, needsEscalation,
@@ -111,9 +188,9 @@ export function getKaiDecision(text) {
     return reply('services', clinicKnowledge.services.map(s => `• ${s}`).join('\n'));
   }
   // Viewing a card is app navigation; interpreting its contents is clinical.
-  const cardHelp = /\b(?:view|see|find|export|download|save|tingnan|makita|i-download|i-export)\b/.test(q) && /\b(?:card|records?)\b/.test(q);
+  const cardHelp = /\b(?:view|see|find|export|download|save|where|open|show|tingnan|makita|saan|nasaan|buksan|i-download|i-export)\b/.test(q) && /\b(?:card|records?)\b/.test(q);
   if (cardHelp) return reply('records', copy.records);
-  if (/\b(?:how|paano|pano|can i).{0,35}(?:book|magbook|mag-book|magpa-appointment|reserve)\b/.test(q) && !DATE_WORD.test(q) && !/\bbukas\b/.test(q)) return reply('booking', copy.booking);
+  if (/\b(?:how|paano|pano|can i|help me|i want to|i'd like to|gusto ko(?:ng)?)\b.{0,35}\b(?:book|magbook|mag-book|magpa-appointment|reserve)\b/.test(q) && !DATE_WORD.test(q) && !/\bbukas\b/.test(q)) return reply('booking', copy.booking);
   if (MEDICAL_DOMAIN.test(q)) return reply('blocked', copy.blocked, 'clinical', true);
   if (APP_NAME.test(q)) return reply('app_name', copy.appName);
   if (/\b(?:your name|name are you|who are you|pangalan mo|sino ka|(?:who|what)(?:'s|\s+is)\s+kai|(?:sino|ano)\s+(?:po\s+)?si\s+kai)\b/.test(q)) return reply('name', copy.name);
