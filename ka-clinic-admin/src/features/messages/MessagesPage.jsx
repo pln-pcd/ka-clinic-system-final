@@ -91,8 +91,13 @@ export default function MessagesPage() {
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
 
-  // Profile photos by MRN, fetched once per patient in the thread list.
+  // Profile photos and the clinic's own record (name, email) by MRN, fetched
+  // once per patient in the thread list. The name and email a thread carries
+  // are written by the patient's phone, so the clinic record is shown instead
+  // when there is one; firestore.rules ties a new thread's MRN to the
+  // patient's signed-in session.
   const [photos, setPhotos] = useState({});
+  const [records, setRecords] = useState({});
   const requestedPhotos = useRef(new Set());
   useEffect(() => {
     threads.forEach(t => {
@@ -102,8 +107,17 @@ export default function MessagesPage() {
       getDoc(doc(db, 'patientAvatars', mrn))
         .then(snap => { if (snap.exists() && snap.data()?.dataUrl) setPhotos(p => ({ ...p, [mrn]: snap.data().dataUrl })); })
         .catch(() => {});
+      getDoc(doc(db, 'vaccinations', mrn))
+        .then(snap => {
+          if (!snap.exists()) return;
+          const { name, email } = snap.data() || {};
+          setRecords(r => ({ ...r, [mrn]: { name: typeof name === 'string' ? name : '', email: typeof email === 'string' ? email : '' } }));
+        })
+        .catch(() => {});
     });
   }, [threads]);
+  const nameOf = (t) => records[t?.patientMrn]?.name || t?.patientName;
+  const emailOf = (t) => (records[t?.patientMrn] ? records[t.patientMrn].email : t?.patientEmail);
 
   /* ── real-time chatThreads listener ────────────────────────── */
   useEffect(() => {
@@ -236,7 +250,7 @@ export default function MessagesPage() {
         ...(selectedThread.resolved ? {} : { closedBy: 'staff', closedAt: now }),
       });
       logActivity({ action: 'message.thread', collection: 'chatThreads', docId: selectedThread.id, mrn: selectedThread.patientMrn || '',
-        summary: `Archived the conversation with ${selectedThread.patientName || 'a patient'}`, changes: [{ field: 'archived', before: 'false', after: 'true' }] });
+        summary: `Archived the conversation with ${nameOf(selectedThread) || 'a patient'}`, changes: [{ field: 'archived', before: 'false', after: 'true' }] });
       // It has just left the Active list — drop the selection so the pane
       // does not keep showing a conversation that is no longer there.
       setSelectedThread(null);
@@ -257,7 +271,7 @@ export default function MessagesPage() {
     try {
       await updateDoc(doc(db, 'chatThreads', selectedThread.id), { archived: false, archivedAt: deleteField() });
       logActivity({ action: 'message.thread', collection: 'chatThreads', docId: selectedThread.id, mrn: selectedThread.patientMrn || '',
-        summary: `Restored the conversation with ${selectedThread.patientName || 'a patient'}`, changes: [{ field: 'archived', before: 'true', after: 'false' }] });
+        summary: `Restored the conversation with ${nameOf(selectedThread) || 'a patient'}`, changes: [{ field: 'archived', before: 'true', after: 'false' }] });
       setSelectedThread(null);
       setConfirmAction(null);
     } catch (err) {
@@ -308,7 +322,7 @@ export default function MessagesPage() {
       });
       // The message text stays out of the log; it can hold medical details.
       logActivity({ action: 'message.reply', collection: 'chatMessages', docId: selectedThread.id, mrn: selectedThread.patientMrn || '',
-        summary: `Replied to ${selectedThread.patientName || 'a patient'}` });
+        summary: `Replied to ${nameOf(selectedThread) || 'a patient'}` });
     } catch (err) {
       console.error('Send reply error:', err);
       alert('Failed to send reply. Please try again.');
@@ -324,7 +338,7 @@ export default function MessagesPage() {
   // as ambiguous duplicates across the two lists.
   const matchesSearch = (t) => {
     const q = search.toLowerCase();
-    return (t.patientName || '').toLowerCase().includes(q) ||
+    return (nameOf(t) || '').toLowerCase().includes(q) ||
            (t.lastMessage || '').toLowerCase().includes(q);
   };
 
@@ -450,7 +464,7 @@ export default function MessagesPage() {
                           view, so "All" shows at a glance what is unread
                           rather than hiding it behind the Unread filter. */}
                       <div className="relative flex-shrink-0">
-                        <ThreadAvatar name={t.patientName} photo={photos[t.patientMrn]} className="w-9 h-9 rounded-full" textClass="text-xs" />
+                        <ThreadAvatar name={nameOf(t)} photo={photos[t.patientMrn]} className="w-9 h-9 rounded-full" textClass="text-xs" />
                         {t.unread && !isArchived && (
                           <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-[#3B50DF] ring-2 ring-white" />
                         )}
@@ -462,7 +476,7 @@ export default function MessagesPage() {
                           <span className={`text-xs truncate ${
                             t.unread && !isArchived ? 'text-gray-900 font-extrabold' : 'text-gray-800 font-bold'
                           }`}>
-                            {t.patientName || 'Unknown Patient'}
+                            {nameOf(t) || 'Unknown Patient'}
                           </span>
                           {/* Active shows recency; Archive shows the archive
                               date, which is what tells a patient's several
@@ -507,13 +521,13 @@ export default function MessagesPage() {
               {/* Top Header Bar */}
               <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-white flex-shrink-0">
                 <div className="flex items-center gap-3">
-                  <ThreadAvatar name={selectedThread.patientName} photo={photos[selectedThread.patientMrn]} className="w-10 h-10 rounded-full" textClass="text-sm" />
+                  <ThreadAvatar name={nameOf(selectedThread)} photo={photos[selectedThread.patientMrn]} className="w-10 h-10 rounded-full" textClass="text-sm" />
                   <div>
-                    <h2 className="text-sm font-bold text-gray-900">{selectedThread.patientName}</h2>
+                    <h2 className="text-sm font-bold text-gray-900">{nameOf(selectedThread)}</h2>
                     <p className="text-[11px] text-gray-400 flex items-center gap-2">
                       <span>MRN: {selectedThread.patientMrn || 'N/A'}</span>
                       <span>•</span>
-                      <span>{selectedThread.patientEmail || 'No email registered'}</span>
+                      <span>{emailOf(selectedThread) || 'No email registered'}</span>
                     </p>
                   </div>
                 </div>
@@ -581,7 +595,7 @@ export default function MessagesPage() {
                           }`}
                         >
                           <p className="font-semibold text-[11px] mb-1 opacity-80">
-                            {isAdmin ? 'K&A Staff' : m.senderName || selectedThread.patientName}
+                            {isAdmin ? 'K&A Staff' : nameOf(selectedThread) || 'Patient'}
                           </p>
                           <p className="whitespace-pre-wrap">{m.text}</p>
                         </div>
@@ -650,7 +664,7 @@ export default function MessagesPage() {
           return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
         };
         const subject = [
-          ['Patient', t?.patientName || t?.name || ''],
+          ['Patient', nameOf(t) || t?.name || ''],
           ['MRN', t?.patientMrn || ''],
           ['Messages', messages.length ? String(messages.length) : ''],
           confirmAction === 'archive'

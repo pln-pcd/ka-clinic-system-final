@@ -171,8 +171,18 @@ service cloud.firestore {
     }
     match /chatThreads/{id} {
       allow read: if isAdmin() || (isPatient() && resource.data.patientUid == request.auth.uid);
+      // A patient opens a thread only as themselves: the MRN must be the one
+      // of their signed-in session (the clinic inbox shows that patient's
+      // record), and only the fields the app writes are accepted.
       allow create: if isAdmin() || (isPatient() && request.resource.data.patientUid == request.auth.uid
-        && request.resource.data.resolved == false && request.resource.data.get('archived', false) == false);
+        && request.resource.data.resolved == false && request.resource.data.get('archived', false) == false
+        && request.resource.data.keys().hasOnly(['patientUid', 'patientName', 'patientMrn', 'patientEmail', 'status', 'unread', 'resolved', 'lastMessage', 'lastMessageAt', 'createdAt'])
+        && request.resource.data.patientMrn == session().mrn
+        && request.resource.data.get('status', 'pending') == 'pending'
+        && request.resource.data.get('unread', true) == true
+        && request.resource.data.get('patientName', '') is string && request.resource.data.get('patientName', '').size() <= 120
+        && (request.resource.data.get('patientEmail', null) == null || (request.resource.data.patientEmail is string && request.resource.data.patientEmail.size() <= 254))
+        && request.resource.data.get('lastMessage', '') is string && request.resource.data.get('lastMessage', '').size() <= 5000);
       // A patient's message bumps their own thread in the clinic inbox:
       // lastMessage/lastMessageAt, status back to 'pending' and unread for
       // staff. (Before 1.0.5 status/unread were refused, so every send showed
@@ -194,6 +204,8 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/chatThreads/$(request.resource.data.threadId)).data.resolved == false
         && request.resource.data.sender == 'patient'
         && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 5000
+        && request.resource.data.get('senderName', '') is string && request.resource.data.get('senderName', '').size() <= 120
+        && request.resource.data.createdAt is number
         && request.resource.data.keys().hasOnly(['threadId', 'sender', 'senderName', 'text', 'createdAt']));
       allow update, delete: if isAdmin();
     }

@@ -1,5 +1,5 @@
 {
-  "date": "2026-10-23T14:57:08.661Z",
+  "date": "2026-10-28T06:24:48.631Z",
   "results": [
     {
       "id": "RULE-vaccinations-anonymous-read",
@@ -6095,6 +6095,46 @@
       "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
       "expected": "Allowed",
       "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chat-open-own",
+      "description": "Patient opens a thread as themselves",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "Allowed",
+      "actual": "Allowed",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chat-open-spoof-mrn",
+      "description": "Patient cannot open a thread under another patient's MRN",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chat-open-extra-field",
+      "description": "Patient cannot add unexpected fields to a new thread",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chat-open-replied",
+      "description": "Patient cannot open a thread already marked replied",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
+      "status": "PASS"
+    },
+    {
+      "id": "RULE-chat-long-sender",
+      "description": "Patient cannot send an oversized sender name",
+      "steps": "Seed fictional fixture; direct Firebase SDK request with role token.",
+      "expected": "PERMISSION_DENIED",
+      "actual": "permission-denied",
       "status": "PASS"
     },
     {

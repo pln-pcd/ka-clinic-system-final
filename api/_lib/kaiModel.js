@@ -71,12 +71,17 @@ const CLINICAL_OUTPUT = /\b(day\s*(0|3|7|14|28)|regimen|wound|symptom|fever|swel
 // Who made the app, or anyone's name or role, is never part of an answer.
 const PEOPLE_OUTPUT = /\b(bicol university|bu polangui|capstone|students?|developers?|programmers?|nurses?|doctors?|doktor|lebron|president)\b/i;
 
+const safeAnswer = text => text.length <= 1200 && !CLINICAL_OUTPUT.test(text) && !PEOPLE_OUTPUT.test(text)
+  && !/[\w.+-]+@[\w.-]+\.[a-z]{2,}/i.test(text) && !/(?:\+?63|0)9\d{2}[\s-]?\d{3}[\s-]?\d{4}/.test(text)
+  && getKaiDecision(text).intent !== 'override';
+
 function cleanHistory(history) {
   // Only earlier turns that the policy would itself accept: never forward a
   // turn with personal details or a blocked topic.
   return (Array.isArray(history) ? history : []).slice(-8)
     .filter(t => t && typeof t.text === 'string' && t.text.length <= 1000 && !containsPersonalDetails(t.text))
-    .filter(t => t.role === 'bot' || (['in_scope', 'out_of_scope'].includes(getKaiDecision(t.text).category) && getKaiDecision(t.text).intent !== 'override'))
+    .filter(t => (t.role === 'bot' ? safeAnswer(t.text)
+      : (['in_scope', 'out_of_scope'].includes(getKaiDecision(t.text).category) && getKaiDecision(t.text).intent !== 'override')))
     .map(t => ({ role: t.role === 'bot' ? 'model' : 'user', parts: [{ text: t.text }] }));
 }
 
@@ -89,7 +94,7 @@ export async function smartReply(prompt, history, decision, { fetchImpl = fetch,
   if (!apiKey) return { reason: 'no_api_key' };
   if (!SMART_INTENTS.has(decision.intent)) return { reason: 'not_smart' };
   const model = process.env.GEMINI_MODEL || process.env.VITE_GEMINI_MODEL || 'gemini-3.5-flash-lite';
-  const contents = [...cleanHistory(history), { role: 'user', parts: [{ text: prompt }] }];
+  const contents = [...cleanHistory(history), { role: 'user', parts: [{ text: String(prompt).replace(/[\u00AD\u200B-\u200F\u2060-\u2064\uFEFF]/g, '') }] }];
   // Keep the conversation starting with a user turn.
   while (contents.length && contents[0].role !== 'user') contents.shift();
 

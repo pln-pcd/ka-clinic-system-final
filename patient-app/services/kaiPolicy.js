@@ -2,7 +2,7 @@ import { clinicKnowledge, kaiCopy } from './kaiKnowledge.js';
 
 export { clinicKnowledge, kaiCopy };
 
-const normalize = text => String(text || '').normalize('NFKC').replace(/[’‘]/g, "'").trim();
+const normalize = text => String(text || '').normalize('NFKC').replace(/[\u00AD\u200B-\u200F\u2060-\u2064\uFEFF]/g, '').replace(/[’‘]/g, "'").trim();
 const TAGALOG = /\b(po|opo|ako|ko|kong|ka|kayo|ninyo|niyo|mo|namin|natin|si|sino|ano|anong|paano|pano|kailan|kelan|saan|nasaan|magkano|presyo|bayad|oras|bukas|ngayon|mamaya|samakalawa|ba|pa|ang|ng|sa|may|meron|wala|puwede|pwede|gusto|salamat|kumusta|kamusta|pakitingnan|pakisabi|nakalimutan|susunod|turok|bakuna|rabis|sabado|linggo|lunes|martes|miyerkules|miyerkoles|huwebes|biyernes|pangalan|nakagat|kagat|sugat|kalmot|lagnat|buntis|gamot|tulong|serbisyo)\b/i;
 // Common app/clinic loanwords (appointment, slot, vaccine card, Home, etc.) do
 // not by themselves turn a Filipino sentence into Taglish.

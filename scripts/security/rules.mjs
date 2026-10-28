@@ -21,7 +21,7 @@ const fixtures = {
   appointments: ['security-appt', { patientUid: uid['patient-own'], userId: uid['patient-own'], patientId: '2026-001', name: 'Simulated A', contactNumber: '0000000000', date: '2026-12-12', status: 'pending' }],
   inventory: ['security-item', { quantity: 10 }],
   incidents: ['security-incident', { isSimulated: true, simNo: 1, type: 'Bite', category: 'II', month: '2026-10', lat: 13, lng: 123 }],
-  chatThreads: ['security-thread', { patientUid: uid['patient-own'], resolved: false, archived: false, lastMessage: '', lastMessageAt: Date.now() }],
+  chatThreads: ['security-thread', { patientUid: uid['patient-own'], patientMrn: '2026-001', patientName: 'Simulated A', resolved: false, lastMessage: '', lastMessageAt: Date.now() }],
   chatMessages: ['security-message', { threadId: 'security-thread', sender: 'patient', text: '<script>alert(1)</script>', createdAt: Date.now() }],
   patientNotifications: ['security-notification', { patientId: '2026-001', message: 'Simulated only' }],
   admins: ['security-manager', { role: 'manager', status: 'active', email: 'security-manager@example.test' }],
@@ -175,6 +175,12 @@ try {
   // for their own open thread only; status/unread only to pending/true.
   await check('RULE-chat-send-message', 'Patient sends a message in their own thread', true, () => setDoc(doc(clients['patient-own'], 'chatMessages', 'send-1'), { threadId: 'security-thread', sender: 'patient', senderName: 'A', text: 'Hello', createdAt: Date.now() }));
   await check('RULE-chat-send-bump', 'Patient bumps their own thread after sending', true, () => updateDoc(doc(clients['patient-own'], 'chatThreads', 'security-thread'), { lastMessage: 'Hello', lastMessageAt: Date.now(), status: 'pending', unread: true }));
+  const newThread = { patientUid: uid['patient-own'], patientName: 'Simulated A', patientMrn: '2026-001', patientEmail: 'security-a@example.test', status: 'pending', unread: true, resolved: false, lastMessage: 'Hello', lastMessageAt: Date.now(), createdAt: Date.now() };
+  await check('RULE-chat-open-own', 'Patient opens a thread as themselves', true, () => setDoc(doc(clients['patient-own'], 'chatThreads', 'open-own'), newThread));
+  await check('RULE-chat-open-spoof-mrn', "Patient cannot open a thread under another patient's MRN", false, () => setDoc(doc(clients['patient-own'], 'chatThreads', 'open-spoof'), { ...newThread, patientMrn: '2026-002' }));
+  await check('RULE-chat-open-extra-field', 'Patient cannot add unexpected fields to a new thread', false, () => setDoc(doc(clients['patient-own'], 'chatThreads', 'open-extra'), { ...newThread, assignedTo: 'security-staff' }));
+  await check('RULE-chat-open-replied', 'Patient cannot open a thread already marked replied', false, () => setDoc(doc(clients['patient-own'], 'chatThreads', 'open-replied'), { ...newThread, status: 'replied' }));
+  await check('RULE-chat-long-sender', 'Patient cannot send an oversized sender name', false, () => setDoc(doc(clients['patient-own'], 'chatMessages', 'send-long'), { threadId: 'security-thread', sender: 'patient', senderName: 'x'.repeat(500), text: 'Hi', createdAt: Date.now() }));
   await check('RULE-chat-status-replied', 'Patient cannot mark their thread as replied', false, () => updateDoc(doc(clients['patient-own'], 'chatThreads', 'security-thread'), { status: 'replied' }));
   await check('RULE-chat-unread-false', "Patient cannot clear staff's unread flag", false, () => updateDoc(doc(clients['patient-own'], 'chatThreads', 'security-thread'), { unread: false }));
   await check('RULE-chat-other-send', "Patient cannot send into another patient's thread", false, () => setDoc(doc(clients['patient-other'], 'chatMessages', 'send-2'), { threadId: 'security-thread', sender: 'patient', senderName: 'B', text: 'Hi', createdAt: Date.now() }));
