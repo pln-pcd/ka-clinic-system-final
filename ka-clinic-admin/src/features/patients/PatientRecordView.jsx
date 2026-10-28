@@ -125,7 +125,8 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
   // Matched by document id only. The old name fallback could open a
   // different patient who happens to share a name.
   const r = records.find(x => x.firestoreId === patient.firestoreId);
-  const rec = r || { doses: [], reports: [], address: '—', date: patient.date, id: patient.id, age: patient.age, animal: patient.animal, cat: patient.cat };
+  // The selected object is only a fallback until the live row arrives.
+  const rec = r || patient;
   const reportsList = r?.reports || patient.reports || [];
 
   // Sync patient appointments real-time from Firestore /appointments
@@ -457,11 +458,7 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
             subtitle={`${serviceLabel(rec.service || patient.service || 'PEP')} protocol · dose schedule`}
           />
           {(() => {
-            const dosesList = (Array.isArray(patient?.doses) && patient.doses.length > 0)
-              ? patient.doses
-              : (Array.isArray(rec?.doses) && rec.doses.length > 0)
-              ? rec.doses
-              : [];
+            const dosesList = Array.isArray(rec.doses) ? rec.doses : [];
 
             if (dosesList.length === 0) {
               return <EmptyState icon={Syringe} title="No doses recorded yet" text="Doses appear here once the vaccination schedule is recorded." minHeight={180} className="!py-4" />;
@@ -697,7 +694,7 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
       {showAddReportModal && (
         <AddReportModal
           patient={patient}
-          doses={(Array.isArray(patient?.doses) && patient.doses.length > 0) ? patient.doses : (rec.doses || [])}
+          doses={Array.isArray(rec.doses) ? rec.doses : []}
           existingReports={reportsList}
           onClose={() => setShowAddReportModal(false)}
           onSave={handleSaveReport}
@@ -720,11 +717,7 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
           initialPatient={{
             ...patient,
             ...(r || {}),
-            doses: (Array.isArray(patient?.doses) && patient.doses.length > 0)
-              ? patient.doses
-              : (Array.isArray(r?.doses) && r.doses.length > 0)
-              ? r.doses
-              : (rec?.doses || [])
+            doses: Array.isArray(rec.doses) ? rec.doses : []
           }}
           onClose={() => setShowExportModal(false)}
           onToast={onToast}

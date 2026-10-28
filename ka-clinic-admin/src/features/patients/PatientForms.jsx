@@ -12,6 +12,7 @@ import ConfirmDialog from "../../components/ConfirmDialog";
 import { brandAvailability } from "../../lib/inventoryStock";
 import { BTN, BTN_ICON } from "../../lib/buttons";
 import { LIBON_BARANGAYS, POBLACION, POBLACION_ZONES, geocodeLibonAddress, knownBarangay, libonAddress, poblacionZone, recordBarangay } from '../../lib/libonGeo';
+import { libonLocalities } from '../../lib/libonLocalities';
 import { weekdayName } from '../../lib/clinicDays';
 import DatePicker from '../../components/DatePicker';
 import { FieldError, FormErrorNote, useFieldErrors } from '../../components/FormValidation';
@@ -23,8 +24,23 @@ import {
 
 /* ─────────────────────────── LIBON ADDRESS ─────────────────────────── */
 // Barangays and Poblacion zones come from lib/libonGeo.js (official list).
-// Puroks have no official list, so they are typed in.
-const PUROK_MAX = 60;
+// Locality choices are sourced per barangay; no generic numbered purok list.
+function LocalitySelect({ barangay, value, onChange, id }) {
+  const options = libonLocalities(barangay);
+  const legacy = value && !options.includes(value);
+  return <>
+    <Select id={id} value={value || ''} onChange={onChange} disabled={!barangay || (!options.length && !value)}>
+      <option value="">{!barangay ? 'Choose the barangay first' : options.length ? 'Select purok / sitio' : 'No verified list available'}</option>
+      {legacy && <option value={value} disabled>{value} (saved address)</option>}
+      {options.map(name => <option key={name} value={name}>{name}</option>)}
+    </Select>
+    {value && <button type="button" className="text-xs text-slate-500 underline mt-1"
+      onClick={() => onChange({ target: { value: '' } })}>Clear purok / sitio</button>}
+    {barangay && <p className="text-xs text-slate-500 mt-1">{options.length
+      ? 'Choose your location if listed; otherwise leave blank.'
+      : 'No verified purok list for this barangay yet. This field is optional.'}</p>}
+  </>;
+}
 
 export const WOUND_LOCATION_OPTIONS = [
   'Right Hand', 'Left Hand', 'Right Arm', 'Left Arm',
@@ -529,7 +545,7 @@ export function AddPatientModal({ onClose, onAdd, initialPatient = null }) {
   };
 
   const setAddress = (barangay, zone) => setForm(f => {
-    const z = (barangay === POBLACION) === (f.barangay === POBLACION) ? zone : '';
+    const z = barangay === f.barangay ? zone : '';
     return { ...f, barangay, zone: z, address: libonAddress(barangay, z) };
   });
   const fullDisplayName = [form.fname, form.mname, form.lname].filter(Boolean).join(' ') + (form.suffix ? `, ${form.suffix}` : '');
@@ -709,10 +725,9 @@ export function AddPatientModal({ onClose, onAdd, initialPatient = null }) {
                       <FieldError v={v} name="zone" />
                     </div>
                   ) : (
-                    <div className="form-field"><label htmlFor="reg-zone">Purok / sitio / street <Opt /></label>
-                      <input id="reg-zone" type="text" value={form.zone || ''} maxLength={PUROK_MAX} disabled={!form.barangay}
-                        onChange={e => setAddress(form.barangay || '', e.target.value)}
-                        placeholder={form.barangay ? 'e.g. Purok 3' : 'Choose the barangay first'} autoComplete="off" />
+                    <div className="form-field"><label htmlFor="reg-zone">Purok / sitio <Opt /></label>
+                      <LocalitySelect id="reg-zone" barangay={form.barangay} value={form.zone}
+                        onChange={e => setAddress(form.barangay || '', e.target.value)} />
                     </div>
                   )}
                   <div className="form-field span-2"><label htmlFor="reg-address">Full address <Opt>auto-filled</Opt></label>
@@ -1022,6 +1037,8 @@ export function EditPatientModal({ patient, onClose, onSave, inventoryItems = []
     name: patient.name || '', email: patient.email || '', age: patient.age || '', sex: patient.sex || '',
     dob: patient.dob || '', height: patient.height || '', weight: patient.weight || '', bloodPressure: patient.bloodPressure || '',
     address: patient.address || '', contact: patient.contact || '',
+    barangay: knownBarangay(recordBarangay(patient)) || recordBarangay(patient),
+    zone: patient.zone || poblacionZone(patient.barangay) || '',
     service: patient.service || '', vaccineBrand: patient.vaccineBrand || '',
     animal: patient.animal || '', cat: patient.cat === 'II' || patient.cat === 'III' ? `Category ${patient.cat}` : '',
     date: patient.date || today(),
@@ -1033,6 +1050,10 @@ export function EditPatientModal({ patient, onClose, onSave, inventoryItems = []
     riskCondition: patient.riskCondition || '', riskConditionOther: patient.riskConditionOther || '',
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const setAddress = (barangay, zone) => setForm(f => {
+    const z = barangay === f.barangay ? zone : '';
+    return { ...f, barangay, zone: z, address: libonAddress(barangay, z) };
+  });
   const editDobAge = ageFromDob(form.dob);
   const [requestClose, discardDialog] = useDiscardGuard(form, onClose);
   const isPep = form.service === 'PEP';
@@ -1198,15 +1219,25 @@ export function EditPatientModal({ patient, onClose, onSave, inventoryItems = []
                   />
                   <FieldError v={v} name="contact" />
                 </div>
-                <div>
-                  <label className="block mb-1.5 text-slate-500">Address</label>
-                  <input
-                    type="text"
-                    value={form.address}
-                    onChange={e => set('address', e.target.value)}
-                    placeholder="Purok, Brgy., Libon, Albay"
-                    className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                  />
+                <div className="sm:col-span-2 grid grid-cols-2 gap-3">
+                  <div className="form-field"><label htmlFor="edit-barangay">Barangay</label>
+                    <Select id="edit-barangay" value={form.barangay || ''} onChange={e => setAddress(e.target.value, '')}>
+                      <option value="">Select barangay</option>
+                      {form.barangay && !LIBON_BARANGAYS.includes(form.barangay) && <option value={form.barangay} disabled>{form.barangay} (saved address)</option>}
+                      {LIBON_BARANGAYS.map(b => <option key={b} value={b}>{b}</option>)}
+                    </Select>
+                  </div>
+                  <div className="form-field"><label htmlFor="edit-zone">{form.barangay === POBLACION ? 'Zone' : 'Purok / sitio'} <Opt /></label>
+                    {form.barangay === POBLACION ? <Select id="edit-zone" value={form.zone || ''} onChange={e => setAddress(POBLACION, e.target.value)}>
+                      <option value="">Select zone</option>
+                      {POBLACION_ZONES.map(z => <option key={z} value={z}>{z}</option>)}
+                    </Select> : <LocalitySelect id="edit-zone" barangay={form.barangay} value={form.zone}
+                      onChange={e => setAddress(form.barangay || '', e.target.value)} />}
+                  </div>
+                  <div className="form-field col-span-2"><label htmlFor="edit-address">Full address</label>
+                    <input id="edit-address" type="text" value={form.address} readOnly tabIndex={-1}
+                      className="w-full py-2.5 px-3 border border-slate-300 rounded-xl bg-white font-medium text-slate-800" />
+                  </div>
                 </div>
               </div>
             </div>

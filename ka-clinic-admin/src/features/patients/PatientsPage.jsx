@@ -534,6 +534,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
       name: newName, age: form.age || editPatient.age, sex: form.sex || '',
       dob: form.dob || '', height: form.height || '', weight: form.weight || '', bloodPressure: form.bloodPressure || '',
       email: cleanEmail,
+      barangay: form.barangay || '', zone: form.zone || '',
       address: form.address || '', contact: formatE164(form.contact || editPatient.contact || ''), service: form.service || 'PEP',
       vaccineBrand: form.vaccineBrand || '',
       animal: form.animal || '', cat: (form.cat || '').replace('Category ', ''),

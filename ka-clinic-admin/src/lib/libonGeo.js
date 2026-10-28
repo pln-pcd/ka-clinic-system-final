@@ -6,8 +6,8 @@
 // philatlas.com/luzon/r05/albay/libon.html), with each barangay's point from
 // its PhilAtlas page. The seven Poblacion barangays (Zone I to Zone VII) are
 // chosen as "Poblacion" plus a zone, so the barangay list has no zone entries.
-// Puroks and sitios are set by each barangay and have no official published
-// list, so they are typed in, not chosen.
+// Verified purok/sitio choices and their source documents live separately in
+// libonLocalities.js. That list is partial; missing entries are not guessed.
 
 export const POBLACION = 'Poblacion';
 export const POBLACION_ZONES = ['Zone I', 'Zone II', 'Zone III', 'Zone IV', 'Zone V', 'Zone VI', 'Zone VII'];

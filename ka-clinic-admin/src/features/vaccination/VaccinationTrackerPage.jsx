@@ -295,21 +295,12 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
     { key: 'progress_desc', label: 'Dose Progress (Highest)' },
   ];
 
-  // Sync if dashboard passes updated patient list
-  useEffect(() => {
-    if (initialPatients && initialPatients.length > 0) {
-      setPatients(initialPatients);
-      cachedVaccinationPatients = initialPatients;
-      setLoading(false);
-    }
-  }, [initialPatients]);
-
-  // Without a list from the dashboard, read the shared live collection
-  // (lib/liveStore.js) instead of opening a second listener on vaccinations.
+  // Dashboard props seed the first render. Thereafter the shared live
+  // collection updates both the list and the open record, even when the
+  // dashboard supplied that initial list.
   const vaxLive = useLiveCollection('vaccinations');
-  const hasInitialPatients = !!(initialPatients && initialPatients.length > 0);
   useEffect(() => {
-    if (hasInitialPatients || !vaxLive.loaded) return;
+    if (!vaxLive.loaded) return;
     const data = vaxLive.rows;
     cachedVaccinationPatients = data;
     setPatients(data);
@@ -320,7 +311,7 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
       return updated || prev;
     });
     setLoading(false);
-  }, [vaxLive, hasInitialPatients]);
+  }, [vaxLive]);
 
   const [toast, setToast] = useState({ msg: '', type: '' });
   const [inventoryItems, setInventoryItems] = useState(() => peekLiveCollection('inventory').rows);
@@ -417,10 +408,12 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
     const lockKey = `${p.firestoreId}:${doseKey}`;
     if (dosesInFlight.current.has(lockKey)) return;
     dosesInFlight.current.add(lockKey);
+    setSaving(prev => ({ ...prev, [`${p.firestoreId}_${doseKey}`]: true }));
     try {
       await cycleStatusUnlocked(p, doseKey, brandOverride);
     } finally {
       dosesInFlight.current.delete(lockKey);
+      setSaving(prev => ({ ...prev, [`${p.firestoreId}_${doseKey}`]: false }));
     }
   };
 
@@ -507,58 +500,8 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
       }
     }
 
-    // The brand to associate with this dose: record brandToUse when done, clear when pending
-    const updatedDoses = doses.map((d, idx) =>
-      idx === di
-        ? {
-            ...d,
-            status: nextStatus,
-            s: nextStatus,
-            brand: nextStatus === 'done' ? brandToUse : '',
-            attendingName: nextStatus === 'done' ? attendingStaff.trim() : '',
-            autoMissed: false,
-          }
-        : d
-    );
-
-    const doneCount  = updatedDoses.filter(d => d.status === 'done').length;
-    const totalDoses = updatedDoses.length;
-    const allDone    = doneCount === totalDoses;
-    const newStatus  = allDone ? 'completed' : 'ongoing';
-    const wasCompleted = doses.length > 0 && doses.every(d => d.status === 'done');
-    const completedAt  = allDone ? (wasCompleted && fresh.completedAt ? fresh.completedAt : getTodayStr()) : null;
-
-    // ── INSTANT OPTIMISTIC LOCAL UI UPDATE ──
-    setPatients(prev =>
-      prev.map(x =>
-        x.firestoreId === p.firestoreId
-          ? {
-              ...x,
-              doses: updatedDoses,
-              status: newStatus,
-              completedAt,
-              dose: `${doneCount}/${totalDoses}`,
-              vaccineBrand: nextStatus === 'done' ? brandToUse : (x.vaccineBrand || ''),
-            }
-          : x
-      )
-    );
-    setDetailPt(prev =>
-      prev && prev.firestoreId === p.firestoreId
-        ? {
-            ...prev,
-            doses: updatedDoses,
-            status: newStatus,
-            completedAt,
-            dose: `${doneCount}/${totalDoses}`,
-            vaccineBrand: nextStatus === 'done' ? brandToUse : (prev.vaccineBrand || ''),
-          }
-        : prev
-    );
-
-    // Reset assignedBrand for next dose
-    setAssignedBrand('');
-
+    // Keep the checklist unchanged while saving. The transaction owns the
+    // actual date, later schedule, undo metadata and stock movement.
     let outcome;
     try {
       outcome = await recordDoseChange({ runTransaction, doc, collection, deleteField }, db, {
@@ -575,8 +518,6 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
         shiftLater,
       });
     } catch (err) {
-      setPatients(prev => prev.map(x => (x.firestoreId === p.firestoreId ? fresh : x)));
-      setDetailPt(prev => (prev && prev.firestoreId === p.firestoreId ? fresh : prev));
       if (err?.code === 'stale') showToast('This dose was just updated elsewhere. The list has been refreshed.', 'warning');
       else if (err?.code === 'out-of-stock') showToast(`${err.message} Restock it or choose another brand before recording this dose.`, 'error');
       else if (err?.code === 'expired') showToast(`${err.message} Choose another brand.`, 'error');
@@ -586,6 +527,11 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
       }
       return;
     }
+
+    const committed = { ...outcome.record, firestoreId: p.firestoreId };
+    setPatients(prev => prev.map(x => x.firestoreId === p.firestoreId ? committed : x));
+    setDetailPt(prev => prev?.firestoreId === p.firestoreId ? committed : prev);
+    setAssignedBrand('');
 
     if (outcome.allDone !== outcome.wasDone) syncIncidentPinsForCompletion(fresh, outcome.allDone);
 

@@ -187,13 +187,14 @@ export async function recordDoseChange(fs, db, {
     const wasDone = savedDoses.length > 0 && savedDoses.every(d => d.status === 'done');
     const completedAt = allDone ? (wasDone && saved.completedAt ? saved.completedAt : today) : null;
 
-    tx.update(vaxRef, {
+    const recordUpdate = {
       doses: nextDoses,
       dose: `${doneN}/${nextDoses.length}`,
       status: allDone ? 'completed' : 'ongoing',
       completedAt: completedAt || deleteField(),
       ...(give ? { vaccineBrand: brand } : {}),
-    });
+    };
+    tx.update(vaxRef, recordUpdate);
 
     if (move) {
       tx.update(invRef, move.update);
@@ -213,7 +214,10 @@ export async function recordDoseChange(fs, db, {
     }
     return { before: move?.before ?? null, after: move?.after ?? null, itemName: item?.name || '', allDone, wasDone, moved: Boolean(move),
       doseLabel: savedDoses[idx].label || doseKey, statusBefore: savedDoses[idx].status === 'done' ? 'done' : 'pending',
-      delay, shifted, dueDate: savedDoses[idx].date };
+      delay, shifted, dueDate: savedDoses[idx].date,
+      // Return exactly what committed, including adjusted dates. Callers
+      // must not reconstruct the record from their pre-transaction snapshot.
+      record: { ...saved, ...recordUpdate, completedAt } };
   });
   logActivity({
     action: 'dose.update', collection: 'vaccinations', docId: patientId, mrn: patientId,
