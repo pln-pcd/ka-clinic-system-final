@@ -1117,7 +1117,7 @@ const INACTIVE_STATUSES = ['cancelled', 'canceled', 'declined'];
 const getInitials = (name = '') =>
   name.trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?';
 
-export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {}) {
+export default function AppointmentPage({ openPreviewDate, onPreviewOpened, initialOpenAddModal = false, onAddModalClosed } = {}) {
   const [appointments, setAppointments] = useState(() => peekLiveCollection('appointments').rows);
   const [selectedDate, setSelectedDate] = useState(getTodayDateString());
   const [currentViewDate, setCurrentViewDate] = useState(new Date());
@@ -1154,7 +1154,11 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
 
   const [addForm, setAddForm] = useState(EMPTY_ADD_FORM);
   // Ask before closing Add Appointment with something typed in it.
-  const [requestCloseAdd, addDiscardDialog] = useDiscardGuard(addForm, () => setAddModalOpen(false), { resetKey: addModalOpen, enabled: addModalOpen });
+  const handleCloseAdd = () => {
+    setAddModalOpen(false);
+    onAddModalClosed?.();
+  };
+  const [requestCloseAdd, addDiscardDialog] = useDiscardGuard(addForm, handleCloseAdd, { resetKey: addModalOpen, enabled: addModalOpen });
   const addV = useFieldErrors(ADD_APPT_RULES, addForm, 'appt');
 
 
@@ -1431,6 +1435,15 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
     onPreviewOpened?.();
   }, [openPreviewDate]);
 
+  // Open Add Appointment modal if triggered from dashboard Walk-In Apt button
+  useEffect(() => {
+    if (!initialOpenAddModal) return;
+    setSaving(false);
+    setAddForm(EMPTY_ADD_FORM());
+    addV.clear();
+    setAddModalOpen(true);
+  }, [initialOpenAddModal]);
+
   // Popups close on Escape through <Modal>; this only closes the month picker.
   useEffect(() => {
     if (!monthPickerOpen) return undefined;
@@ -1607,6 +1620,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
       showToast(`${sourceLabel(newApt.source)} appointment added for ${newApt.name}`);
       setAddModalOpen(false);
       setAddForm(EMPTY_ADD_FORM());
+      onAddModalClosed?.();
     } catch (err) {
       console.error('Add error:', err);
       showToast(err?.message === 'SLOT_TAKEN'

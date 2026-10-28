@@ -307,6 +307,7 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
   }, [activePage]);
   const [openAddPatientModal, setOpenAddPatientModal] = useState(false);
   const [addModalInitialPatient, setAddModalInitialPatient] = useState(null);
+  const [openAddApptModal, setOpenAddApptModal] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // Batch 5/6 — role drives the Manage Staff sidebar item + route guard
@@ -1422,7 +1423,10 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
                             </button>
 
                             <button
-                              onClick={() => setActivePage('appointments')}
+                              onClick={() => {
+                                setActivePage('appointments');
+                                setOpenAddApptModal(true);
+                              }}
                               className="group flex items-center justify-between p-3.5 px-4 rounded-2xl text-xs font-semibold border border-blue-100/80 transition-all cursor-pointer bg-blue-50/30 hover:bg-white hover:border-blue-300 text-[#0a1d47] shadow-2xs hover:shadow-xs h-full"
                             >
                               <span className="flex items-center gap-2.5 truncate">
@@ -1576,7 +1580,16 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
             )}
 
             <Suspense fallback={<SectionLoading />}>
-            {activePage === 'appointments' && <div className="page-scroll"><AppointmentPage openPreviewDate={apptPreviewDate} onPreviewOpened={() => setApptPreviewDate(null)} /></div>}
+            {activePage === 'appointments' && (
+              <div className="page-scroll">
+                <AppointmentPage
+                  openPreviewDate={apptPreviewDate}
+                  onPreviewOpened={() => setApptPreviewDate(null)}
+                  initialOpenAddModal={openAddApptModal}
+                  onAddModalClosed={() => setOpenAddApptModal(false)}
+                />
+              </div>
+            )}
             {activePage === 'patients'     && (
               <div className="page-scroll">
                 <PatientRecordsPage
