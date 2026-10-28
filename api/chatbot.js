@@ -46,8 +46,9 @@ export function createChatbotHandler({ load = loadAppointmentAvailability, now =
     // App and clinic questions the policy has cleared get a flexible answer
     // from the model (kaiModel.js), checked again; otherwise the fixed reply.
     if (SMART_INTENTS.has(decision.intent)) {
-      const text = await smart(prompt, history, decision);
-      if (text) return res.status(200).json({ success: true, ...decision, text, source: 'model', fallbackReason: null });
+      const out = await smart(prompt, history, decision);
+      if (out?.text) return res.status(200).json({ success: true, ...decision, text: out.text, source: 'model', fallbackReason: null });
+      return res.status(200).json({ success: true, ...decision, source: 'knowledge', fallbackReason: out?.reason || 'no_model_answer' });
     }
     if (decision.intent !== 'availability') {
       return res.status(200).json({ success: true, ...decision, source: 'knowledge', fallbackReason: null });

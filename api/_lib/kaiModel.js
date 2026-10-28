@@ -36,6 +36,10 @@ const FACTS = [
   'Bottom tabs in the app: Home (vaccination card, dose timeline, previous treatments, notifications bell), Appointments (book, view, reschedule, cancel, delete cancelled ones), Chat (KAI and Talk to clinic staff), Account (profile photo, personal information, notifications, signed-in devices, privacy notice, sign out).',
   'Patients sign in with their Medical Record Number (MRN) and password; a 6-digit email code is asked when registering or on a new device. Forgot Password is on the sign-in screen.',
   'Height, weight and blood pressure are recorded by the clinic and are read-only in the app.',
+  'Forgot Password: tap Forgot Password on the sign-in screen and enter your MRN; a reset link is sent to the email address the clinic has on file (shown masked).',
+  'Cancelling: in Appointments, tap the appointment, tap Cancel, add an optional reason and confirm. It is cancelled right away and the time slot is freed; no staff approval is needed. Past appointments cannot be cancelled. An appointment affected by a clinic schedule closure cannot be cancelled; reschedule it instead.',
+  'Rescheduling: in Appointments, tap the appointment, tap Reschedule, pick a new weekend date and an open time, then confirm.',
+  'Cancelled appointments are listed under Cancelled in Appointments; a patient can delete their own cancelled appointment with its Delete button.',
 ].join('\n');
 
 const SYSTEM = `You are KAI, the friendly virtual assistant inside the K&A Clinic Patient App.
@@ -70,12 +74,13 @@ function cleanHistory(history) {
 }
 
 /**
- * Model answer for a cleared message, or null (the caller then uses the
- * fixed reply). `decision` is the policy's decision for the prompt.
+ * { text } for a cleared message, or { reason } when the caller should use
+ * the fixed reply. `decision` is the policy's decision for the prompt.
  */
 export async function smartReply(prompt, history, decision, { fetchImpl = fetch, timeoutMs = 9000 } = {}) {
   const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
-  if (!apiKey || !SMART_INTENTS.has(decision.intent)) return null;
+  if (!apiKey) return { reason: 'no_api_key' };
+  if (!SMART_INTENTS.has(decision.intent)) return { reason: 'not_smart' };
   const model = process.env.GEMINI_MODEL || process.env.VITE_GEMINI_MODEL || 'gemini-3.5-flash-lite';
   const contents = [...cleanHistory(history), { role: 'user', parts: [{ text: prompt }] }];
   // Keep the conversation starting with a user turn.
@@ -94,17 +99,18 @@ export async function smartReply(prompt, history, decision, { fetchImpl = fetch,
         generationConfig: { temperature: 0.3, maxOutputTokens: 450 },
       }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) return { reason: `http_${res.status}` };
     const data = await res.json();
     const text = (data.candidates?.[0]?.content?.parts || [])
       .filter(p => typeof p.text === 'string' && !p.thought).map(p => p.text).join('').trim();
-    if (!text || text.length > 1200) return null;
+    if (!text) return { reason: 'empty' };
+    if (text.length > 1200) return { reason: 'too_long' };
     // Checks on the answer itself: nothing clinical, no personal details.
-    if (CLINICAL_OUTPUT.test(text)) return null;
-    if (/[\w.+-]+@[\w.-]+\.[a-z]{2,}/i.test(text) || /(?:\+?63|0)9\d{2}[\s-]?\d{3}[\s-]?\d{4}/.test(text)) return null;
-    return text;
-  } catch {
-    return null;
+    if (CLINICAL_OUTPUT.test(text)) return { reason: 'clinical_output' };
+    if (/[\w.+-]+@[\w.-]+\.[a-z]{2,}/i.test(text) || /(?:\+?63|0)9\d{2}[\s-]?\d{3}[\s-]?\d{4}/.test(text)) return { reason: 'contact_output' };
+    return { text };
+  } catch (err) {
+    return { reason: err?.name === 'AbortError' ? 'timeout' : 'network' };
   } finally {
     clearTimeout(timer);
   }

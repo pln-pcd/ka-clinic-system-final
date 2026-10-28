@@ -12,7 +12,7 @@ const call = async (handler, prompt) => {
 
 test('medical, private and off-topic messages never reach the model', async () => {
   const seen = [];
-  const handler = createChatbotHandler({ smart: async p => { seen.push(p); return 'MODEL'; }, load: async () => null });
+  const handler = createChatbotHandler({ smart: async p => { seen.push(p); return { text: 'MODEL' }; }, load: async () => null });
   for (const p of ['Is it safe after a dog bite?', 'nakagat ako ng aso, ano gagawin ko?', 'my name is Maria Santos', 'Maria Santos',
     '0917 123 4567', 'who is lebron?', 'what is my next dose?', 'magkano ang PEP?', 'anong mga serbisyo nyo?']) {
     const r = await call(handler, p);
@@ -22,7 +22,7 @@ test('medical, private and off-topic messages never reach the model', async () =
 });
 
 test('app and clinic questions use the model answer, in any language', async () => {
-  const handler = createChatbotHandler({ smart: async () => 'MODEL', load: async () => null });
+  const handler = createChatbotHandler({ smart: async () => ({ text: 'MODEL' }), load: async () => null });
   for (const p of ['What is the name of the app?', 'How do I use this app?', 'paano mag-reset ng password?', 'how do I change my profile photo po?']) {
     const r = await call(handler, p);
     assert.equal(r.text, 'MODEL', p);
@@ -31,7 +31,7 @@ test('app and clinic questions use the model answer, in any language', async () 
 });
 
 test('the fixed reply answers when the model has nothing', async () => {
-  const handler = createChatbotHandler({ smart: async () => null, load: async () => null });
+  const handler = createChatbotHandler({ smart: async () => ({ reason: 'empty' }), load: async () => null });
   const r = await call(handler, 'How do I use this app?');
   assert.equal(r.text, getKaiDecision('How do I use this app?').text);
 });
@@ -40,8 +40,8 @@ test('model answers with clinical content or contact details are discarded', asy
   process.env.GEMINI_API_KEY = 'test-key';
   const fake = text => async () => ({ ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text }] } }] }) });
   const d = getKaiDecision('How do I use this app?');
-  assert.equal(await smartReply('q', [], d, { fetchImpl: fake('Get your Day 7 dose and wash the wound.') }), null);
-  assert.equal(await smartReply('q', [], d, { fetchImpl: fake('Email us at clinic@example.com') }), null);
-  assert.equal(await smartReply('q', [], d, { fetchImpl: fake('Open **Account** to change your photo.') }), 'Open **Account** to change your photo.');
+  assert.equal((await smartReply('q', [], d, { fetchImpl: fake('Get your Day 7 dose and wash the wound.') })).text, undefined);
+  assert.equal((await smartReply('q', [], d, { fetchImpl: fake('Email us at clinic@example.com') })).text, undefined);
+  assert.equal((await smartReply('q', [], d, { fetchImpl: fake('Open **Account** to change your photo.') })).text, 'Open **Account** to change your photo.');
   delete process.env.GEMINI_API_KEY;
 });
