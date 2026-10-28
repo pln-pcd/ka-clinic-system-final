@@ -81,6 +81,17 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
       setMode('single');
     }
   }, [initialPatient]);
+
+  // Always resolve the freshest patient record from live `patients` prop so updates are never stale
+  const activePatient = (() => {
+    if (!selectedPatient) return null;
+    const found = (patients || []).find(p =>
+      (p.firestoreId && selectedPatient.firestoreId && p.firestoreId === selectedPatient.firestoreId) ||
+      (p.id && selectedPatient.id && p.id === selectedPatient.id) ||
+      (p.mrn && selectedPatient.mrn && p.mrn === selectedPatient.mrn)
+    );
+    return found ? { ...selectedPatient, ...found } : selectedPatient;
+  })();
   const matchingPatients = (() => {
     const q = patientQuery.trim().toLowerCase();
     if (!q || selectedPatient) return [];
@@ -1053,91 +1064,118 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     const st = derivePatientStatus(p);
     const isPEP = (p.service || '').trim().toUpperCase() === 'PEP';
     const caseNo = p.firestoreId ? p.firestoreId.slice(0, 8).toUpperCase() : (p.id || '—');
+    const mrn = p.id || p.mrn || '—';
 
-    const admin = [
-      ['Date', registered, 'MRN', p.id || p.mrn || '—'],
-      ['Account / Case No.', caseNo, 'Ward / Service', `${serviceLabel(p.service || 'PEP')} (Animal Bite Clinic)`],
-      ['Primary Attending', 'Dr. Francis R. Reyes, MD', 'Status', st.toUpperCase()],
-    ];
+    // Extract latest vitals and clinical encounter reports if present
+    const reports = Array.isArray(p.reports) ? p.reports : [];
+    const latestReport = reports.length > 0 ? reports[0] : null;
 
-    const complaintRows = isPEP
-      ? [
-          ['Presenting Complaint', `Clinical evaluation and post-exposure prophylaxis following exposure to ${p.animal || 'animal'} on ${fmtDate(p.date) || registered}. Assessed as Category ${p.cat || '—'} bite exposure.`],
-          ['Exposure Category', `Category ${p.cat || '—'}`],
-          ...(showWoundDetail
-            ? [['Wound Site / Depth', `${p.woundLocation || '—'} · ${p.woundDepth || '—'} · Bites: ${p.numberOfBites || '1'}`]]
-            : [['Wound Assessment', PATIENT_HIDDEN_NOTE]]),
-        ]
-      : [
-          ['Presenting Complaint', `Patient received clinical assessment and vaccination administration under the ${serviceLabel(p.service) || 'vaccination'} protocol.`],
-        ];
+    const bp = latestReport?.bp || p.bloodPressure || p.bp || '';
+    const pulse = latestReport?.pulse || p.pulse || '';
+    const temp = latestReport?.temp || p.temperature || p.temp || '';
+    const weight = latestReport?.weight || p.weight || '';
+    const height = p.height || '';
+    const woundCondition = latestReport?.woundCondition || p.woundCondition || '';
+    const adverseEvent = latestReport?.adverseEvent || '';
+    const nurseNotes = latestReport?.notes || p.notes || '';
 
-    const sections = [
-      {
-        title: '1. PATIENT DEMOGRAPHICS',
-        rows: [
-          ['Name', formatTitleCase(p.name)],
-          ['Age / Gender', `${p.age || '—'} yrs · ${(p.sex || '—').toUpperCase()}`],
-          ['Date of Birth', p.dob ? (formatDateLong(p.dob) || p.dob) : '—'],
-          ['Height / Weight', `${p.height ? `${p.height} cm` : '—'} · ${p.weight ? `${p.weight} kg` : '—'}`],
-          ['Blood Pressure', p.bloodPressure || '—'],
-          ['Contact / Address', `${p.contact || '—'} · ${p.address || '—'}`],
-          ['Guarantor / Next of Kin', p.emergencyName
-            ? `${p.emergencyName}${p.emergencyRel ? ` (${p.emergencyRel})` : ''}${p.emergencyPhone ? ` · ${p.emergencyPhone}` : ''}`
-            : (p.guardian || p.emergencyContact || '—')],
-        ],
-      },
-      {
-        title: '2. ENCOUNTER SUMMARY',
-        rows: [
-          ['Encounter Type', 'Outpatient Clinical Consultation & Prophylaxis'],
-          ['Protocol / Reason', isPEP ? `Animal Bite Exposure (${p.animal || 'Animal'} Bite)` : `${serviceLabel(p.service) || 'Vaccination'} Protocol`],
-          ['Registration Date', registered],
-          ['Treatment Protocol', getProtocolLabel(p)],
-          ['Attending Facility', 'K&A Animal Bite Treatment Center · Municipality of Libon, Province of Albay'],
-        ],
-      },
-      {
-        title: '3. CHIEF COMPLAINT & CLINICAL DETAILS',
-        rows: complaintRows,
-      },
-      {
-        title: '4. MEDICAL HISTORY',
-        rows: [
-          ['Past Vaccines', p.pastVaccines || 'None reported'],
-          ['Allergies', p.allergies || 'No known allergies'],
-        ],
-      },
-    ];
+    // Patient demographics & encounter
+    const demographics = {
+      name: formatTitleCase(p.name || 'Patient'),
+      mrn,
+      caseNo,
+      age: p.age ? `${p.age} yrs` : '—',
+      gender: (p.sex || p.gender || '—').toUpperCase(),
+      dob: p.dob ? (formatDateLong(p.dob) || p.dob) : '—',
+      contact: p.contact || '—',
+      address: p.address || (p.barangay ? `${p.barangay}, Libon, Albay` : 'Libon, Albay'),
+      emergencyContact: p.emergencyName
+        ? `${p.emergencyName}${p.emergencyRel ? ` (${p.emergencyRel})` : ''}${p.emergencyPhone ? ` · ${p.emergencyPhone}` : ''}`
+        : (p.guardian || p.emergencyContact || '—'),
+      service: serviceLabel(p.service || 'PEP'),
+      protocol: getProtocolLabel(p),
+      registered,
+      attending: latestReport?.author || p.registeredByName || 'Dr. Francis R. Reyes, MD',
+      facility: 'K&A Animal Bite Treatment Center · Libon, Albay',
+      status: st,
+    };
 
-    const doseRows = doses.map(d => {
+    // Vitals
+    const vitals = {
+      bp: bp ? `${bp} mmHg` : 'Not recorded',
+      pulse: pulse ? `${pulse} bpm` : null,
+      temp: temp ? `${temp} °C` : null,
+      weight: weight ? `${weight} kg` : null,
+      height: height ? `${height} cm` : null,
+      allergies: p.allergies || 'No known allergies (NKDA)',
+      pastVaccines: p.pastVaccines || 'None reported',
+    };
+
+    // Clinical Presentation & Exposure
+    const exposure = isPEP ? {
+      isPEP: true,
+      complaint: `Clinical evaluation and post-exposure prophylaxis following exposure to ${p.animal || 'animal'} on ${fmtDate(p.date) || registered}. Assessed as Category ${p.cat || '—'} bite exposure.`,
+      category: p.cat ? (String(p.cat).startsWith('Category') ? p.cat : `Category ${p.cat}`) : 'Category II',
+      animal: p.animal ? `${formatTitleCase(p.animal)} Exposure` : 'Animal Bite Exposure',
+      woundSite: showWoundDetail
+        ? `${p.woundLocation || 'Wound site'} · ${p.woundDepth || 'Intact skin'} · ${p.numberOfBites ? `${p.numberOfBites} bite(s)` : '1 bite'}`
+        : PATIENT_HIDDEN_NOTE,
+      woundCondition: woundCondition || 'Clean, normal healing',
+      adverseEvent: adverseEvent || 'None reported',
+    } : {
+      isPEP: false,
+      complaint: `Patient received clinical evaluation and vaccination under the ${serviceLabel(p.service) || 'vaccination'} protocol.`,
+      category: 'Preventive Vaccination',
+      animal: 'N/A',
+      woundSite: 'Intact skin / Deltoid injection site',
+      woundCondition: 'Intact skin',
+      adverseEvent: adverseEvent || 'None reported',
+    };
+
+    // Dosing Schedule (The ONLY Table)
+    const doseRows = doses.map((d, i) => {
       const rawStatus = String(d.status || d.s || 'pending').toLowerCase();
       const isDone = rawStatus === 'done' || rawStatus === 'completed' || d.done === true;
       const isMiss = rawStatus === 'miss' || rawStatus === 'missed' || rawStatus === 'overdue';
+      const statusText = isDone ? 'Completed' : isMiss ? 'Overdue' : 'Scheduled';
+      const brand = d.brand || d.vaccineBrand || (isDone ? (p.vaccineBrand || 'Standard Biologic') : '—');
+      const route = d.site || d.route || (isPEP ? '0.1 mL ID (Deltoid)' : '0.5 mL IM');
+      const scheduledDate = d.dueDate ? (formatDateShort(d.dueDate) || d.dueDate) : (d.date ? (formatDateShort(d.date) || d.date) : '—');
+      const dateGiven = isDone ? (d.date ? (formatDateShort(d.date) || d.date) : 'Administered') : '—';
+
       return {
-        label: d.label || d.n || d.dose || d.name || 'Dose',
-        date: d.date ? (formatDateShort(d.date) || d.date) : '—',
-        status: isMiss ? 'Overdue' : isDone ? 'Completed' : 'Scheduled',
+        label: d.label || d.n || d.dose || d.name || `Session ${i + 1}`,
+        scheduledDate,
+        dateGiven,
+        brand,
+        route,
+        status: statusText,
         kind: isMiss ? 'miss' : isDone ? 'done' : 'pending',
       };
     });
 
-    const assessment = [
-      ['Assessment', st === 'completed'
-        ? 'Successfully completed full prescribed post-exposure prophylaxis regimen with no adverse reactions.'
-        : 'Ongoing vaccination treatment. Patient is adhering to protocol.'],
-      ['Plan & Recommendations', 'Complete remaining scheduled vaccine doses on designated dates. Maintain proper wound care hygiene. Avoid applying irritants or traditional remedies to bite wound. Report any fever, malaise, or neurological symptoms immediately.'],
+    // Assessment & Care Plan
+    const assessmentText = st === 'completed'
+      ? 'Patient has successfully completed the full prescribed post-exposure prophylaxis regimen with satisfactory clinical progress and no adverse reactions.'
+      : st === 'overdue'
+        ? 'Vaccination series is currently overdue for one or more scheduled sessions. Patient is strongly advised to complete the remaining doses immediately to maintain protective antibody titers.'
+        : 'Ongoing vaccination treatment. Patient is adhering to protocol with satisfactory clinical progress.';
+
+    const planBullets = [
+      'Complete all remaining scheduled vaccine sessions on designated dates to establish and maintain immune protection.',
+      'Maintain rigorous local wound hygiene. Clean gently with soap and water or prescribed antiseptic solution.',
+      'Strictly avoid applying traditional or unverified topical remedies (e.g., tandok, garlic, stones, kerosene) to the wound.',
+      'Monitor exposure area for signs of secondary infection (progressive erythema, warmth, purulent drainage) or systemic symptoms (fever, malaise, neurological tingling). Return to clinic immediately if any occur.',
     ];
 
     return {
-      registered,
-      status: st,
-      admin,
-      sections,
-      doseSectionTitle: '5. VACCINATION DOSING SCHEDULE',
+      demographics,
+      vitals,
+      exposure,
       doseRows,
-      assessmentTitle: '6. ASSESSMENTS & RECOMMENDATIONS',
-      assessment,
+      assessmentText,
+      nurseNotes,
+      planBullets,
       officer: {
         name: 'Dr. Francis R. Reyes, MD',
         license: 'PRC License # 0123456 · Animal Bite Treatment Specialist',
@@ -1145,8 +1183,8 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
         badge: 'VERIFIED EHR CLINICAL RECORD',
       },
       footer: [
-        `Generated by K&A Clinic EHR System · Confidential Patient Information · ${new Date().getFullYear()}`,
-        'K&A Animal Bite Center · Municipality of Libon, Province of Albay',
+        `Generated by K&A Clinic EHR System · Confidential Patient Medical Record · ${new Date().getFullYear()}`,
+        'K&A Animal Bite Treatment Center · Municipality of Libon, Province of Albay',
       ],
     };
   }
@@ -1160,61 +1198,17 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     if (!p) return '<div style="padding:40px;text-align:center;color:#64748B;">No patient record selected.</div>';
     const m = buildMedicalRecordModel(p, audience);
 
-    const CELL = 'padding:4.5px 8px;border:1px solid #CBD5E1;font-size:9.5px;line-height:1.45;';
-    const LABEL_CELL = `${CELL}background:#F8FAFC;color:#475569;font-weight:700;width:26%;vertical-align:top;`;
-    const VALUE_CELL = `${CELL}color:#0F172A;vertical-align:top;`;
-    const statusColor = m.status === 'completed' ? '#15803D' : m.status === 'overdue' ? '#DC2626' : '#1D4ED8';
-
-    // Administrative box: two label/value pairs per row, the same 4-column
-    // shape autoTable draws in the PDF.
-    const adminRows = m.admin.map(([l1, v1, l2, v2]) => `
-      <tr>
-        <td style="${LABEL_CELL}width:22%;">${escapeHtml(l1)}</td>
-        <td style="${VALUE_CELL}width:28%;">${escapeHtml(v1)}</td>
-        <td style="${LABEL_CELL}width:22%;">${escapeHtml(l2)}</td>
-        <td style="${VALUE_CELL}width:28%;${l2 === 'Status' ? `font-weight:700;color:${statusColor};` : ''}">${escapeHtml(v2)}</td>
-      </tr>`).join('');
-
-    const sectionHtml = (title, rows) => `
-      <table style="width:100%;border-collapse:collapse;margin-bottom:8px;table-layout:fixed;">
-        <thead>
-          <tr><th colspan="2" style="${CELL}background:#0A1D47;color:#FFFFFF;text-align:left;font-weight:700;letter-spacing:.3px;">${escapeHtml(title)}</th></tr>
-        </thead>
-        <tbody>
-          ${rows.map(([label, value]) => `
-          <tr>
-            <td style="${LABEL_CELL}">${escapeHtml(label)}</td>
-            <td style="${VALUE_CELL}">${escapeHtml(value)}</td>
-          </tr>`).join('')}
-        </tbody>
-      </table>`;
-
-    const doseTable = `
-      <table style="width:100%;border-collapse:collapse;margin-bottom:8px;table-layout:fixed;">
-        <thead>
-          <tr>
-            <th style="${CELL}background:#1D4ED8;color:#FFFFFF;text-align:left;font-weight:700;width:40%;">Dose</th>
-            <th style="${CELL}background:#1D4ED8;color:#FFFFFF;text-align:left;font-weight:700;width:35%;">Scheduled Date</th>
-            <th style="${CELL}background:#1D4ED8;color:#FFFFFF;text-align:left;font-weight:700;width:25%;">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${m.doseRows.length
-            ? m.doseRows.map((d, i) => `
-          <tr style="background:${i % 2 ? '#FAFAFC' : '#FFFFFF'};">
-            <td style="${VALUE_CELL}">${escapeHtml(d.label)}</td>
-            <td style="${VALUE_CELL}">${escapeHtml(d.date)}</td>
-            <td style="${VALUE_CELL}font-weight:700;">${escapeHtml(d.status)}</td>
-          </tr>`).join('')
-            : `<tr><td colspan="3" style="${VALUE_CELL}text-align:center;color:#64748B;">No dose schedule on file.</td></tr>`}
-        </tbody>
-      </table>`;
+    const isDone = m.demographics.status === 'completed';
+    const isOverdue = m.demographics.status === 'overdue';
+    const statusBg = isDone ? '#DCFCE7' : isOverdue ? '#FEE2E2' : '#DBEAFE';
+    const statusColor = isDone ? '#15803D' : isOverdue ? '#B91C1C' : '#1D4ED8';
+    const statusBorder = isDone ? '#BBF7D0' : isOverdue ? '#FECACA' : '#BFDBFE';
 
     return `
-      <div style="font-family:'Plus Jakarta Sans','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0F172A;font-size:10px;line-height:1.5;padding:20px 24px;background:#FFFFFF;">
+      <div style="font-family:'Plus Jakarta Sans','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0F172A;font-size:10px;line-height:1.5;padding:24px 28px;background:#FFFFFF;">
 
         <!-- Institutional letterhead -->
-        <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto 4px;border:none;">
+        <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto 4px;border:none;width:100%;">
           <tr>
             <td style="vertical-align:middle;padding-right:14px;width:62px;text-align:right;">
               <img src="${logo || '/assets/dashboard/logo-white-nobg.png'}" alt="K&A Clinic Logo" style="width:58px;height:58px;object-fit:contain;display:block;" />
@@ -1223,6 +1217,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
               <div style="font-size:15px;font-weight:900;color:#0F172A;letter-spacing:0.6px;text-transform:uppercase;">K&amp;A ANIMAL BITE CENTER</div>
               <div style="font-size:8.5px;color:#1D4ED8;font-weight:700;margin-top:2px;">Caring for Life &bull; Animal Bite Treatment &amp; Care</div>
               <div style="font-size:8px;color:#64748B;margin-top:2px;">Municipality of Libon, Province of Albay | Ph: (052) 742-0123 | ka.animalbitecenter@gmail.com</div>
+              <div style="font-size:7.5px;color:#64748B;margin-top:1px;">DOH Accredited Animal Bite Treatment Center (ABTC) &bull; PhilHealth Accredited</div>
             </td>
             <td style="vertical-align:middle;padding-left:14px;width:62px;text-align:left;">
               <img src="${LIBON_SEAL_BASE64}" alt="Municipality of Libon seal" style="width:58px;height:58px;object-fit:contain;display:block;" />
@@ -1230,40 +1225,154 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
           </tr>
         </table>
 
-        <div style="border-top:1.6px solid #0A1D47;border-bottom:.6px solid #0A1D47;height:2px;margin:6px 0 10px;"></div>
+        <!-- Header dividers -->
+        <div style="border-top:1.6px solid #0A1D47;border-bottom:.6px solid #2563EB;height:2px;margin:8px 0 12px;"></div>
 
-        <div style="text-align:center;margin-bottom:10px;">
-          <h1 style="margin:0;font-size:13px;font-weight:900;color:#0A1D47;letter-spacing:1px;text-transform:uppercase;">PATIENT MEDICAL REPORT</h1>
+        <!-- Document Title & Header Meta -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <div>
+            <h1 style="margin:0;font-size:13px;font-weight:900;color:#0A1D47;letter-spacing:0.8px;text-transform:uppercase;">OFFICIAL PATIENT MEDICAL REPORT</h1>
+            <div style="font-size:8px;color:#64748B;font-weight:600;margin-top:2px;">Clinical Assessment, Exposure Evaluation &amp; Vaccination Administration Log</div>
+          </div>
+          <div style="text-align:right;">
+            <span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:8.5px;font-weight:800;letter-spacing:0.5px;background:${statusBg};color:${statusColor};border:1px solid ${statusBorder};">
+              ${escapeHtml(m.demographics.status.toUpperCase())}
+            </span>
+            <div style="font-size:8px;color:#64748B;margin-top:3px;">
+              MRN: <strong style="color:#0F172A;">${escapeHtml(m.demographics.mrn)}</strong> &bull; Case #${escapeHtml(m.demographics.caseNo)}
+            </div>
+          </div>
         </div>
 
-        <!-- Administrative information -->
-        <table style="width:100%;border-collapse:collapse;margin-bottom:8px;table-layout:fixed;">
-          <thead>
-            <tr><th colspan="4" style="${CELL}background:#F1F5F9;color:#0A1D47;text-align:center;font-weight:700;letter-spacing:.3px;">ADMINISTRATIVE INFORMATION</th></tr>
-          </thead>
-          <tbody>${adminRows}</tbody>
-        </table>
+        <!-- 1. Patient Demographics & Encounter Summary (Card layout, NO TABLES) -->
+        <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:12px 16px;margin-bottom:10px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #E2E8F0;">
+            <div style="display:flex;align-items:baseline;gap:8px;">
+              <span style="font-size:15px;font-weight:800;color:#0F172A;">${escapeHtml(m.demographics.name)}</span>
+              <span style="font-size:10px;color:#64748B;font-weight:600;">&bull; ${escapeHtml(m.demographics.age)} &bull; ${escapeHtml(m.demographics.gender)}</span>
+            </div>
+            <span style="font-size:9px;font-weight:700;padding:2px 8px;border-radius:6px;background:#EEF2FF;color:#3B50DF;border:1px solid #C7D2FE;">
+              ${escapeHtml(m.demographics.service)}
+            </span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:8px 14px;font-size:9.5px;">
+            <div>
+              <span style="font-size:8px;font-weight:700;color:#64748B;text-transform:uppercase;display:block;letter-spacing:0.4px;">Date of Birth</span>
+              <span style="color:#0F172A;font-weight:600;">${escapeHtml(m.demographics.dob)}</span>
+            </div>
+            <div>
+              <span style="font-size:8px;font-weight:700;color:#64748B;text-transform:uppercase;display:block;letter-spacing:0.4px;">Registration Date</span>
+              <span style="color:#0F172A;font-weight:600;">${escapeHtml(m.demographics.registered)}</span>
+            </div>
+            <div>
+              <span style="font-size:8px;font-weight:700;color:#64748B;text-transform:uppercase;display:block;letter-spacing:0.4px;">Attending Physician</span>
+              <span style="color:#0F172A;font-weight:600;">${escapeHtml(m.demographics.attending)}</span>
+            </div>
+            <div>
+              <span style="font-size:8px;font-weight:700;color:#64748B;text-transform:uppercase;display:block;letter-spacing:0.4px;">Contact Phone</span>
+              <span style="color:#0F172A;font-weight:600;">${escapeHtml(m.demographics.contact)}</span>
+            </div>
+            <div>
+              <span style="font-size:8px;font-weight:700;color:#64748B;text-transform:uppercase;display:block;letter-spacing:0.4px;">Treatment Protocol</span>
+              <span style="color:#0F172A;font-weight:600;">${escapeHtml(m.demographics.protocol)}</span>
+            </div>
+            <div>
+              <span style="font-size:8px;font-weight:700;color:#64748B;text-transform:uppercase;display:block;letter-spacing:0.4px;">Emergency Contact</span>
+              <span style="color:#0F172A;font-weight:600;">${escapeHtml(m.demographics.emergencyContact)}</span>
+            </div>
+            <div style="grid-column:span 2;">
+              <span style="font-size:8px;font-weight:700;color:#64748B;text-transform:uppercase;display:block;letter-spacing:0.4px;">Address</span>
+              <span style="color:#0F172A;font-weight:600;">${escapeHtml(m.demographics.address)}</span>
+            </div>
+            <div>
+              <span style="font-size:8px;font-weight:700;color:#64748B;text-transform:uppercase;display:block;letter-spacing:0.4px;">Medical Center</span>
+              <span style="color:#0F172A;font-weight:600;">${escapeHtml(m.demographics.facility)}</span>
+            </div>
+          </div>
+        </div>
 
-        ${m.sections.map(s => sectionHtml(s.title, s.rows)).join('')}
+        <!-- 2. Clinical Vitals Strip (NO TABLES) -->
+        <div style="background:#FFFFFF;border:1px solid #E2E8F0;border-radius:8px;padding:8px 14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;font-size:9.5px;">
+          <div><span style="color:#64748B;font-weight:700;font-size:8px;text-transform:uppercase;display:block;">Blood Pressure</span><strong style="color:#0F172A;">${escapeHtml(m.vitals.bp)}</strong></div>
+          ${m.vitals.pulse ? `<div><span style="color:#64748B;font-weight:700;font-size:8px;text-transform:uppercase;display:block;">Heart Rate</span><strong style="color:#0F172A;">${escapeHtml(m.vitals.pulse)}</strong></div>` : ''}
+          ${m.vitals.temp ? `<div><span style="color:#64748B;font-weight:700;font-size:8px;text-transform:uppercase;display:block;">Temperature</span><strong style="color:#0F172A;">${escapeHtml(m.vitals.temp)}</strong></div>` : ''}
+          ${m.vitals.weight || m.vitals.height ? `<div><span style="color:#64748B;font-weight:700;font-size:8px;text-transform:uppercase;display:block;">Weight / Height</span><strong style="color:#0F172A;">${escapeHtml(m.vitals.weight || '—')} / ${escapeHtml(m.vitals.height || '—')}</strong></div>` : ''}
+          <div><span style="color:#64748B;font-weight:700;font-size:8px;text-transform:uppercase;display:block;">Allergies</span><strong style="color:${m.vitals.allergies && !m.vitals.allergies.toLowerCase().includes('none') && !m.vitals.allergies.toLowerCase().includes('no known') ? '#B45309' : '#0F172A'};">${escapeHtml(m.vitals.allergies)}</strong></div>
+          <div><span style="color:#64748B;font-weight:700;font-size:8px;text-transform:uppercase;display:block;">Prior Vaccines</span><strong style="color:#0F172A;">${escapeHtml(m.vitals.pastVaccines)}</strong></div>
+        </div>
 
-        <div style="font-size:9.5px;font-weight:800;color:#0F172A;letter-spacing:.3px;margin:10px 0 4px;">${escapeHtml(m.doseSectionTitle)}</div>
-        ${doseTable}
+        <!-- 3. Clinical Evaluation & Exposure Narrative (NO TABLES) -->
+        <div style="background:#F8FAFC;border-left:3.5px solid #2563EB;border-top:1px solid #E2E8F0;border-right:1px solid #E2E8F0;border-bottom:1px solid #E2E8F0;border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:10px;">
+          <div style="font-size:8.5px;font-weight:800;color:#1E293B;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">CLINICAL EVALUATION &amp; EXPOSURE DETAILS</div>
+          <p style="margin:0 0 6px 0;font-size:9.5px;color:#334155;line-height:1.5;">${escapeHtml(m.exposure.complaint)}</p>
+          <div style="display:flex;gap:12px;font-size:8.5px;color:#64748B;flex-wrap:wrap;">
+            <span><strong>Exposure:</strong> ${escapeHtml(m.exposure.category)} &bull; ${escapeHtml(m.exposure.animal)}</span>
+            <span>&bull;</span>
+            <span><strong>Wound Site:</strong> ${escapeHtml(m.exposure.woundSite)}</span>
+            <span>&bull;</span>
+            <span><strong>Wound Condition:</strong> ${escapeHtml(m.exposure.woundCondition)}</span>
+            ${m.exposure.adverseEvent && m.exposure.adverseEvent !== 'None reported' ? `<span>&bull;</span><span><strong>Reaction:</strong> ${escapeHtml(m.exposure.adverseEvent)}</span>` : ''}
+          </div>
+        </div>
 
-        ${sectionHtml(m.assessmentTitle, m.assessment)}
+        <!-- 4. Vaccination Dosing Schedule (THE ONLY TABLE) -->
+        <div style="margin-bottom:10px;">
+          <div style="font-size:8.5px;font-weight:800;color:#1E293B;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px;">VACCINATION DOSING SCHEDULE &amp; ADMINISTRATION LOG</div>
+          <table style="width:100%;border-collapse:collapse;border:1px solid #CBD5E1;border-radius:8px;overflow:hidden;font-size:9px;table-layout:fixed;">
+            <thead>
+              <tr style="background:#F1F5F9;color:#0F172A;border-bottom:1px solid #CBD5E1;">
+                <th style="padding:6px 10px;text-align:left;font-weight:800;width:25%;">SESSION / DOSE</th>
+                <th style="padding:6px 10px;text-align:left;font-weight:800;width:16%;">SCHEDULED</th>
+                <th style="padding:6px 10px;text-align:left;font-weight:800;width:16%;">DATE GIVEN</th>
+                <th style="padding:6px 10px;text-align:left;font-weight:800;width:20%;">VACCINE / BRAND</th>
+                <th style="padding:6px 10px;text-align:left;font-weight:800;width:18%;">ROUTE &amp; SITE</th>
+                <th style="padding:6px 10px;text-align:center;font-weight:800;width:15%;">STATUS</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${m.doseRows.length
+                ? m.doseRows.map((d, i) => `
+              <tr style="background:${i % 2 ? '#FAFAFC' : '#FFFFFF'};border-bottom:1px solid #E2E8F0;">
+                <td style="padding:5.5px 10px;font-weight:700;color:#0F172A;">${escapeHtml(d.label)}</td>
+                <td style="padding:5.5px 10px;color:#334155;">${escapeHtml(d.scheduledDate)}</td>
+                <td style="padding:5.5px 10px;color:#334155;">${escapeHtml(d.dateGiven)}</td>
+                <td style="padding:5.5px 10px;color:#334155;">${escapeHtml(d.brand)}</td>
+                <td style="padding:5.5px 10px;color:#334155;">${escapeHtml(d.route)}</td>
+                <td style="padding:5.5px 10px;text-align:center;">
+                  <span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:8px;font-weight:800;background:${d.kind === 'done' ? '#DCFCE7' : d.kind === 'miss' ? '#FEE2E2' : '#EFF6FF'};color:${d.kind === 'done' ? '#15803D' : d.kind === 'miss' ? '#B91C1C' : '#1D4ED8'};border:1px solid ${d.kind === 'done' ? '#BBF7D0' : d.kind === 'miss' ? '#FECACA' : '#BFDBFE'};">
+                    ${escapeHtml(d.status)}
+                  </span>
+                </td>
+              </tr>`).join('')
+                : `<tr><td colspan="6" style="padding:10px;text-align:center;color:#64748B;">No dose schedule records on file.</td></tr>`}
+            </tbody>
+          </table>
+        </div>
 
-        <!-- Attending officer & verification -->
-        <table style="width:100%;border-collapse:collapse;margin-top:10px;border-top:1px solid #CBD5E1;">
-          <tr>
-            <td style="padding-top:8px;font-size:9px;color:#334155;vertical-align:bottom;">
-              <div><strong>Attending Medical Officer:</strong> ${escapeHtml(m.officer.name)}</div>
-              <div style="font-size:8px;color:#64748B;">${escapeHtml(m.officer.license)}</div>
-              <div style="font-size:8px;color:#64748B;">${escapeHtml(m.officer.issued)}</div>
-            </td>
-            <td style="padding-top:8px;text-align:right;vertical-align:bottom;">
-              <span style="display:inline-block;padding:3px 8px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:4px;font-size:8px;font-weight:700;color:#1D4ED8;">${escapeHtml(m.officer.badge)}</span>
-            </td>
-          </tr>
-        </table>
+        <!-- 5. Clinical Assessment & Care Plan (NO TABLES) -->
+        <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:10px 14px;margin-bottom:10px;">
+          <div style="font-size:8.5px;font-weight:800;color:#1E293B;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">ASSESSMENT &amp; CARE PLAN</div>
+          <p style="margin:0 0 6px 0;font-size:9.5px;color:#0F172A;line-height:1.45;font-weight:600;">${escapeHtml(m.assessmentText)}</p>
+          ${m.nurseNotes ? `<p style="margin:0 0 6px 0;font-size:9px;color:#475569;font-style:italic;"><strong>Attending Observations:</strong> ${escapeHtml(m.nurseNotes)}</p>` : ''}
+          <div style="font-size:8.5px;font-weight:700;color:#64748B;text-transform:uppercase;margin-bottom:4px;">Patient Instructions &amp; Recommendations:</div>
+          <ul style="margin:0;padding-left:16px;font-size:9px;color:#334155;line-height:1.45;">
+            ${m.planBullets.map(b => `<li style="margin-bottom:2px;">${escapeHtml(b)}</li>`).join('')}
+          </ul>
+        </div>
+
+        <!-- 6. Attestation & Verification (NO TABLES) -->
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;padding-top:8px;border-top:1px solid #CBD5E1;margin-top:10px;">
+          <div>
+            <div style="font-size:9px;color:#334155;"><strong>Attending Medical Officer:</strong> ${escapeHtml(m.officer.name)}</div>
+            <div style="font-size:8px;color:#64748B;">${escapeHtml(m.officer.license)}</div>
+            <div style="font-size:8px;color:#64748B;">${escapeHtml(m.officer.issued)}</div>
+          </div>
+          <div style="text-align:right;">
+            <span style="display:inline-block;padding:4px 10px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:6px;font-size:8.5px;font-weight:800;color:#1D4ED8;letter-spacing:0.3px;">
+              ${escapeHtml(m.officer.badge)}
+            </span>
+          </div>
+        </div>
 
         <div style="margin-top:12px;font-size:7.5px;color:#94A3B8;text-align:center;line-height:1.5;">
           ${escapeHtml(m.footer[0])}<br>${escapeHtml(m.footer[1])}
@@ -1278,16 +1387,12 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-      /* Browsers drop table fills when printing unless colour adjustment is
-         forced, which is what turned the navy section bars pale grey on paper. */
       *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact;}
       body{font-family:'Plus Jakarta Sans','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;margin:0;padding:0;background:#FFFFFF;}
       @media print{
         @page{size:A4 portrait;margin:8mm 10mm;}
         html,body{margin:0!important;padding:0!important;background:#FFFFFF!important;}
-        /* Keeps the record on one sheet and stops a section splitting across
-           the page break. */
-        body{zoom:0.88;}
+        body{zoom:0.92;}
         table{page-break-inside:avoid;break-inside:avoid;}
         tr,td,th{page-break-inside:avoid;break-inside:avoid;}
         thead{display:table-header-group;}
@@ -1296,14 +1401,13 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     </head><body><div>${medicalRecordBodyHtml(p, audience, logoDataUrl || CLINIC_LOGO_BASE64)}</div></body></html>`;
   }
 
-  // `density` scales the table metrics so a long record can be squeezed onto
-  // one sheet — buildDocumentPdf steps through the presets until the whole
-  // report fits, matching the preview, which never paginates.
   function drawMedicalRecordPdf(doc, p, audience = 'clinic', logoDataUrl = clinicLogoBase64Cache || CLINIC_LOGO_BASE64, density = { fontSize: 8, cellPadding: 2.5, gap: 4 }) {
     if (!p) return;
     const m = buildMedicalRecordModel(p, audience);
     const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
 
+    // 1. Institutional header
     if (logoDataUrl) {
       try {
         doc.addImage(logoDataUrl, 'PNG', 14, 8, 14, 14);
@@ -1311,139 +1415,281 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
         console.warn('Could not add logo to single report PDF:', e);
       }
     }
-    // Libon municipal seal, mirrored on the right at the same size and height.
     try {
       doc.addImage(LIBON_SEAL_BASE64, 'PNG', pageWidth - 14 - 14, 8, 14, 14);
     } catch (e) {
       console.warn('Could not add Libon seal to single report PDF:', e);
     }
 
-    // Clean institutional header matching report format
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(13);
     doc.setTextColor(15, 23, 42);
-    doc.text('K&A ANIMAL BITE CENTER', pageWidth / 2, 13, { align: 'center' });
+    doc.text('K&A ANIMAL BITE CENTER', pageWidth / 2, 12.5, { align: 'center' });
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
     doc.setTextColor(29, 78, 216);
-    doc.text('Caring for Life · Animal Bite Treatment & Care', pageWidth / 2, 17, { align: 'center' });
+    doc.text('Caring for Life · Animal Bite Treatment & Care', pageWidth / 2, 16.5, { align: 'center' });
 
-    doc.setFontSize(7);
+    doc.setFontSize(6.8);
     doc.setTextColor(100, 116, 139);
-    doc.text('Municipality of Libon, Province of Albay | Ph: (052) 742-0123 | ka.animalbitecenter@gmail.com', pageWidth / 2, 21, { align: 'center' });
+    doc.text('Municipality of Libon, Province of Albay | Ph: (052) 742-0123 | ka.animalbitecenter@gmail.com', pageWidth / 2, 20.2, { align: 'center' });
+
+    doc.setFontSize(6.2);
+    doc.setTextColor(100, 116, 139);
+    doc.text('DOH Accredited Animal Bite Treatment Center (ABTC) · PhilHealth Accredited', pageWidth / 2, 23.5, { align: 'center' });
 
     // Double divider line
     doc.setDrawColor(10, 29, 71);
-    doc.setLineWidth(0.6);
-    doc.line(14, 24, pageWidth - 14, 24);
-    doc.setLineWidth(0.2);
+    doc.setLineWidth(0.5);
     doc.line(14, 25.5, pageWidth - 14, 25.5);
+    doc.setDrawColor(29, 78, 216);
+    doc.setLineWidth(0.2);
+    doc.line(14, 26.5, pageWidth - 14, 26.5);
 
-    // Document Title
-    doc.setFontSize(12);
+    // 2. Document Title & Status Pill Badge
+    doc.setFontSize(10.5);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(10, 29, 71);
-    doc.text('PATIENT MEDICAL REPORT', pageWidth / 2, 31, { align: 'center' });
+    doc.text('OFFICIAL PATIENT MEDICAL REPORT', 14, 32);
 
-    const baseStyles = { fontSize: density.fontSize, cellPadding: density.cellPadding, overflow: 'linebreak', valign: 'top' };
-    const GAP = density.gap;
-    const labelColumn = { 0: { fontStyle: 'bold', fillColor: [248, 250, 252], textColor: [71, 85, 105], cellWidth: 45 } };
+    const stText = (m.demographics.status || 'ongoing').toUpperCase();
+    const isDone = m.demographics.status === 'completed';
+    const isOverdue = m.demographics.status === 'overdue';
+    const stW = doc.getTextWidth(stText) + 8;
+    const badgeX = pageWidth - 14 - stW;
 
-    // Administrative Information Box
+    if (isDone) {
+      doc.setFillColor(220, 252, 231);
+      doc.setDrawColor(187, 247, 208);
+      doc.setTextColor(21, 128, 61);
+    } else if (isOverdue) {
+      doc.setFillColor(254, 226, 226);
+      doc.setDrawColor(254, 202, 202);
+      doc.setTextColor(185, 28, 28);
+    } else {
+      doc.setFillColor(219, 234, 254);
+      doc.setDrawColor(191, 219, 254);
+      doc.setTextColor(29, 78, 216);
+    }
+    doc.roundedRect(badgeX, 27.8, stW, 5.2, 1, 1, 'FD');
+    doc.setFontSize(6.8);
+    doc.setFont('helvetica', 'bold');
+    doc.text(stText, badgeX + 4, 31.4);
+
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.text(`MRN: ${m.demographics.mrn}  ·  Case #${m.demographics.caseNo}`, badgeX - 4, 31.5, { align: 'right' });
+
+    // 3. Section 1: Patient Information Card (Card layout, NO TABLES)
+    const cardY = 35;
+    const cardH = 26;
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.2);
+    doc.roundedRect(14, cardY, 182, cardH, 1.5, 1.5, 'FD');
+
+    // Name & Sub-details
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(15, 23, 42);
+    doc.text(m.demographics.name, 18, cardY + 5);
+    const nameW = doc.getTextWidth(m.demographics.name);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`·  ${m.demographics.age}  ·  ${m.demographics.gender}`, 18 + nameW + 2, cardY + 5);
+
+    // Service Pill
+    const srvText = m.demographics.service;
+    const srvW = doc.getTextWidth(srvText) + 6;
+    doc.setFillColor(238, 242, 255);
+    doc.setDrawColor(199, 210, 254);
+    doc.roundedRect(pageWidth - 18 - srvW, cardY + 1.8, srvW, 4.2, 0.8, 0.8, 'FD');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.5);
+    doc.setTextColor(59, 80, 223);
+    doc.text(srvText, pageWidth - 18 - srvW + 3, cardY + 4.8);
+
+    doc.setDrawColor(226, 232, 240);
+    doc.line(18, cardY + 7.5, pageWidth - 18, cardY + 7.5);
+
+    // 3 Columns of Metadata
+    doc.setFontSize(6.5);
+    const renderField = (label, val, x, y) => {
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(100, 116, 139);
+      doc.text(label.toUpperCase(), x, y);
+      const lW = doc.getTextWidth(label.toUpperCase()) + 2;
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(15, 23, 42);
+      doc.text(String(val || '—'), x + lW, y);
+    };
+
+    renderField('DOB: ', m.demographics.dob, 18, cardY + 12);
+    renderField('Reg Date: ', m.demographics.registered, 78, cardY + 12);
+    renderField('Attending: ', m.demographics.attending, 138, cardY + 12);
+
+    renderField('Contact: ', m.demographics.contact, 18, cardY + 17);
+    renderField('Protocol: ', m.demographics.protocol, 78, cardY + 17);
+    renderField('Emergency: ', m.demographics.emergencyContact, 138, cardY + 17);
+
+    renderField('Address: ', m.demographics.address, 18, cardY + 22);
+    renderField('Facility: ', m.demographics.facility, 108, cardY + 22);
+
+    // 4. Section 2: Clinical Vitals & Exposure (Card layout, NO TABLES)
+    const sec2Y = cardY + cardH + 3;
+    const sec2H = 24;
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(14, sec2Y, 182, sec2H, 1.5, 1.5, 'FD');
+
+    doc.setFillColor(37, 99, 235);
+    doc.rect(14, sec2Y, 2, sec2H, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text('CLINICAL EVALUATION & EXPOSURE DETAILS', 19, sec2Y + 4.5);
+
+    doc.setFontSize(6.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(71, 85, 105);
+    doc.text(`BP: ${m.vitals.bp}   |   Pulse: ${m.vitals.pulse || '—'}   |   Temp: ${m.vitals.temp || '—'}   |   Weight/Height: ${m.vitals.weight || '—'} / ${m.vitals.height || '—'}   |   Allergies: ${m.vitals.allergies}`, 19, sec2Y + 9);
+
+    doc.setFontSize(6.8);
+    doc.setTextColor(15, 23, 42);
+    const complaintLines = doc.splitTextToSize(m.exposure.complaint, 172);
+    doc.text(complaintLines, 19, sec2Y + 14);
+
+    doc.setFontSize(6.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`Exposure: ${m.exposure.category} · ${m.exposure.animal}   |   Site/Depth: ${m.exposure.woundSite}   |   Wound Condition: ${m.exposure.woundCondition}`, 19, sec2Y + 20.5);
+
+    // 5. Section 3: Vaccination Dosing Schedule (THE ONLY TABLE)
+    const tableY = sec2Y + sec2H + 3;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text('VACCINATION DOSING SCHEDULE & ADMINISTRATION LOG', 14, tableY + 2.5);
+
     autoTable(doc, {
-      startY: 34,
-      head: [['ADMINISTRATIVE INFORMATION', '', '', '']],
-      body: m.admin,
+      startY: tableY + 4.5,
+      head: [['Session / Dose', 'Scheduled', 'Date Given', 'Vaccine / Brand', 'Route & Site', 'Status']],
+      body: m.doseRows.map(d => [d.label, d.scheduledDate, d.dateGiven, d.brand, d.route, d.status]),
       theme: 'grid',
-      headStyles: { fillColor: [241, 245, 249], textColor: [10, 29, 71], fontStyle: 'bold', fontSize: density.fontSize, halign: 'center' },
-      styles: baseStyles,
+      headStyles: {
+        fillColor: [241, 245, 249],
+        textColor: [15, 23, 42],
+        fontStyle: 'bold',
+        fontSize: density.fontSize - 1,
+        cellPadding: density.cellPadding,
+        lineColor: [203, 213, 225],
+        lineWidth: 0.15,
+      },
+      styles: {
+        fontSize: density.fontSize - 1,
+        cellPadding: density.cellPadding,
+        overflow: 'linebreak',
+        valign: 'middle',
+        lineColor: [226, 232, 240],
+        lineWidth: 0.15,
+        textColor: [15, 23, 42],
+      },
+      alternateRowStyles: {
+        fillColor: [250, 250, 252],
+      },
       columnStyles: {
-        0: { fontStyle: 'bold', fillColor: [248, 250, 252], textColor: [71, 85, 105], cellWidth: 35 },
-        2: { fontStyle: 'bold', fillColor: [248, 250, 252], textColor: [71, 85, 105], cellWidth: 35 },
+        0: { cellWidth: 38, fontStyle: 'bold' },
+        1: { cellWidth: 26 },
+        2: { cellWidth: 26 },
+        3: { cellWidth: 36 },
+        4: { cellWidth: 32 },
+        5: { cellWidth: 24, fontStyle: 'bold', halign: 'center' },
       },
     });
 
-    // Sections 1–4, straight off the shared model so the PDF carries every
-    // field the preview shows.
-    m.sections.forEach(section => {
-      autoTable(doc, {
-        startY: doc.lastAutoTable.finalY + GAP,
-        head: [[section.title, '']],
-        body: section.rows,
-        theme: 'grid',
-        headStyles: { fillColor: [10, 29, 71], textColor: 255, fontSize: density.fontSize, fontStyle: 'bold' },
-        styles: baseStyles,
-        columnStyles: labelColumn,
-      });
+    // 6. Section 4: Assessment & Care Plan (Card layout, NO TABLES)
+    const sec4Y = doc.lastAutoTable.finalY + 3.5;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(density.fontSize - 1.2);
+    const assessmentLines = doc.splitTextToSize(m.assessmentText, 174);
+    const bulletsCount = m.planBullets.length;
+    const sec4H = 13 + (assessmentLines.length * 3.2) + (bulletsCount * 3.2);
+
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.2);
+    doc.roundedRect(14, sec4Y, 182, sec4H, 1.5, 1.5, 'FD');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text('ASSESSMENT & CARE PLAN', 18, sec4Y + 4.5);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.8);
+    doc.setTextColor(30, 41, 59);
+    doc.text(assessmentLines, 18, sec4Y + 8.5);
+
+    let bY = sec4Y + 9 + (assessmentLines.length * 3.2);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text('TREATMENT RECOMMENDATIONS & PATIENT INSTRUCTIONS:', 18, bY);
+    bY += 3.2;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(51, 65, 85);
+    m.planBullets.forEach((bullet) => {
+      const bLines = doc.splitTextToSize(`• ${bullet}`, 174);
+      doc.text(bLines, 18, bY);
+      bY += bLines.length * 3;
     });
 
-    // 5. Vaccination Dosing Schedule
-    autoTable(doc, {
-      startY: doc.lastAutoTable.finalY + GAP,
-      head: [['Dose', 'Scheduled Date', 'Status']],
-      body: m.doseRows.length
-        ? m.doseRows.map(d => [d.label, d.date, d.status])
-        : [['No dose schedule on file.', '', '']],
-      headStyles: { fillColor: [29, 78, 216], textColor: 255, fontSize: density.fontSize, fontStyle: 'bold' },
-      styles: baseStyles,
-      alternateRowStyles: { fillColor: [250, 250, 252] },
-    });
-
-    // 6. Assessments & Recommendations
-    autoTable(doc, {
-      startY: doc.lastAutoTable.finalY + GAP,
-      head: [[m.assessmentTitle, '']],
-      body: m.assessment,
-      theme: 'grid',
-      headStyles: { fillColor: [10, 29, 71], textColor: 255, fontSize: density.fontSize, fontStyle: 'bold' },
-      styles: baseStyles,
-      columnStyles: labelColumn,
-    });
-
-    // Attending officer & verification. The block is pinned above the footer
-    // rather than pushed to a second page — buildDocumentPdf re-renders at a
-    // tighter density instead, so the report stays a single sheet.
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const y = Math.min(doc.lastAutoTable.finalY + 8, pageHeight - 26);
+    // 7. Attestation & EHR Verification
+    const y = Math.min(bY + 5, pageHeight - 24);
     doc.setDrawColor(203, 213, 225);
     doc.setLineWidth(0.2);
     doc.line(14, y, pageWidth - 14, y);
 
-    const yText = y + 5;
+    const yText = y + 4.5;
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor(51, 65, 85);
+    doc.setFontSize(7.5);
+    doc.setTextColor(15, 23, 42);
     doc.text('Attending Medical Officer:', 14, yText);
     const officerLabelWidth = doc.getTextWidth('Attending Medical Officer: ');
     doc.setFont('helvetica', 'normal');
-    doc.text(m.officer.name, 14 + officerLabelWidth, yText);
+    doc.text(m.officer.name, 14 + officerLabelWidth + 1, yText);
 
-    doc.setFontSize(7);
+    doc.setFontSize(6.5);
     doc.setTextColor(100, 116, 139);
     doc.text(m.officer.license, 14, yText + 4);
-    doc.text(m.officer.issued, 14, yText + 8);
+    doc.text(m.officer.issued, 14, yText + 7.5);
 
-    // Verified badge, right-aligned against the officer block
-    doc.setFontSize(7);
+    // Verified badge
+    doc.setFontSize(6.8);
     doc.setFont('helvetica', 'bold');
-    const badgeWidth = doc.getTextWidth(m.officer.badge) + 6;
-    const badgeX = pageWidth - 14 - badgeWidth;
+    const verifBadgeW = 54;
+    const verifBadgeX = pageWidth - 14 - verifBadgeW;
     doc.setFillColor(239, 246, 255);
     doc.setDrawColor(191, 219, 254);
-    doc.roundedRect(badgeX, yText + 1, badgeWidth, 6, 1, 1, 'FD');
+    doc.roundedRect(verifBadgeX, y + 1.5, verifBadgeW, 6.5, 1, 1, 'FD');
     doc.setTextColor(29, 78, 216);
-    doc.text(m.officer.badge, badgeX + 3, yText + 5);
+    doc.text(m.officer.badge, verifBadgeX + (verifBadgeW / 2), y + 5.8, { align: 'center' });
 
     // Footer on every page
     const totalPages = doc.internal.getNumberOfPages();
     for (let i = 1; i <= totalPages; i++) {
       doc.setPage(i);
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7);
+      doc.setFontSize(6.5);
       doc.setTextColor(148, 163, 184);
-      doc.text(m.footer[0], pageWidth / 2, pageHeight - 11, { align: 'center' });
-      doc.text(m.footer[1], pageWidth / 2, pageHeight - 7.5, { align: 'center' });
+      doc.text(m.footer[0], pageWidth / 2, pageHeight - 9, { align: 'center' });
+      doc.text(m.footer[1], pageWidth / 2, pageHeight - 5.5, { align: 'center' });
     }
   }
 
@@ -1551,7 +1797,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
 
   // The measured height belongs to one specific rendered document; re-measure
   // rather than briefly showing the previous record's sheet size.
-  useEffect(() => { setDocSheetHeight(null); }, [selectedPatient, showEmailInput, mode, exportFormat, period, statusFilter, serviceFilter]);
+  useEffect(() => { setDocSheetHeight(null); }, [activePatient, selectedPatient, showEmailInput, mode, exportFormat, period, statusFilter, serviceFilter]);
 
   const preview = getFilteredPatients();
 
@@ -1615,11 +1861,11 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-900">
-                {mode === 'single' ? `Export Patient Record — ${formatTitleCase(selectedPatient?.name || 'Patient')}` : 'Export Clinic Report'}
+                {mode === 'single' ? `Export Patient Record — ${formatTitleCase(activePatient?.name || 'Patient')}` : 'Export Clinic Report'}
               </h3>
               <p className="text-[11px] text-slate-500 font-normal mt-0.5">
                 {mode === 'single'
-                  ? `Official patient medical report for ${formatTitleCase(selectedPatient?.name || 'Patient')}`
+                  ? `Official patient medical report for ${formatTitleCase(activePatient?.name || 'Patient')}`
                   : 'Download, print, or email official clinic registry reports'}
               </p>
             </div>
@@ -1694,24 +1940,35 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
               <>
                 {/* Target patient */}
                 <div>
-                  <label style={labelStyle}>Target Patient Record</label>
-                  {selectedPatient ? (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <label style={{ ...labelStyle, marginBottom: 0 }}>Target Patient Record</label>
+                    {activePatient && (
+                      <button
+                        type="button"
+                        onClick={() => { setSelectedPatient(null); setPatientQuery(''); }}
+                        style={{ fontSize: '.6875rem', color: '#3B50DF', fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                      >
+                        Change
+                      </button>
+                    )}
+                  </div>
+                  {activePatient ? (
                     <div style={{ background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 12, padding: '10px 14px', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
                       <div style={{ fontSize: '.8125rem', fontWeight: 800, color: '#0F172A' }}>
-                        {formatTitleCase(selectedPatient.name || '—')}
+                        {formatTitleCase(activePatient.name || '—')}
                       </div>
                       <div style={{ fontSize: '.71875rem', color: '#64748B', marginTop: 2 }}>
-                        ID: <strong style={{ color: '#3B50DF' }}>{selectedPatient.id || selectedPatient.mrn || '—'}</strong>
-                        {selectedPatient.age ? ` · ${selectedPatient.age} yrs` : ''} · {selectedPatient.sex || '—'}
+                        ID: <strong style={{ color: '#3B50DF' }}>{activePatient.id || activePatient.mrn || '—'}</strong>
+                        {activePatient.age ? ` · ${activePatient.age} yrs` : ''} · {activePatient.sex || '—'}
                       </div>
                       <div style={{ fontSize: '.71875rem', color: '#64748B', marginTop: 4 }}>
-                        {selectedPatient.service || 'PEP'} · {selectedPatient.barangay || selectedPatient.address || 'Libon, Albay'}
+                        {activePatient.service || 'PEP'} · {activePatient.barangay || activePatient.address || 'Libon, Albay'}
                       </div>
                       <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '.71875rem', color: '#64748B' }}>
                         <span>Exposure / Category:</span>
                         <strong style={{ color: '#0F172A' }}>
-                          {((selectedPatient.service || '').trim().toUpperCase() === 'PEP')
-                            ? (selectedPatient.cat ? `Category ${selectedPatient.cat}` : (selectedPatient.animal || '—'))
+                          {((activePatient.service || '').trim().toUpperCase() === 'PEP')
+                            ? (activePatient.cat ? (String(activePatient.cat).startsWith('Category') ? activePatient.cat : `Category ${activePatient.cat}`) : (activePatient.animal || '—'))
                             : '—'}
                         </strong>
                       </div>
@@ -1792,13 +2049,13 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
                 <>
                   <button
                     type="button"
-                    onClick={() => exportSinglePatientPdf(selectedPatient)}
-                    disabled={!selectedPatient}
+                    onClick={() => exportSinglePatientPdf(activePatient)}
+                    disabled={!activePatient}
                     style={{
                       width: '100%', height: 42, padding: '0 16px', borderRadius: 12, border: '1px solid transparent',
                       background: '#3B50DF', color: '#FFFFFF', fontSize: '.8125rem', fontWeight: 700,
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer',
-                      opacity: !selectedPatient ? 0.5 : 1
+                      opacity: !activePatient ? 0.5 : 1
                     }}
                   >
                     <Download size={14} />
@@ -1806,13 +2063,13 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
                   </button>
                   <button
                     type="button"
-                    onClick={() => printSinglePatientReport(selectedPatient)}
-                    disabled={!selectedPatient}
+                    onClick={() => printSinglePatientReport(activePatient)}
+                    disabled={!activePatient}
                     style={{
                       width: '100%', height: 42, padding: '0 16px', borderRadius: 12, border: '1px solid #CBD5E1',
                       background: '#FFFFFF', color: '#0F172A', fontSize: '.8125rem', fontWeight: 700,
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer',
-                      opacity: !selectedPatient ? 0.5 : 1
+                      opacity: !activePatient ? 0.5 : 1
                     }}
                   >
                     <Printer size={14} />
@@ -1826,11 +2083,11 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
                 onClick={() => {
                   setShowEmailInput(v => !v);
                   setSentTo('');
-                  if (mode === 'single' && selectedPatient && !emailTo) {
-                    setEmailTo(selectedPatient.email || '');
+                  if (mode === 'single' && activePatient && !emailTo) {
+                    setEmailTo(activePatient.email || '');
                   }
                 }}
-                disabled={mode === 'bulk' ? preview.length === 0 : !selectedPatient}
+                disabled={mode === 'bulk' ? preview.length === 0 : !activePatient}
                 style={{
                   width: '100%', height: 42, padding: '0 16px', borderRadius: 12,
                   border: showEmailInput ? '1px solid #3B50DF' : '1px solid #CBD5E1',
@@ -1838,7 +2095,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
                   color: showEmailInput ? '#3B50DF' : '#0F172A',
                   fontSize: '.8125rem', fontWeight: 700,
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer',
-                  opacity: (mode === 'bulk' ? preview.length === 0 : !selectedPatient) ? 0.5 : 1
+                  opacity: (mode === 'bulk' ? preview.length === 0 : !activePatient) ? 0.5 : 1
                 }}
               >
                 <Mail size={14} />
@@ -1868,7 +2125,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
                     onClick={() =>
                       mode === 'bulk'
                         ? emailBulkReportPdf(emailTo)
-                        : emailSinglePatientPdf(selectedPatient, emailTo)
+                        : emailSinglePatientPdf(activePatient, emailTo)
                     }
                     style={{ width: '100%', height: 38, background: '#3B50DF', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: '.8125rem', cursor: 'pointer', opacity: (sending || !emailTo.trim()) ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
                   >
@@ -1897,9 +2154,9 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
                   : buildBulkReportHtml(preview, logoDataUrl),
                 setDocSheetHeight
               )
-            ) : selectedPatient ? (
+            ) : activePatient ? (
               previewPane(
-                buildDocumentHtml(selectedPatient, docType, showEmailInput ? 'patient' : 'clinic'),
+                buildDocumentHtml(activePatient, docType, showEmailInput ? 'patient' : 'clinic'),
                 setDocSheetHeight
               )
             ) : (
