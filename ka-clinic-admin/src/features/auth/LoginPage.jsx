@@ -1036,8 +1036,6 @@ export default function AdminLogin({ onSuccess, onBack }) {
       <footer className="relative z-20 w-full px-6 sm:px-10 md:px-14 pb-6 sm:pb-8 flex flex-col sm:flex-row items-center justify-between text-[11px] text-blue-200/60 gap-2">
         <span>&copy; {new Date().getFullYear()} K&amp;A Animal Bite Center. All rights reserved.</span>
         <div className="flex items-center gap-4 text-blue-200/70 font-medium">
-          <span>HIPAA &amp; DOH Compliant</span>
-          <span>&bull;</span>
           <span>Authorized Access Only</span>
         </div>
       </footer>

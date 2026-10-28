@@ -1,101 +1,59 @@
-// Client for the shared chatbot engine (api/chatbot.js).
-//
-// SCOPE (thesis ethics rules, docs/STUDY_MODE.md): general clinic
-// information, office hours, contact details, appointment procedures and app
-// navigation only. No medical content of any kind, and no patient's own
-// dates, dose counts or treatment status: those questions get a navigation
-// reply ("see your schedule on Home under your vaccination card").
-//
-// The same deterministic rules as the server (services/chatbotRules.ts, a
-// copy of api/_lib/chatbotRules.js) run here first, so a blocked or personal
-// question never depends on the network to be answered correctly.
 import { API_BASE_URL } from '../config/backend';
-import {
-  BLOCKED_REPLY_APP,
-  BOOKING_REPLY,
-  OUT_OF_SCOPE_REPLY,
-  PERSONAL_INFO_REPLY_APP,
-  PERSONAL_NAV_REPLY_APP,
-  classifyMessage,
-  fixedInScopeReply,
-  isShortVague,
-  vagueReply,
-  type ScopeCategory,
-} from './chatbotRules';
+import { availabilityFallback, getKaiDecision, kaiCopy, type KaiLanguage, type ReplyCategory } from './kaiPolicy';
 
-/** Wakes the chatbot server when the chat opens, so the first message does not wait for a cold start. */
-export function warmClinicAssistant(): void {
-  if (!API_BASE_URL) return;
-  fetch(`${API_BASE_URL}/api/chatbot?warm=1`).catch(() => {});
-}
-
+export type { ReplyCategory } from './kaiPolicy';
 export type ChatTurn = { role: 'user' | 'bot'; text: string };
-
-/** A button under a reply: open the vaccination card on Home, or Appointments. */
 export type ReplyAction = { label: string; target: 'card' | 'appointments' };
-
 export type AssistantReply = {
   text: string;
-  /** A blocked medical question: the reply mentions "Talk to clinic staff"
-   *  and that button is highlighted. Never opens the staff pop-up by itself. */
   needsEscalation: boolean;
-  category: ScopeCategory;
+  category: ReplyCategory;
+  language: KaiLanguage;
+  disclaimer?: string;
   action?: ReplyAction;
 };
 
-const CARD_ACTION: ReplyAction = { label: 'Open my vaccination card', target: 'card' };
+export function warmClinicAssistant(): void {
+  if (API_BASE_URL) fetch(`${API_BASE_URL}/api/chatbot?warm=1`).catch(() => {});
+}
 
 export async function askClinicAssistant(prompt: string, history: ChatTurn[] = []): Promise<AssistantReply> {
-  const category = classifyMessage(prompt);
-  // 1. Strict on-device protections: medical queries and personal schedule navigation
-  if (category === 'clinical') return { text: BLOCKED_REPLY_APP, needsEscalation: true, category };
-  if (category === 'personal_nav') return { text: PERSONAL_NAV_REPLY_APP, needsEscalation: false, category, action: CARD_ACTION };
-  if (category === 'personal_info') return { text: PERSONAL_INFO_REPLY_APP, needsEscalation: false, category, action: CARD_ACTION };
-  if (category === 'out_of_scope') return { text: OUT_OF_SCOPE_REPLY, needsEscalation: false, category };
-  // A bare name, an introduction or a short vague message: answered here, so
-  // a name never leaves the phone and is never repeated back.
-  if (category === 'vague' && isShortVague(prompt)) return { text: vagueReply(prompt), needsEscalation: false, category };
-  // Allowed topics with a fixed answer (hours, contact, services, prices,
-  // booking steps, app help): instant, no network. Same text as the server.
-  if (category === 'in_scope') {
-    const fixedReply = fixedInScopeReply(prompt);
-    if (fixedReply) return { text: fixedReply, needsEscalation: false, category: 'in_scope' };
-  }
+  const decision = getKaiDecision(prompt);
+  if (prompt.trim().length > 1000) return { ...decision, text: kaiCopy[decision.language].tooLong, needsEscalation: false };
+  if (decision.text) return {
+    ...decision, text: decision.text,
+    ...(['own_schedule', 'own_details'].includes(decision.intent)
+      ? { action: { label: decision.language === 'en' ? 'Open my vaccination card' : 'Buksan ang vaccination card', target: 'card' as const } }
+      : {}),
+  };
 
-  // 2. Online: Route all clinic questions, app navigation, booking, and conversational queries to backend
+  // Only date/availability queries need a network request. Do not send names,
+  // personal details or unrelated transcript turns as appointment context.
+  const safeHistory = history.slice(-20).filter(turn => turn.role === 'user'
+    && turn.text.length <= 1000 && getKaiDecision(turn.text).intent === 'availability');
   if (API_BASE_URL) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
     try {
       const res = await fetch(`${API_BASE_URL}/api/chatbot`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, history: history.map(h => ({ role: h.role, text: h.text })), channel: 'app' }),
+        body: JSON.stringify({ prompt, history: safeHistory, channel: 'app' }),
+        signal: controller.signal,
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (data?.success && data.text) {
-          return {
-            text: data.text as string,
-            needsEscalation: !!data.needsEscalation,
-            category: (data.category as ScopeCategory) ?? 'in_scope',
-            action: data.action?.target === 'card' || data.action?.target === 'appointments' ? data.action : undefined,
-          };
-        }
+      const data = await res.json();
+      if (res.status === 429) return { ...decision, text: kaiCopy[decision.language].rateLimit };
+      // Require the new structured contract; an older deployed chatbot can
+      // otherwise reintroduce its English-only, unrestricted fallback copy.
+      if (data?.success && data.intent === 'availability' && data.language === decision.language
+        && data.category === 'in_scope' && data.needsEscalation === false && typeof data.text === 'string') {
+        return { ...decision, text: data.text };
       }
-    } catch (err) {
-      console.warn('Chatbot API request failed:', err);
+    } catch {
+      // Live data could not be verified. Do not invent open slots.
+    } finally {
+      clearTimeout(timeout);
     }
   }
-
-  // 3. Offline / Network error fallback
-
-  if (/\b(book|appointment|appt|reserv|cancel|reschedul|slot)/i.test(prompt)) {
-    return { text: BOOKING_REPLY, needsEscalation: false, category: 'in_scope', action: { label: 'Open appointments', target: 'appointments' } };
-  }
-  if (category === 'vague') return { text: vagueReply(prompt), needsEscalation: false, category };
-
-  return {
-    text: "KAI can't answer right now. Please check your connection or contact K&A Clinic at +63 912 345 6789.",
-    needsEscalation: false,
-    category: 'in_scope',
-  };
+  return availabilityFallback(decision.language);
 }

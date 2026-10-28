@@ -1,5 +1,22 @@
 # Welcome to your Expo app 👋
 
+## KAI clinic assistant
+
+KAI uses the same approved response policy in the patient app and `/api/chatbot`.
+Clinic facts and English, Tagalog and Taglish replies live in
+`patient-app/services/kaiKnowledge.js`; classification lives in `kaiPolicy.js`.
+Missing contact details and rates must remain unknown until verified by the clinic.
+Responses are selected from this knowledge, without generative text or patient-record lookups.
+Appointment occupancy is read from Firestore on the server; if it cannot be verified,
+KAI directs the patient to Appts without claiming any slots are open.
+
+After installing the root and patient-app dependencies, run `npm run test:kai`
+for the behavior examples, privacy/clinical boundaries, calendar/occupancy checks,
+HTTP contract and mobile network fallbacks. These tests do not access production.
+Deploy the API alongside the updated mobile app: older API replies are rejected by
+the mobile client, which shows the unavailable-slots reply until the new API is live.
+
+
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
 
 ## Get started

@@ -38,7 +38,7 @@ import { usePatientAuth } from '../../context/PatientAuthContext';
 import { moderateScale, scale, verticalScale } from '../../utils/scale';
 import CustomAlertModal, { CustomAlertConfig } from '../../components/CustomAlertModal';
 import { askClinicAssistant, warmClinicAssistant, type ChatTurn, type ReplyAction } from '../../services/chatbot';
-import { KAI_DISCLAIMER } from '../../config/studyMode';
+import { kaiCopy, type KaiLanguage } from '../../services/kaiPolicy';
 
 type BubbleMessage = {
   id: string;
@@ -46,6 +46,7 @@ type BubbleMessage = {
   sender: 'patient' | 'admin' | 'bot';
   createdAt: number;
   senderName?: string;
+  disclaimer?: string;
   /** Navigation replies carry a button (open the vaccination card / Appointments). */
   action?: ReplyAction;
   /** Staff chat only: a message of the patient's still sending or not sent. */
@@ -190,6 +191,7 @@ export default function ChatScreen() {
 
   const [botMessages, setBotMessages] = useState<BubbleMessage[]>([]);
   const [botTyping, setBotTyping] = useState(false);
+  const [chatLanguage, setChatLanguage] = useState<KaiLanguage>('en');
 
   const [adminMessages, setAdminMessages] = useState<BubbleMessage[]>([]);
   const [adminMessagesLoaded, setAdminMessagesLoaded] = useState(false);
@@ -496,11 +498,12 @@ export default function ChatScreen() {
     }
     setBotMessages(m => [...m, {
       id: `b-${Date.now()}`, text: reply.text, sender: 'bot',
-      createdAt: Date.now(), senderName: BOT_SENDER_LABEL, action: reply.action,
+      createdAt: Date.now(), senderName: BOT_SENDER_LABEL, action: reply.action, disclaimer: reply.disclaimer,
     }]);
     // Highlights the "Talk to clinic staff" button after a medical question.
     // Only the latest reply counts. The staff pop-up itself opens only when
     // the patient taps that button, never from a reply.
+    setChatLanguage(reply.language);
     rememberPendingTrigger(reply.needsEscalation);
   };
 
@@ -634,7 +637,7 @@ export default function ChatScreen() {
           {mode === 'bot' && (
             <View style={s.disclaimerBar} accessibilityRole="text">
               <Ionicons name="information-circle-outline" size={13} color="#64748B" style={{ marginTop: 1 }} />
-              <Text style={s.disclaimerTxt}>{KAI_DISCLAIMER}</Text>
+              <Text style={s.disclaimerTxt}>{kaiCopy[chatLanguage].disclaimer}</Text>
             </View>
           )}
 
@@ -694,6 +697,9 @@ export default function ChatScreen() {
                           {renderFormattedMessage(m.text, isPatient, [s.msgText, isPatient && { color: '#fff' }])}
                         </View>
                       </View>
+                      {m.sender === 'bot' && m.disclaimer && (
+                        <Text style={s.disclaimerTxt}>{m.disclaimer}</Text>
+                      )}
                       {m.localStatus === 'sending' && (
                         <View style={s.msgStatusRow}><Text style={s.msgStatusTxt}>Sending…</Text></View>
                       )}

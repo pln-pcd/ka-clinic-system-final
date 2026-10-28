@@ -14,7 +14,8 @@
     "test:security:rules": "node scripts/security/rules.mjs",
     "test:security:api": "node scripts/security/api.mjs",
     "test:security:headers": "node scripts/security/headers.mjs",
-    "test:security:ui": "node scripts/security/ui.mjs"
+    "test:security:ui": "node scripts/security/ui.mjs",
+    "test:kai": "node --test scripts/tests/kai.test.mjs scripts/tests/kai-mobile.test.mjs"
   },
   "dependencies": {
     "firebase-admin": "^14.5.0",

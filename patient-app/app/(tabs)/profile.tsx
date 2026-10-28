@@ -936,7 +936,7 @@ export default function ProfileScreen() {
               </View>
               {isEditingPersonal && (
                 <Text style={{ fontSize: moderateScale(11), color: C.muted, marginTop: verticalScale(6), marginHorizontal: scale(6) }}>
-                  Physical info is recorded by the clinic and can't be changed here.
+                  Physical info is recorded by the clinic and cannot be changed here.
                 </Text>
               )}
 

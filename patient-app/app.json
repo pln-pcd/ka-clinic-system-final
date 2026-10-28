@@ -2,7 +2,7 @@
   "expo": {
     "name": "K&A Clinic",
     "slug": "kna-rabies-monitoring",
-    "version": "1.0.21",
+    "version": "1.0.22",
     "icon": "./assets/icon.png",
     "plugins": [
       [
@@ -62,7 +62,7 @@
         "backgroundColor": "#FFFFFF"
       },
       "allowBackup": false,
-      "versionCode": 21
+      "versionCode": 22
     },
     "extra": {
       "eas": {

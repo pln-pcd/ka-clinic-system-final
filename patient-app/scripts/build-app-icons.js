@@ -1,3 +1,4 @@
+/* global __dirname */
 // Generates the launcher icons from assets/logo-white-nobg.png.
 //
 // Android masks an adaptive icon's foreground to a shape the launcher chooses
