@@ -28,6 +28,12 @@ export async function getClinicLogoBase64() {
   }
 }
 
+export function pdfToBase64(doc) {
+  const uri = doc.output('datauristring');
+  const comma = uri.indexOf(',');
+  return comma === -1 ? '' : uri.slice(comma + 1);
+}
+
 // The header band at the top of every landscape report page: logo, LGU line,
 // report title, subtitle (left) and the active filters (right), then a rule.
 export function drawReportHeader(doc, { logo, margin, pageWidth, title, subtitle, filters }) {

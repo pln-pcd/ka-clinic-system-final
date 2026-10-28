@@ -58,6 +58,7 @@ app-example
 .vercel
 .env*
 .idea/
+scratch/
 
 *-private-key.json
 service-account*.json

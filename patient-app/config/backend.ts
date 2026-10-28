@@ -316,7 +316,13 @@ const describeDevice = () =>
 const currentIdToken = async (): Promise<string> => {
   const u = auth.currentUser;
   if (!u) throw new Error('Not signed in.');
-  return withTimeout(u.getIdToken(), 10000, 'Session refresh');
+  try {
+    return await withTimeout(u.getIdToken(false), 5000, 'Session token');
+  } catch (err: any) {
+    const e: any = new Error(err?.message || 'Could not fetch ID token.');
+    e.offline = true;
+    throw e;
+  }
 };
 
 /** Server-side answer to "is THIS install trusted?". Never sends mail. Any
@@ -336,16 +342,16 @@ export const checkLoginTrust = async (timeoutMs = 20000, rememberDevice = false)
     // 30-day trust token ("Keep me signed in").
     if (data.trustToken !== undefined) await setTrustToken(data.trustToken || null);
     if (data.trusted !== true) {
-      // Server rejected it (expired / revoked / reinstall mismatch): drop it so
+      // Server explicitly rejected it (expired / revoked / reinstall mismatch): drop it so
       // we stop presenting a dead token.
       await setTrustToken(null);
       return { trusted: false, mrn: null, hasToken };
     }
     return { trusted: true, mrn: data.mrn || null, hasToken };
   } catch (e: any) {
-    // No answer from the server (offline / timeout) is not a "no": the
-    // caller decides, with the token still in place.
-    return { trusted: false, mrn: null, offline: !!e?.offline, hasToken };
+    // Any network failure, timeout, or server unreachable error is an offline state.
+    // The trust token remains safe in the keystore.
+    return { trusted: false, mrn: null, offline: true, hasToken };
   }
 };
 

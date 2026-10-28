@@ -155,6 +155,8 @@ type FirestoreAppt = {
   affectedByClosure?: boolean;
   closureId?: string;
   closureReason?: string;
+  hiddenByPatient?: boolean;
+  hiddenAt?: number;
 };
 
 type PatientForm = {
@@ -172,8 +174,10 @@ const endedByClinic = (a: { status?: string; declineReason?: string; declinedBy?
   a.status === 'declined' || !!a.declineReason || !!a.declinedBy;
 const isEnded = (a: { status?: string }) => a.status === 'cancelled' || a.status === 'declined';
 
-const StatusBadge = ({ status, declined = false }: { status: string; declined?: boolean }) => {
-  const config = (declined ? { bg: C.dangerFaint, color: C.danger, icon: 'close-circle-outline', label: 'Declined by clinic' } : null) ?? {
+const StatusBadge = ({ status, declined = false, affectedByClosure = false }: { status: string; declined?: boolean; affectedByClosure?: boolean }) => {
+  const config = (declined ? { bg: C.dangerFaint, color: C.danger, icon: 'close-circle-outline', label: 'Declined by clinic' } : null)
+    ?? (affectedByClosure ? { bg: C.orangeFaint, color: C.orange, icon: 'calendar-outline', label: 'Can be rescheduled' } : null)
+    ?? {
     pending:              { bg: C.orangeFaint, color: C.orange, icon: 'time-outline',            label: 'Pending'              },
     cancellation_pending: { bg: C.orangeFaint, color: C.orange, icon: 'alert-circle-outline',   label: 'Cancellation requested' },
     confirmed:            { bg: C.greenFaint,  color: C.green,  icon: 'checkmark-circle',        label: 'Confirmed'            },
@@ -488,6 +492,22 @@ export default function AppointmentsScreen() {
       return;
     }
 
+    const closureCheck = getClosureForDate(rescheduleDate);
+    const isTargetClosed = closureCheck && (
+      closureCheck.type === 'day' ||
+      (closureCheck.type === 'slots' && (closureCheck.slots || []).includes(rescheduleTime))
+    );
+    if (isTargetClosed) {
+      showAlert({
+        type: 'warning',
+        title: 'Schedule Closed',
+        message: `This appointment slot is closed (${closureCheck.closure?.reason || 'Clinic schedule closed'}). Please pick a different date or time.`,
+        primaryButtonText: 'Pick Another Time',
+        onPrimaryPress: hideAlert,
+      });
+      return;
+    }
+
     setSubmittingReschedule(true);
     try {
       const oldSlotRef = doc(db, 'appointmentSlots', slotId(target.date, target.time));
@@ -642,16 +662,19 @@ export default function AppointmentsScreen() {
   const confirmDeleteCancelled = (appt: any) => {
     showAlert({
       type: 'warning',
-      title: 'Delete this appointment?',
-      message: `Your cancelled ${apptTypeLabel(appt.type)} appointment on ${shortKeyWithDay(appt.date)} will be removed from your list. This can't be undone.`,
-      primaryButtonText: 'Delete',
+      title: 'Remove from your list?',
+      message: `Your cancelled ${apptTypeLabel(appt.type)} appointment on ${shortKeyWithDay(appt.date)} will be removed from your list. The clinic record will not be affected.`,
+      primaryButtonText: 'Remove',
       onPrimaryPress: async () => {
         hideAlert();
         try {
-          await deleteDoc(doc(db, 'appointments', appt.id));
+          await updateDoc(doc(db, 'appointments', appt.id), {
+            hiddenByPatient: true,
+            hiddenAt: Date.now(),
+          });
         } catch (err) {
-          console.warn('Delete cancelled appointment failed:', err);
-          showAlert({ type: 'error', title: 'Could not delete', message: 'Please check your connection and try again.', primaryButtonText: 'OK', onPrimaryPress: hideAlert });
+          console.warn('Remove cancelled appointment failed:', err);
+          showAlert({ type: 'error', title: 'Could not remove', message: 'Please check your connection and try again.', primaryButtonText: 'OK', onPrimaryPress: hideAlert });
         }
       },
       secondaryButtonText: 'Keep',
@@ -750,7 +773,7 @@ export default function AppointmentsScreen() {
   const pastApts = myAppointments.filter(a =>
     (a.status === 'confirmed' || a.status === 'accepted' || a.status === 'done') && a.date < todayKey
   );
-  const cancelledApts = myAppointments.filter(isEnded);
+  const cancelledApts = myAppointments.filter(a => isEnded(a) && !a.hiddenByPatient);
 
   // Slot holds across the visible month, so the calendar can mark a weekend
   // whose every hour is gone as full rather than inviting a tap that leads to
@@ -1121,8 +1144,9 @@ export default function AppointmentsScreen() {
                 const cInfo      = hasSlots ? getClosureForDate(key) : null;
                 const isClosedDay = cInfo?.type === 'day';
                 const isPartiallyClosed = cInfo?.type === 'slots';
-                // Every hour claimed — still a clinic day, but nothing left to book.
-                const isFull     = hasSlots && (monthSlotCounts[key] || 0) >= TIME_SLOTS.length;
+                // Every hour claimed or closed — still a clinic day, but nothing left to book.
+                const closedCount = isClosedDay ? TIME_SLOTS.length : (cInfo?.slots?.length || 0);
+                const isFull     = hasSlots && !isClosedDay && ((monthSlotCounts[key] || 0) + closedCount >= TIME_SLOTS.length);
                 const tappable   = !isPast && hasSlots && (!isFull || isClosedDay);
 
                 return (
@@ -1219,7 +1243,7 @@ export default function AppointmentsScreen() {
           ) : (
             <View style={s.apptListCard}>
               {upcomingApts.map((appt, idx) => {
-                const confirmedLike = appt.status === 'confirmed' || appt.status === 'accepted' || appt.status === 'done';
+                const confirmedLike = (appt.status === 'confirmed' || appt.status === 'accepted' || appt.status === 'done') && !appt.affectedByClosure;
                 // An appointment inside a clinic closure can only be moved, not
                 // cancelled (firestore.rules refuses the cancel too).
                 const canCancel = (appt.status === 'pending' || appt.status === 'confirmed' || appt.status === 'accepted') && !appt.affectedByClosure;
@@ -1238,7 +1262,7 @@ export default function AppointmentsScreen() {
                       <View style={s.apptInfo}>
                         <View style={s.apptHeaderRow}>
                           <Text style={s.apptType}>{apptTypeLabel(appt.type)}</Text>
-                          <StatusBadge status={appt.status} declined={isEnded(appt) && endedByClinic(appt)}/>
+                          <StatusBadge status={appt.status} declined={isEnded(appt) && endedByClinic(appt)} affectedByClosure={appt.affectedByClosure}/>
                         </View>
                         <View style={s.apptInfoRow}>
                           <Ionicons name="time-outline" size={12} color={C.muted}/>
@@ -1808,7 +1832,7 @@ export default function AppointmentsScreen() {
                       >
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: scale(10), marginBottom: verticalScale(16) }}>
                           <Text style={{ flex: 1, minWidth: 0, fontSize: moderateScale(16), fontWeight: '800', color: C.charcoal }}>{apptTypeLabel(selectedApptDetail.type)}</Text>
-                          <StatusBadge status={selectedApptDetail.status} declined={isEnded(selectedApptDetail) && endedByClinic(selectedApptDetail)} />
+                          <StatusBadge status={selectedApptDetail.status} declined={isEnded(selectedApptDetail) && endedByClinic(selectedApptDetail)} affectedByClosure={selectedApptDetail.affectedByClosure} />
                         </View>
 
                         {/* Affected by closure banner in detail view */}
@@ -2136,9 +2160,13 @@ export default function AppointmentsScreen() {
                         const isWeekend = isWeekendDate(key);
                         const isPast = key < todayKey;
                         const isCurrentApptDate = reschedulingAppt?.date === key;
+                        const cInfo = isWeekend ? getClosureForDate(key) : null;
+                        const isClosedDay = cInfo?.type === 'day';
+                        const isPartiallyClosed = cInfo?.type === 'slots';
                         const hoursTaken = rescheduleMonthSlotCounts[key] || 0;
-                        const isFull = hoursTaken >= TIME_SLOTS.length && !isCurrentApptDate;
-                        const tappable = isWeekend && !isPast && !isFull;
+                        const closedCount = isClosedDay ? TIME_SLOTS.length : (cInfo?.slots?.length || 0);
+                        const isFull = isWeekend && !isClosedDay && !isCurrentApptDate && (hoursTaken + closedCount >= TIME_SLOTS.length);
+                        const tappable = isWeekend && !isPast && (!isFull || isClosedDay);
 
                         return (
                           <Tap
@@ -2146,21 +2174,38 @@ export default function AppointmentsScreen() {
                             style={s.calCell}
                             disabled={!tappable}
                             onPress={() => {
-                              setRescheduleDate(key);
-                              setRescheduleStep('slots');
+                              if (isClosedDay) {
+                                setClosureModal({
+                                  visible: true,
+                                  title: 'Appointments closed',
+                                  dateStr: displayKey(key),
+                                  reason: cInfo.closure.reason,
+                                });
+                              } else if (tappable && !isFull) {
+                                setRescheduleDate(key);
+                                setRescheduleStep('slots');
+                              }
                             }}
                           >
                             <View style={[
                               s.calTile,
                               isCurrentApptDate && { backgroundColor: C.navyFaint, borderColor: C.navy, borderWidth: 1.5 },
-                              tappable && !isCurrentApptDate && { borderColor: C.navy, borderWidth: 1 },
+                              tappable && !isCurrentApptDate && !isClosedDay && { borderColor: C.navy, borderWidth: 1 },
+                              isClosedDay && { backgroundColor: '#F1F5F9', borderColor: '#CBD5E1', borderWidth: 1 },
                             ]}>
+                              {isClosedDay && (
+                                <Ionicons name="lock-closed" size={10} color="#64748B" style={{ position: 'absolute', top: 3, right: 3 }} />
+                              )}
+                              {isPartiallyClosed && !isClosedDay && (
+                                <Ionicons name="lock-closed" size={8} color="#94A3B8" style={{ position: 'absolute', top: 3, right: 3 }} />
+                              )}
                               <Text style={[
                                 s.calDayTxt,
                                 isPast && s.calDayPast,
                                 !isPast && !isWeekend && s.calDayNoSlot,
-                                tappable && s.calDayOpen,
-                                isFull && s.calDayFull,
+                                tappable && !isClosedDay && s.calDayOpen,
+                                isFull && !isClosedDay && s.calDayFull,
+                                isClosedDay && { color: '#475569', fontWeight: '800' },
                               ]}>
                                 {day}
                               </Text>
@@ -2170,7 +2215,24 @@ export default function AppointmentsScreen() {
                       })}
                     </View>
 
-                    <View style={[s.noteBox, { marginTop: verticalScale(14) }]}>
+                    <View style={[s.legend, { marginTop: verticalScale(10), paddingTop: verticalScale(10) }]}>
+                      <View style={s.legendItem}>
+                        <View style={[s.calTile, { width: 14, height: 14, borderColor: C.navy, borderWidth: 1 }]} />
+                        <Text style={{ fontSize: moderateScale(11), color: C.slate }}>Available</Text>
+                      </View>
+                      <View style={s.legendItem}>
+                        <View style={[s.calTile, { width: 14, height: 14, backgroundColor: '#F1F5F9', borderColor: '#CBD5E1', borderWidth: 1, justifyContent: 'center', alignItems: 'center' }]}>
+                          <Ionicons name="lock-closed" size={8} color="#64748B" />
+                        </View>
+                        <Text style={{ fontSize: moderateScale(11), color: C.slate }}>Closed</Text>
+                      </View>
+                      <View style={s.legendItem}>
+                        <View style={[s.calTile, { width: 14, height: 14, backgroundColor: C.navyFaint, borderColor: C.navy, borderWidth: 1 }]} />
+                        <Text style={{ fontSize: moderateScale(11), color: C.slate }}>Current</Text>
+                      </View>
+                    </View>
+
+                    <View style={[s.noteBox, { marginTop: verticalScale(10) }]}>
                       <Ionicons name="information-circle" size={16} color={C.shapeBlue}/>
                       <Text style={s.noteTxt}>Weekend slots only (Saturday & Sunday). Weekdays operate on walk-in basis.</Text>
                     </View>
@@ -2183,6 +2245,12 @@ export default function AppointmentsScreen() {
                       {TIME_SLOTS.map(time => {
                         const isCurrentSlot = reschedulingAppt?.date === rescheduleDate && reschedulingAppt?.time === time;
                         const isTaken = rescheduleTakenTimes.includes(time);
+                        const cInfo = rescheduleDate ? getClosureForDate(rescheduleDate) : null;
+                        const isClosed = Boolean(cInfo && (
+                          cInfo.type === 'day' ||
+                          (cInfo.type === 'slots' && (cInfo.slots || []).includes(time))
+                        ));
+                        const closureReason = cInfo?.closure?.reason || 'Clinic schedule closed';
                         const disabled = isTaken || isCurrentSlot;
                         const active = rescheduleTime === time;
 
@@ -2192,14 +2260,31 @@ export default function AppointmentsScreen() {
                             style={[
                               s.timeChip,
                               active && s.timeChipActive,
-                              disabled && s.timeChipOff,
+                              disabled && !isClosed && s.timeChipOff,
+                              isClosed && { backgroundColor: '#F1F5F9', borderColor: '#CBD5E1' },
                               isCurrentSlot && { borderColor: C.navy, borderWidth: 1.5, backgroundColor: C.navyFaint },
                             ]}
-                            disabled={disabled}
-                            onPress={() => setRescheduleTime(time)}
+                            disabled={isTaken}
+                            onPress={() => {
+                              if (isClosed) {
+                                setClosureModal({
+                                  visible: true,
+                                  title: 'This time is closed',
+                                  dateStr: `${displayKey(rescheduleDate || '')} · ${time}`,
+                                  slots: [time],
+                                  reason: closureReason,
+                                });
+                              } else if (!disabled) {
+                                setRescheduleTime(time);
+                              }
+                            }}
                           >
                             {active && <LinearGradient colors={[C.navy, C.charcoal]} style={[StyleSheet.absoluteFill, { borderRadius: scale(14) }]}/>}
-                            <Ionicons name={active ? 'time' : 'time-outline'} size={12} color={active ? C.white : isCurrentSlot ? C.navy : disabled ? '#CBD5E1' : C.slate}/>
+                            <Ionicons
+                              name={active ? 'time' : isClosed ? 'lock-closed' : 'time-outline'}
+                              size={12}
+                              color={active ? C.white : isCurrentSlot ? C.navy : isClosed ? '#64748B' : disabled ? '#CBD5E1' : C.slate}
+                            />
                             <Text
                               numberOfLines={1}
                               adjustsFontSizeToFit
@@ -2208,7 +2293,8 @@ export default function AppointmentsScreen() {
                                 s.timeTxt,
                                 { flexShrink: 1 },
                                 active && { color: C.white, fontWeight: '800' },
-                                disabled && !isCurrentSlot && { color: '#CBD5E1', textDecorationLine: 'line-through' },
+                                disabled && !isCurrentSlot && !isClosed && { color: '#CBD5E1', textDecorationLine: 'line-through' },
+                                isClosed && { color: '#475569', fontWeight: '700' },
                                 isCurrentSlot && { color: C.navy, fontWeight: '700' },
                               ]}
                             >
@@ -2217,6 +2303,10 @@ export default function AppointmentsScreen() {
                             {isCurrentSlot ? (
                               <View style={sm.currentPill}>
                                 <Text style={sm.currentPillTxt}>Current</Text>
+                              </View>
+                            ) : isClosed ? (
+                              <View style={[s.fullPill, { backgroundColor: '#E2E8F0' }]}>
+                                <Text style={[s.fullPillTxt, { color: '#92400E' }]}>Closed</Text>
                               </View>
                             ) : isTaken ? (
                               <View style={s.fullPill}>

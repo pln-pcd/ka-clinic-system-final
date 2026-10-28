@@ -567,7 +567,15 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
                         <td className="px-4 py-3 truncate max-w-[180px]">{formatServiceType(apt.type || apt.purpose, '—')}</td>
                         <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{apt.time || '—'}</td>
                         <td className="pl-4 pr-0 py-3">
-                          <StatusBadge status={apt.status || 'pending'} />
+                          {apt.affectedByClosure ? (
+                            <StatusBadge
+                              tone="amber"
+                              label="Can Be Rescheduled by Patient"
+                              title="The clinic schedule is closed for this date/time. The patient can reschedule through the app."
+                            />
+                          ) : (
+                            <StatusBadge status={apt.status || 'pending'} />
+                          )}
                         </td>
                       </tr>
                     );

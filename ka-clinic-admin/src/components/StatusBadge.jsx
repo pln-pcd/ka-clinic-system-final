@@ -30,6 +30,9 @@ const STATUSES = {
   in_progress: ['In Progress', 'blue'],
   upcoming: ['Upcoming', 'slate'],
   scheduled: ['Scheduled', 'slate'],
+  reschedule_by_patient: ['Can Be Rescheduled by Patient', 'amber'],
+  can_be_rescheduled_by_patient: ['Can Be Rescheduled by Patient', 'amber'],
+  affected_by_closure: ['Can Be Rescheduled by Patient', 'amber'],
 };
 
 const titleCase = (s) => String(s || '')

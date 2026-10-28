@@ -3,127 +3,18 @@ import { formatTitleCase, formatDateLong, formatDateLong as fmtDate, formatDateS
 import Modal from '../../components/Modal';
 import IconButton from '../../components/IconButton';
 import Select from '../../components/Select';
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { auth } from "../../lib/firebase";
-import { buildDoses } from "../../lib/doseSchedules";
-import { erigStatusLabel } from "../../lib/erig";
-import { serviceFieldRows, showsTreatments } from "../../lib/serviceFields";
-import { amountText } from "../../lib/inventoryStock";
+import { buildDoses, getSchedule } from "../../lib/doseSchedules";
 import { LIBON_SEAL_BASE64 } from "../../assets/libonSealBase64";
 import jsPDF from "jspdf";
-import * as XLSX from "xlsx";
+import XLSX, { EXCEL_STYLES, EXCEL_PALETTE, applyRangeStyle, computeAutoFitColumns } from "../../lib/excelReport";
 import autoTable from "jspdf-autotable";
 import { CLINIC_LOGO_BASE64 } from "../../assets/clinicLogoBase64";
-import { clinicLogoBase64Cache, drawReportHeader, getClinicLogoBase64 } from "../../lib/pdfReport";
-import { pdfToBytes, reportGeneratedOn, sendReportInBackground, warmReportMailer } from "../../lib/reportMailer";
+import { clinicLogoBase64Cache, drawReportHeader, getClinicLogoBase64, pdfToBase64 } from "../../lib/pdfReport";
 import { Printer, Download, Mail, Loader2 } from "lucide-react";
 import { X, derivePatientStatus } from "./shared";
 import PreviewViewer from "../../components/PreviewViewer";
-
-// Single-patient record paper: US Letter at 96 px per inch, plus the page
-// padding and the gap between pages in the on-screen preview.
-const LETTER_PX = { w: 816, h: 1056, padY: 36, padX: 40, gap: 16 };
-
-// Cuts a rendered medical record (buildDocumentHtml) into Letter pages, each
-// carrying the same letterhead and footer. Runs on the live document so it
-// measures real heights; a table that will not fit is split between rows and
-// its header row repeated. Returns the page count. Safe to call twice.
-function paginateMedicalRecord(d) {
-  const root = d?.querySelector('.mr-doc');
-  if (!root) return 1;
-  if (root.dataset.paged) return root.querySelectorAll('.mr-page').length || 1;
-  const head = root.querySelector('.mr-head');
-  const flow = root.querySelector('.mr-flow');
-  const foot = root.querySelector('.mr-foot');
-  if (!head || !flow || !foot) return 1;
-
-  const view = d.defaultView;
-  const height = el => el.getBoundingClientRect().height;
-  const outer = el => {
-    const cs = view.getComputedStyle(el);
-    return height(el) + parseFloat(cs.marginTop || 0) + parseFloat(cs.marginBottom || 0);
-  };
-  const PAGE_NO_LINE = 14;
-  const avail = LETTER_PX.h - LETTER_PX.padY * 2 - outer(head) - outer(foot) - PAGE_NO_LINE;
-
-  // Measure everything first: moving rows later changes the layout.
-  const items = [...flow.children].map(el => {
-    const isTable = el.tagName === 'TABLE';
-    const cs = view.getComputedStyle(el);
-    return {
-      el,
-      h: outer(el),
-      title: el.classList.contains('mr-title'),
-      split: isTable && !el.classList.contains('mr-keep') && el.tBodies.length > 0,
-      headH: isTable && el.tHead ? height(el.tHead) : 0,
-      margins: parseFloat(cs.marginTop || 0) + parseFloat(cs.marginBottom || 0),
-      rows: isTable && el.tBodies[0] ? [...el.tBodies[0].rows].map(r => ({ r, h: height(r) })) : [],
-    };
-  });
-
-  const pages = [[]];
-  let used = 0;
-  const newPage = () => { pages.push([]); used = 0; };
-  const onPage = () => pages[pages.length - 1];
-
-  items.forEach((it, i) => {
-    if (it.title) {
-      // Keep a section title with its table's header and first row.
-      const next = items[i + 1];
-      const need = it.h + (next ? next.headH + (next.rows[0]?.h || 0) : 0);
-      if (used + need > avail && onPage().length) newPage();
-      onPage().push(it.el);
-      used += it.h;
-      return;
-    }
-    if (used + it.h <= avail || !it.split) {
-      if (used + it.h > avail && onPage().length) newPage();
-      onPage().push(it.el);
-      used += it.h;
-      return;
-    }
-    let part = null;
-    it.rows.forEach(({ r, h }) => {
-      if (part && used + h > avail) { newPage(); part = null; }
-      if (!part) {
-        if (used + it.headH + h + it.margins > avail && onPage().length) newPage();
-        part = it.el.cloneNode(false);
-        if (it.el.tHead) part.appendChild(it.el.tHead.cloneNode(true));
-        part.appendChild(d.createElement('tbody'));
-        onPage().push(part);
-        used += it.headH + it.margins;
-      }
-      part.tBodies[0].appendChild(r);
-      used += h;
-    });
-  });
-
-  const total = pages.length;
-  root.textContent = '';
-  pages.forEach((els, i) => {
-    const page = d.createElement('div');
-    page.className = 'mr-page';
-    page.appendChild(head.cloneNode(true));
-    const body = d.createElement('div');
-    body.className = 'mr-body';
-    els.forEach(el => body.appendChild(el));
-    page.appendChild(body);
-    const f = foot.cloneNode(true);
-    const no = d.createElement('div');
-    no.className = 'mr-pageno';
-    no.textContent = `Page ${i + 1} of ${total}`;
-    f.appendChild(no);
-    page.appendChild(f);
-    root.appendChild(page);
-  });
-  root.dataset.paged = '1';
-  return total;
-}
-
-// Waits for web fonts (they change text heights) before paginating.
-function whenFontsReady(d) {
-  return (d?.fonts?.ready || Promise.resolve()).catch(() => {});
-}
 
 /* ─────────────────────────── EXPORT REPORT MODAL ─────────────────────────── */
 export function ExportReportModal({ patients, onClose, onToast, initialPatient }) {
@@ -150,6 +41,10 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
 
   const fileIcon = <svg {...iconProps}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>;
   const [exportFormat, setExportFormat] = useState('pdf'); // 'xls' | 'pdf'
+  const FORMATS = [
+    { key: 'xls', label: 'Excel (XLS)' },
+    { key: 'pdf', label: 'PDF' },
+  ];
 
   const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'completed' | 'overdue' | 'ongoing'
   function statusFilterLabel() {
@@ -198,27 +93,13 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
 
   // ── Email delivery — shared by both bulk and single-patient modes ──────
   const [showEmailInput, setShowEmailInput] = useState(false);
-  // The settings column scrolls; opening the email box brings it (field,
-  // Send button and status) into view and puts the cursor in the field.
-  const emailBoxRef = useRef(null);
-  const emailInputRef = useRef(null);
-  useEffect(() => {
-    if (!showEmailInput) return;
-    const id = requestAnimationFrame(() => {
-      emailBoxRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
-      emailInputRef.current?.focus({ preventScroll: true });
-    });
-    return () => cancelAnimationFrame(id);
-  }, [showEmailInput]);
   const [emailTo, setEmailTo] = useState('');
+  const [sending, setSending] = useState(false);
   // The toast renders under the modal's portal, so a send needs its own
   // confirmation inside the card.
   const [sentTo, setSentTo] = useState('');
-  const [queuedTo, setQueuedTo] = useState('');
 
-  // The send runs in the background (lib/reportMailer.js) with its own
-  // progress toast, so the dialog is free again at once and can be closed.
-  function sendReportEmail(to, subject, report, attachment) {
+  async function sendReportEmail(to, subject, html, attachment) {
     const trimmed = to.trim();
     if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
       onToast('Enter a valid recipient email address.', 'error');
@@ -228,14 +109,34 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
       onToast('You must be signed in as an administrator to send reports.', 'error');
       return;
     }
-    setQueuedTo(trimmed);
-    setSentTo('');
-    setEmailTo('');
-    sendReportInBackground({ to: trimmed, subject, report, pdf: attachment.pdf, filename: attachment.filename })
-      .then(ok => {
-        setQueuedTo(q => (q === trimmed ? '' : q));
-        if (ok) setSentTo(trimmed);
+    setSending(true);
+    try {
+      const idToken = await auth.currentUser.getIdToken(true);
+      const res = await fetch('/api/send-patient-report', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          to: trimmed, subject, html,
+          ...(attachment ? { attachmentBase64: attachment.base64, attachmentFilename: attachment.filename } : {}),
+        }),
       });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
+        onToast(`Report emailed to ${trimmed}`, 'success');
+        setSentTo(trimmed);
+        setEmailTo('');
+      } else {
+        onToast(data?.error || `Failed to send email (${res.status} ${res.statusText})`, 'error');
+      }
+    } catch (err) {
+      console.error('sendReportEmail error:', err);
+      onToast(err?.message || 'Network error while sending the email.', 'error');
+    } finally {
+      setSending(false);
+    }
   }
 
   function getFilteredPatients() {
@@ -245,33 +146,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     const curMonth = parseInt(curParts[1], 10);
     const now = new Date();
 
-    // Flatten active records and previous case encounters from caseHistory
-    // so historical registries (daily, weekly, monthly, yearly) retain previous cases.
-    const allRecords = [];
-    (patients || []).forEach(p => {
-      allRecords.push(p);
-      if (Array.isArray(p.caseHistory) && p.caseHistory.length > 0) {
-        p.caseHistory.forEach((h, hIdx) => {
-          allRecords.push({
-            ...p,
-            ...h,
-            id: p.id || p.mrn,
-            mrn: p.mrn || p.id,
-            isHistoricalCase: true,
-            historicalIndex: hIdx + 1,
-            date: h.date || h.closedAt || p.date,
-            createdAt: h.createdAt || h.date,
-            status: h.status || 'completed',
-            doses: h.doses || [],
-            treatments: h.treatments || [],
-            reports: h.reports || [],
-            service: h.service || p.service || 'PEP',
-          });
-        });
-      }
-    });
-
-    return allRecords.filter(p => {
+    return patients.filter(p => {
       const pDateStr = p.date ? String(p.date).split('T')[0] : (p.createdAt?.toDate ? getTodayDateString(p.createdAt.toDate()) : '');
       const raw = p.createdAt?.toDate ? p.createdAt.toDate() : (pDateStr ? new Date(`${pDateStr}T12:00:00`) : null);
       let matchesPeriod = true;
@@ -321,20 +196,12 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     return liveSt === 'completed' ? 'completed' : isOverdue ? 'overdue' : 'ongoing';
   }
 
-  // Records store sex as "Male"/"Female" (older ones "M"/"F").
-  function sexCounts(rows) {
-    const c = { male: 0, female: 0, unspecified: 0 };
-    rows.forEach(p => {
-      const s = String(p.sex || '').trim().charAt(0).toUpperCase();
-      if (s === 'M') c.male++; else if (s === 'F') c.female++; else c.unspecified++;
-    });
-    return c;
-  }
-
   function buildReportSummary(rows) {
     const total = rows.length;
     const counts = { ongoing: 0, overdue: 0, completed: 0 };
     const bySvc = {};
+    let maleCount = 0;
+    let femaleCount = 0;
     rows.forEach(p => {
       const st = reportStatusOf(p);
       counts[st]++;
@@ -342,22 +209,22 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
       bySvc[svc] = bySvc[svc] || { total: 0, completed: 0, active: 0 };
       bySvc[svc].total++;
       if (st === 'completed') bySvc[svc].completed++; else bySvc[svc].active++;
+      const sex = (p.sex || '').toUpperCase();
+      if (sex.startsWith('M')) maleCount++;
+      else if (sex.startsWith('F')) femaleCount++;
     });
     const pct = n => (total ? `${Math.round((n / total) * 1000) / 10}%` : '0%');
     const active = counts.ongoing + counts.overdue;
-    const sex = sexCounts(rows);
     return {
       total,
-      sex,
       totals: [
         ['Total patients', total],
         ['Active (in treatment)', active],
         ['   of which overdue', counts.overdue],
         ['Completed', counts.completed],
         ['Completion rate', pct(counts.completed)],
-        ['Male', `${sex.male} (${pct(sex.male)})`],
-        ['Female', `${sex.female} (${pct(sex.female)})`],
-        ...(sex.unspecified ? [['Sex not recorded', `${sex.unspecified} (${pct(sex.unspecified)})`]] : []),
+        ['Male', `${maleCount} (${pct(maleCount)})`],
+        ['Female', `${femaleCount} (${pct(femaleCount)})`],
       ],
       services: Object.entries(bySvc)
         .sort((a, b) => b[1].total - a[1].total)
@@ -457,6 +324,19 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
 
       <div class="sheet-container">
         <table class="excel-grid">
+          <colgroup>
+            <col style="width:36px;" />
+            <col style="width:40px;" />
+            <col style="width:160px;" />
+            <col style="width:110px;" />
+            <col style="width:160px;" />
+            <col style="width:105px;" />
+            <col style="width:130px;" />
+            <col style="width:100px;" />
+            <col style="width:90px;" />
+            <col style="width:100px;" />
+            <col style="width:115px;" />
+          </colgroup>
           <thead>
             <tr>
               <th class="col-head" style="width:36px;"></th>
@@ -515,11 +395,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
       </body></html>`;
   }
 
-  // Excel HTML Export — formatted structured spreadsheet table
-  // Real .xlsx via SheetJS. The old export wrote an HTML table with an .xls
-  // extension, which made Excel warn that the format and extension disagree
-  // and coerced phone numbers into scientific notation. The on-screen preview
-  // (buildExcelPreviewHtml) is unchanged — only the produced file is.
+  // Excel XLSX Export — formatted spreadsheet matching live preview exactly
   function exportBulkXLS() {
     const rows = getFilteredPatients();
     if (rows.length === 0) { onToast('No patients found for this period', 'error'); return; }
@@ -530,90 +406,197 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
       const isOverdue = liveSt !== 'completed' && (liveSt === 'overdue' || p.status === 'overdue' || buildDoses(p).some(d => d.status === 'miss'));
       return liveSt === 'completed' ? 'completed' : isOverdue ? 'overdue' : 'ongoing';
     };
-    // Service mix, counted from the same rows the table prints. This was
-    // computed and then thrown away before, so the report carried no service
-    // breakdown at all.
-    const serviceCount = {};
+
     rows.forEach(p => {
       const st = statusFor(p);
       statusCount[st] = (statusCount[st] || 0) + 1;
-      const svc = serviceLabel((p.service || 'Unspecified').trim() || 'Unspecified');
-      serviceCount[svc] = (serviceCount[svc] || 0) + 1;
     });
-    const servicePct = (n) => (rows.length ? `${Math.round((n / rows.length) * 1000) / 10}%` : '0%');
-    const serviceRows = Object.entries(serviceCount)
-      .sort((a, b) => b[1] - a[1])
-      .map(([svc, n]) => [svc, n, servicePct(n)]);
 
-    const headers = ['#', 'Barangay / Address', 'Patient ID', 'Patient Name', 'Age', 'Sex', 'Contact No.', 'Service Type', 'Exposure', 'Status', 'Date Registered'];
+    const headers = ['#', 'Barangay / Address', 'Patient ID', 'Patient Name', 'Age / Sex', 'Contact No.', 'Service', 'Exposure', 'Status', 'Date Registered'];
 
-    // Title block, summary metrics, then the registry table.
+    // Header layout matching live preview:
+    // Row 1: Title (A1:J1)
+    // Row 2: Subtitle (A2:J2)
+    // Row 3: Metric cards (Total Patients, Ongoing, Overdue, Completed)
+    // Row 4: Blank separator row
+    // Row 5: Table Column Headers (A5:J5)
+    const subtitleStr = `Period Covered: ${periodLabel()} | Status: ${statusFilterLabel()} | Barangay: All Barangays | Date Generated: ${new Date().toLocaleString('en-PH')}`;
+
     const aoa = [
-      ['HEALTH MONITORING & PATIENT REGISTRY REPORT'],
-      ['RURAL HEALTH UNIT • ANIMAL BITE TREATMENT CENTER • LIBON, ALBAY'],
-      [`Period Covered: ${periodLabel()}`, `Service: ${serviceFilterLabel()}`, `Status: ${statusFilterLabel()}`, `Date Generated: ${new Date().toLocaleString('en-PH')}`],
-      [],
-      ['SUMMARY METRICS'],
-      ['Total Patients', rows.length, 'Ongoing', statusCount.ongoing || 0, 'Overdue', statusCount.overdue || 0, 'Completed', statusCount.completed || 0],
-      [],
-      ['SERVICE BREAKDOWN'],
-      ['Service', 'Patients', 'Share'],
-      ...serviceRows,
-      [],
+      ['HEALTH MONITORING & PATIENT REGISTRY REPORT', '', '', '', '', '', '', '', '', ''],
+      [subtitleStr, '', '', '', '', '', '', '', '', ''],
+      [`Total Patients: ${rows.length}`, '', `Ongoing: ${statusCount.ongoing || 0}`, '', `Overdue: ${statusCount.overdue || 0}`, '', '', `Completed: ${statusCount.completed || 0}`, '', ''],
+      ['', '', '', '', '', '', '', '', '', ''],
       headers,
     ];
 
-    const HEADER_ROW = aoa.length - 1; // zero-based index of the header row
+    const HEADER_ROW = 4; // 0-indexed row 4 is Excel Row 5
+
     rows.forEach((p, idx) => {
       const st = statusFor(p);
+      const isPep = ((p.service || '').trim().toUpperCase() === 'PEP');
+      const exposureVal = isPep ? (p.cat ? `Cat ${p.cat}` : (p.animal || '—')) : '—';
       aoa.push([
         idx + 1,
         p.barangay || p.address || 'Libon, Albay',
         p.id || p.mrn || '—',
         formatTitleCase(p.name || '—'),
-        p.age === 0 || p.age ? Number(p.age) : '—',
-        (p.sex || '—').toUpperCase(),
+        `${p.age || '—'} / ${p.sex || '—'}`,
         p.contact || '—',
         serviceLabel(p.service || 'PEP'),
-        ((p.service || '').trim().toUpperCase() === 'PEP') ? (p.cat ? `Cat ${p.cat}` : (p.animal || '—')) : '—',
-        st.charAt(0).toUpperCase() + st.slice(1),
+        exposureVal,
+        st.toUpperCase(),
         formatDateNumeric(p.date || p.createdAt),
       ]);
     });
 
-    // Closing summary under the table (the metrics at the top stay as the
-    // at-a-glance header). Kept out of the autofilter range below.
     const LAST_DATA_ROW = aoa.length - 1;
+
+    // Blank separator
+    aoa.push(['', '', '', '', '', '', '', '', '', '']);
+
+    // Summary Section matching live preview
     const summary = buildReportSummary(rows);
-    aoa.push([], ['REPORT SUMMARY']);
-    const SUMMARY_TITLE_ROW = aoa.length - 1;
-    summary.totals.forEach(([k, v]) => aoa.push([k.trim(), v]));
-    aoa.push([], SUMMARY_SERVICE_HEAD, ...summary.services);
+    const SUMMARY_TITLE_ROW = aoa.length;
+    aoa.push(['REPORT SUMMARY', '', '', '', '', '', '', '', '', '']);
+
+    const summaryTotalRanges = [];
+    summary.totals.forEach(([k, v]) => {
+      const rIdx = aoa.length;
+      aoa.push([k.trim(), '', '', v, '', '', '', '', '', '']);
+      summaryTotalRanges.push(rIdx);
+    });
+
+    // Blank separator
+    aoa.push(['', '', '', '', '', '', '', '', '', '']);
+
+    // Service Breakdown Table
+    const SVC_HEAD_ROW = aoa.length;
+    aoa.push([SUMMARY_SERVICE_HEAD[0], '', '', SUMMARY_SERVICE_HEAD[1], SUMMARY_SERVICE_HEAD[2], SUMMARY_SERVICE_HEAD[3], SUMMARY_SERVICE_HEAD[4], '', '', '']);
+
+    const svcCtrRows = [];
+    summary.services.forEach(r => {
+      const rIdx = aoa.length;
+      aoa.push([r[0], '', '', r[1], r[2], r[3], r[4], '', '', '']);
+      svcCtrRows.push(rIdx);
+    });
 
     const ws = XLSX.utils.aoa_to_sheet(aoa);
 
-    // Phone numbers and IDs are identifiers, not quantities — forcing them to
-    // text is what stops "+639272401450" becoming 6.39272E+11.
-    const TEXT_COLUMNS = [2, 6, 10]; // Patient ID, Contact No., Date Registered
+    // Merge ranges
+    const merges = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 9 } }, // Row 1 Title
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 9 } }, // Row 2 Subtitle
+      { s: { r: 2, c: 0 }, e: { r: 2, c: 1 } }, // Row 3 Total Patients
+      { s: { r: 2, c: 2 }, e: { r: 2, c: 3 } }, // Row 3 Ongoing
+      { s: { r: 2, c: 4 }, e: { r: 2, c: 6 } }, // Row 3 Overdue
+      { s: { r: 2, c: 7 }, e: { r: 2, c: 9 } }, // Row 3 Completed
+      { s: { r: SUMMARY_TITLE_ROW, c: 0 }, e: { r: SUMMARY_TITLE_ROW, c: 9 } }, // REPORT SUMMARY title
+    ];
+
+    summaryTotalRanges.forEach(r => {
+      merges.push({ s: { r, c: 0 }, e: { r, c: 2 } });
+    });
+
+    merges.push({ s: { r: SVC_HEAD_ROW, c: 0 }, e: { r: SVC_HEAD_ROW, c: 2 } });
+    svcCtrRows.forEach(r => {
+      merges.push({ s: { r, c: 0 }, e: { r, c: 2 } });
+    });
+
+    ws['!merges'] = merges;
+
+    // Apply styles to all cells
+    // Row 1 Title Banner
+    applyRangeStyle(ws, { s: { r: 0, c: 0 }, e: { r: 0, c: 9 } }, EXCEL_STYLES.title);
+
+    // Row 2 Subtitle
+    applyRangeStyle(ws, { s: { r: 1, c: 0 }, e: { r: 1, c: 9 } }, EXCEL_STYLES.subtitle);
+
+    // Row 3 Metric Cards
+    applyRangeStyle(ws, { s: { r: 2, c: 0 }, e: { r: 2, c: 1 } }, EXCEL_STYLES.metricCard(EXCEL_PALETTE.darkText));
+    applyRangeStyle(ws, { s: { r: 2, c: 2 }, e: { r: 2, c: 3 } }, EXCEL_STYLES.metricCard(EXCEL_PALETTE.ongoingBlue));
+    applyRangeStyle(ws, { s: { r: 2, c: 4 }, e: { r: 2, c: 6 } }, EXCEL_STYLES.metricCard(EXCEL_PALETTE.overdueRed));
+    applyRangeStyle(ws, { s: { r: 2, c: 7 }, e: { r: 2, c: 9 } }, EXCEL_STYLES.metricCard(EXCEL_PALETTE.completedGreen));
+
+    // Row 5 Table Headers
+    headers.forEach((h, c) => {
+      const ref = XLSX.utils.encode_cell({ r: HEADER_ROW, c });
+      const align = (h === '#' || h === 'Age / Sex' || h === 'Service' || h === 'Exposure' || h === 'Status' || h === 'Date Registered') ? 'center' : 'left';
+      if (!ws[ref]) ws[ref] = { t: 's', v: h };
+      ws[ref].s = EXCEL_STYLES.tableHeader(align);
+    });
+
+    // Patient Data Rows
     for (let r = HEADER_ROW + 1; r <= LAST_DATA_ROW; r++) {
-      TEXT_COLUMNS.forEach(c => {
+      const stCell = ws[XLSX.utils.encode_cell({ r, c: 8 })];
+      const stVal = stCell ? String(stCell.v).toUpperCase() : '';
+      const stColor = stVal === 'COMPLETED' ? EXCEL_PALETTE.completedGreen : stVal === 'OVERDUE' ? EXCEL_PALETTE.overdueRed : EXCEL_PALETTE.ongoingBlue;
+
+      for (let c = 0; c < 10; c++) {
         const ref = XLSX.utils.encode_cell({ r, c });
         const cell = ws[ref];
-        if (cell) { cell.t = 's'; cell.z = '@'; cell.v = String(cell.v); }
-      });
+        if (!cell) continue;
+
+        let align = 'left';
+        let bold = false;
+        let colorRgb = EXCEL_PALETTE.bodyText;
+
+        // Force string type for IDs, Contact Numbers, Dates to prevent numeric scientific notation
+        if (c === 2 || c === 5 || c === 9) {
+          cell.t = 's';
+          cell.z = '@';
+          cell.v = String(cell.v);
+        }
+
+        if (c === 0 || c === 4 || c === 6 || c === 7 || c === 9) align = 'center';
+        if (c === 2 || c === 3 || c === 6) bold = true;
+        if (c === 8) {
+          align = 'center';
+          bold = true;
+          colorRgb = stColor;
+        }
+
+        cell.s = EXCEL_STYLES.dataCell({ align, bold, colorRgb });
+      }
     }
 
-    ws['!cols'] = [
-      { wch: 5 }, { wch: 22 }, { wch: 13 }, { wch: 26 }, { wch: 6 }, { wch: 8 },
-      { wch: 17 }, { wch: 13 }, { wch: 11 }, { wch: 12 }, { wch: 15 },
+    // Summary Section Styles
+    applyRangeStyle(ws, { s: { r: SUMMARY_TITLE_ROW, c: 0 }, e: { r: SUMMARY_TITLE_ROW, c: 9 } }, EXCEL_STYLES.sectionBanner);
+
+    summaryTotalRanges.forEach(r => {
+      applyRangeStyle(ws, { s: { r, c: 0 }, e: { r, c: 2 } }, EXCEL_STYLES.summaryLabel);
+      const valRef = XLSX.utils.encode_cell({ r, c: 3 });
+      if (ws[valRef]) ws[valRef].s = EXCEL_STYLES.summaryValue('right');
+    });
+
+    // Service Breakdown Styles
+    applyRangeStyle(ws, { s: { r: SVC_HEAD_ROW, c: 0 }, e: { r: SVC_HEAD_ROW, c: 2 } }, EXCEL_STYLES.summaryHeader('left'));
+    for (let c = 3; c <= 6; c++) {
+      const ref = XLSX.utils.encode_cell({ r: SVC_HEAD_ROW, c });
+      if (ws[ref]) ws[ref].s = EXCEL_STYLES.summaryHeader('right');
+    }
+
+    svcCtrRows.forEach(r => {
+      applyRangeStyle(ws, { s: { r, c: 0 }, e: { r, c: 2 } }, EXCEL_STYLES.dataCell({ align: 'left', bold: false }));
+      for (let c = 3; c <= 6; c++) {
+        const ref = XLSX.utils.encode_cell({ r, c });
+        if (ws[ref]) ws[ref].s = EXCEL_STYLES.dataCell({ align: 'right', bold: false });
+      }
+    });
+
+    // Dynamic Auto-fit Columns with generous padding and minimum widths
+    ws['!cols'] = computeAutoFitColumns(aoa, merges, [6, 24, 14, 24, 14, 18, 14, 14, 14, 16]);
+
+    // Row heights for visual hierarchy
+    ws['!rows'] = [
+      { hpt: 28 }, // Row 1 Title
+      { hpt: 20 }, // Row 2 Subtitle
+      { hpt: 22 }, // Row 3 Metric Cards
+      { hpt: 6 },  // Row 4 Gap
+      { hpt: 24 }, // Row 5 Table Headers
     ];
-    ws['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } },
-      { s: { r: 1, c: 0 }, e: { r: 1, c: headers.length - 1 } },
-      { s: { r: 4, c: 0 }, e: { r: 4, c: headers.length - 1 } },
-      { s: { r: SUMMARY_TITLE_ROW, c: 0 }, e: { r: SUMMARY_TITLE_ROW, c: headers.length - 1 } },
-    ];
-    // Header row stays visible while scrolling, and the table gets a filter.
+
+    // Freeze header and add autofilter
     ws['!freeze'] = { xSplit: 0, ySplit: HEADER_ROW + 1 };
     ws['!autofilter'] = {
       ref: `${XLSX.utils.encode_cell({ r: HEADER_ROW, c: 0 })}:${XLSX.utils.encode_cell({ r: LAST_DATA_ROW, c: headers.length - 1 })}`,
@@ -852,7 +835,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
   // same header/footer furniture — so the downloaded file matches the preview
   // page for page instead of reflowing to its own rhythm.
   function buildBulkPdf(rows, logoDataUrl = CLINIC_LOGO_BASE64) {
-    const doc = new jsPDF({ orientation: 'landscape', format: 'a4', unit: 'mm', compress: true });
+    const doc = new jsPDF({ orientation: 'landscape', format: 'a4', unit: 'mm' });
     const pageWidth = doc.internal.pageSize.getWidth(); // 297mm
     const pageHeight = doc.internal.pageSize.getHeight(); // 210mm
     const dateGeneratedStr = new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -1030,7 +1013,28 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
   // measured from the rendered document instead, so it ends where the
   // content ends. Null until the iframe reports back.
   const [docSheetHeight, setDocSheetHeight] = useState(null);
-  const [docPages, setDocPages] = useState(1);
+
+  // Built from the patient's actual schedule (lib/doseSchedules.js), e.g.
+  // PEP "Day 0, 3, 7, 28", PrEP "Day 0, 7", Anti-Tetanus "Day 0, 1 month,
+  // 6 months", Pneumonia "single dose (adult)".
+  function getProtocolLabel(p) {
+    const schedule = getSchedule(p?.service);
+    const doses = buildDoses(p);
+    const doneCount = doses.filter(d => (d.s || d.status) === 'done' || d.done === true).length;
+    let timing;
+    if (schedule.doses.length === 1) {
+      timing = p?.service === 'Pneumonia' ? 'single dose (adult)' : 'single dose';
+    } else {
+      timing = schedule.doses.map((d, i) => (
+        typeof d.month === 'number'
+          ? `${d.month} month${d.month === 1 ? '' : 's'}`
+          : (i === 0 ? `Day ${d.day || 0}` : String(d.day || 0))
+      )).join(', ');
+    }
+    const hasERIG = p?.service === 'PEP' && doses.some(d => (d.n || d.label || '').includes('ERIG'));
+    const progress = doses.length ? ` · ${doneCount} of ${doses.length} dose${doses.length === 1 ? '' : 's'} given` : '';
+    return `${hasERIG ? 'ERIG + ' : ''}${schedule.label}: ${timing}${progress}`;
+  }
 
   const PATIENT_HIDDEN_NOTE = 'Wound assessment details are held in your clinical file at K&A Clinic.';
 
@@ -1046,177 +1050,97 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     const registered = rawDate
       ? (formatDateLong(rawDate) || formatDateShort(rawDate) || String(rawDate).split('T')[0])
       : (p.date || '—');
-    // A previous case (exported from its pop-up) keeps the status it was
-    // saved with; its doses are not re-judged against today.
-    const historical = Boolean(p.isHistoricalCase);
-    const st = historical ? String(p.status || 'completed').toLowerCase() : derivePatientStatus(p);
+    const st = derivePatientStatus(p);
     const isPEP = (p.service || '').trim().toUpperCase() === 'PEP';
-    const caseNo = historical
-      ? `Case #${p.historicalIndex} (previous case)`
-      : p.firestoreId ? p.firestoreId.slice(0, 8).toUpperCase() : (p.id || '—');
-    const completedRaw = p.completedAt || p.closedAt;
-    const completed = completedRaw
-      ? (formatDateLong(completedRaw) || formatDateShort(completedRaw) || String(completedRaw).split('T')[0])
-      : '—';
-
-    function resolvePrimaryAttending(record) {
-      const doses = Array.isArray(record?.doses) ? record.doses : [];
-      const firstGiven = doses.find(d => {
-        const s = String(d?.status || d?.s || '').toLowerCase();
-        return s === 'done' || s === 'completed' || d?.done;
-      });
-      const firstAttending = firstGiven?.attendingName || firstGiven?.givenByName || firstGiven?.administeredBy || firstGiven?.staff;
-      if (firstAttending && String(firstAttending).trim()) return String(firstAttending).trim();
-      if (record?.registeredByName && String(record.registeredByName).trim()) return String(record.registeredByName).trim();
-      return '—';
-    }
-    const primaryAttending = resolvePrimaryAttending(p);
+    const caseNo = p.firestoreId ? p.firestoreId.slice(0, 8).toUpperCase() : (p.id || '—');
 
     const admin = [
-      ['Registration Date', registered, 'MRN', p.id || p.mrn || '—'],
+      ['Date', registered, 'MRN', p.id || p.mrn || '—'],
       ['Account / Case No.', caseNo, 'Ward / Service', `${serviceLabel(p.service || 'PEP')} (Animal Bite Clinic)`],
-      ['Primary Attending', primaryAttending, 'Status', st.toUpperCase()],
-      ...(historical ? [['Completion Date', completed, '', '']] : []),
+      ['Primary Attending', 'Dr. Francis R. Reyes, MD', 'Status', st.toUpperCase()],
     ];
 
-    // Only the fields this service asks (lib/serviceFields.js). The
-    // patient-safe copy drops wound location and depth, as before.
-    const treatmentText = t => `${t.product || 'Treatment'} (${[amountText(t), t.date ? (formatDateShort(t.date) || t.date) : '', (t.attendingName || t.recordedByName || t.staff) ? `by ${t.attendingName || t.recordedByName || t.staff}` : ''].filter(Boolean).join(' · ')})`;
-    const hasTreatments = Array.isArray(p.treatments) && p.treatments.length > 0;
-    const exposureRows = serviceFieldRows(p, 'exposure', { audience, exclude: ['cat'] }).map(r => [r.label, r.value || '—']);
-    const woundWithheld = !showWoundDetail && serviceFieldRows(p, 'exposure').some(r => r.key === 'woundLocation' || r.key === 'woundDepth');
-
-    // Exposure facts and what was given for them. Notes and visit vitals live
-    // in their own Clinical Notes & Reports section below.
-    const exposureDetailRows = [
-      ...(isPEP ? [['Exposure Category', `Category ${p.cat || '—'}`]] : []),
-      ...exposureRows,
-      ...(woundWithheld ? [['Wound Assessment', PATIENT_HIDDEN_NOTE]] : []),
-      ...(showsTreatments(p) ? [['ERIG', erigStatusLabel(p, d => formatDateShort(d) || d)]] : []),
-      ...(hasTreatments ? [[isPEP ? 'Cat III Treatments (RIG / Anti-Tetanus)' : 'Treatments Given', p.treatments.map(treatmentText).join('; ')]] : []),
-    ];
-
-    // Section numbers follow whichever sections this record actually has.
-    let sectionNo = 0;
-    const numbered = title => `${++sectionNo}. ${title}`;
+    const complaintRows = isPEP
+      ? [
+          ['Presenting Complaint', `Clinical evaluation and post-exposure prophylaxis following exposure to ${p.animal || 'animal'} on ${fmtDate(p.date) || registered}. Assessed as Category ${p.cat || '—'} bite exposure.`],
+          ['Exposure Category', `Category ${p.cat || '—'}`],
+          ...(showWoundDetail
+            ? [['Wound Site / Depth', `${p.woundLocation || '—'} · ${p.woundDepth || '—'} · Bites: ${p.numberOfBites || '1'}`]]
+            : [['Wound Assessment', PATIENT_HIDDEN_NOTE]]),
+        ]
+      : [
+          ['Presenting Complaint', `Patient received clinical assessment and vaccination administration under the ${serviceLabel(p.service) || 'vaccination'} protocol.`],
+        ];
 
     const sections = [
       {
-        title: numbered('ENCOUNTER SUMMARY'),
+        title: '1. PATIENT DEMOGRAPHICS',
         rows: [
-          ['Patient Name', formatTitleCase(p.name)],
+          ['Name', formatTitleCase(p.name)],
           ['Age / Gender', `${p.age || '—'} yrs · ${(p.sex || '—').toUpperCase()}`],
           ['Date of Birth', p.dob ? (formatDateLong(p.dob) || p.dob) : '—'],
           ['Height / Weight', `${p.height ? `${p.height} cm` : '—'} · ${p.weight ? `${p.weight} kg` : '—'}`],
           ['Blood Pressure', p.bloodPressure || '—'],
           ['Contact / Address', `${p.contact || '—'} · ${p.address || '—'}`],
+          ['Guarantor / Next of Kin', p.emergencyName
+            ? `${p.emergencyName}${p.emergencyRel ? ` (${p.emergencyRel})` : ''}${p.emergencyPhone ? ` · ${p.emergencyPhone}` : ''}`
+            : (p.guardian || p.emergencyContact || '—')],
+        ],
+      },
+      {
+        title: '2. ENCOUNTER SUMMARY',
+        rows: [
+          ['Encounter Type', 'Outpatient Clinical Consultation & Prophylaxis'],
           ['Protocol / Reason', isPEP ? `Animal Bite Exposure (${p.animal || 'Animal'} Bite)` : `${serviceLabel(p.service) || 'Vaccination'} Protocol`],
-          ['Primary Attending', primaryAttending],
+          ['Registration Date', registered],
+          ['Treatment Protocol', getProtocolLabel(p)],
           ['Attending Facility', 'K&A Animal Bite Treatment Center · Municipality of Libon, Province of Albay'],
         ],
       },
       {
-        title: numbered('MEDICAL HISTORY & PREVIOUS ENCOUNTERS'),
+        title: '3. CHIEF COMPLAINT & CLINICAL DETAILS',
+        rows: complaintRows,
+      },
+      {
+        title: '4. MEDICAL HISTORY',
         rows: [
-          ...serviceFieldRows(p, 'history', { audience, exclude: ['notes'] }).map(r => [r.label, r.value || '—']),
-          ...(Array.isArray(p.caseHistory) && p.caseHistory.length > 0
-            ? [['Previous Case Encounters', `${p.caseHistory.length} prior service encounter(s) recorded under this MRN (see Previous Services table below)`]]
-            : []),
+          ['Past Vaccines', p.pastVaccines || 'None reported'],
+          ['Allergies', p.allergies || 'No known allergies'],
         ],
       },
-      ...(exposureDetailRows.length
-        ? [{ title: numbered(isPEP ? 'EXPOSURE DETAILS' : 'CLINICAL DETAILS'), rows: exposureDetailRows }]
-        : []),
     ];
 
-    // A historical case lists the stored doses as saved (amount and staff
-    // included); "—" where an old case never saved them.
-    const rawDoses = Array.isArray(p.doses) ? p.doses : [];
-    const doseRows = (historical ? rawDoses : doses).map((d, i) => {
+    const doseRows = doses.map(d => {
       const rawStatus = String(d.status || d.s || 'pending').toLowerCase();
       const isDone = rawStatus === 'done' || rawStatus === 'completed' || d.done === true;
-      const isMiss = !isDone && (rawStatus === 'miss' || rawStatus === 'missed' || rawStatus === 'overdue');
-      const raw = rawDoses[i] || {};
-      const ml = raw.ml ?? raw.mg;
+      const isMiss = rawStatus === 'miss' || rawStatus === 'missed' || rawStatus === 'overdue';
       return {
         label: d.label || d.n || d.dose || d.name || 'Dose',
         date: d.date ? (formatDateShort(d.date) || d.date) : '—',
-        status: historical ? (isDone ? 'Given' : isMiss ? 'Missed' : 'Not given') : isMiss ? 'Overdue' : isDone ? 'Completed' : 'Scheduled',
+        status: isMiss ? 'Overdue' : isDone ? 'Completed' : 'Scheduled',
         kind: isMiss ? 'miss' : isDone ? 'done' : 'pending',
-        amount: ml != null && ml !== '' ? `${ml} mL` : '—',
-        by: raw.attendingName || raw.givenByName || raw.administeredBy || raw.staff || '—',
       };
     });
 
-    const previousServicesRows = (Array.isArray(p.caseHistory) && p.caseHistory.length > 0)
-      ? p.caseHistory.map((h, i) => {
-          const hDoses = Array.isArray(h.doses) ? h.doses : [];
-          const hDone = hDoses.filter(d => d.s === 'done' || d.status === 'done' || d.done).length;
-          const hTreat = Array.isArray(h.treatments) && h.treatments.length
-            ? h.treatments.map(t => `${t.product}${amountText(t) ? ` (${amountText(t)})` : ''}`).join(', ')
-            : showsTreatments(h) ? 'None' : '';
-          return {
-            caseNo: `Case #${i + 1}`,
-            service: `${serviceLabel(h.service || 'PEP')}${h.cat ? ` (Cat ${h.cat})` : ''}`,
-            date: formatDateShort(h.date || h.closedAt) || h.date || '—',
-            doses: `${hDone}/${hDoses.length}`,
-            treatments: hTreat,
-            status: (h.status || 'completed').toUpperCase(),
-          };
-        })
-      : [];
-
-    // Logged visit assessments from the record's "Clinical Reports & Nurse
-    // Notes" card (BP, weight, temperature, notes, attending), oldest first,
-    // after any remarks written at registration. The patient-safe copy drops
-    // wound condition, as above.
-    const registrationRemarks = p.notes ? [{
-      date: formatDateShort(rawDate) || registered,
-      title: 'Registration Remarks',
-      vitals: '—',
-      observations: '—',
-      notes: p.notes,
-      author: p.registeredByName || '—',
-    }] : [];
-    const clinicalReportRows = [...registrationRemarks, ...(Array.isArray(p.reports) ? p.reports : [])
-      .slice()
-      .sort((a, b) => String(a.date || a.createdAt || '').localeCompare(String(b.date || b.createdAt || '')))
-      .map(rep => ({
-        date: formatDateShort(rep.date || rep.createdAt) || rep.date || '—',
-        title: rep.title || 'Clinical Assessment',
-        vitals: [
-          rep.bp && `BP ${rep.bp}`,
-          rep.pulse && `Pulse ${rep.pulse}`,
-          rep.temp && `Temp ${rep.temp}°C`,
-          rep.weight && `Wt ${rep.weight} kg`,
-        ].filter(Boolean).join(' · ') || '—',
-        observations: [
-          rep.injectionSite && `Site: ${rep.injectionSite}`,
-          showWoundDetail && rep.woundCondition && `Wound: ${rep.woundCondition}`,
-          rep.adverseEvent && `Adverse event: ${rep.adverseEvent}`,
-        ].filter(Boolean).join('; ') || '—',
-        notes: rep.notes || '—',
-        author: rep.author || '—',
-      }))];
-
-    const clinicalReportsTitle = clinicalReportRows.length ? numbered('CLINICAL NOTES & REPORTS') : '';
-    const doseSectionTitle = numbered('VACCINATION DOSING SCHEDULE');
-    const previousServicesTitle = previousServicesRows.length ? numbered('PREVIOUS SERVICES & CASE HISTORY') : '';
+    const assessment = [
+      ['Assessment', st === 'completed'
+        ? 'Successfully completed full prescribed post-exposure prophylaxis regimen with no adverse reactions.'
+        : 'Ongoing vaccination treatment. Patient is adhering to protocol.'],
+      ['Plan & Recommendations', 'Complete remaining scheduled vaccine doses on designated dates. Maintain proper wound care hygiene. Avoid applying irritants or traditional remedies to bite wound. Report any fever, malaise, or neurological symptoms immediately.'],
+    ];
 
     return {
-      title: historical ? `PATIENT MEDICAL REPORT (HISTORICAL CASE #${p.historicalIndex})` : 'PATIENT MEDICAL REPORT',
       registered,
       status: st,
-      doseDetail: true,
       admin,
       sections,
-      clinicalReportsTitle,
-      clinicalReportRows,
-      doseSectionTitle,
+      doseSectionTitle: '5. VACCINATION DOSING SCHEDULE',
       doseRows,
-      previousServicesTitle,
-      previousServicesRows,
+      assessmentTitle: '6. ASSESSMENTS & RECOMMENDATIONS',
+      assessment,
       officer: {
+        name: 'Dr. Francis R. Reyes, MD',
+        license: 'PRC License # 0123456 · Animal Bite Treatment Specialist',
         issued: `Date Issued: ${new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}`,
         badge: 'VERIFIED EHR CLINICAL RECORD',
       },
@@ -1239,7 +1163,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     const CELL = 'padding:4.5px 8px;border:1px solid #CBD5E1;font-size:9.5px;line-height:1.45;';
     const LABEL_CELL = `${CELL}background:#F8FAFC;color:#475569;font-weight:700;width:26%;vertical-align:top;`;
     const VALUE_CELL = `${CELL}color:#0F172A;vertical-align:top;`;
-    const statusColor = m.status === 'overdue' ? '#DC2626' : '#0F172A';
+    const statusColor = m.status === 'completed' ? '#15803D' : m.status === 'overdue' ? '#DC2626' : '#1D4ED8';
 
     // Administrative box: two label/value pairs per row, the same 4-column
     // shape autoTable draws in the PDF.
@@ -1254,7 +1178,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     const sectionHtml = (title, rows) => `
       <table style="width:100%;border-collapse:collapse;margin-bottom:8px;table-layout:fixed;">
         <thead>
-          <tr><th colspan="2" style="${CELL}background:#F1F5F9;color:#0F172A;text-align:left;font-weight:700;letter-spacing:.3px;">${escapeHtml(title)}</th></tr>
+          <tr><th colspan="2" style="${CELL}background:#0A1D47;color:#FFFFFF;text-align:left;font-weight:700;letter-spacing:.3px;">${escapeHtml(title)}</th></tr>
         </thead>
         <tbody>
           ${rows.map(([label, value]) => `
@@ -1265,15 +1189,14 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
         </tbody>
       </table>`;
 
-    // A historical case adds the amount given and who gave each dose.
-    const HEAD = `${CELL}background:#F1F5F9;color:#0F172A;text-align:left;font-weight:700;`;
-    const doseCols = m.doseDetail
-      ? [['Dose', 24], ['Date', 18], ['Status', 16], ['Amount Given', 16], ['Attending Nurse / Physician', 26]]
-      : [['Dose', 40], ['Scheduled Date', 35], ['Status', 25]];
     const doseTable = `
       <table style="width:100%;border-collapse:collapse;margin-bottom:8px;table-layout:fixed;">
         <thead>
-          <tr>${doseCols.map(([h, w]) => `<th style="${HEAD}width:${w}%;">${h}</th>`).join('')}</tr>
+          <tr>
+            <th style="${CELL}background:#1D4ED8;color:#FFFFFF;text-align:left;font-weight:700;width:40%;">Dose</th>
+            <th style="${CELL}background:#1D4ED8;color:#FFFFFF;text-align:left;font-weight:700;width:35%;">Scheduled Date</th>
+            <th style="${CELL}background:#1D4ED8;color:#FFFFFF;text-align:left;font-weight:700;width:25%;">Status</th>
+          </tr>
         </thead>
         <tbody>
           ${m.doseRows.length
@@ -1282,63 +1205,14 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
             <td style="${VALUE_CELL}">${escapeHtml(d.label)}</td>
             <td style="${VALUE_CELL}">${escapeHtml(d.date)}</td>
             <td style="${VALUE_CELL}font-weight:700;">${escapeHtml(d.status)}</td>
-            ${m.doseDetail ? `<td style="${VALUE_CELL}">${escapeHtml(d.amount)}</td><td style="${VALUE_CELL}">${escapeHtml(d.by)}</td>` : ''}
           </tr>`).join('')
-            : `<tr><td colspan="${doseCols.length}" style="${VALUE_CELL}text-align:center;color:#64748B;">No dose schedule on file.</td></tr>`}
+            : `<tr><td colspan="3" style="${VALUE_CELL}text-align:center;color:#64748B;">No dose schedule on file.</td></tr>`}
         </tbody>
       </table>`;
 
-    const reportCols = [['Date', 11], ['Assessment', 15], ['Vitals', 17], ['Observations', 20], ['Clinical Notes', 23], ['Attending', 14]];
-    const clinicalReportsTable = m.clinicalReportRows.length ? `
-      <div class="mr-title" style="font-size:9.5px;font-weight:800;color:#0F172A;letter-spacing:.3px;margin:10px 0 4px;">${escapeHtml(m.clinicalReportsTitle)}</div>
-      <table style="width:100%;border-collapse:collapse;margin-bottom:8px;table-layout:fixed;">
-        <thead>
-          <tr>${reportCols.map(([h, w]) => `<th style="${CELL}background:#F1F5F9;color:#0F172A;text-align:left;font-weight:700;width:${w}%;">${h}</th>`).join('')}</tr>
-        </thead>
-        <tbody>
-          ${m.clinicalReportRows.map((r, i) => `
-          <tr style="background:${i % 2 ? '#FAFAFC' : '#FFFFFF'};">
-            <td style="${VALUE_CELL}">${escapeHtml(r.date)}</td>
-            <td style="${VALUE_CELL}font-weight:700;">${escapeHtml(r.title)}</td>
-            <td style="${VALUE_CELL}">${escapeHtml(r.vitals)}</td>
-            <td style="${VALUE_CELL}">${escapeHtml(r.observations)}</td>
-            <td style="${VALUE_CELL}">${escapeHtml(r.notes)}</td>
-            <td style="${VALUE_CELL}">${escapeHtml(r.author)}</td>
-          </tr>`).join('')}
-        </tbody>
-      </table>` : '';
-
-    const prevServicesTable = m.previousServicesRows.length ? `
-      <div class="mr-title" style="font-size:9.5px;font-weight:800;color:#0F172A;letter-spacing:.3px;margin:10px 0 4px;">${escapeHtml(m.previousServicesTitle)}</div>
-      <table style="width:100%;border-collapse:collapse;margin-bottom:8px;table-layout:fixed;">
-        <thead>
-          <tr>
-            <th style="${CELL}background:#F1F5F9;color:#0F172A;text-align:left;font-weight:700;width:15%;">Case</th>
-            <th style="${CELL}background:#F1F5F9;color:#0F172A;text-align:left;font-weight:700;width:24%;">Service</th>
-            <th style="${CELL}background:#F1F5F9;color:#0F172A;text-align:left;font-weight:700;width:15%;">Date</th>
-            <th style="${CELL}background:#F1F5F9;color:#0F172A;text-align:left;font-weight:700;width:12%;">Doses</th>
-            <th style="${CELL}background:#F1F5F9;color:#0F172A;text-align:left;font-weight:700;width:20%;">Treatments</th>
-            <th style="${CELL}background:#F1F5F9;color:#0F172A;text-align:left;font-weight:700;width:14%;">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${m.previousServicesRows.map((ps, i) => `
-          <tr style="background:${i % 2 ? '#FAFAFC' : '#FFFFFF'};">
-            <td style="${VALUE_CELL}font-weight:700;">${escapeHtml(ps.caseNo)}</td>
-            <td style="${VALUE_CELL}">${escapeHtml(ps.service)}</td>
-            <td style="${VALUE_CELL}">${escapeHtml(ps.date)}</td>
-            <td style="${VALUE_CELL}">${escapeHtml(ps.doses)}</td>
-            <td style="${VALUE_CELL}">${escapeHtml(ps.treatments)}</td>
-            <td style="${VALUE_CELL}font-weight:700;">${escapeHtml(ps.status)}</td>
-          </tr>`).join('')}
-        </tbody>
-      </table>` : '';
-
-    // mr-head / mr-flow / mr-foot are the hooks paginateMedicalRecord uses to
-    // cut the record into Letter pages, each with the same head and foot.
     return `
-      <div class="mr-doc" style="font-family:'Plus Jakarta Sans','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0F172A;font-size:10px;line-height:1.5;">
-       <div class="mr-head">
+      <div style="font-family:'Plus Jakarta Sans','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0F172A;font-size:10px;line-height:1.5;padding:20px 24px;background:#FFFFFF;">
+
         <!-- Institutional letterhead -->
         <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto 4px;border:none;">
           <tr>
@@ -1347,7 +1221,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
             </td>
             <td style="vertical-align:middle;text-align:center;padding:0 6px;">
               <div style="font-size:15px;font-weight:900;color:#0F172A;letter-spacing:0.6px;text-transform:uppercase;">K&amp;A ANIMAL BITE CENTER</div>
-              <div style="font-size:8.5px;color:#475569;font-weight:700;margin-top:2px;">Caring for Life &bull; Animal Bite Treatment &amp; Care</div>
+              <div style="font-size:8.5px;color:#1D4ED8;font-weight:700;margin-top:2px;">Caring for Life &bull; Animal Bite Treatment &amp; Care</div>
               <div style="font-size:8px;color:#64748B;margin-top:2px;">Municipality of Libon, Province of Albay | Ph: (052) 742-0123 | ka.animalbitecenter@gmail.com</div>
             </td>
             <td style="vertical-align:middle;padding-left:14px;width:62px;text-align:left;">
@@ -1359,11 +1233,9 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
         <div style="border-top:1.6px solid #0A1D47;border-bottom:.6px solid #0A1D47;height:2px;margin:6px 0 10px;"></div>
 
         <div style="text-align:center;margin-bottom:10px;">
-          <h1 style="margin:0;font-size:13px;font-weight:900;color:#0A1D47;letter-spacing:1px;text-transform:uppercase;">${escapeHtml(m.title)}</h1>
+          <h1 style="margin:0;font-size:13px;font-weight:900;color:#0A1D47;letter-spacing:1px;text-transform:uppercase;">PATIENT MEDICAL REPORT</h1>
         </div>
-       </div>
 
-       <div class="mr-flow">
         <!-- Administrative information -->
         <table style="width:100%;border-collapse:collapse;margin-bottom:8px;table-layout:fixed;">
           <thead>
@@ -1374,27 +1246,26 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
 
         ${m.sections.map(s => sectionHtml(s.title, s.rows)).join('')}
 
-        ${clinicalReportsTable}
-
-        <div class="mr-title" style="font-size:9.5px;font-weight:800;color:#0F172A;letter-spacing:.3px;margin:10px 0 4px;">${escapeHtml(m.doseSectionTitle)}</div>
+        <div style="font-size:9.5px;font-weight:800;color:#0F172A;letter-spacing:.3px;margin:10px 0 4px;">${escapeHtml(m.doseSectionTitle)}</div>
         ${doseTable}
 
-        ${prevServicesTable}
+        ${sectionHtml(m.assessmentTitle, m.assessment)}
 
         <!-- Attending officer & verification -->
-        <table class="mr-keep" style="width:100%;border-collapse:collapse;margin-top:10px;border-top:1px solid #CBD5E1;">
+        <table style="width:100%;border-collapse:collapse;margin-top:10px;border-top:1px solid #CBD5E1;">
           <tr>
             <td style="padding-top:8px;font-size:9px;color:#334155;vertical-align:bottom;">
+              <div><strong>Attending Medical Officer:</strong> ${escapeHtml(m.officer.name)}</div>
+              <div style="font-size:8px;color:#64748B;">${escapeHtml(m.officer.license)}</div>
               <div style="font-size:8px;color:#64748B;">${escapeHtml(m.officer.issued)}</div>
             </td>
             <td style="padding-top:8px;text-align:right;vertical-align:bottom;">
-              <span style="display:inline-block;padding:3px 8px;background:#F8FAFC;border:1px solid #CBD5E1;border-radius:4px;font-size:8px;font-weight:700;color:#334155;">${escapeHtml(m.officer.badge)}</span>
+              <span style="display:inline-block;padding:3px 8px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:4px;font-size:8px;font-weight:700;color:#1D4ED8;">${escapeHtml(m.officer.badge)}</span>
             </td>
           </tr>
         </table>
-       </div>
 
-        <div class="mr-foot" style="margin-top:12px;font-size:7.5px;color:#94A3B8;text-align:center;line-height:1.5;">
+        <div style="margin-top:12px;font-size:7.5px;color:#94A3B8;text-align:center;line-height:1.5;">
           ${escapeHtml(m.footer[0])}<br>${escapeHtml(m.footer[1])}
         </div>
       </div>`;
@@ -1410,79 +1281,70 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
       /* Browsers drop table fills when printing unless colour adjustment is
          forced, which is what turned the navy section bars pale grey on paper. */
       *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact;}
-      body{font-family:'Plus Jakarta Sans','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;margin:0;padding:0;background:#EDF0FA;}
-      /* US Letter (8.5 x 11 in) at 96 px per inch. Before paginateMedicalRecord
-         runs, the record is laid out at the page's content width so its
-         measurements match the pages it is cut into. */
-      .mr-doc{width:${LETTER_PX.w}px;padding:${LETTER_PX.padY}px ${LETTER_PX.padX}px;background:#FFFFFF;}
-      .mr-doc[data-paged]{width:auto;padding:0;background:transparent;}
-      .mr-page{width:${LETTER_PX.w}px;height:${LETTER_PX.h}px;padding:${LETTER_PX.padY}px ${LETTER_PX.padX}px;background:#FFFFFF;display:flex;flex-direction:column;overflow:hidden;border-radius:6px;border:1px solid #D8DEF0;box-shadow:0 4px 18px rgba(15,23,42,0.10);}
-      .mr-page + .mr-page{margin-top:${LETTER_PX.gap}px;}
-      .mr-body{flex:1;}
-      .mr-pageno{margin-top:2px;}
+      body{font-family:'Plus Jakarta Sans','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;margin:0;padding:0;background:#FFFFFF;}
       @media print{
-        @page{size:letter portrait;margin:0;}
+        @page{size:A4 portrait;margin:8mm 10mm;}
         html,body{margin:0!important;padding:0!important;background:#FFFFFF!important;}
-        .mr-page{margin:0!important;border:none!important;border-radius:0!important;box-shadow:none!important;break-after:page;page-break-after:always;}
-        .mr-page:last-child{break-after:auto;page-break-after:auto;}
+        /* Keeps the record on one sheet and stops a section splitting across
+           the page break. */
+        body{zoom:0.88;}
+        table{page-break-inside:avoid;break-inside:avoid;}
+        tr,td,th{page-break-inside:avoid;break-inside:avoid;}
+        thead{display:table-header-group;}
       }
     </style>
     </head><body><div>${medicalRecordBodyHtml(p, audience, logoDataUrl || CLINIC_LOGO_BASE64)}</div></body></html>`;
   }
 
-  // A long record flows onto further pages, like the preview; every page gets
-  // the same letterhead, title and footer, drawn once the tables are placed.
+  // `density` scales the table metrics so a long record can be squeezed onto
+  // one sheet — buildDocumentPdf steps through the presets until the whole
+  // report fits, matching the preview, which never paginates.
   function drawMedicalRecordPdf(doc, p, audience = 'clinic', logoDataUrl = clinicLogoBase64Cache || CLINIC_LOGO_BASE64, density = { fontSize: 8, cellPadding: 2.5, gap: 4 }) {
     if (!p) return;
     const m = buildMedicalRecordModel(p, audience);
     const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    // Room above for the letterhead and title, below for the footer.
-    const PAGE_MARGIN = { top: 35, bottom: 18, left: 14, right: 14 };
 
-    function drawPageHeader() {
-      if (logoDataUrl) {
-        try {
-          doc.addImage(logoDataUrl, 'PNG', 14, 8, 14, 14);
-        } catch (e) {
-          console.warn('Could not add logo to single report PDF:', e);
-        }
-      }
-      // Libon municipal seal, mirrored on the right at the same size and height.
+    if (logoDataUrl) {
       try {
-        doc.addImage(LIBON_SEAL_BASE64, 'PNG', pageWidth - 14 - 14, 8, 14, 14);
+        doc.addImage(logoDataUrl, 'PNG', 14, 8, 14, 14);
       } catch (e) {
-        console.warn('Could not add Libon seal to single report PDF:', e);
+        console.warn('Could not add logo to single report PDF:', e);
       }
-
-      // Clean institutional header matching report format
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(13);
-      doc.setTextColor(15, 23, 42);
-      doc.text('K&A ANIMAL BITE CENTER', pageWidth / 2, 13, { align: 'center' });
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.5);
-      doc.setTextColor(71, 85, 105);
-      doc.text('Caring for Life · Animal Bite Treatment & Care', pageWidth / 2, 17, { align: 'center' });
-
-      doc.setFontSize(7);
-      doc.setTextColor(100, 116, 139);
-      doc.text('Municipality of Libon, Province of Albay | Ph: (052) 742-0123 | ka.animalbitecenter@gmail.com', pageWidth / 2, 21, { align: 'center' });
-
-      // Double divider line
-      doc.setDrawColor(10, 29, 71);
-      doc.setLineWidth(0.6);
-      doc.line(14, 24, pageWidth - 14, 24);
-      doc.setLineWidth(0.2);
-      doc.line(14, 25.5, pageWidth - 14, 25.5);
-
-      // Document Title
-      doc.setFontSize(12);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(10, 29, 71);
-      doc.text(m.title, pageWidth / 2, 31, { align: 'center' });
     }
+    // Libon municipal seal, mirrored on the right at the same size and height.
+    try {
+      doc.addImage(LIBON_SEAL_BASE64, 'PNG', pageWidth - 14 - 14, 8, 14, 14);
+    } catch (e) {
+      console.warn('Could not add Libon seal to single report PDF:', e);
+    }
+
+    // Clean institutional header matching report format
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(13);
+    doc.setTextColor(15, 23, 42);
+    doc.text('K&A ANIMAL BITE CENTER', pageWidth / 2, 13, { align: 'center' });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(29, 78, 216);
+    doc.text('Caring for Life · Animal Bite Treatment & Care', pageWidth / 2, 17, { align: 'center' });
+
+    doc.setFontSize(7);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Municipality of Libon, Province of Albay | Ph: (052) 742-0123 | ka.animalbitecenter@gmail.com', pageWidth / 2, 21, { align: 'center' });
+
+    // Double divider line
+    doc.setDrawColor(10, 29, 71);
+    doc.setLineWidth(0.6);
+    doc.line(14, 24, pageWidth - 14, 24);
+    doc.setLineWidth(0.2);
+    doc.line(14, 25.5, pageWidth - 14, 25.5);
+
+    // Document Title
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(10, 29, 71);
+    doc.text('PATIENT MEDICAL REPORT', pageWidth / 2, 31, { align: 'center' });
 
     const baseStyles = { fontSize: density.fontSize, cellPadding: density.cellPadding, overflow: 'linebreak', valign: 'top' };
     const GAP = density.gap;
@@ -1490,20 +1352,19 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
 
     // Administrative Information Box
     autoTable(doc, {
-      startY: PAGE_MARGIN.top,
+      startY: 34,
       head: [['ADMINISTRATIVE INFORMATION', '', '', '']],
       body: m.admin,
       theme: 'grid',
       headStyles: { fillColor: [241, 245, 249], textColor: [10, 29, 71], fontStyle: 'bold', fontSize: density.fontSize, halign: 'center' },
       styles: baseStyles,
-      margin: PAGE_MARGIN,
       columnStyles: {
         0: { fontStyle: 'bold', fillColor: [248, 250, 252], textColor: [71, 85, 105], cellWidth: 35 },
         2: { fontStyle: 'bold', fillColor: [248, 250, 252], textColor: [71, 85, 105], cellWidth: 35 },
       },
     });
 
-    // Summary, history and exposure sections, straight off the shared model so the PDF carries every
+    // Sections 1–4, straight off the shared model so the PDF carries every
     // field the preview shows.
     m.sections.forEach(section => {
       autoTable(doc, {
@@ -1511,114 +1372,100 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
         head: [[section.title, '']],
         body: section.rows,
         theme: 'grid',
-        headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontSize: density.fontSize, fontStyle: 'bold' },
+        headStyles: { fillColor: [10, 29, 71], textColor: 255, fontSize: density.fontSize, fontStyle: 'bold' },
         styles: baseStyles,
-        margin: PAGE_MARGIN,
         columnStyles: labelColumn,
       });
     });
 
-    // Numbered section title above a table, as in the preview. Moves to a
-    // new page with its table when too close to the footer.
-    const titled = title => {
-      let y = doc.lastAutoTable.finalY + GAP + 3;
-      if (y + 14 > pageHeight - PAGE_MARGIN.bottom) { doc.addPage(); y = PAGE_MARGIN.top + 3; }
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(density.fontSize + 0.5);
-      doc.setTextColor(15, 23, 42);
-      doc.text(title, PAGE_MARGIN.left, y);
-      return y + 2;
-    };
-
-    // Clinical Notes & Reports (if any): visit vitals and notes.
-    if (m.clinicalReportRows.length) {
-      autoTable(doc, {
-        startY: titled(m.clinicalReportsTitle),
-        head: [['Date', 'Assessment', 'Vitals', 'Observations', 'Clinical Notes', 'Attending']],
-        body: m.clinicalReportRows.map(r => [r.date, r.title, r.vitals, r.observations, r.notes, r.author]),
-        theme: 'grid',
-        headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontSize: density.fontSize, fontStyle: 'bold' },
-        styles: baseStyles,
-        margin: PAGE_MARGIN,
-        columnStyles: { 1: { fontStyle: 'bold' } },
-        alternateRowStyles: { fillColor: [250, 250, 252] },
-      });
-    }
-
-    // Vaccination Dosing Schedule
+    // 5. Vaccination Dosing Schedule
     autoTable(doc, {
-      startY: titled(m.doseSectionTitle),
-      head: [m.doseDetail ? ['Dose', 'Date', 'Status', 'Amount Given', 'Attending Nurse / Physician'] : ['Dose', 'Scheduled Date', 'Status']],
+      startY: doc.lastAutoTable.finalY + GAP,
+      head: [['Dose', 'Scheduled Date', 'Status']],
       body: m.doseRows.length
-        ? m.doseRows.map(d => (m.doseDetail ? [d.label, d.date, d.status, d.amount, d.by] : [d.label, d.date, d.status]))
-        : [m.doseDetail ? ['No dose schedule on file.', '', '', '', ''] : ['No dose schedule on file.', '', '']],
-      headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontSize: density.fontSize, fontStyle: 'bold' },
+        ? m.doseRows.map(d => [d.label, d.date, d.status])
+        : [['No dose schedule on file.', '', '']],
+      headStyles: { fillColor: [29, 78, 216], textColor: 255, fontSize: density.fontSize, fontStyle: 'bold' },
       styles: baseStyles,
-      margin: PAGE_MARGIN,
       alternateRowStyles: { fillColor: [250, 250, 252] },
     });
 
-    // Previous Services & Case History (if any)
-    if (m.previousServicesRows.length) {
-      autoTable(doc, {
-        startY: titled(m.previousServicesTitle),
-        head: [['Case', 'Service', 'Date', 'Doses', 'Treatments', 'Status']],
-        body: m.previousServicesRows.map(ps => [ps.caseNo, ps.service, ps.date, ps.doses, ps.treatments, ps.status]),
-        theme: 'grid',
-        headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontSize: density.fontSize, fontStyle: 'bold' },
-        styles: baseStyles,
-        margin: PAGE_MARGIN,
-        alternateRowStyles: { fillColor: [250, 250, 252] },
-      });
-    }
+    // 6. Assessments & Recommendations
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + GAP,
+      head: [[m.assessmentTitle, '']],
+      body: m.assessment,
+      theme: 'grid',
+      headStyles: { fillColor: [10, 29, 71], textColor: 255, fontSize: density.fontSize, fontStyle: 'bold' },
+      styles: baseStyles,
+      columnStyles: labelColumn,
+    });
 
-    // Issue date & verification, kept in one piece: it moves to a new page
-    // when the last table leaves no room above the footer.
-    const OFFICER_HEIGHT = 12;
-    let y = doc.lastAutoTable.finalY + 8;
-    if (y + OFFICER_HEIGHT > pageHeight - PAGE_MARGIN.bottom) {
-      doc.addPage();
-      y = PAGE_MARGIN.top;
-    }
+    // Attending officer & verification. The block is pinned above the footer
+    // rather than pushed to a second page — buildDocumentPdf re-renders at a
+    // tighter density instead, so the report stays a single sheet.
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const y = Math.min(doc.lastAutoTable.finalY + 8, pageHeight - 26);
     doc.setDrawColor(203, 213, 225);
     doc.setLineWidth(0.2);
     doc.line(14, y, pageWidth - 14, y);
 
     const yText = y + 5;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(51, 65, 85);
+    doc.text('Attending Medical Officer:', 14, yText);
+    const officerLabelWidth = doc.getTextWidth('Attending Medical Officer: ');
     doc.setFont('helvetica', 'normal');
+    doc.text(m.officer.name, 14 + officerLabelWidth, yText);
+
     doc.setFontSize(7);
     doc.setTextColor(100, 116, 139);
-    doc.text(m.officer.issued, 14, yText + 4);
+    doc.text(m.officer.license, 14, yText + 4);
+    doc.text(m.officer.issued, 14, yText + 8);
 
     // Verified badge, right-aligned against the officer block
     doc.setFontSize(7);
     doc.setFont('helvetica', 'bold');
     const badgeWidth = doc.getTextWidth(m.officer.badge) + 6;
     const badgeX = pageWidth - 14 - badgeWidth;
-    doc.setFillColor(248, 250, 252);
-    doc.setDrawColor(203, 213, 225);
+    doc.setFillColor(239, 246, 255);
+    doc.setDrawColor(191, 219, 254);
     doc.roundedRect(badgeX, yText + 1, badgeWidth, 6, 1, 1, 'FD');
-    doc.setTextColor(51, 65, 85);
+    doc.setTextColor(29, 78, 216);
     doc.text(m.officer.badge, badgeX + 3, yText + 5);
 
-    // Letterhead, title and footer on every page, with "Page X of Y".
+    // Footer on every page
     const totalPages = doc.internal.getNumberOfPages();
     for (let i = 1; i <= totalPages; i++) {
       doc.setPage(i);
-      drawPageHeader();
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7);
       doc.setTextColor(148, 163, 184);
       doc.text(m.footer[0], pageWidth / 2, pageHeight - 11, { align: 'center' });
       doc.text(m.footer[1], pageWidth / 2, pageHeight - 7.5, { align: 'center' });
-      doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 4, { align: 'center' });
     }
   }
 
-  // US Letter (8.5 x 11 in), the same paper the preview and print use.
+  // Preview and print show the whole record in one continuous sheet, so the
+  // download must not split mid-table. Each preset is drawn into a throwaway
+  // document; the first that lands on a single page is the one returned, and
+  // the tightest is used as-is if even that overflows.
+  const PDF_DENSITIES = [
+    { fontSize: 8, cellPadding: 2.5, gap: 4 },
+    { fontSize: 7.5, cellPadding: 2, gap: 3.5 },
+    { fontSize: 7, cellPadding: 1.6, gap: 3 },
+    { fontSize: 6.5, cellPadding: 1.2, gap: 2.5 },
+    { fontSize: 6, cellPadding: 1, gap: 2 },
+  ];
+
   function buildDocumentPdf(p, type = 'record', audience = 'clinic', logoDataUrl = clinicLogoBase64Cache || CLINIC_LOGO_BASE64) {
-    const doc = new jsPDF({ unit: 'mm', format: 'letter', compress: true });
-    drawMedicalRecordPdf(doc, p, audience, logoDataUrl);
+    let doc;
+    for (let i = 0; i < PDF_DENSITIES.length; i++) {
+      doc = new jsPDF();
+      drawMedicalRecordPdf(doc, p, audience, logoDataUrl, PDF_DENSITIES[i]);
+      if (doc.internal.getNumberOfPages() === 1) return doc;
+    }
     return doc;
   }
 
@@ -1629,7 +1476,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
   async function exportSinglePatientPdf(p) {
     if (!p) return;
     const logo = (await getClinicLogoBase64()) || logoDataUrl || CLINIC_LOGO_BASE64;
-    buildDocumentPdf(p, docType, 'clinic', logo).save(`medical-report-${p.id || p.mrn || p.firestoreId || 'patient'}${p.isHistoricalCase ? `-case-${p.historicalIndex}` : ''}-${new Date().toISOString().slice(0, 10)}.pdf`);
+    buildDocumentPdf(p, docType, 'clinic', logo).save(`medical-report-${p.id || p.mrn || p.firestoreId || 'patient'}-${new Date().toISOString().slice(0, 10)}.pdf`);
     onToast(`Medical Report exported for ${formatTitleCase(p.name)}`, 'success');
   }
 
@@ -1643,11 +1490,8 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     w.document.write(buildDocumentHtml(p, docType, 'clinic'));
     w.document.close();
     w.focus();
-    // Cut into Letter pages (same head and foot on each) once fonts settle.
     setTimeout(() => {
-      whenFontsReady(w.document).then(() => {
-        try { paginateMedicalRecord(w.document); w.print(); } catch (e) { console.error('Print error:', e); }
-      });
+      try { w.print(); } catch (e) { console.error('Print error:', e); }
     }, 250);
     onToast(`Medical Report opened for printing — ${formatTitleCase(p.name)}`, 'success');
   }
@@ -1664,26 +1508,19 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
         return;
       }
       const logo = (await getClinicLogoBase64()) || logoDataUrl || CLINIC_LOGO_BASE64;
-      const pdf = pdfToBytes(buildBulkPdf(rows, logo));
-      if (!pdf?.byteLength) {
+      const base64 = pdfToBase64(buildBulkPdf(rows, logo));
+      if (!base64) {
         onToast('Could not generate the PDF report. Please try again.', 'error');
         return;
       }
       const statusSlug = statusFilter !== 'all' ? `-${statusFilter}` : '';
-      const sex = sexCounts(rows);
       await sendReportEmail(
         to,
-        `K&A Clinic Report – ${periodLabel()}`,
-        {
-          reportName: 'Clinic Report',
-          period: periodLabel(),
-          generatedOn: reportGeneratedOn(),
-          summary: [
-            `${rows.length} patient${rows.length !== 1 ? 's' : ''} (${sex.male} male, ${sex.female} female) · ${periodLabel()}`,
-            `Filters: ${serviceFilterLabel()} · ${statusFilterLabel()}`,
-          ],
-        },
-        { pdf, filename: `health-monitoring-report-${period}${statusSlug}-${getTodayDateString()}.pdf` }
+        `K&A Clinic — Health Monitoring Report (${periodLabel()})`,
+        `<p>Attached is the K&amp;A Animal Bite Center health monitoring report for <strong>${periodLabel()}</strong>.</p>`
+          + `<p>Service: ${serviceFilterLabel()} &bull; Status: ${statusFilterLabel()} &bull; ${rows.length} patient record${rows.length !== 1 ? 's' : ''}.</p>`
+          + `<p>&mdash; K&amp;A Animal Bite Center</p>`,
+        { base64, filename: `health-monitoring-report-${period}${statusSlug}-${getTodayDateString()}.pdf` }
       );
     } catch (err) {
       console.error('emailBulkReportPdf error:', err);
@@ -1695,26 +1532,16 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     if (!p) return;
     try {
       const logo = (await getClinicLogoBase64()) || logoDataUrl || CLINIC_LOGO_BASE64;
-      const pdf = pdfToBytes(buildDocumentPdf(p, docType, 'patient', logo));
-      if (!pdf?.byteLength) {
+      const base64 = pdfToBase64(buildDocumentPdf(p, docType, 'patient', logo));
+      if (!base64) {
         onToast('Could not generate the PDF attachment. Please try again.', 'error');
         return;
       }
-      // Greet the patient by name only when the report goes to their own address.
-      const toPatient = (p.email || '').trim().toLowerCase() === to.trim().toLowerCase();
       await sendReportEmail(
         to,
-        `K&A Clinic Patient Record – ${formatTitleCase(p.name)}`,
-        {
-          recipientName: toPatient ? formatTitleCase(p.name) : '',
-          reportName: `patient medical record of ${formatTitleCase(p.name)}`,
-          generatedOn: reportGeneratedOn(),
-          summary: [
-            `Patient: ${formatTitleCase(p.name)} · ${p.id || p.mrn || '—'}`,
-            `Service: ${serviceLabel(p.service || 'PEP')}${p.isHistoricalCase ? ` · previous case #${p.historicalIndex}` : ''}`,
-          ],
-        },
-        { pdf, filename: `medical-report-${p.id || p.mrn || p.firestoreId || 'patient'}${p.isHistoricalCase ? `-case-${p.historicalIndex}` : ''}.pdf` }
+        `K&A Clinic — Medical Report for ${formatTitleCase(p.name)}`,
+        `<p>Dear ${formatTitleCase(p.name)},</p><p>Please find your official patient medical report from K&amp;A Animal Bite Center attached as a PDF.</p><p>&mdash; K&amp;A Animal Bite Center</p>`,
+        { base64, filename: `medical-report-${p.id || p.mrn || p.firestoreId || 'patient'}.pdf` }
       );
     } catch (err) {
       console.error('emailSinglePatientPdf error:', err);
@@ -1724,30 +1551,25 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
 
   // The measured height belongs to one specific rendered document; re-measure
   // rather than briefly showing the previous record's sheet size.
-  useEffect(() => { setDocSheetHeight(null); setDocPages(1); }, [selectedPatient, showEmailInput, mode, exportFormat, period, statusFilter, serviceFilter]);
+  useEffect(() => { setDocSheetHeight(null); }, [selectedPatient, showEmailInput, mode, exportFormat, period, statusFilter, serviceFilter]);
 
   const preview = getFilteredPatients();
 
+  // The clinic report is landscape orientation, so the preview sheet turns
+  // landscape for bulk exports and stays portrait for a single patient record.
+  const isLandscapeSheet = mode === 'bulk';
 
   // `allow-same-origin` (with scripts still blocked) is what makes the loaded
   // document readable for the height measurement below.
-  // With `paginate`, the single-patient record is cut into Letter pages
-  // (paginateMedicalRecord) before it is measured.
-  const previewPane = (html, onMeasure, paginate = false) => (
+  const previewPane = (html, onMeasure) => (
     <iframe
       title="Report preview"
       sandbox="allow-same-origin"
       scrolling="no"
       srcDoc={html}
       onLoad={onMeasure ? (e) => {
-        const d = e.currentTarget.contentDocument;
-        if (!d?.body) return;
-        if (!paginate) { onMeasure(Math.ceil(d.body.scrollHeight)); return; }
-        whenFontsReady(d).then(() => {
-          if (!d.body) return;
-          setDocPages(paginateMedicalRecord(d));
-          onMeasure(Math.ceil(d.body.scrollHeight));
-        });
+        const body = e.currentTarget.contentDocument?.body;
+        if (body) onMeasure(Math.ceil(body.scrollHeight));
       } : undefined}
       style={{ display: 'block', width: '100%', height: '100%', border: 'none', background: '#FFFFFF' }}
     />
@@ -1762,15 +1584,16 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     display: 'block', fontSize: '.71875rem', fontWeight: 700, color: '#334155',
     textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 6
   };
-  const previewPages = mode === 'bulk' ? chunkPatientsIntoPages(preview).length : docPages;
+  const previewPages = mode === 'bulk' ? chunkPatientsIntoPages(preview).length : 1;
   // Width is the paper; height comes from whatever the rendered document
-  // actually measured, so a multi-page report shows every page stacked.
-  const sheetWidth = mode === 'bulk' ? 1100 : LETTER_PX.w;
+  // actually measured, so a short record has no trailing blank paper and a
+  // multi-page report shows every page stacked.
+  const sheetWidth = mode === 'bulk' ? 1100 : 820;
   // Full measured height for every document, so the paper never scrolls on
   // its own; the preview area scrolls instead.
   const sheetHeight = mode === 'bulk'
     ? (docSheetHeight || previewPages * 790)
-    : (docSheetHeight || LETTER_PX.h);
+    : (docSheetHeight || 1060);
 
   return (
     <Modal onClose={onClose}>
@@ -1792,16 +1615,12 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-900">
-                {mode === 'single'
-                  ? `Export Patient Record${selectedPatient?.isHistoricalCase ? ` (Historical Case #${selectedPatient.historicalIndex})` : ''} — ${formatTitleCase(selectedPatient?.name || 'Patient')}`
-                  : 'Export Clinic Report'}
+                {mode === 'single' ? `Export Patient Record — ${formatTitleCase(selectedPatient?.name || 'Patient')}` : 'Export Clinic Report'}
               </h3>
               <p className="text-[11px] text-slate-500 font-normal mt-0.5">
-                {mode !== 'single'
-                  ? 'Download, print, or email official clinic registry reports'
-                  : selectedPatient?.isHistoricalCase
-                  ? `Previous case from its saved snapshot, not the active case · Registered ${formatDateShort(selectedPatient.date) || '—'} · Completed ${formatDateShort(selectedPatient.completedAt || selectedPatient.closedAt) || '—'}`
-                  : `Official patient medical report for ${formatTitleCase(selectedPatient?.name || 'Patient')}`}
+                {mode === 'single'
+                  ? `Official patient medical report for ${formatTitleCase(selectedPatient?.name || 'Patient')}`
+                  : 'Download, print, or email official clinic registry reports'}
               </p>
             </div>
           </div>
@@ -1857,10 +1676,46 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
                 {/* Export Format */}
                 <div>
                   <label style={labelStyle}>Export Format</label>
-                  <Select value={exportFormat} onChange={e => setExportFormat(e.target.value)} style={selectStyle}>
-                    <option value="pdf">PDF – Official printout</option>
-                    <option value="xls">Excel – Raw data</option>
-                  </Select>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setExportFormat('pdf')}
+                      className={`p-2.5 rounded-xl border text-left flex items-center gap-2.5 transition-all cursor-pointer ${
+                        exportFormat === 'pdf' ? 'border-[#3B50DF] bg-[#EEF2FF] shadow-xs ring-1 ring-[#3B50DF]/30' : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-[10px] shrink-0 ${exportFormat === 'pdf' ? 'bg-[#3B50DF] text-white' : 'bg-slate-100 text-slate-600'}`}>
+                        PDF
+                      </div>
+                      <div>
+                        <div className="text-[11px] font-bold text-slate-900">PDF</div>
+                        <div className="text-[10px] text-slate-600">Official printout</div>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExportFormat('xls')}
+                      className={`p-2.5 rounded-xl border text-left flex items-center gap-2.5 transition-all cursor-pointer ${
+                        exportFormat === 'xls' ? 'border-[#3B50DF] bg-[#EEF2FF] shadow-xs ring-1 ring-[#3B50DF]/30' : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-[10px] shrink-0 ${exportFormat === 'xls' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                        XLS
+                      </div>
+                      <div>
+                        <div className="text-[11px] font-bold text-slate-900">Excel</div>
+                        <div className="text-[10px] text-slate-600">Raw data</div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Matching result banner */}
+                <div className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200 text-xs">
+                  <span className="font-medium text-slate-600">Matching records:</span>
+                  <span className="font-extrabold text-[#3B50DF] bg-[#EEF2FF] px-2.5 py-1 rounded-full border border-[#E0E7FF]">
+                    {preview.length} patient{preview.length !== 1 ? 's' : ''}
+                  </span>
                 </div>
               </>
             ) : (
@@ -1868,13 +1723,6 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
                 {/* Target patient */}
                 <div>
                   <label style={labelStyle}>Target Patient Record</label>
-                  {selectedPatient?.isHistoricalCase && (
-                    <div role="note" style={{ marginBottom: 8, background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10, padding: '8px 12px', fontSize: '.71875rem', color: '#92400E', lineHeight: 1.45 }}>
-                      <strong>Historical case #{selectedPatient.historicalIndex}</strong> · {serviceLabel(selectedPatient.service)}<br />
-                      Registered {formatDateShort(selectedPatient.date) || '—'} · Completed {formatDateShort(selectedPatient.completedAt || selectedPatient.closedAt) || '—'}<br />
-                      Exported from this case's saved snapshot, not the active case.
-                    </div>
-                  )}
                   {selectedPatient ? (
                     <div style={{ background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 12, padding: '10px 14px', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
                       <div style={{ fontSize: '.8125rem', fontWeight: 800, color: '#0F172A' }}>
@@ -2006,7 +1854,6 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
                 onClick={() => {
                   setShowEmailInput(v => !v);
                   setSentTo('');
-                  warmReportMailer();
                   if (mode === 'single' && selectedPatient && !emailTo) {
                     setEmailTo(selectedPatient.email || '');
                   }
@@ -2027,15 +1874,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
               </button>
 
               {showEmailInput && (
-                <div ref={emailBoxRef} style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px', background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 8, marginTop: 2, scrollMarginBottom: 4 }}>
-                  {queuedTo && (
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', background: '#EEF2FF', border: '1px solid #C7D2FE', borderRadius: 8 }}>
-                      <Loader2 size={13} style={{ color: '#3B50DF', marginTop: 1, flexShrink: 0, animation: 'spin 1s linear infinite' }} />
-                      <div style={{ fontSize: '.71875rem', color: '#3730A3', lineHeight: 1.45 }}>
-                        <strong>Sending…</strong> to <strong>{queuedTo}</strong>. You can close this window; a message appears when it's done.
-                      </div>
-                    </div>
-                  )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px', background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 8, marginTop: 2 }}>
                   {sentTo && (
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 8 }}>
                       <span style={{ color: '#047857', fontWeight: 800, lineHeight: 1.2 }}>✓</span>
@@ -2045,9 +1884,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
                     </div>
                   )}
                   <input
-                    ref={emailInputRef}
                     type="email"
-                    aria-label="Recipient email"
                     placeholder="Enter recipient email…"
                     value={emailTo}
                     onChange={e => { setEmailTo(e.target.value); setSentTo(''); }}
@@ -2055,28 +1892,31 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
                   />
                   <button
                     type="button"
-                    disabled={!emailTo.trim()}
+                    disabled={sending || !emailTo.trim()}
                     onClick={() =>
                       mode === 'bulk'
                         ? emailBulkReportPdf(emailTo)
                         : emailSinglePatientPdf(selectedPatient, emailTo)
                     }
-                    style={{ width: '100%', height: 38, background: '#3B50DF', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: '.8125rem', cursor: 'pointer', opacity: !emailTo.trim() ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                    style={{ width: '100%', height: 38, background: '#3B50DF', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: '.8125rem', cursor: 'pointer', opacity: (sending || !emailTo.trim()) ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
                   >
-                    Send via Email
+                    {sending ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />Sending… this can take a few seconds</> : 'Send via Email'}
                   </button>
                 </div>
               )}
             </div>
           </div>
 
-          {/* RIGHT PANEL: live paper document preview (shared viewer). Both
-              documents draw their own page chrome and page breaks. */}
+          {/* RIGHT PANEL: live paper document preview (shared viewer). The bulk
+              report draws its own page chrome and page breaks, so only the
+              single-patient document gets a white sheet drawn around it. */}
           <PreviewViewer
             pages={previewPages}
             sheetWidth={sheetWidth}
             sheetHeight={sheetHeight}
-            sheetStyle={{ background: 'transparent' }}
+            sheetStyle={isLandscapeSheet
+              ? { background: 'transparent' }
+              : { background: '#FFFFFF', borderRadius: 6, border: '1px solid #D8DEF0', boxShadow: '0 6px 24px rgba(15,23,42,0.14)' }}
           >
             {mode === 'bulk' ? (
               previewPane(
@@ -2088,8 +1928,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
             ) : selectedPatient ? (
               previewPane(
                 buildDocumentHtml(selectedPatient, docType, showEmailInput ? 'patient' : 'clinic'),
-                setDocSheetHeight,
-                true
+                setDocSheetHeight
               )
             ) : (
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC', color: '#64748B', fontSize: '.875rem' }}>

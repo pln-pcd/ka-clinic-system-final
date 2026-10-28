@@ -3,37 +3,41 @@ import { Download, X, Printer, Mail, Loader2 } from 'lucide-react';
 import Modal from '../../components/Modal';
 import IconButton from '../../components/IconButton';
 import Select from '../../components/Select';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { auth } from '../../lib/firebase';
 import { getTodayDateString } from '../../lib/formatters';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
+import XLSX, { EXCEL_STYLES, EXCEL_PALETTE, applyRangeStyle, computeAutoFitColumns } from '../../lib/excelReport';
 import { CLINIC_LOGO_BASE64 } from '../../assets/clinicLogoBase64';
-import { clinicLogoBase64Cache, drawReportHeader, getClinicLogoBase64 } from '../../lib/pdfReport';
-import { pdfToBytes, reportGeneratedOn, sendReportInBackground, warmReportMailer } from '../../lib/reportMailer';
-import { deriveStockLabel, deriveStockStatus, fmtUnit, formatVials, vialsOf } from '../../lib/inventoryStock';
+import { clinicLogoBase64Cache, drawReportHeader, getClinicLogoBase64, pdfToBase64 } from '../../lib/pdfReport';
+import { deriveStockLabel, deriveStockStatus, fmtUnit } from '../../lib/inventoryStock';
 import PreviewViewer from '../../components/PreviewViewer';
-import { inventoryCategoryLabel } from '../../lib/inventoryCategories';
 
-// The item's Inventory category (lib/inventoryCategories.js), for the
-// report summary and the Category column.
-const vaccineTypeOf = (item) => inventoryCategoryLabel(item);
+// Which vaccine an item is, for the report summary. Immunoglobulin is checked
+// before rabies so ERIG/HRIG are not counted as rabies vaccine. Non-vaccine
+// categories (Medicine, Supply) are grouped by their category.
+function vaccineTypeOf(item) {
+  const n = String(item.name || '').toLowerCase();
+  if ((item.category || 'Vaccine') !== 'Vaccine') return item.category || 'Other';
+  if (/immunoglobulin|\berig\b|\bhrig\b|\brig\b/.test(n)) return 'Rabies Immunoglobulin (RIG)';
+  if (/rabies|rabipur|verorab|speeda|pcec|pvrv|hdcv|\barv\b/.test(n)) return 'Anti-Rabies Vaccine';
+  if (/tetanus|toxoid|\btt\b|\btd\b|\bats\b|\btig\b/.test(n)) return 'Anti-Tetanus';
+  if (/pneumo|prevnar|pcv|ppsv/.test(n)) return 'Pneumococcal';
+  if (/flu|influenza/.test(n)) return 'Influenza';
+  return 'Other Vaccine';
+}
 
 // Closing summary of an inventory report: totals, per vaccine type counts,
 // and every low or out-of-stock item. Out-of-stock items are always listed,
 // so a vaccine at zero never drops out of the report.
-// Stock as the list shows it: whole vials.
-const wholeVials = item => vialsOf(item);
-const stockText = item => formatVials(item);
-
 function buildInventorySummary(rows) {
   const count = { 'in-stock': 0, 'low-stock': 0, 'out-of-stock': 0 };
   const byType = {};
   let units = 0;
   rows.forEach(item => {
     const st = deriveStockStatus(item);
-    const stock = wholeVials(item);
+    const stock = parseInt(item.stock, 10) || 0;
     count[st]++;
     units += Math.max(0, stock);
     const t = vaccineTypeOf(item);
@@ -45,7 +49,7 @@ function buildInventorySummary(rows) {
   return {
     totals: [
       ['Total items', rows.length],
-      ['Vials in stock', units],
+      ['Units in stock', units],
       ['In stock', count['in-stock']],
       ['Low stock', count['low-stock']],
       ['Out of stock', count['out-of-stock']],
@@ -54,12 +58,12 @@ function buildInventorySummary(rows) {
       .map(([t, c]) => [t, c.items, c.units, c['in-stock'], c['low-stock'], c['out-of-stock']]),
     flags: rows
       .filter(i => deriveStockStatus(i) !== 'in-stock')
-      .sort((a, b) => vialsOf(a) - vialsOf(b))
-      .map(i => [i.name || '—', vaccineTypeOf(i), stockText(i), String(parseInt(i.minStock, 10) || 10), deriveStockLabel(i)]),
+      .sort((a, b) => (parseInt(a.stock, 10) || 0) - (parseInt(b.stock, 10) || 0))
+      .map(i => [i.name || '—', vaccineTypeOf(i), String(parseInt(i.stock, 10) || 0), String(parseInt(i.minStock, 10) || 10), deriveStockLabel(i)]),
   };
 }
 
-const SUMMARY_TYPE_HEAD = ['Vaccine type', 'Items', 'Vials', 'In stock', 'Low', 'Out'];
+const SUMMARY_TYPE_HEAD = ['Vaccine type', 'Items', 'Units', 'In stock', 'Low', 'Out'];
 
 const SUMMARY_FLAG_HEAD = ['Needs restocking', 'Type', 'Stock', 'Min', 'Status'];
 
@@ -101,24 +105,12 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
   const [docSheetHeight, setDocSheetHeight] = useState(null);
 
   const [showEmailInput, setShowEmailInput] = useState(false);
-  // The settings column scrolls; opening the email box brings it (field,
-  // Send button and status) into view and puts the cursor in the field.
-  const emailBoxRef = useRef(null);
-  const emailInputRef = useRef(null);
-  useEffect(() => {
-    if (!showEmailInput) return;
-    const id = requestAnimationFrame(() => {
-      emailBoxRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
-      emailInputRef.current?.focus({ preventScroll: true });
-    });
-    return () => cancelAnimationFrame(id);
-  }, [showEmailInput]);
   const [emailTo, setEmailTo] = useState('');
+  const [sending, setSending] = useState(false);
   const [sentTo, setSentTo] = useState('');
-  const [queuedTo, setQueuedTo] = useState('');
 
   // Extract unique categories
-  const categories = Array.from(new Set(inventory.map(i => inventoryCategoryLabel(i)))).sort();
+  const categories = Array.from(new Set(inventory.map(i => (i.category || '').trim()).filter(Boolean)));
 
   function getItemTimestamp(item) {
     if (item.createdAt) {
@@ -163,7 +155,7 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
 
       // Category filter
       if (categoryFilter !== 'all') {
-        if (inventoryCategoryLabel(item) !== categoryFilter) return false;
+        if ((item.category || '').trim().toLowerCase() !== categoryFilter.trim().toLowerCase()) return false;
       }
 
       // Status filter
@@ -199,9 +191,7 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
     return 'All Statuses';
   }
 
-  // The send runs in the background (lib/reportMailer.js) with its own
-  // progress toast, so the dialog is free again at once and can be closed.
-  function sendReportEmail(to, subject, report, attachment) {
+  async function sendReportEmail(to, subject, html, attachment) {
     const trimmed = to.trim();
     if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
       onToast('Enter a valid recipient email address.', 'error');
@@ -211,14 +201,36 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
       onToast('You must be signed in as an administrator to send reports.', 'error');
       return;
     }
-    setQueuedTo(trimmed);
-    setSentTo('');
-    setEmailTo('');
-    sendReportInBackground({ to: trimmed, subject, report, pdf: attachment.pdf, filename: attachment.filename })
-      .then(ok => {
-        setQueuedTo(q => (q === trimmed ? '' : q));
-        if (ok) setSentTo(trimmed);
+    setSending(true);
+    try {
+      const idToken = await auth.currentUser.getIdToken(true);
+      const res = await fetch('/api/send-patient-report', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          to: trimmed,
+          subject,
+          html,
+          ...(attachment ? { attachmentBase64: attachment.base64, attachmentFilename: attachment.filename } : {}),
+        }),
       });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
+        onToast(`Report emailed to ${trimmed}`, 'success');
+        setSentTo(trimmed);
+        setEmailTo('');
+      } else {
+        onToast(data?.error || `Failed to send email (${res.status} ${res.statusText})`, 'error');
+      }
+    } catch (err) {
+      console.error('sendReportEmail error:', err);
+      onToast(err?.message || 'Network error while sending the email.', 'error');
+    } finally {
+      setSending(false);
+    }
   }
 
   // Realistic Microsoft Excel Live Table Preview HTML
@@ -245,8 +257,8 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
             <td class="row-num">${rowNum}</td>
             <td style="text-align:center;">${idx + 1}</td>
             <td style="font-weight:bold;color:#0F172A;">${item.name || '—'}</td>
-            <td style="text-align:center;">${inventoryCategoryLabel(item)}</td>
-            <td style="text-align:center;font-weight:bold;">${vialsOf(item)}</td>
+            <td style="text-align:center;">${item.category || 'General'}</td>
+            <td style="text-align:center;font-weight:bold;">${item.stock !== undefined && item.stock !== null ? item.stock : 0}</td>
             <td style="text-align:center;">${fmtUnit(item.unit) || 'Vials'}</td>
             <td style="text-align:center;">${item.minStock !== undefined && item.minStock !== null ? item.minStock : 10}</td>
             <td style="text-align:center;">${item.expiry || item.expiryDate || '—'}</td>
@@ -269,6 +281,17 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
 
       <div class="sheet-container">
         <table class="excel-grid">
+          <colgroup>
+            <col style="width:36px;" />
+            <col style="width:40px;" />
+            <col style="width:230px;" />
+            <col style="width:140px;" />
+            <col style="width:90px;" />
+            <col style="width:90px;" />
+            <col style="width:90px;" />
+            <col style="width:110px;" />
+            <col style="width:110px;" />
+          </colgroup>
           <thead>
             <tr>
               <th class="col-head" style="width:36px;"></th>
@@ -371,8 +394,8 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
             <tr>
               <td class="col-center">${startNum + i + 1}</td>
               <td class="col-left" style="font-weight:700;">${item.name || '—'}</td>
-              <td class="col-center">${inventoryCategoryLabel(item)}</td>
-              <td class="col-center" style="font-weight:700;">${vialsOf(item)}</td>
+              <td class="col-center">${item.category || 'General'}</td>
+              <td class="col-center" style="font-weight:700;">${item.stock !== undefined && item.stock !== null ? item.stock : 0}</td>
               <td class="col-center">${fmtUnit(item.unit) || 'Vials'}</td>
               <td class="col-center">${item.minStock !== undefined && item.minStock !== null ? item.minStock : 10}</td>
               <td class="col-center">${item.expiry || item.expiryDate || '—'}</td>
@@ -535,7 +558,7 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
   }
 
   function buildInventoryBulkPdf(rows, logoDataUrl = CLINIC_LOGO_BASE64) {
-    const doc = new jsPDF({ orientation: 'landscape', format: 'a4', unit: 'mm', compress: true });
+    const doc = new jsPDF({ orientation: 'landscape', format: 'a4', unit: 'mm' });
     const pageWidth = doc.internal.pageSize.getWidth(); // 297mm
     const pageHeight = doc.internal.pageSize.getHeight(); // 210mm
     const dateGeneratedStr = new Date().toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -570,8 +593,8 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
       return [
         startNum + i + 1,
         item.name || '—',
-        inventoryCategoryLabel(item),
-        String(vialsOf(item)),
+        item.category || 'General',
+        item.stock !== undefined && item.stock !== null ? String(item.stock) : '0',
         fmtUnit(item.unit) || 'Vials',
         item.minStock !== undefined && item.minStock !== null ? String(item.minStock) : '10',
         item.expiry || item.expiryDate || '—',
@@ -682,51 +705,45 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
     onToast(`Landscape PDF exported (${rows.length} item${rows.length !== 1 ? 's' : ''})`, 'success');
   }
 
+  // Excel XLSX Export — formatted spreadsheet matching live preview exactly
   function exportBulkXLS() {
     const rows = getFilteredItems();
     if (rows.length === 0) { onToast('No inventory items found for this period', 'error'); return; }
 
     const statusCount = { inStock: 0, lowStock: 0, outOfStock: 0 };
-    const categoryCount = {};
     rows.forEach(item => {
       const st = deriveStockStatus(item);
       if (st === 'in-stock') statusCount.inStock++;
       else if (st === 'low-stock') statusCount.lowStock++;
       else statusCount.outOfStock++;
-
-      const cat = inventoryCategoryLabel(item);
-      categoryCount[cat] = (categoryCount[cat] || 0) + 1;
     });
-
-    const categoryPct = (n) => (rows.length ? `${Math.round((n / rows.length) * 1000) / 10}%` : '0%');
-    const categoryRows = Object.entries(categoryCount)
-      .sort((a, b) => b[1] - a[1])
-      .map(([cat, n]) => [cat, n, categoryPct(n)]);
 
     const headers = ['#', 'Item Name / Description', 'Category', 'Stock Level', 'Unit', 'Min Stock', 'Expiration Date', 'Stock Status'];
 
+    // Header layout matching live preview:
+    // Row 1: Title (A1:H1)
+    // Row 2: Subtitle (A2:H2)
+    // Row 3: Metric cards (Total Items, In Stock, Low Stock, Out of Stock)
+    // Row 4: Blank separator row
+    // Row 5: Table Column Headers (A5:H5)
+    const subtitleStr = `Period Covered: ${periodLabel()} | Category: ${categoryFilterLabel()} | Status: ${statusFilterLabel()} | Date Generated: ${new Date().toLocaleString('en-PH')}`;
+
     const aoa = [
-      ['INVENTORY & STOCK MANAGEMENT REGISTRY REPORT'],
-      ['RURAL HEALTH UNIT • ANIMAL BITE TREATMENT CENTER • LIBON, ALBAY'],
-      [`Period Covered: ${periodLabel()}`, `Category: ${categoryFilterLabel()}`, `Status: ${statusFilterLabel()}`, `Date Generated: ${new Date().toLocaleString('en-PH')}`],
-      [],
-      ['SUMMARY METRICS'],
-      ['Total Items', rows.length, 'In Stock', statusCount.inStock, 'Low Stock', statusCount.lowStock, 'Out of Stock', statusCount.outOfStock],
-      [],
-      ['CATEGORY BREAKDOWN'],
-      ['Category', 'Items', 'Share'],
-      ...categoryRows,
-      [],
+      ['INVENTORY & STOCK MANAGEMENT REGISTRY REPORT', '', '', '', '', '', '', ''],
+      [subtitleStr, '', '', '', '', '', '', ''],
+      [`Total Items: ${rows.length}`, '', `In Stock: ${statusCount.inStock}`, '', `Low Stock: ${statusCount.lowStock}`, '', `Out of Stock: ${statusCount.outOfStock}`, ''],
+      ['', '', '', '', '', '', '', ''],
       headers,
     ];
 
-    const HEADER_ROW = aoa.length - 1;
+    const HEADER_ROW = 4; // 0-indexed row 4 is Excel Row 5
+
     rows.forEach((item, idx) => {
       aoa.push([
         idx + 1,
         item.name || '—',
-        inventoryCategoryLabel(item),
-        vialsOf(item),
+        item.category || 'General',
+        item.stock !== undefined && item.stock !== null ? Number(item.stock) : 0,
         fmtUnit(item.unit) || 'Vials',
         item.minStock !== undefined && item.minStock !== null ? Number(item.minStock) : 10,
         item.expiry || item.expiryDate || '—',
@@ -735,33 +752,189 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
     });
 
     const LAST_DATA_ROW = aoa.length - 1;
+
+    // Blank separator
+    aoa.push(['', '', '', '', '', '', '', '']);
+
+    // Summary Section matching live preview
     const summary = buildInventorySummary(rows);
-    aoa.push([], ['INVENTORY SUMMARY']);
-    const SUMMARY_TITLE_ROW = aoa.length - 1;
-    summary.totals.forEach(r => aoa.push(r));
-    aoa.push([], SUMMARY_TYPE_HEAD, ...summary.types);
-    if (summary.flags.length) aoa.push([], SUMMARY_FLAG_HEAD, ...summary.flags);
+    const SUMMARY_TITLE_ROW = aoa.length;
+    aoa.push(['INVENTORY SUMMARY', '', '', '', '', '', '', '']);
 
-    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    const summaryTotalRanges = [];
+    summary.totals.forEach(([k, v]) => {
+      const rIdx = aoa.length;
+      aoa.push([k, '', '', v, '', '', '', '']);
+      summaryTotalRanges.push(rIdx);
+    });
 
-    const TEXT_COLUMNS = [6];
-    for (let r = HEADER_ROW + 1; r <= LAST_DATA_ROW; r++) {
-      TEXT_COLUMNS.forEach(c => {
-        const ref = XLSX.utils.encode_cell({ r, c });
-        const cell = ws[ref];
-        if (cell) { cell.t = 's'; cell.z = '@'; cell.v = String(cell.v); }
+    // Blank separator
+    aoa.push(['', '', '', '', '', '', '', '']);
+
+    // Vaccine Type Breakdown Table
+    const TYPE_HEAD_ROW = aoa.length;
+    aoa.push([SUMMARY_TYPE_HEAD[0], '', '', SUMMARY_TYPE_HEAD[1], SUMMARY_TYPE_HEAD[2], SUMMARY_TYPE_HEAD[3], SUMMARY_TYPE_HEAD[4], SUMMARY_TYPE_HEAD[5]]);
+
+    const typeRows = [];
+    summary.types.forEach(r => {
+      const rIdx = aoa.length;
+      aoa.push([r[0], '', '', r[1], r[2], r[3], r[4], r[5]]);
+      typeRows.push(rIdx);
+    });
+
+    let FLAG_HEAD_ROW = -1;
+    const flagRows = [];
+    if (summary.flags.length) {
+      aoa.push(['', '', '', '', '', '', '', '']);
+      FLAG_HEAD_ROW = aoa.length;
+      aoa.push([SUMMARY_FLAG_HEAD[0], '', '', SUMMARY_FLAG_HEAD[1], SUMMARY_FLAG_HEAD[2], SUMMARY_FLAG_HEAD[3], SUMMARY_FLAG_HEAD[4], '']);
+
+      summary.flags.forEach(f => {
+        const rIdx = aoa.length;
+        aoa.push([f[0], '', '', f[1], f[2], f[3], f[4], '']);
+        flagRows.push(rIdx);
       });
     }
 
-    ws['!cols'] = [
-      { wch: 5 }, { wch: 28 }, { wch: 16 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 16 }, { wch: 16 }
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+    // Merge ranges
+    const merges = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 7 } }, // Row 1 Title
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 7 } }, // Row 2 Subtitle
+      { s: { r: 2, c: 0 }, e: { r: 2, c: 1 } }, // Row 3 Total Items
+      { s: { r: 2, c: 2 }, e: { r: 2, c: 3 } }, // Row 3 In Stock
+      { s: { r: 2, c: 4 }, e: { r: 2, c: 5 } }, // Row 3 Low Stock
+      { s: { r: 2, c: 6 }, e: { r: 2, c: 7 } }, // Row 3 Out of Stock
+      { s: { r: SUMMARY_TITLE_ROW, c: 0 }, e: { r: SUMMARY_TITLE_ROW, c: 7 } }, // INVENTORY SUMMARY title
     ];
-    ws['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } },
-      { s: { r: 1, c: 0 }, e: { r: 1, c: headers.length - 1 } },
-      { s: { r: 4, c: 0 }, e: { r: 4, c: headers.length - 1 } },
-      { s: { r: SUMMARY_TITLE_ROW, c: 0 }, e: { r: SUMMARY_TITLE_ROW, c: headers.length - 1 } },
+
+    summaryTotalRanges.forEach(r => {
+      merges.push({ s: { r, c: 0 }, e: { r, c: 2 } });
+    });
+
+    merges.push({ s: { r: TYPE_HEAD_ROW, c: 0 }, e: { r: TYPE_HEAD_ROW, c: 2 } });
+    typeRows.forEach(r => {
+      merges.push({ s: { r, c: 0 }, e: { r, c: 2 } });
+    });
+
+    if (FLAG_HEAD_ROW !== -1) {
+      merges.push({ s: { r: FLAG_HEAD_ROW, c: 0 }, e: { r: FLAG_HEAD_ROW, c: 2 } });
+      flagRows.forEach(r => {
+        merges.push({ s: { r, c: 0 }, e: { r, c: 2 } });
+      });
+    }
+
+    ws['!merges'] = merges;
+
+    // Apply styles to all cells
+    // Row 1 Title Banner
+    applyRangeStyle(ws, { s: { r: 0, c: 0 }, e: { r: 0, c: 7 } }, EXCEL_STYLES.title);
+
+    // Row 2 Subtitle
+    applyRangeStyle(ws, { s: { r: 1, c: 0 }, e: { r: 1, c: 7 } }, EXCEL_STYLES.subtitle);
+
+    // Row 3 Metric Cards
+    applyRangeStyle(ws, { s: { r: 2, c: 0 }, e: { r: 2, c: 1 } }, EXCEL_STYLES.metricCard(EXCEL_PALETTE.darkText));
+    applyRangeStyle(ws, { s: { r: 2, c: 2 }, e: { r: 2, c: 3 } }, EXCEL_STYLES.metricCard(EXCEL_PALETTE.completedGreen));
+    applyRangeStyle(ws, { s: { r: 2, c: 4 }, e: { r: 2, c: 5 } }, EXCEL_STYLES.metricCard(EXCEL_PALETTE.lowStockAmber));
+    applyRangeStyle(ws, { s: { r: 2, c: 6 }, e: { r: 2, c: 7 } }, EXCEL_STYLES.metricCard(EXCEL_PALETTE.overdueRed));
+
+    // Row 5 Table Headers
+    headers.forEach((h, c) => {
+      const ref = XLSX.utils.encode_cell({ r: HEADER_ROW, c });
+      const align = (h === '#' || h === 'Stock Level' || h === 'Unit' || h === 'Min Stock' || h === 'Expiration Date' || h === 'Stock Status') ? 'center' : 'left';
+      if (!ws[ref]) ws[ref] = { t: 's', v: h };
+      ws[ref].s = EXCEL_STYLES.tableHeader(align);
+    });
+
+    // Inventory Data Rows
+    for (let r = HEADER_ROW + 1; r <= LAST_DATA_ROW; r++) {
+      const stCell = ws[XLSX.utils.encode_cell({ r, c: 7 })];
+      const stVal = stCell ? String(stCell.v).toUpperCase() : '';
+      const stColor = stVal === 'IN STOCK' ? EXCEL_PALETTE.completedGreen : stVal === 'LOW STOCK' ? EXCEL_PALETTE.lowStockAmber : EXCEL_PALETTE.overdueRed;
+
+      for (let c = 0; c < 8; c++) {
+        const ref = XLSX.utils.encode_cell({ r, c });
+        const cell = ws[ref];
+        if (!cell) continue;
+
+        let align = 'left';
+        let bold = false;
+        let colorRgb = EXCEL_PALETTE.bodyText;
+
+        // Force string type for Expiration Date
+        if (c === 6) {
+          cell.t = 's';
+          cell.z = '@';
+          cell.v = String(cell.v);
+        }
+
+        if (c === 0 || c === 2 || c === 3 || c === 4 || c === 5 || c === 6) align = 'center';
+        if (c === 1 || c === 3) bold = true;
+        if (c === 7) {
+          align = 'center';
+          bold = true;
+          colorRgb = stColor;
+        }
+
+        cell.s = EXCEL_STYLES.dataCell({ align, bold, colorRgb });
+      }
+    }
+
+    // Summary Section Styles
+    applyRangeStyle(ws, { s: { r: SUMMARY_TITLE_ROW, c: 0 }, e: { r: SUMMARY_TITLE_ROW, c: 7 } }, EXCEL_STYLES.sectionBanner);
+
+    summaryTotalRanges.forEach(r => {
+      applyRangeStyle(ws, { s: { r, c: 0 }, e: { r, c: 2 } }, EXCEL_STYLES.summaryLabel);
+      const valRef = XLSX.utils.encode_cell({ r, c: 3 });
+      if (ws[valRef]) ws[valRef].s = EXCEL_STYLES.summaryValue('center');
+    });
+
+    // Vaccine Type Breakdown Styles
+    applyRangeStyle(ws, { s: { r: TYPE_HEAD_ROW, c: 0 }, e: { r: TYPE_HEAD_ROW, c: 2 } }, EXCEL_STYLES.summaryHeader('left'));
+    for (let c = 3; c <= 7; c++) {
+      const ref = XLSX.utils.encode_cell({ r: TYPE_HEAD_ROW, c });
+      if (ws[ref]) ws[ref].s = EXCEL_STYLES.summaryHeader('center');
+    }
+
+    typeRows.forEach(r => {
+      applyRangeStyle(ws, { s: { r, c: 0 }, e: { r, c: 2 } }, EXCEL_STYLES.dataCell({ align: 'left', bold: false }));
+      for (let c = 3; c <= 7; c++) {
+        const ref = XLSX.utils.encode_cell({ r, c });
+        if (ws[ref]) ws[ref].s = EXCEL_STYLES.dataCell({ align: 'center', bold: false });
+      }
+    });
+
+    if (FLAG_HEAD_ROW !== -1) {
+      applyRangeStyle(ws, { s: { r: FLAG_HEAD_ROW, c: 0 }, e: { r: FLAG_HEAD_ROW, c: 2 } }, EXCEL_STYLES.summaryHeader('left'));
+      for (let c = 3; c <= 6; c++) {
+        const ref = XLSX.utils.encode_cell({ r: FLAG_HEAD_ROW, c });
+        if (ws[ref]) ws[ref].s = EXCEL_STYLES.summaryHeader('center');
+      }
+
+      flagRows.forEach(r => {
+        applyRangeStyle(ws, { s: { r, c: 0 }, e: { r, c: 2 } }, EXCEL_STYLES.dataCell({ align: 'left', bold: false }));
+        for (let c = 3; c <= 6; c++) {
+          const ref = XLSX.utils.encode_cell({ r, c });
+          if (ws[ref]) ws[ref].s = EXCEL_STYLES.dataCell({ align: 'center', bold: false });
+        }
+      });
+    }
+
+    // Dynamic Auto-fit Columns with generous padding and minimum widths
+    ws['!cols'] = computeAutoFitColumns(aoa, merges, [6, 36, 20, 14, 12, 14, 18, 16]);
+
+    // Row heights for visual hierarchy
+    ws['!rows'] = [
+      { hpt: 28 }, // Row 1 Title
+      { hpt: 20 }, // Row 2 Subtitle
+      { hpt: 22 }, // Row 3 Metric Cards
+      { hpt: 6 },  // Row 4 Gap
+      { hpt: 24 }, // Row 5 Table Headers
     ];
+
+    // Freeze header and add autofilter
     ws['!freeze'] = { xSplit: 0, ySplit: HEADER_ROW + 1 };
     ws['!autofilter'] = {
       ref: `${XLSX.utils.encode_cell({ r: HEADER_ROW, c: 0 })}:${XLSX.utils.encode_cell({ r: LAST_DATA_ROW, c: headers.length - 1 })}`,
@@ -788,30 +961,19 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
         return;
       }
       const logo = (await getClinicLogoBase64()) || logoDataUrl || CLINIC_LOGO_BASE64;
-      const pdf = pdfToBytes(buildInventoryBulkPdf(rows, logo));
-      if (!pdf?.byteLength) {
+      const base64 = pdfToBase64(buildInventoryBulkPdf(rows, logo));
+      if (!base64) {
         onToast('Could not generate the PDF report. Please try again.', 'error');
         return;
       }
       const statusSlug = statusFilter !== 'all' ? `-${statusFilter}` : '';
-      const lowOut = rows.reduce((c, item) => {
-        const st = deriveStockStatus(item);
-        if (st === 'low-stock') c.low++; else if (st === 'out-of-stock') c.out++;
-        return c;
-      }, { low: 0, out: 0 });
       await sendReportEmail(
         to,
-        `K&A Inventory Report – ${periodLabel()}`,
-        {
-          reportName: 'Inventory Stock Report',
-          period: periodLabel(),
-          generatedOn: reportGeneratedOn(),
-          summary: [
-            `${rows.length} item${rows.length !== 1 ? 's' : ''} · ${lowOut.low} low stock · ${lowOut.out} out of stock`,
-            `Filters: ${categoryFilterLabel()} · ${statusFilterLabel()}`,
-          ],
-        },
-        { pdf, filename: `inventory-report-${period}${statusSlug}-${getTodayDateString()}.pdf` }
+        `K&A Clinic — Inventory Stock Report (${periodLabel()})`,
+        `<p>Attached is the K&amp;A Animal Bite Center official inventory stock report for <strong>${periodLabel()}</strong>.</p>`
+          + `<p>Category: ${categoryFilterLabel()} &bull; Status: ${statusFilterLabel()} &bull; ${rows.length} item record${rows.length !== 1 ? 's' : ''}.</p>`
+          + `<p>&mdash; K&amp;A Animal Bite Center</p>`,
+        { base64, filename: `inventory-report-${period}${statusSlug}-${getTodayDateString()}.pdf` }
       );
     } catch (err) {
       console.error('emailBulkReportPdf error:', err);
@@ -922,10 +1084,46 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
             {/* Export Format */}
             <div>
               <label style={labelStyle}>Export Format</label>
-              <Select value={exportFormat} onChange={e => setExportFormat(e.target.value)} style={selectStyle}>
-                <option value="pdf">PDF – Official printout</option>
-                <option value="xls">Excel – Raw data</option>
-              </Select>
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setExportFormat('pdf')}
+                  className={`p-2.5 rounded-xl border text-left flex items-center gap-2.5 transition-all cursor-pointer ${
+                    exportFormat === 'pdf' ? 'border-[#3B50DF] bg-[#EEF2FF] shadow-xs ring-1 ring-[#3B50DF]/30' : 'border-slate-200 bg-white hover:border-slate-300'
+                  }`}
+                >
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-[10px] shrink-0 ${exportFormat === 'pdf' ? 'bg-[#3B50DF] text-white' : 'bg-slate-100 text-slate-600'}`}>
+                    PDF
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-bold text-slate-900">PDF</div>
+                    <div className="text-[10px] text-slate-600">Official printout</div>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExportFormat('xls')}
+                  className={`p-2.5 rounded-xl border text-left flex items-center gap-2.5 transition-all cursor-pointer ${
+                    exportFormat === 'xls' ? 'border-[#3B50DF] bg-[#EEF2FF] shadow-xs ring-1 ring-[#3B50DF]/30' : 'border-slate-200 bg-white hover:border-slate-300'
+                  }`}
+                >
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-[10px] shrink-0 ${exportFormat === 'xls' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                    XLS
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-bold text-slate-900">Excel</div>
+                    <div className="text-[10px] text-slate-600">Raw data</div>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Matching result banner */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200 text-xs">
+              <span className="font-medium text-slate-600">Matching records:</span>
+              <span className="font-extrabold text-[#3B50DF] bg-[#EEF2FF] px-2.5 py-1 rounded-full border border-[#E0E7FF]">
+                {preview.length} item{preview.length !== 1 ? 's' : ''}
+              </span>
             </div>
 
             {/* Actions */}
@@ -964,7 +1162,6 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
                 onClick={() => {
                   setShowEmailInput(v => !v);
                   setSentTo('');
-                  warmReportMailer();
                 }}
                 disabled={preview.length === 0}
                 style={{
@@ -982,15 +1179,7 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
               </button>
 
               {showEmailInput && (
-                <div ref={emailBoxRef} style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px', background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 8, marginTop: 2, scrollMarginBottom: 4 }}>
-                  {queuedTo && (
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', background: '#EEF2FF', border: '1px solid #C7D2FE', borderRadius: 8 }}>
-                      <Loader2 size={13} style={{ color: '#3B50DF', marginTop: 1, flexShrink: 0, animation: 'spin 1s linear infinite' }} />
-                      <div style={{ fontSize: '.71875rem', color: '#3730A3', lineHeight: 1.45 }}>
-                        <strong>Sending…</strong> to <strong>{queuedTo}</strong>. You can close this window; a message appears when it's done.
-                      </div>
-                    </div>
-                  )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px', background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 8, marginTop: 2 }}>
                   {sentTo && (
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 8 }}>
                       <span style={{ color: '#047857', fontWeight: 800, lineHeight: 1.2 }}>✓</span>
@@ -1000,9 +1189,7 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
                     </div>
                   )}
                   <input
-                    ref={emailInputRef}
                     type="email"
-                    aria-label="Recipient email"
                     placeholder="Enter recipient email…"
                     value={emailTo}
                     onChange={e => { setEmailTo(e.target.value); setSentTo(''); }}
@@ -1010,11 +1197,11 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
                   />
                   <button
                     type="button"
-                    disabled={!emailTo.trim()}
+                    disabled={sending || !emailTo.trim()}
                     onClick={() => emailBulkReportPdf(emailTo)}
-                    style={{ width: '100%', height: 38, background: '#3B50DF', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: '.8125rem', cursor: 'pointer', opacity: !emailTo.trim() ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                    style={{ width: '100%', height: 38, background: '#3B50DF', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: '.8125rem', cursor: 'pointer', opacity: (sending || !emailTo.trim()) ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
                   >
-                    Send via Email
+                    {sending ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />Sending… this can take a few seconds</> : 'Send via Email'}
                   </button>
                 </div>
               )}

@@ -67,47 +67,59 @@ service cloud.firestore {
         && (!('notes' in request.resource.data) || (request.resource.data.notes is string && request.resource.data.notes.size() <= 300)));
       allow update: if
         request.resource.data.status != 'declined'
-        && resource.data.status != 'cancelled'
         && (
-          (isAdmin() && request.resource.data.status != 'cancelled') ||
           (
-            ownAppointment(resource.data)
-            && resource.data.status in ['pending', 'confirmed', 'accepted']
-            && request.resource.data.status != 'confirmed'
-            && request.resource.data.status != 'accepted'
-            && request.resource.data.status != 'done'
+            resource.data.status != 'cancelled'
             && (
-              // Patient direct cancellation. Not for an appointment inside a
-              // clinic closure: the patient reschedules it instead.
+              (isAdmin() && request.resource.data.status != 'cancelled') ||
               (
-                request.resource.data.status == 'cancelled'
-                && resource.data.get('affectedByClosure', false) != true
-                && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-                  'status', 'cancelledAt', 'cancelledBy', 'cancelReason', 'cancellationReason', 'updatedAt'
-                ])
-              )
-              ||
-              // Patient reschedule
-              (
-                request.resource.data.status == 'pending'
-                && request.resource.data.date is string && request.resource.data.date.size() > 0
-                && request.resource.data.time is string && request.resource.data.time.size() > 0
-                && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-                  'date', 'time', 'status', 'notes', 'previousDate', 'previousTime',
-                  'rescheduledAt', 'rescheduledCount', 'rescheduleHistory', 'updatedAt',
-                  'affectedByClosure', 'closureId', 'closureReason'
-                ])
-                // A patient may clear the closure flag when moving out of a
-                // closure (1.0.18+), or leave it as is (older apps), but
-                // never set it.
-                && (request.resource.data.get('affectedByClosure', false) != true
-                  || resource.data.get('affectedByClosure', false) == true)
-                && (!('notes' in request.resource.data) || (request.resource.data.notes is string && request.resource.data.notes.size() <= 300))
+                ownAppointment(resource.data)
+                && resource.data.status in ['pending', 'confirmed', 'accepted']
+                && request.resource.data.status != 'confirmed'
+                && request.resource.data.status != 'accepted'
+                && request.resource.data.status != 'done'
+                && (
+                  // Patient direct cancellation. Not for an appointment inside a
+                  // clinic closure: the patient reschedules it instead.
+                  (
+                    request.resource.data.status == 'cancelled'
+                    && resource.data.get('affectedByClosure', false) != true
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                      'status', 'cancelledAt', 'cancelledBy', 'cancelReason', 'cancellationReason', 'updatedAt'
+                    ])
+                  )
+                  ||
+                  // Patient reschedule
+                  (
+                    request.resource.data.status == 'pending'
+                    && request.resource.data.date is string && request.resource.data.date.size() > 0
+                    && request.resource.data.time is string && request.resource.data.time.size() > 0
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                      'date', 'time', 'status', 'notes', 'previousDate', 'previousTime',
+                      'rescheduledAt', 'rescheduledCount', 'rescheduleHistory', 'updatedAt',
+                      'affectedByClosure', 'closureId', 'closureReason'
+                    ])
+                    // A patient may clear the closure flag when moving out of a
+                    // closure (1.0.18+), or leave it as is (older apps), but
+                    // never set it.
+                    && (request.resource.data.get('affectedByClosure', false) != true
+                      || resource.data.get('affectedByClosure', false) == true)
+                    && (!('notes' in request.resource.data) || (request.resource.data.notes is string && request.resource.data.notes.size() <= 300))
+                  )
+                )
               )
             )
           )
+          ||
+          // Patient removing/hiding their own cancelled or declined appointment from their app view
+          (
+            ownAppointment(resource.data)
+            && resource.data.status in ['cancelled', 'declined']
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hiddenByPatient', 'hiddenAt', 'updatedAt'])
+            && request.resource.data.get('hiddenByPatient', false) == true
+          )
         );
-      allow delete: if isAdmin() || (ownAppointment(resource.data) && resource.data.status == 'cancelled');
+      allow delete: if isAdmin();
     }
     // Public occupancy metadata has no names, contact details or MRNs.
     match /appointmentSlots/{id} {

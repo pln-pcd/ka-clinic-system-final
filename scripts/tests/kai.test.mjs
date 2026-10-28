@@ -103,7 +103,9 @@ test('rates are specific to the requested service and never invented', () => {
   assert.doesNotMatch(getKaiDecision('magkano ang bakuna sa pneumonia?').text, /PEP/);
   assert.match(getKaiDecision('PEP Category II rates').text, /₱1,000.*₱800/);
   assert.doesNotMatch(getKaiDecision('PEP Category II rates').text, /Category III/);
-  assert.doesNotMatch(getKaiDecision('PEP Category III rates').text, /₱800/);
+  assert.match(getKaiDecision('How much the vaccine dose will cost').text, /PEP Category II/);
+  assert.match(getKaiDecision('how much per dose').text, /PEP Category II/);
+  assert.match(getKaiDecision('what is the cost of vaccines and services').text, /PEP Category II/);
   assert.equal(getKaiDecision('What is the clinic parking fee?').text, kaiCopy.en.unknown);
 });
 

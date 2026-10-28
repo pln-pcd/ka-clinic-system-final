@@ -60,7 +60,7 @@ function priceReply(q, language) {
   const pneumo = /\b(pneumonia|pneumococcal)\b/i.test(q);
   const pep = /\bpep\b/i.test(q) || /\b(?:cat(?:egory)?\s*)?(?:ii|iii|2|3)\b/i.test(q);
   const all = !lines.length && !pneumo && !pep;
-  if (all && q.replace(/\b(?:hi|hello|hey|what|are|is|the|your|clinic|k&a|how|much|price|prices|pricing|costs?|fees?|rates?|rate|of|for|a|an|vaccine|vaccines|vaccination|vaccinations|anti[- ]?rabies|rabies|bakuna|magkano|po|ang|mga|sa|ba|presyo|bayad|package|packages|lahat|all|total|everything|list|services?|serbisyo|nyo|ninyo|niyo|kayo)\b|[₱\s?.,!&]/gi, '').trim()) return copy.unknown;
+  if (all && q.replace(/\b(?:hi|hello|hey|good\s+(?:morning|afternoon|evening|day)|what|are|is|was|were|be|been|being|the|your|clinic|k&a|how|much|price|prices|pricing|costs?|fees?|rates?|rate|of|for|a|an|vaccin\w*|bakuna\w*|anti[- ]?rabies|rabies|doses?|dosages?|will|would|can|could|does|do|did|per|each|every|one|shots?|jabs?|injections?|sessions?|magkano|po|ang|mga|sa|ba|presyo|bayad|packages?|lahat|all|total|everything|list|services?|serbisyo|nyo|ninyo|niyo|kayo|bawat|kada|isa|isang|it|its|this|that|these|those|overall|complete|available|offer\w*|provide\w*|have|having|and|at|na|naman|din|rin|turok|magpabakuna|pagpapabakuna)\b|[₱\s?.,!&]/gi, '').trim()) return copy.unknown;
   const r = clinicKnowledge.rates;
   const money = n => `₱${n.toLocaleString('en-PH')}`;
   if (all || pep) {

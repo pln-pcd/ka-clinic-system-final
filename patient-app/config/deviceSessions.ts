@@ -172,6 +172,9 @@ export function watchOwnSession(uid: string, deviceId: string, onRevoked: () => 
   return onSnapshot(
     doc(db, 'patientSessions', sessionDocId(uid, deviceId)),
     snap => {
+      // Offline cache snapshots must never cause a logout. Only an authoritative
+      // server snapshot confirms that the session was deleted or revoked.
+      if (snap.metadata.fromCache) return;
       if (!snap.exists() || (snap.data() as any)?.revoked === true) onRevoked();
     },
     e => {

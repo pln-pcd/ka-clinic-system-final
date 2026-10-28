@@ -23,6 +23,7 @@ import {
   Phone,
   Plus,
   RotateCcw,
+  Trash2,
   UserCheck,
   X,
 } from 'lucide-react';
@@ -1141,6 +1142,8 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
   const [reopenConfirm, setReopenConfirm] = useState(null);
   const [reopening, setReopening] = useState(false);
   const [showPastClosures, setShowPastClosures] = useState(false);
+  const [deleteConfirmApt, setDeleteConfirmApt] = useState(null);
+  const [deletingApt, setDeletingApt] = useState(false);
 
   // Ask before closing Close Schedule modal with changes typed in it
   const [requestCloseClosure, closureDiscardDialog] = useDiscardGuard(
@@ -1209,6 +1212,42 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
       return { type: 'day', closure: matches[0], all: matches, slots: uniqueSlots };
     }
     return { type: 'slots', closure: matches[0], all: matches, slots: uniqueSlots };
+  };
+
+  const slotMatches = (slotList, apptTime) => {
+    if (!Array.isArray(slotList) || !apptTime) return false;
+    const tNorm = String(apptTime).trim().toLowerCase();
+    return slotList.some(s => {
+      const sNorm = String(s).trim().toLowerCase();
+      return sNorm === tNorm || sNorm.startsWith(tNorm) || tNorm.startsWith(sNorm);
+    });
+  };
+
+  const isAptInClosure = (apt) => {
+    if (!apt || !apt.date) return false;
+    const st = String(apt.status || '').toLowerCase();
+    if (st === 'cancelled' || st === 'canceled' || st === 'declined' || st === 'done') return false;
+
+    // 1. Direct active closure match for this appointment's date & time
+    const closureInfo = getDayClosure(apt.date);
+    if (closureInfo) {
+      if (closureInfo.type === 'day') return true;
+      if (closureInfo.type === 'slots') {
+        const slots = closureInfo.slots || closureInfo.closure?.slots || [];
+        if (slotMatches(slots, apt.time)) return true;
+      }
+    }
+
+    // 2. Explicit affectedByClosure flag from database (ensure its closure wasn't deactivated/reopened)
+    if (apt.affectedByClosure) {
+      if (apt.closureId) {
+        const matchingClosure = closures.find(c => c.id === apt.closureId);
+        if (matchingClosure && matchingClosure.active === false) return false;
+      }
+      return true;
+    }
+
+    return false;
   };
 
   const openCloseScheduleModal = async (closureToEdit = null) => {
@@ -1338,6 +1377,35 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
     }
   };
 
+  const handleDeleteCancelledAppointment = async () => {
+    if (!deleteConfirmApt) return;
+    setDeletingApt(true);
+    try {
+      const aptId = deleteConfirmApt.id;
+      await deleteDoc(doc(db, 'appointments', aptId));
+      if (deleteConfirmApt.date && deleteConfirmApt.time) {
+        await deleteDoc(doc(db, 'appointmentSlots', slotId(deleteConfirmApt.date, deleteConfirmApt.time))).catch(() => {});
+      }
+      logActivity({
+        action: 'appointment.delete',
+        collection: 'appointments',
+        docId: aptId,
+        summary: `Deleted cancelled appointment for ${deleteConfirmApt.name || 'patient'} (${deleteConfirmApt.date} ${deleteConfirmApt.time || ''})`,
+      });
+      showToast('Cancelled appointment deleted');
+      setDeleteConfirmApt(null);
+      if (editingApt?.id === aptId) {
+        setEditModalOpen(false);
+        setEditingApt(null);
+      }
+    } catch (err) {
+      console.error('Delete cancelled appointment error:', err);
+      showToast(err?.message || 'Failed to delete cancelled appointment', 'error');
+    } finally {
+      setDeletingApt(false);
+    }
+  };
+
   // Calendar Generation
   // Always 6 full weeks (42 cells), so the calendar card is the same height
   // in every month instead of growing and shrinking between 4 and 6 rows.
@@ -1419,7 +1487,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
     return y > 1999 && y < min ? y : min;
   }, Infinity);
   const yearRange = [Math.min(Number.isFinite(firstDataYear) ? firstDataYear : 2024, thisYear), thisYear + 5];
-  const confirmedToday = appointments.filter(a => a.date === todayStr && (a.status === 'confirmed' || a.status === 'accepted')).length;
+  const confirmedToday = appointments.filter(a => a.date === todayStr && (a.status === 'confirmed' || a.status === 'accepted') && !isAptInClosure(a)).length;
 
   // Actions
   // Confirming an appointment tells the patient. The app already surfaces a
@@ -1687,9 +1755,10 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
               const dStr = `${c.year}-${String(c.month + 1).padStart(2, '0')}-${String(c.day).padStart(2, '0')}`;
               const dayApts = appointments.filter(a => a.date === dStr && isActiveApt(a));
 
-              const hasConfirmed = dayApts.some(a => a.status === 'confirmed' || a.status === 'accepted');
-              const hasPending = dayApts.some(a => a.status === 'pending' || a.status === 'cancellation_pending');
+              const hasConfirmed = dayApts.some(a => (a.status === 'confirmed' || a.status === 'accepted') && !isAptInClosure(a));
+              const hasPending = dayApts.some(a => (a.status === 'pending' || a.status === 'cancellation_pending') && !isAptInClosure(a));
               const hasDone = dayApts.some(a => a.status === 'done');
+              const hasClosureAffected = dayApts.some(a => isAptInClosure(a));
 
               const isToday = dStr === todayStr;
               const isSelected = selectedDate === dStr;
@@ -1728,7 +1797,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                   {dayApts.length > 0 && (
                     <div className="cal-dots-row">
                       {hasConfirmed && <div className="dot-status dot-confirmed" title="Confirmed" />}
-                      {hasPending && <div className="dot-status dot-pending" title="Pending" />}
+                      {(hasPending || hasClosureAffected) && <div className="dot-status dot-pending" title={hasClosureAffected ? "Can Be Rescheduled by Patient" : "Pending"} />}
                       {hasDone && <div className="dot-status dot-done" title="Done" />}
                     </div>
                   )}
@@ -1901,7 +1970,19 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                       {g.items.map(apt => (
                         <QueueCard key={apt.id} apt={apt} onOpen={openEditModal}
                           badge={<StatusBadge tone="slate" label="Cancelled by patient" />}
-                          reason={apt.cancellationReason || apt.declineReason || 'No reason recorded'} />
+                          reason={apt.cancellationReason || apt.declineReason || 'No reason recorded'}
+                          actions={
+                            <IconButton
+                              bordered
+                              icon={Trash2}
+                              label="Delete cancelled appointment"
+                              tone="dangerHover"
+                              size={34}
+                              iconSize={16}
+                              onClick={() => setDeleteConfirmApt(apt)}
+                            />
+                          }
+                        />
                       ))}
                     </section>
                   ));
@@ -1910,11 +1991,16 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                 if (pendingOnlineRequests.length === 0) return empty(CheckCircle2, 'All caught up', 'No booking requests are waiting.');
                 return pendingOnlineRequests.map(apt => (
                   <QueueCard key={apt.id} apt={apt} onOpen={openEditModal}
+                    badge={isAptInClosure(apt) ? <StatusBadge tone="amber" label="Can Be Rescheduled by Patient" /> : null}
                     reason={apt.notes} reasonLabel="Patient note"
                     actions={<>
-                      <button type="button" className={BTN_SM.primary} onClick={() => promptQuickAction(apt, 'confirmed')} title="Confirm appointment">
-                        <UserCheck size={BTN_SM_ICON} /> Confirm
-                      </button>
+                      {isAptInClosure(apt) ? (
+                        <span className="text-xs text-amber-700 italic pr-2">Schedule closed</span>
+                      ) : (
+                        <button type="button" className={BTN_SM.primary} onClick={() => promptQuickAction(apt, 'confirmed')} title="Confirm appointment">
+                          <UserCheck size={BTN_SM_ICON} /> Confirm
+                        </button>
+                      )}
                     </>} />
                 ));
               })()}
@@ -2044,7 +2130,15 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                             <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A' }}>
                               {apt.name}
                             </span>
-                            <StatusBadge status={apt.status || 'pending'} />
+                            {isAptInClosure(apt) ? (
+                              <StatusBadge
+                                tone="amber"
+                                label="Can Be Rescheduled by Patient"
+                                title="The clinic schedule is closed for this date/time. The patient can reschedule through the app."
+                              />
+                            ) : (
+                              <StatusBadge status={apt.status || 'pending'} />
+                            )}
                           </div>
 
                           <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: 3, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -2305,10 +2399,27 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
               {/* Body */}
               <div className="px-6 py-5 overflow-y-auto flex-1 min-h-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <StatusBadge status={apt.status || 'pending'} size="md" />
+                  {isAptInClosure(apt) ? (
+                    <StatusBadge
+                      tone="amber"
+                      label="Can Be Rescheduled by Patient"
+                      size="md"
+                      title="The clinic schedule is closed for this date/time. The patient can reschedule through the app."
+                    />
+                  ) : (
+                    <StatusBadge status={apt.status || 'pending'} size="md" />
+                  )}
                   <StatusBadge tone="slate" label={sourceLabel(apt.source)} size="md" />
                   <ServicePill type={apt.type} />
                 </div>
+                {isAptInClosure(apt) && (
+                  <div className="mt-3 p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800 flex items-start gap-2">
+                    <AlertCircle size={15} className="text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-semibold">Schedule is closed for this date or time slot.</span> The patient has been notified and can reschedule through the app.
+                    </div>
+                  </div>
+                )}
                 <p className="mt-3 flex items-start gap-2 text-xs text-slate-500">
                   <AlertCircle size={14} className="text-slate-400 shrink-0 mt-px" />
                   <span>{staffBooked
@@ -2341,13 +2452,28 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
 
               {/* Footer: Close far left; primary Confirm on the right */}
               <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-2.5 shrink-0">
-                <button type="button" onClick={close} className={BTN.outline}>Close</button>
-                {isPendingReq && (
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={close} className={BTN.outline}>Close</button>
+                  {(apt.status === 'cancelled' || apt.status === 'declined') && (
+                    <button
+                      type="button"
+                      onClick={() => { close(); setDeleteConfirmApt(apt); }}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 transition-colors cursor-pointer"
+                      title="Delete cancelled appointment"
+                    >
+                      <Trash2 size={BTN_ICON} /> Delete
+                    </button>
+                  )}
+                </div>
+                {isPendingReq && !isAptInClosure(apt) && (
                   <div className="flex items-center gap-2.5">
                     <button type="button" className={BTN.primary} onClick={() => { close(); promptQuickAction(apt, 'confirmed'); }}>
                       <UserCheck size={BTN_ICON} /> Confirm
                     </button>
                   </div>
+                )}
+                {isPendingReq && isAptInClosure(apt) && (
+                  <span className="text-xs text-amber-700 italic">Schedule closed — awaiting patient reschedule</span>
                 )}
                 {isCancelReq && (
                   <div className="flex items-center gap-2.5">
@@ -2656,7 +2782,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                           <span className="font-semibold text-slate-900">{a.name}</span>
                           <div className="flex items-center gap-2">
                             <span className="text-slate-500">{a.time}</span>
-                            <StatusBadge status={a.status} />
+                            <StatusBadge tone="amber" label="Can Be Rescheduled by Patient" />
                           </div>
                         </div>
                       ))}
@@ -2708,6 +2834,30 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
           busyLabel="Reopening…"
           onConfirm={() => handleReopenClosure(reopenConfirm)}
           onCancel={() => setReopenConfirm(null)}
+        />
+      )}
+
+      {/* Delete Cancelled Appointment Confirmation Dialog */}
+      {deleteConfirmApt && (
+        <ConfirmDialog
+          variant="danger"
+          icon={Trash2}
+          title="Delete cancelled appointment?"
+          subtitle="Cancelled visit"
+          message={<>This will permanently remove the cancelled appointment record for <strong>{deleteConfirmApt.name}</strong> from the clinic system. This action cannot be undone.</>}
+          details={[
+            ['Patient', deleteConfirmApt.name],
+            ['Date', formatDateLong(deleteConfirmApt.date) || deleteConfirmApt.date],
+            ['Time slot', deleteConfirmApt.time],
+            ['Service', formatServiceType(deleteConfirmApt.type)],
+            ['Reason', deleteConfirmApt.cancellationReason || deleteConfirmApt.declineReason || 'Cancelled by patient'],
+          ]}
+          confirmLabel="Delete Record"
+          cancelLabel="Keep Record"
+          busy={deletingApt}
+          busyLabel="Deleting…"
+          onConfirm={handleDeleteCancelledAppointment}
+          onCancel={() => setDeleteConfirmApt(null)}
         />
       )}
 

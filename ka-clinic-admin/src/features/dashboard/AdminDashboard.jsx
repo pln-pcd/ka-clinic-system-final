@@ -1562,7 +1562,9 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
                           iconCls="bg-indigo-50 text-indigo-600 border-indigo-200"
                           title={apt.name || apt.patient || 'Patient'}
                           sub={`${apt.time || 'Time not set'} · ${formatServiceType(apt.type || apt.purpose)}`}
-                          badge={<StatusBadge status={apt.status || 'pending'} />}
+                          badge={apt.affectedByClosure
+                            ? <StatusBadge tone="amber" label="Can Be Rescheduled by Patient" title="Clinic is closed. Patient can reschedule in app." />
+                            : <StatusBadge status={apt.status || 'pending'} />}
                           onClick={() => { setApptPreviewDate(todayStr); setActivePage('appointments'); }}
                         />
                       ))}

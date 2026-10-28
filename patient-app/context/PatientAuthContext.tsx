@@ -24,7 +24,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { auth, checkLoginTrust, firebaseConfig, onAuthStateChanged, resolveMRNForUser, signOut } from '../config/backend';
 import { getKeepSignedIn, getTrustToken, hasSeenOnboarding } from '../config/appPrefs';
 import { clearThisDeviceSession, registerThisDevice, watchOwnSession } from '../config/deviceSessions';
-import { cacheKeys, clearCache, peekCache, primeCache, writeCache } from '../utils/localCache';
+import { cacheKeys, clearCache, peekCache, primeCache, readCache, writeCache } from '../utils/localCache';
 
 type PatientAuthState = {
   user: User | null;
@@ -124,9 +124,15 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
             withTimeout(getTrustToken(), 1500, 'Keystore', null).catch(() => null),
             withTimeout(primeLaunchCache(saved.uid), 1500, 'Cache', undefined).catch(() => {}),
           ]);
-          const cachedMrn = peekCache<string>(cacheKeys.mrnForUid(saved.uid));
-          if (cancelled || launchHandled.current || !keep || !token || !cachedMrn) return;
-          setMrn(cachedMrn);
+          let cachedMrn = peekCache<string>(cacheKeys.mrnForUid(saved.uid));
+          if (!cachedMrn) {
+            try {
+              const fallback = await AsyncStorage.getItem(`kna:last_mrn:${saved.uid}`);
+              if (fallback) cachedMrn = fallback;
+            } catch {}
+          }
+          if (cancelled || launchHandled.current || !keep) return;
+          if (cachedMrn) setMrn(cachedMrn);
           setVerifiedUid(saved.uid);
         }
         setSeenOnboarding(true);
@@ -181,13 +187,23 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
               withTimeout(getTrustToken(), 3000, 'Keystore', null).catch(() => null),
               withTimeout(primeLaunchCache(fbUser.uid), 3000, 'Cache', undefined).catch(() => {}),
             ]);
-            const cachedMrn = peekCache<string>(cacheKeys.mrnForUid(fbUser.uid));
+            let cachedMrn = peekCache<string>(cacheKeys.mrnForUid(fbUser.uid));
+            if (!cachedMrn) {
+              cachedMrn = (await readCache<string>(cacheKeys.mrnForUid(fbUser.uid)).catch(() => null)) || undefined;
+            }
+            if (!cachedMrn) {
+              try {
+                const fallback = await AsyncStorage.getItem(`kna:last_mrn:${fbUser.uid}`);
+                if (fallback) cachedMrn = fallback;
+              } catch {}
+            }
             const applyTrust = (trust: { trusted: boolean; mrn: string | null; offline?: boolean }) => {
               offlineSession.current = !trust.trusted;
               if (trust.mrn) {
                 serverMrn.current = { uid: fbUser.uid, mrn: trust.mrn };
                 setMrn(trust.mrn);
                 writeCache(cacheKeys.mrnForUid(fbUser.uid), trust.mrn);
+                AsyncStorage.setItem(`kna:last_mrn:${fbUser.uid}`, trust.mrn).catch(() => {});
               }
             };
             if (token && cachedMrn) {
@@ -200,23 +216,33 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
               }).catch(() => {});
             } else {
               const trust = await checkLoginTrust(8000);
-              if (!trust.trusted && !(trust.offline && trust.hasToken && cachedMrn)) {
+              if (trust.trusted) {
+                applyTrust(trust);
+                if (!trust.mrn && cachedMrn) setMrn(cachedMrn);
+                setVerifiedUid(fbUser.uid);
+              } else if (trust.offline) {
+                // Device is offline and "keep me signed in" is enabled: DO NOT sign out!
+                // Home renders safely from cached data and session re-verifies on next connection.
+                offlineSession.current = true;
+                if (cachedMrn) setMrn(cachedMrn);
+                setVerifiedUid(fbUser.uid);
+              } else {
+                // Server explicitly responded and rejected the token
                 await endRestoredSession(fbUser.uid);
                 return;
               }
-              applyTrust(trust);
-              if (!trust.mrn && cachedMrn) setMrn(cachedMrn);
-              setVerifiedUid(fbUser.uid);
             }
           }
         }
         setAuthUser(fbUser);
       } catch (e) {
-        // Nothing here may keep the splash up: an unexpected failure opens
-        // the app signed out (sign-in screen) rather than hanging.
         console.warn('Launch session check failed:', e);
-        if (fbUser && !fbUser.isAnonymous && !verifiedUidRef.current) await endRestoredSession(fbUser.uid);
-        else setAuthUser(fbUser);
+        const keep = await getKeepSignedIn().catch(() => false);
+        if (fbUser && !fbUser.isAnonymous && !verifiedUidRef.current && !keep) {
+          await endRestoredSession(fbUser.uid);
+        } else {
+          setAuthUser(fbUser);
+        }
       } finally {
         clearTimeout(failSafe);
         perfMark('auth-ready');
@@ -256,6 +282,7 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
       serverMrn.current = { uid: u.uid, mrn: issued };
       setMrn(issued);
       writeCache(cacheKeys.mrnForUid(u.uid), issued);
+      AsyncStorage.setItem(`kna:last_mrn:${u.uid}`, issued).catch(() => {});
     }
     setVerifiedUid(u.uid);
   };
@@ -275,15 +302,24 @@ export function PatientAuthProvider({ children }: { children: React.ReactNode })
       return;
     }
     let cancelled = false;
-    const cached = peekCache<string>(cacheKeys.mrnForUid(user.uid));
+    let cached = peekCache<string>(cacheKeys.mrnForUid(user.uid));
     if (cached) setMrn(cached);
-    else setMrnLoading(true);
+    else {
+      setMrnLoading(true);
+      AsyncStorage.getItem(`kna:last_mrn:${user.uid}`).then(fb => {
+        if (!cancelled && fb && !cached) {
+          cached = fb;
+          setMrn(fb);
+        }
+      }).catch(() => {});
+    }
     resolveMRNForUser(user.uid, user.email)
       .then(record => {
         if (cancelled) return;
         const next = record?.mrn ?? null;
         setMrn(next);
         writeCache(cacheKeys.mrnForUid(user.uid), next);
+        if (next) AsyncStorage.setItem(`kna:last_mrn:${user.uid}`, next).catch(() => {});
       })
       .catch((e: any) => {
         if (cancelled) return;
