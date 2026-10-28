@@ -1,5 +1,12 @@
 import { API_BASE_URL } from '../config/backend';
-import { availabilityFallback, getKaiDecision, kaiCopy, type KaiLanguage, type ReplyCategory } from './kaiPolicy';
+import { availabilityFallback, containsPersonalDetails, getKaiDecision, kaiCopy, type KaiLanguage, type ReplyCategory } from './kaiPolicy';
+
+// Same list as api/_lib/kaiModel.js SMART_INTENTS: questions the server's
+// model may answer more flexibly.
+const SMART_INTENTS = new Set([
+  'navigation', 'account', 'records', 'login', 'signup', 'forgot', 'forgot_password', 'cancel', 'reschedule',
+  'booking', 'hours', 'location', 'contact', 'name', 'creator', 'capstone', 'staff', 'unknown', 'unmatched',
+]);
 
 export type { ReplyCategory } from './kaiPolicy';
 export type ChatTurn = { role: 'user' | 'bot'; text: string };
@@ -20,6 +27,31 @@ export function warmClinicAssistant(): void {
 export async function askClinicAssistant(prompt: string, history: ChatTurn[] = []): Promise<AssistantReply> {
   const decision = getKaiDecision(prompt);
   if (prompt.trim().length > 1000) return { ...decision, text: kaiCopy[decision.language].tooLong, needsEscalation: false };
+  // App and clinic questions: ask the server for a flexible answer (checked
+  // there); the fixed reply is the fallback. Medical, personal and explicit
+  // off-topic messages never leave the phone.
+  if (decision.text && SMART_INTENTS.has(decision.intent) && API_BASE_URL) {
+    const safeHistory = history.slice(-8).filter(turn => turn.text.length <= 1000 && !containsPersonalDetails(turn.text));
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/chatbot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, history: safeHistory, channel: 'app' }),
+        signal: controller.signal,
+      });
+      const data = await res.json();
+      if (data?.success && data.intent === decision.intent && data.language === decision.language
+        && data.category === decision.category && typeof data.text === 'string' && data.text.trim()) {
+        return { ...decision, text: data.text, needsEscalation: !!data.needsEscalation };
+      }
+    } catch {
+      // Network or server problem: the fixed reply below still answers.
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
   if (decision.text) return {
     ...decision, text: decision.text,
     ...(['own_schedule', 'own_details'].includes(decision.intent)

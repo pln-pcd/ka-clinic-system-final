@@ -124,7 +124,10 @@ export function getKaiDecision(text) {
   if (/\b(?:talk|speak|connect|kausap|makipag-usap|staff|human)\b/.test(q)) return reply('staff', copy.staff, 'in_scope', true);
   if (/\b(?:records?|card)\b/.test(q)) return reply('records', copy.records);
   if (/\b(?:use|navigate|gamitin|app|tabs?|screens?)\b/.test(q)) return reply('navigation', copy.navigation);
-  return CLINIC_TOPIC.test(q) ? reply('unknown', copy.unknown) : reply('off_topic', copy.offTopic, 'out_of_scope');
+  // Not matched by any rule above. The server's model may still answer it if
+  // it turns out to be about the app or clinic ('unmatched'); explicit
+  // off-topic subjects were already answered with the fixed reply.
+  return CLINIC_TOPIC.test(q) ? reply('unknown', copy.unknown) : reply('unmatched', copy.offTopic, 'out_of_scope');
 }
 
 export function availabilityFallback(language) {
