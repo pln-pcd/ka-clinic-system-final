@@ -45,3 +45,16 @@ test('model answers with clinical content or contact details are discarded', asy
   assert.equal((await smartReply('q', [], d, { fetchImpl: fake('Open **Account** to change your photo.') })).text, 'Open **Account** to change your photo.');
   delete process.env.GEMINI_API_KEY;
 });
+
+test('"bukas" is tomorrow or open depending on the sentence', async () => {
+  const { bukasMeansTomorrow } = await import('../../patient-app/services/kaiPolicy.js');
+  for (const s of ['may slot pa ba bukas?', 'may slot po ba bukas?', 'pwede ba mag-book bukas?', 'available ba ang appointment bukas?', 'para bukas po', 'bukas ng umaga', 'bukas'])
+    assert.equal(bukasMeansTomorrow(s), true, s);
+  for (const s of ['bukas po ba kayo?', 'bukas ba kayo?', 'bukas ba ang clinic?', 'anong oras kayo bukas?', 'anong oras po kayo bukas?', 'kayo po ba ay bukas?'])
+    assert.equal(bukasMeansTomorrow(s), false, s);
+  assert.equal(getKaiDecision('anong oras kayo magbubukas?').intent, 'hours');
+  assert.equal(getKaiDecision('bukas po ba kayo?').intent, 'hours');
+  assert.equal(getKaiDecision('anong oras kayo bukas?').intent, 'hours');
+  assert.equal(getKaiDecision('may slot pa ba bukas?').intent, 'availability');
+  assert.equal(getKaiDecision('anong oras kayo bukas sa sabado?').intent, 'availability');
+});

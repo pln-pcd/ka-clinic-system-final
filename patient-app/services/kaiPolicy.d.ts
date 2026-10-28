@@ -10,6 +10,7 @@ export type KaiDecision = {
 };
 export function detectLanguage(text: string): KaiLanguage;
 export function containsPersonalDetails(text: string): boolean;
+export function bukasMeansTomorrow(text: string): boolean;
 export function getKaiDecision(text: string): KaiDecision;
 export function availabilityFallback(language: KaiLanguage): KaiDecision & { text: string };
 export const kaiCopy: Record<KaiLanguage, {

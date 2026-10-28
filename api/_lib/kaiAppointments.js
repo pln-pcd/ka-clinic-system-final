@@ -1,4 +1,4 @@
-import { clinicKnowledge, getKaiDecision, kaiCopy } from '../../patient-app/services/kaiPolicy.js';
+import { bukasMeansTomorrow, clinicKnowledge, getKaiDecision, kaiCopy } from '../../patient-app/services/kaiPolicy.js';
 
 const DAY_NAMES = {
   en: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
@@ -55,7 +55,7 @@ export function requestedDate(text, today) {
     return { iso: addDays(today, delta), specified: true };
   }
   if (/\b(?:day after tomorrow|samakalawa)\b/.test(q)) return { iso: addDays(today, 2), specified: true };
-  if (/\b(?:tomorrow|bukas)\b/.test(q)) return { iso: addDays(today, 1), specified: true };
+  if (/\btomorrow\b/.test(q) || bukasMeansTomorrow(q)) return { iso: addDays(today, 1), specified: true };
   if (/\b(?:today|tonight|ngayon|mamaya)\b/.test(q)) return { iso: today, specified: true };
   return { iso: null, specified: false };
 }

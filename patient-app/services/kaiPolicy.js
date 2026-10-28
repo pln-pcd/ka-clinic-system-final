@@ -110,9 +110,9 @@ export function getKaiDecision(text) {
   if (/\b(?:reschedul\w*|magpa-reschedule|magpalit|palitan|baguhin).{0,20}(?:schedule|appointment)?/.test(q)) return reply('reschedule', copy.reschedule);
   if (/\b(?:how|paano|pano).{0,35}(?:book|magbook|mag-book|magpa-appointment|appointment|reserve)\b/.test(q)) return reply('booking', copy.booking);
 
-  const hasDate = DATE_WORD.test(q) || (/\bbukas\b/.test(q) && !/\b(?:bukas\s+(?:ba|po|ang|kayo)|(?:ba|po)\s+(?:kayo\s+)?bukas)\b/.test(q));
+  const hasDate = DATE_WORD.test(q) || bukasMeansTomorrow(q);
   if (AVAILABILITY.test(q) || hasDate) return { intent: 'availability', language, category: 'in_scope', needsEscalation: false };
-  if (/\b(?:hours?|oras|open|opening|close|closing|sarado|bukas|walk[- ]?in)\b/.test(q)) return reply('hours', /walk[- ]?in/.test(q) ? copy.walkIn : copy.hours);
+  if (/\b(?:hours?|oras|open|opening|close|closing|sarado|bukas|magbubukas|nagbubukas|walk[- ]?in)\b/.test(q)) return reply('hours', /walk[- ]?in/.test(q) ? copy.walkIn : copy.hours);
   if (/\b(?:phone|telephone|number|email|contact)\b/.test(q) && !/\b(?:change|update|palitan|baguhin)\b/.test(q)) {
     const value = /\bemail\b/.test(q) ? clinicKnowledge.email : /\b(?:phone|telephone|number)\b/.test(q) ? clinicKnowledge.phone : null;
     return reply('contact', value || copy.unknown);
@@ -128,6 +128,21 @@ export function getKaiDecision(text) {
   // it turns out to be about the app or clinic ('unmatched'); explicit
   // off-topic subjects were already answered with the fixed reply.
   return CLINIC_TOPIC.test(q) ? reply('unknown', copy.unknown) : reply('unmatched', copy.offTopic, 'out_of_scope');
+}
+
+/**
+ * "Bukas" means both "tomorrow" and "open". It is tomorrow when the sentence
+ * is about slots, appointments, booking or a time of day ("may slot pa ba
+ * bukas?", "para bukas", "bukas ng umaga"); it is open when it asks whether
+ * the clinic is open ("bukas po ba kayo?", "bukas ba ang clinic?", "anong
+ * oras kayo bukas?"). On its own it is read as tomorrow.
+ */
+export function bukasMeansTomorrow(text) {
+  const q = normalize(text).toLowerCase();
+  if (!/\bbukas\b/.test(q)) return false;
+  if (/\b(?:slots?|appointments?|appt|schedule|iskedyul|book\w*|magpa-?book|magpa-?schedule|available|availability|bakante|vacant|reserve|para\s+bukas|bukas\s+ng\s+(?:umaga|hapon|gabi|tanghali)|ngayon\s+o\s+bukas|bukas\s+o\s+\w+)\b/.test(q)) return true;
+  if (/\b(?:bukas\s+(?:po\s+)?(?:ba|pa|na|kayo|ang\s+(?:clinic|klinika))|(?:kayo|clinic|klinika)(?:\s+(?:ay|po|ba|pa))*\s+bukas|anong\s+oras\b.*\bbukas)\b/.test(q)) return false;
+  return true;
 }
 
 export function availabilityFallback(language) {
