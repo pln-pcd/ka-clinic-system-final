@@ -1,0 +1,21 @@
+{
+  "version": "1.0.22",
+  "versionCode": 22,
+  "package": "com.anonymous.knarabiesmonitoring",
+  "signatureVerified": true,
+  "certificateMatchesPreviousRelease": true,
+  "certificateSha256": "4fef45c1eae069ede9b94c98567b94116f9765e778257a69ab729a3391b62bfe",
+  "sha256": "8fda395f48f6cb9db1b3ac464fa70c145c73d2ce412fbe20f5fe74eb251182ea",
+  "bytes": 103439340,
+  "architectures": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+  ],
+  "cleartextTraffic": false,
+  "backupAllowed": false,
+  "productionApiConfigured": true,
+  "kaiPolicyPackaged": true,
+  "privateServerSecretsAbsent": true
+}
