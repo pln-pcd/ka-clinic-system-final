@@ -273,3 +273,19 @@ test('closures read the same way as the app calendar', () => {
   assert.equal(some.mode, 'appointment');
   assert.deepEqual(some.open, all.filter(s => !['3:00 PM - 4:00 PM', '9:00 AM - 10:00 AM'].includes(s)));
 });
+
+test('common app words and short replies are not mistaken for names or medical questions', () => {
+  const expect = {
+    sched: 'booking', photo: 'account', pic: 'account', settings: 'account', notif: 'notifications', signout: 'logout', logout: 'logout',
+    ok: 'ack', okay: 'ack', yes: 'ack', help: 'help', huh: 'help', test: 'help', card: 'records', mrn: 'login', payment: 'payment', appointment: 'booking',
+    'is my data safe?': 'data_privacy', 'who can see my records?': 'data_privacy', 'pano palitan password ko?': 'change_password',
+    'paano mag-reset ng password?': 'forgot_password', 'paano mag logout?': 'logout', 'how do I turn off notifications?': 'notifications',
+    'how do i edit my height and weight?': 'physical', 'where do I see my appointment status?': 'appt_status',
+    'paano ko malalaman kung confirmed na appointment ko?': 'appt_status', 'do I need to pay in the app?': 'payment',
+    'sino ang kakausapin ko para mag reschedule?': 'staff', 'who will reply to my message?': 'staff', 'magkano po lahat?': 'rates',
+  };
+  for (const [text, intent] of Object.entries(expect)) assert.equal(getKaiDecision(text).intent, intent, text);
+  assert.notEqual(getKaiDecision('magkano po lahat?').text, kaiCopy.tl.unknown);
+  // Names are still caught.
+  for (const text of ['Maria Santos', 'Juan Dela Cruz']) assert.equal(getKaiDecision(text).intent, 'privacy', text);
+});

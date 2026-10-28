@@ -43,10 +43,10 @@ export function containsPersonalDetails(text) {
   // Names typed alone, or following a greeting. Do not mistake ordinary
   // questions or known clinic terms for a person's name.
   const bare = q.replace(/^(?:hello|hi|hey|kumusta|kamusta)[,!\s]+/i, '').split(/[,.!?]/)[0].trim();
-  const known = /\b(clinic|kai|hello|hi|good|morning|afternoon|evening|thank|thanks|salamat|kumusta|kamusta|pep|prep|vaccine|vaccination|pneumonia|tetanus|rabies|rabis|dose|bakuna|what|when|where|who|how|my|please|appointment|account|forgot|password|medical|record|number|home|records|services|rates|hours|contact|talk|staff|weekend|monday|tuesday|wednesday|thursday|friday|saturday|sunday|sabado|linggo|lunes|martes|miyerkules|huwebes|biyernes|reschedul\w*|cancel\w*|login|logout|signup|register|registration|profile|notifications?|capstone|developer|creator|programmer|yes|no)\b/i;
+  const known = /\b(clinic|kai|hello|hi|good|morning|afternoon|evening|thank|thanks|salamat|kumusta|kamusta|pep|prep|vaccine|vaccination|pneumonia|tetanus|rabies|rabis|dose|bakuna|what|when|where|who|how|my|please|appointment|account|forgot|password|medical|record|number|home|records|services|rates|hours|contact|talk|staff|weekend|monday|tuesday|wednesday|thursday|friday|saturday|sunday|sabado|linggo|lunes|martes|miyerkules|huwebes|biyernes|reschedul\w*|cancel\w*|login|logout|signup|register|registration|profile|notifications?|capstone|developer|creator|programmer|yes|no|ok|okay|okey|oks|sige|noted|done|good|nice|cool|great|wow|sorry|hmm+|huh|test|testing|menu|settings?|photos?|pic|pictures?|sched|notifs?|sign\s?out|log\s?out|help|card|cards|tabs?|sure|again|why|bakit|ano|paano|pano)\b/i;
   return !known.test(bare) && !ENGLISH.test(bare) && !MEDICAL_DOMAIN.test(bare) && !TAGALOG.test(bare) && !CLINIC_TOPIC.test(bare) && !AVAILABILITY.test(bare)
     && !OFF_TOPIC.test(bare) && !HARD_CLINICAL.some(re => re.test(bare))
-    && /^[\p{L}][\p{L}'’-]+(?:\s+[\p{L}][\p{L}'’-]+){0,4}$/u.test(bare);
+    && /^\p{Lu}[\p{L}'’-]+(?:\s+\p{Lu}[\p{L}'’-]+){0,4}$/u.test(bare);
 }
 
 function priceReply(q, language) {
@@ -58,7 +58,7 @@ function priceReply(q, language) {
   const pneumo = /\b(pneumonia|pneumococcal)\b/i.test(q);
   const pep = /\bpep\b/i.test(q) || /\b(?:cat(?:egory)?\s*)?(?:ii|iii|2|3)\b/i.test(q);
   const all = !lines.length && !pneumo && !pep;
-  if (all && q.replace(/\b(?:hi|hello|hey|what|are|is|the|your|clinic|k&a|how|much|price|prices|pricing|costs?|fees?|rates?|rate|of|for|a|an|vaccine|vaccines|vaccination|vaccinations|anti[- ]?rabies|rabies|bakuna|magkano|po|ang|mga|sa|ba|presyo|bayad|package|packages)\b|[₱\s?.,!&]/gi, '').trim()) return copy.unknown;
+  if (all && q.replace(/\b(?:hi|hello|hey|what|are|is|the|your|clinic|k&a|how|much|price|prices|pricing|costs?|fees?|rates?|rate|of|for|a|an|vaccine|vaccines|vaccination|vaccinations|anti[- ]?rabies|rabies|bakuna|magkano|po|ang|mga|sa|ba|presyo|bayad|package|packages|lahat|all|total|everything|list|services?|serbisyo|nyo|ninyo|niyo|kayo)\b|[₱\s?.,!&]/gi, '').trim()) return copy.unknown;
   const r = clinicKnowledge.rates;
   const money = n => `₱${n.toLocaleString('en-PH')}`;
   if (all || pep) {
@@ -88,9 +88,11 @@ export function getKaiDecision(text) {
   });
   if (containsPersonalDetails(raw)) return reply('privacy', copy.privacy);
   if (OFF_TOPIC.test(q)) return reply('off_topic', copy.offTopic, 'out_of_scope');
+  if (/\b(?:data|privacy|personal (?:info|information|details)|information|impormasyon|records?|account)\b.{0,25}\b(?:safe|secure|protected|private|ligtas)\b|\bwho can (?:see|view|access) my\b|\bsino (?:ang )?(?:makakakita|nakakakita)\b/.test(q)) return reply('data_privacy', copy.dataPrivacy);
   if (HARD_CLINICAL.some(re => re.test(q))) return reply('blocked', copy.blocked, 'clinical', true);
   // KAI talks about the app only: never about people (public figures, the
   // app's makers, clinic staff, nurses or doctors).
+  if (/\b(?:who|sino)\b.{0,25}\b(?:kakausapin|kausapin|tatawagan|lalapitan|sasagot|magre-?reply|(?:can|should|do) i (?:talk|speak|ask|contact|message)|will (?:reply|answer|respond))\b/.test(q)) return reply('staff', copy.staff, 'in_scope', true);
   if (PERSON.test(q) || STAFF_PEOPLE.test(q)) return reply('people', copy.people, 'out_of_scope');
   if (CREATOR.test(q)) return reply('creator', copy.notAnswerable, 'out_of_scope');
 
@@ -100,6 +102,7 @@ export function getKaiDecision(text) {
   if (MEDICAL_DOMAIN.test(q) && /\b(?:schedules?|regimens?|days?)\b/.test(q) && !/\b(?:view|see|find|check|tingnan|makita)\b/.test(q)) return reply('blocked', copy.blocked, 'clinical', true);
   if (MEDICAL_DOMAIN.test(q) && /\b(?:need|should|take|skip|choose|kailangan|dapat|puwede|pwede|ilang|how many|for me|para sa akin)\b/.test(q)) return reply('blocked', copy.blocked, 'clinical', true);
 
+  if (/^(?:pay|payment|payments)[?.!\s]*$/.test(q) || /\b(?:pay|payment|payments|magbayad|magbabayad|bayaran)\b.{0,30}\b(?:app|online|gcash|maya|card)\b|\b(?:app|online)\b.{0,20}\b(?:pay|payment|magbayad|bayad)\b/.test(q)) return reply('payment', copy.payment);
   if (PRICING.test(q)) return reply('rates', priceReply(q, language));
   if (SERVICES.test(q) && (/\b(?:services?|serbisyo)\b/.test(q) || !/\b(?:what is|explain|describe|paano gumagana|ano ang)\b/.test(q))) {
     return reply('services', clinicKnowledge.services.map(s => `• ${s}`).join('\n'));
@@ -113,10 +116,17 @@ export function getKaiDecision(text) {
   if (/\b(?:your name|name are you|who are you|pangalan mo|sino ka|(?:who|what)(?:'s|\s+is)\s+kai|(?:sino|ano)\s+(?:po\s+)?si\s+kai)\b/.test(q)) return reply('name', copy.name);
   if (/^(?:hi|hello|hey|good\s+(?:morning|afternoon|evening|day)|greetings|kumusta|kamusta)(?:\s+(?:po|kayo|kai|there))*[!?.\s]*$/.test(q)) return reply('greeting', copy.greeting);
   if (/^(?:thanks|thank you|salamat|maraming salamat)(?:\s+(?:po|kai))*[!?.\s]*$/.test(q)) return reply('thanks', copy.thanks);
+  if (/^(?:ok|okay|okey|oks|k|sige|noted|yes|yup|no|nope|opo|oo|hindi|done|got it|alright|cool|nice|great)(?:\s+(?:po|kai|thanks|salamat))*[!?.\s]*$/.test(q)) return reply('ack', copy.ack);
+  if (/^(?:help|tulong|hmm+|huh|test|testing|menu|\?+|ano|what|eh)(?:\s+(?:po|kai|me|please))*[!?.\s]*$/.test(q) || /\b(?:what can you do|what do you do|ano(?:ng)? (?:kaya|magagawa|maitutulong) mo|paano mo ako matutulungan)\b/.test(q)) return reply('help', copy.help);
+  if (/\b(?:change|palitan|baguhin|update|i-?change)\b.{0,20}\bpassword\b|\bpassword\b.{0,12}\b(?:change|palitan|baguhin)\b/.test(q)) return reply('change_password', copy.changePassword);
+  if (/\b(?:log\s?-?out|sign\s?-?out|mag-?logout|mag-?sign\s?out)\b/.test(q)) return reply('logout', copy.logout);
+  if (/\b(?:notifications?|notifs?|abiso)\b/.test(q)) return reply('notifications', copy.notifications);
+  if (/\b(?:height|weight|blood pressure|bp|timbang)\b/.test(q)) return reply('physical', copy.physical);
+  if (/\b(?:appointments?|appt|booking)\b/.test(q) && /\b(?:status|confirmed|approved|accepted|pending|na-?confirm|kumpirmado|see|view|check|makita|malalaman|tingnan)\b/.test(q) && !/\b(?:cancel\w*|reschedul\w*|delete|book\s+an?)\b/.test(q)) return reply('appt_status', copy.apptStatus);
   if (/\b(?:forgot|forgotten|reset|nakalimutan).{0,25}(?:password)|\bforgot password\b/.test(q)) return reply('forgot_password', copy.forgot);
   if (/\b(?:delete|remove|erase|burahin|burahin|tanggalin|i-delete|idelete)\b/.test(q) && /\b(?:appointments?|appt|cancel\w*|kanselado)\b/.test(q)) return reply('delete', copy.deleteCancelled);
   if (/\b(?:cancel\w*|magkansela|pagkansela|kanselahin)\b/.test(q)) return reply('cancel', copy.cancel);
-  if (/\b(?:reschedul\w*|magpa-reschedule|magpalit|palitan|baguhin).{0,20}(?:schedule|appointment)?/.test(q)) return reply('reschedule', copy.reschedule);
+  if (/\b(?:reschedul\w*|magpa-reschedule)\b|\b(?:magpalit|palitan|baguhin|ilipat|change|move)\b.{0,20}\b(?:schedule|sched|appointment|appt|petsa|oras|date|time)\b/.test(q)) return reply('reschedule', copy.reschedule);
   if (/\b(?:how|paano|pano).{0,35}(?:book|magbook|mag-book|magpa-appointment|appointment|reserve)\b/.test(q)) return reply('booking', copy.booking);
 
   const hasDate = DATE_WORD.test(q) || bukasMeansTomorrow(q);
@@ -128,14 +138,15 @@ export function getKaiDecision(text) {
   }
   if (/\b(?:address|location|where|directions?|map|saan|nasaan)\b/.test(q)) return reply('location', `${language === 'en' ? 'The clinic is at' : language === 'tl' ? 'Nasa' : 'Located po ang clinic sa'} ${clinicKnowledge.address}${language === 'tl' ? ' po ang clinic.' : '.'}`);
   if (/\b(?:sign[- ]?up|register|registration|magrehistro)\b/.test(q)) return reply('signup', copy.signup);
-  if (/\b(?:sign[- ]?in|log[- ]?in|login|password|otp|verification)\b/.test(q)) return reply('login', copy.login);
-  if (/\b(?:account|profile|notification|change|update|palitan|baguhin)\b/.test(q)) return reply('account', copy.account);
+  if (/\b(?:sign[- ]?in|log[- ]?in|login|password|otp|verification|mrn)\b/.test(q)) return reply('login', copy.login);
+  if (/\b(?:account|profile|photos?|pic|pictures?|settings?|change|update|palitan|baguhin)\b/.test(q)) return reply('account', copy.account);
   if (/\b(?:talk|speak|connect|kausap|makipag-usap|staff|human)\b/.test(q)) return reply('staff', copy.staff, 'in_scope', true);
   if (/\b(?:records?|card)\b/.test(q)) return reply('records', copy.records);
   if (/\b(?:use|navigate|gamitin|app|tabs?|screens?)\b/.test(q)) return reply('navigation', copy.navigation);
   // Not matched by any rule above. The server's model may still answer it if
   // it turns out to be about the app or clinic ('unmatched'); explicit
   // off-topic subjects were already answered with the fixed reply.
+  if (q.split(/\s+/).length <= 3 && /\b(?:appointments?|appt|booking|book|magbook|mag-book|sched|schedule)\b/.test(q)) return reply('booking', copy.booking);
   return CLINIC_TOPIC.test(q) ? reply('unknown', copy.unknown) : reply('unmatched', copy.offTopic, 'out_of_scope');
 }
 
