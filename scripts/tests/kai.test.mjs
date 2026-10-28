@@ -8,8 +8,8 @@ const cases = [
   ['what is your name?', 'name', 'en'],
   ['ano ang pangalan mo?', 'name', 'tl'],
   ['who created this app?', 'creator', 'en'],
-  ['sino ang gumawa ng app?', 'creator', 'tl'],
-  ['Is this a BU Polangui capstone project?', 'capstone', 'en'],
+  ['sino ang gumawa ng app?', 'people', 'tl'],
+  ['Is this a BU Polangui capstone project?', 'creator', 'en'],
   ['who is lebron?', 'off_topic', 'en'],
   ['what is the weather tomorrow?', 'off_topic', 'en'],
   ['How much is shabu?', 'off_topic', 'en'],
@@ -34,7 +34,7 @@ const cases = [
   ['reschedule', 'reschedule', 'en'],
   ['login', 'login', 'en'],
   ['developer', 'creator', 'en'],
-  ['capstone', 'capstone', 'en'],
+  ['capstone', 'creator', 'en'],
   ['bukas ba kayo?', 'hours', 'tl'],
   ['saan ang clinic?', 'location', 'tl'],
   ['What is the clinic phone number?', 'contact', 'en'],
@@ -132,7 +132,8 @@ test('medical terms and pricing cannot mask clinical questions', () => {
 
 test('unknown contact and creator details are never filled in', () => {
   assert.equal(getKaiDecision('What is the clinic email?').text, kaiCopy.en.unknown);
-  assert.equal(getKaiDecision('Who are the app developers?').text, kaiCopy.en.creator);
+  assert.equal(getKaiDecision('Who are the app developers?').category, 'out_of_scope');
+  assert.doesNotMatch(getKaiDecision('Who are the app developers?').text, /bicol|polangui|capstone|student/i);
   assert.doesNotMatch(getKaiDecision('What services do you offer?').text, /immunoglobulin|treat|protect|dose|schedule/i);
 });
 
@@ -227,4 +228,35 @@ test('HTTP limits remain localized and block the 31st request', async () => {
   assert.equal(res.code, 429);
   assert.equal(res.body.error, kaiCopy.tl.rateLimit);
   assert.equal(res.headers['Retry-After'], '300');
+});
+
+test('no clinical advice of any kind (paper section on KAI limits)', () => {
+  for (const text of [
+    'Can you diagnose me?', 'Do I have rabies?', 'what treatment should I get after a dog bite?', 'what medicine can I take for pain after my shot?',
+    'how do I clean a cat scratch?', 'should I get vaccinated?', 'do I need PEP?', 'is my exposure category 2 or 3?', 'am I at risk of rabies?',
+    'my dog bit me and I am bleeding, what do I do?', 'is it an emergency?', 'what are the side effects of the vaccine?', 'what is PEP?',
+    'how does the rabies vaccine work?', 'wound', 'inject', 'ilang turok ang kailangan ko?', 'kailangan ko ba ng anti-tetanus?',
+    'masakit ang braso ko pagkatapos ng turok',
+  ]) assert.equal(getKaiDecision(text).category, 'clinical', text);
+});
+
+test('never answers about people, the app makers or clinic staff', () => {
+  for (const text of ['Who created this app?', 'who developed this?', 'Is this a capstone project?', 'who is the nurse?', 'what is the name of the doctor?',
+    'who are the staff?', 'sino si Manny Pacquiao?', 'kilala mo ba si Vice Ganda?', 'who is the US president?', 'who is lebron', 'what is the capital of France?']) {
+    const d = getKaiDecision(text);
+    assert.equal(d.category, 'out_of_scope', text);
+    assert.doesNotMatch(d.text, /bicol|polangui|capstone|student/i, text);
+  }
+  assert.equal(getKaiDecision('who are you?').intent, 'name');
+  assert.equal(getKaiDecision('who is KAI?').intent, 'name');
+});
+
+test('app questions get app answers', () => {
+  assert.equal(getKaiDecision('What is the name of the app?').intent, 'app_name');
+  assert.equal(getKaiDecision('anong pangalan ng app?').intent, 'app_name');
+  assert.equal(getKaiDecision('how do I delete a cancelled appointment?').intent, 'delete');
+  assert.match(getKaiDecision('How do I use this app?').text, /Home[\s\S]*Appointments[\s\S]*Chat[\s\S]*Account/);
+  assert.equal(getKaiDecision('price').intent, 'rates');
+  assert.equal(getKaiDecision('what services do the clinic offer?').intent, 'services');
+  assert.match(kaiCopy.en.disclaimer, /^This chatbot does not provide medical advice\./);
 });

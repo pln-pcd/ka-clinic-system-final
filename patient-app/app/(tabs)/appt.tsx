@@ -1397,14 +1397,13 @@ export default function AppointmentsScreen() {
                       {/* firestore.rules lets a patient delete only their own cancelled appointments. */}
                       {appt.status === 'cancelled' && (
                         <Tap
-                          style={s.cancelPill}
-                          hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+                          style={s.deleteIconBtn}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                           onPress={() => confirmDeleteCancelled(appt)}
                           accessibilityRole="button"
                           accessibilityLabel="Delete cancelled appointment"
                         >
-                          <Ionicons name="trash-outline" size={13} color={C.navy}/>
-                          <Text style={s.cancelPillTxt}>Delete</Text>
+                          <Ionicons name="trash-outline" size={18} color={C.navy}/>
                         </Tap>
                       )}
                     </Tap>
@@ -2578,6 +2577,7 @@ const s = StyleSheet.create({
   // Clear, dedicated action button with 44dp+ tap target via hitSlop.
   cancelPill: { flexDirection: 'row', alignItems: 'center', gap: scale(4), paddingHorizontal: scale(10), paddingVertical: verticalScale(6), borderRadius: scale(8), borderWidth: 1, borderColor: C.border, backgroundColor: C.white, overflow: 'hidden', marginLeft: scale(10), alignSelf: 'center' },
   cancelPillTxt: { fontSize: moderateScale(11), fontWeight: '700', color: C.navy },
+  deleteIconBtn: { width: scale(38), height: scale(38), alignItems: 'center', justifyContent: 'center', borderRadius: scale(10), borderWidth: 1, borderColor: C.border, backgroundColor: C.white, overflow: 'hidden', marginLeft: scale(10), alignSelf: 'center' },
   doneBadge:  { flexDirection: 'row', alignItems: 'center', gap: scale(4), backgroundColor: C.greenFaint, paddingHorizontal: scale(8), paddingVertical: verticalScale(4), borderRadius: scale(8) },
   doneTxt:    { fontSize: moderateScale(10), fontWeight: '800', color: C.green },
 });

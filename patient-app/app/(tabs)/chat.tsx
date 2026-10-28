@@ -38,7 +38,7 @@ import { usePatientAuth } from '../../context/PatientAuthContext';
 import { moderateScale, scale, verticalScale } from '../../utils/scale';
 import CustomAlertModal, { CustomAlertConfig } from '../../components/CustomAlertModal';
 import { askClinicAssistant, warmClinicAssistant, type ChatTurn, type ReplyAction } from '../../services/chatbot';
-import { kaiCopy, type KaiLanguage } from '../../services/kaiPolicy';
+import { KAI_DISCLAIMER } from '../../config/studyMode';
 
 type BubbleMessage = {
   id: string;
@@ -46,7 +46,6 @@ type BubbleMessage = {
   sender: 'patient' | 'admin' | 'bot';
   createdAt: number;
   senderName?: string;
-  disclaimer?: string;
   /** Navigation replies carry a button (open the vaccination card / Appointments). */
   action?: ReplyAction;
   /** Staff chat only: a message of the patient's still sending or not sent. */
@@ -191,7 +190,6 @@ export default function ChatScreen() {
 
   const [botMessages, setBotMessages] = useState<BubbleMessage[]>([]);
   const [botTyping, setBotTyping] = useState(false);
-  const [chatLanguage, setChatLanguage] = useState<KaiLanguage>('en');
 
   const [adminMessages, setAdminMessages] = useState<BubbleMessage[]>([]);
   const [adminMessagesLoaded, setAdminMessagesLoaded] = useState(false);
@@ -201,7 +199,15 @@ export default function ChatScreen() {
   const [loadError, setLoadError] = useState('');
   // The patient's own staff-chat messages not yet confirmed by Firestore.
   const [pendingMessages, setPendingMessages] = useState<BubbleMessage[]>([]);
-  useEffect(() => { setPendingMessages([]); setLoadError(''); }, [openThreadId]);
+  // Cleared when the patient moves to another thread or the thread ends, but
+  // not when their first message creates the thread: that message is still
+  // being delivered and must stay on screen.
+  const prevThreadRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (prevThreadRef.current !== null) setPendingMessages([]);
+    prevThreadRef.current = openThreadId;
+    setLoadError('');
+  }, [openThreadId]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -335,16 +341,39 @@ export default function ChatScreen() {
     }
     setAdminMessagesLoaded(false);
     const q = query(collection(db, 'chatMessages'), where('threadId', '==', openThreadId), orderBy('createdAt', 'asc'));
-    return onSnapshot(q, (snap) => {
-      setLoadError('');
-      setAdminMessages(snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })));
-      setAdminMessagesLoaded(true);
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
-    }, (err) => {
-      console.error('Admin chat messages listener error:', err);
-      setAdminMessagesLoaded(true);
-      setLoadError('Could not load this conversation. Please check your connection and try again.');
-    });
+    // A new thread reaches this listener from the local write, before the
+    // server has it, so the first read can be refused (firestore.rules reads
+    // the thread). A refused listener stops for good: listen again a few
+    // times before showing an error.
+    let stopped = false;
+    let attempts = 0;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let unsubscribe = () => {};
+    const listen = () => {
+      unsubscribe = onSnapshot(q, (snap) => {
+        attempts = 0;
+        setLoadError('');
+        setAdminMessages(snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })));
+        setAdminMessagesLoaded(true);
+        setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+      }, (err) => {
+        if (stopped) return;
+        if (attempts < 5) {
+          attempts += 1;
+          retryTimer = setTimeout(listen, 400 * attempts);
+          return;
+        }
+        console.error('Admin chat messages listener error:', err);
+        setAdminMessagesLoaded(true);
+        setLoadError('Could not load this conversation. Please check your connection and try again.');
+      });
+    };
+    listen();
+    return () => {
+      stopped = true;
+      clearTimeout(retryTimer);
+      unsubscribe();
+    };
   }, [mode, openThreadId]);
 
   useEffect(() => {
@@ -498,12 +527,11 @@ export default function ChatScreen() {
     }
     setBotMessages(m => [...m, {
       id: `b-${Date.now()}`, text: reply.text, sender: 'bot',
-      createdAt: Date.now(), senderName: BOT_SENDER_LABEL, action: reply.action, disclaimer: reply.disclaimer,
+      createdAt: Date.now(), senderName: BOT_SENDER_LABEL, action: reply.action,
     }]);
     // Highlights the "Talk to clinic staff" button after a medical question.
     // Only the latest reply counts. The staff pop-up itself opens only when
     // the patient taps that button, never from a reply.
-    setChatLanguage(reply.language);
     rememberPendingTrigger(reply.needsEscalation);
   };
 
@@ -590,7 +618,8 @@ export default function ChatScreen() {
   useEffect(() => { warmClinicAssistant(); }, []);
 
   const messages = mode === 'admin' ? [...adminMessages, ...pendingMessages] : botMessages;
-  const messagesLoaded = mode === 'admin' ? (openThreadId ? adminMessagesLoaded : true) : true;
+  // The patient's own unsent messages show at once, even while the thread loads.
+  const messagesLoaded = mode === 'admin' ? (openThreadId ? adminMessagesLoaded || pendingMessages.length > 0 : true) : true;
   const typing = mode === 'admin' ? false : botTyping;
 
   return (
@@ -637,7 +666,7 @@ export default function ChatScreen() {
           {mode === 'bot' && (
             <View style={s.disclaimerBar} accessibilityRole="text">
               <Ionicons name="information-circle-outline" size={13} color="#64748B" style={{ marginTop: 1 }} />
-              <Text style={s.disclaimerTxt}>{kaiCopy[chatLanguage].disclaimer}</Text>
+              <Text style={s.disclaimerTxt}>{KAI_DISCLAIMER}</Text>
             </View>
           )}
 
@@ -660,7 +689,7 @@ export default function ChatScreen() {
                 <Text style={s.heroSub}>
                   {mode === 'admin'
                     ? 'Send a message and clinic staff will reply here'
-                    : "I'm the K&A Clinic virtual assistant. Ask about office hours, the clinic's location and contact details, booking an appointment, or finding your way around the app."}
+                    : "I'm the K&A Clinic virtual assistant. Ask me how to use the app, book or manage an appointment, or about clinic hours, services and rates."}
                 </Text>
               </View>
               {mode === 'bot' && (
@@ -697,9 +726,6 @@ export default function ChatScreen() {
                           {renderFormattedMessage(m.text, isPatient, [s.msgText, isPatient && { color: '#fff' }])}
                         </View>
                       </View>
-                      {m.sender === 'bot' && m.disclaimer && (
-                        <Text style={s.disclaimerTxt}>{m.disclaimer}</Text>
-                      )}
                       {m.localStatus === 'sending' && (
                         <View style={s.msgStatusRow}><Text style={s.msgStatusTxt}>Sending…</Text></View>
                       )}
@@ -1081,7 +1107,9 @@ const s = StyleSheet.create({
   },
   listRow: { flexDirection: 'row', alignItems: 'flex-start' },
   listMarker: { width: scale(20), fontWeight: '700' },
-  listText: { flex: 1, minWidth: 0 },
+  // flexShrink, not flex: 1. The bubble is as wide as its text, so flex: 1
+  // (zero basis) left list items no width and only the bullets showed.
+  listText: { flexShrink: 1 },
 
   botActions: {
     marginHorizontal: scale(16),

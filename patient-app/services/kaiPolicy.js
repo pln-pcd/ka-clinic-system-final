@@ -23,9 +23,14 @@ const HARD_CLINICAL = [
   /\b(regimens?|protocols?|dosage|intradermal|intramuscular|immunoglobulin|irig|erig|hrig|booster|day\s*\d+|araw\s*(?:na\s*)?\d+|(?:pep|prep|vaccine|vaccination|dose|bakuna|turok)\s+(?:days?|regimen))\b/i,
   /\b(?:ano gagawin|anong gagawin)\b/i,
 ];
-const MEDICAL_DOMAIN = /\b(rabies|rabis|rabid|vaccin\w*|bakuna|turok|doses?|shots?|jabs?|injections?|pep|prep|tetanus|pneumonia|pneumococcal|exposure|categor(?:y|ies)|triage)\b/i;
+const MEDICAL_DOMAIN = /\b(rabies|rabis|rabid|vaccin\w*|bakuna|turok|doses?|shots?|jabs?|inject\w*|iniksyon|ineksyon|syringes?|needles?|karayom|anti-?rabies|pep|prep|tetanus|pneumonia|pneumococcal|exposure|categor(?:y|ies)|triage)\b/i;
 const DATE_WORD = /\b(today|tomorrow|tonight|ngayon|mamaya|samakalawa|sunday|monday|tuesday|wednesday|thursday|friday|saturday|linggo|lunes|martes|miyerkules|miyerkoles|huwebes|biyernes|sabado)\b|\b20\d\d-\d{1,2}-\d{1,2}\b|\b\d{1,2}\/\d{1,2}\b|\b(?:jan\w*|feb\w*|mar\w*|apr\w*|may|jun\w*|jul\w*|aug\w*|sep\w*|oct\w*|nov\w*|dec\w*|enero|pebrero|marso|abril|mayo|hunyo|hulyo|agosto|setyembre|oktubre|nobyembre|disyembre)\s+\d{1,2}\b|\b\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?(?:jan\w*|feb\w*|mar\w*|apr\w*|may|jun\w*|jul\w*|aug\w*|sep\w*|oct\w*|nov\w*|dec\w*)\b/i;
 const AVAILABILITY = /\b(slots?|availability|available appointments?|available times?|vacant|bakante|may appointment|may schedule|anong petsa|what dates?|what times? (?:are )?(?:left|available))\b/i;
+// "Who is ...?" about anyone but KAI itself.
+const PERSON = /(?:^|[^\p{L}])(?:who\s+(?:is|was|are|were)|who's|sino\s+(?:po\s+|ba\s+)*(?:si|sina|ang|yung|iyong)|kilala\s+mo\s+ba)\s+(?!(?:you|kai|ka|this\s+(?:app|chatbot|assistant))\b)/iu;
+const STAFF_PEOPLE = /\b(?:nurses?|nars|doctors?|doktor|physicians?|vaccinators?|midwi(?:fe|ves)|(?:staff|employees?|workers?)(?:'s)?\s+names?|names?\s+of\s+(?:the\s+)?(?:staff|employees?|workers?)|pangalan\s+ng\s+(?:staff|empleyado))\b/i;
+const CREATOR = /\b(?:who|sino)\b.{0,25}(?:creat|made|make|built|develop|gumawa|program)|\b(?:developers?|creators?|programmers?|gumawa|capstone|bu polangui|bicol university)\b/i;
+const APP_NAME = /\b(?:name\s+of\s+(?:the\s+|this\s+)?(?:app|application)|(?:app|application)(?:'s)?\s+name|(?:what|which)\s+app\s+is\s+this|anong\s+app\s+(?:ito|to)|pangalan\s+ng\s+(?:app|application))\b/i;
 const CLINIC_TOPIC = /\b(clinic|klinika|parking|requirements?|requirements|payment|gcash|maya|cash|contact|phone|telephone|number|email|address|location|directions?|map|app|account|mrn|appointment|appts|booking|staff|walk[- ]?in|vaccination card)\b/i;
 
 export function containsPersonalDetails(text) {
@@ -84,6 +89,10 @@ export function getKaiDecision(text) {
   if (containsPersonalDetails(raw)) return reply('privacy', copy.privacy);
   if (OFF_TOPIC.test(q)) return reply('off_topic', copy.offTopic, 'out_of_scope');
   if (HARD_CLINICAL.some(re => re.test(q))) return reply('blocked', copy.blocked, 'clinical', true);
+  // KAI talks about the app only: never about people (public figures, the
+  // app's makers, clinic staff, nurses or doctors).
+  if (PERSON.test(q) || STAFF_PEOPLE.test(q)) return reply('people', copy.people, 'out_of_scope');
+  if (CREATOR.test(q)) return reply('creator', copy.notAnswerable, 'out_of_scope');
 
   if (/\b(?:who am i|sino ako|my (?:name|mrn|email|phone|contact|address)|(?:ano|saan).{0,20}(?:pangalan|mrn|email|numero|contact).{0,10}(?:ko|kong)|(?:name|mrn|email|numero|pangalan) ko)\b/.test(q)) return reply('own_details', copy.ownDetails);
   if (/\b(?:my (?:next |last |vaccination )?(?:dose|doses|shot|schedule|status)|(?:dose|doses|turok|schedule|status|bakuna) (?:ko|kong)|susunod (?:kong|na) (?:turok|dose|bakuna)|how many .{0,15}(?:have i|i have)|when .{0,15}(?:my|i am|am i))\b/.test(q) && /\b(dose|doses|shot|schedule|status|turok|bakuna|vaccination)\b/.test(q)) return reply('own_schedule', copy.ownSchedule);
@@ -100,12 +109,12 @@ export function getKaiDecision(text) {
   if (cardHelp) return reply('records', copy.records);
   if (/\b(?:how|paano|pano|can i).{0,35}(?:book|magbook|mag-book|magpa-appointment|reserve)\b/.test(q) && !DATE_WORD.test(q) && !/\bbukas\b/.test(q)) return reply('booking', copy.booking);
   if (MEDICAL_DOMAIN.test(q)) return reply('blocked', copy.blocked, 'clinical', true);
-  if (/\b(?:your name|name are you|who are you|pangalan mo|sino ka)\b/.test(q)) return reply('name', copy.name);
-  if (/\b(?:who|sino).{0,25}(?:creat|made|built|develop|gumawa)|\b(?:developer|creator|programmer|gumawa)\b/.test(q)) return reply('creator', copy.creator);
-  if (/\b(capstone|bu polangui)\b/.test(q)) return reply('capstone', copy.capstone);
+  if (APP_NAME.test(q)) return reply('app_name', copy.appName);
+  if (/\b(?:your name|name are you|who are you|pangalan mo|sino ka|(?:who|what)(?:'s|\s+is)\s+kai|(?:sino|ano)\s+(?:po\s+)?si\s+kai)\b/.test(q)) return reply('name', copy.name);
   if (/^(?:hi|hello|hey|good\s+(?:morning|afternoon|evening|day)|greetings|kumusta|kamusta)(?:\s+(?:po|kayo|kai|there))*[!?.\s]*$/.test(q)) return reply('greeting', copy.greeting);
   if (/^(?:thanks|thank you|salamat|maraming salamat)(?:\s+(?:po|kai))*[!?.\s]*$/.test(q)) return reply('thanks', copy.thanks);
   if (/\b(?:forgot|forgotten|reset|nakalimutan).{0,25}(?:password)|\bforgot password\b/.test(q)) return reply('forgot_password', copy.forgot);
+  if (/\b(?:delete|remove|erase|burahin|burahin|tanggalin|i-delete|idelete)\b/.test(q) && /\b(?:appointments?|appt|cancel\w*|kanselado)\b/.test(q)) return reply('delete', copy.deleteCancelled);
   if (/\b(?:cancel\w*|magkansela|pagkansela|kanselahin)\b/.test(q)) return reply('cancel', copy.cancel);
   if (/\b(?:reschedul\w*|magpa-reschedule|magpalit|palitan|baguhin).{0,20}(?:schedule|appointment)?/.test(q)) return reply('reschedule', copy.reschedule);
   if (/\b(?:how|paano|pano).{0,35}(?:book|magbook|mag-book|magpa-appointment|appointment|reserve)\b/.test(q)) return reply('booking', copy.booking);

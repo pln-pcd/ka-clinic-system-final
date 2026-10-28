@@ -5,7 +5,7 @@ import { availabilityFallback, containsPersonalDetails, getKaiDecision, kaiCopy,
 // model may answer more flexibly.
 const SMART_INTENTS = new Set([
   'navigation', 'account', 'records', 'login', 'signup', 'forgot', 'forgot_password', 'cancel', 'reschedule',
-  'booking', 'hours', 'location', 'contact', 'name', 'creator', 'capstone', 'staff', 'unknown', 'unmatched',
+  'booking', 'hours', 'location', 'contact', 'name', 'app_name', 'delete', 'staff', 'unknown', 'unmatched',
 ]);
 
 export type { ReplyCategory } from './kaiPolicy';
