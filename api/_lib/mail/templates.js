@@ -451,12 +451,12 @@ ${cells}
                 </table>`;
 }
 
-export const DEFAULT_PATIENT_APP_DOWNLOAD_URL = 'https://github.com/pln-pcd/ka-clinic-system-final/releases/download/v1.0.27/ka-clinic-1.0.27.apk';
+export const DEFAULT_PATIENT_APP_DOWNLOAD_URL = 'https://ka-clinic-system-final.vercel.app/downloads/ka-clinic.apk';
 
 // Sent once when the clinic registers a new patient on the admin dashboard
 // (api/notifications.js, action `patient-welcome`). Tells the patient they
 // are on file and walks them through installing the companion app, creating
-// their password and signing in. `downloadUrl` defaults to the latest release APK.
+// their password and signing in. `downloadUrl` defaults to the directly hosted APK.
 export function buildPatientWelcomeEmailHtml({ patientName, mrn, email, downloadUrl }) {
   const activeDownloadUrl = (downloadUrl && /^https:\/\//i.test(downloadUrl))
     ? downloadUrl.trim()
@@ -464,7 +464,7 @@ export function buildPatientWelcomeEmailHtml({ patientName, mrn, email, download
   const greeting = patientName ? `Dear ${escapeHtml(patientName)},` : 'Dear Patient,';
   const safeMrn = escapeHtml(mrn);
   const downloadDetail = activeDownloadUrl
-    ? 'Tap the <strong>Download Android App (APK)</strong> button above on your Android phone to directly download and install the <strong>K&amp;A Clinic</strong> companion app (ka-clinic-1.0.27.apk). If your phone prompts, allow installing apps from this source.'
+    ? 'Tap the <strong>Download Android App (APK)</strong> button above on your Android phone to directly download and install the <strong>K&amp;A Clinic</strong> companion app. If your phone prompts, allow installing apps from this source.'
     : 'Ask the clinic front desk for the download link or QR code, then install the <strong>K&amp;A Clinic</strong> app on your Android phone.';
   return shell({
     title: 'You are registered at K&amp;A Animal Bite Center',

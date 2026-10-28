@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:emulator": "vite --mode emulator --host",
-    "build": "vite build",
+    "build": "node scripts/ensure-apk.js && vite build",
     "preview": "vite preview",
     "check-smtp": "node --env-file=../.env ../scripts/admin-tools.mjs check-smtp"
   },

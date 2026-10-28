@@ -1475,7 +1475,7 @@ async function patientWelcome(req, res) {
     return;
   }
 
-  const DEFAULT_APK_DOWNLOAD_URL = 'https://github.com/pln-pcd/ka-clinic-system-final/releases/download/v1.0.27/ka-clinic-1.0.27.apk';
+  const DEFAULT_APK_DOWNLOAD_URL = 'https://ka-clinic-system-final.vercel.app/downloads/ka-clinic.apk';
   const rawDownloadUrl = (process.env.PATIENT_APP_DOWNLOAD_URL || '').trim();
   const downloadUrl = /^https:\/\//i.test(rawDownloadUrl) ? rawDownloadUrl : DEFAULT_APK_DOWNLOAD_URL;
   const content = { patientName: patient.name || '', mrn, email, downloadUrl };

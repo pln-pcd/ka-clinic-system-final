@@ -247,9 +247,9 @@ export default function AppSection() {
 
             {/* Simple & Compact APK Download Button */}
             <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-              <a href="https://github.com/pln-pcd/ka-clinic-system-final/releases/download/v1.0.27/ka-clinic-1.0.27.apk"
-                download="ka-clinic-1.0.27.apk"
-                onClick={() => showToast('Downloading K&A Clinic APK (v1.0.27)... 🚀')}
+              <a href="/downloads/ka-clinic.apk"
+                download="ka-clinic.apk"
+                onClick={() => showToast('Downloading K&A Clinic APK... 🚀')}
                 style={{
                   background: '#EF4444',
                   border: 'none',

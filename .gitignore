@@ -20,6 +20,7 @@ expo-env.d.ts
 *.orig.*
 *.jks
 *.keystore
+*.apk
 credentials.json
 /patient-app/credentials/
 *.p8
