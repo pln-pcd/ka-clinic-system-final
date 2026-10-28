@@ -809,7 +809,7 @@ export default function RabiesRecoveryApp() {
                   </View>
                   <View style={[s.recordsTableRow, { borderBottomWidth: 0 }]}>
                     <Text style={[s.recordsTableCellLabel, { flex: 1.2 }]}>Attending ABTC</Text>
-                    <Text style={[s.recordsTableCellValue, { flex: 1.8, fontWeight: '700', color: '#1E293B' }]}>K&A Animal Bite Center</Text>
+                    <Text style={[s.recordsTableCellValue, { flex: 1.8, fontWeight: '700', color: '#1E293B' }]}>K&A Anti-Rabies Vaccine Clinic</Text>
                   </View>
                 </View>
               </View>

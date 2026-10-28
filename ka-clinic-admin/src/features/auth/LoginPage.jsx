@@ -501,14 +501,11 @@ export default function AdminLogin({ onSuccess, onBack }) {
         {/* Brand Logo & Name */}
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center p-[3px] shadow-md border border-blue-100/90">
-            <img src="/assets/dashboard/logo-white-nobg.png" alt="K&A Clinic" className="w-full h-full object-contain" />
+            <img src="/assets/dashboard/logo-white-nobg.png" alt="K&A Anti-Rabies Vaccine Clinic" className="w-full h-full object-contain" />
           </div>
           <div>
-            <span className="text-white font-extrabold text-lg sm:text-xl tracking-tight leading-none block">
-              K&amp;A Clinic
-            </span>
-            <span className="text-[10px] uppercase font-bold tracking-widest text-white block mt-0.5">
-              Rabies &amp; Bite Center
+            <span className="text-white font-extrabold text-base sm:text-lg tracking-tight leading-none block">
+              K&amp;A Anti-Rabies Vaccine Clinic
             </span>
           </div>
         </div>
@@ -1034,7 +1031,7 @@ export default function AdminLogin({ onSuccess, onBack }) {
 
       {/* ── FOOTER BAR ── */}
       <footer className="relative z-20 w-full px-6 sm:px-10 md:px-14 pb-6 sm:pb-8 flex flex-col sm:flex-row items-center justify-between text-[11px] text-blue-200/60 gap-2">
-        <span>&copy; {new Date().getFullYear()} K&amp;A Animal Bite Center. All rights reserved.</span>
+        <span>&copy; {new Date().getFullYear()} K&amp;A Anti-Rabies Vaccine Clinic. All rights reserved.</span>
         <div className="flex items-center gap-4 text-blue-200/70 font-medium">
           <span>Authorized Access Only</span>
         </div>

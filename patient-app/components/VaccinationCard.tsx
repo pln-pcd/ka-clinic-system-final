@@ -102,7 +102,7 @@ function Header({ v, title, subtitle, tag }: { v: Sizes; title: string; subtitle
       <View style={[st.headerRow, { gap: v.logoGap }]}>
         <Image source={LOGO_KA} style={{ width: v.logoW, height: v.logoH }} resizeMode="contain" accessibilityLabel="K&A Clinic logo" />
         <View style={st.headerText}>
-          <Text style={[st.clinic, { fontSize: v.clinic }]}>K&A ANIMAL BITE CENTER & CLINIC</Text>
+          <Text style={[st.clinic, { fontSize: v.clinic }]}>K&A ANTI-RABIES VACCINE CLINIC</Text>
           <Text style={[st.title, { fontSize: v.title, lineHeight: v.titleLine, marginVertical: v.titleMargin }]}>{title}</Text>
           <Text style={[st.subtitle, { fontSize: v.sub, lineHeight: v.subLine }]}>{subtitle}</Text>
         </View>

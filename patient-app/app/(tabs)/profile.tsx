@@ -1063,7 +1063,7 @@ export default function ProfileScreen() {
                 ))}
               </View>
 
-              <Text style={s.versionText}>Last Updated: August 2026 · K&A Animal Bite Center & Clinic</Text>
+              <Text style={s.versionText}>Last Updated: August 2026 · K&A Anti-Rabies Vaccine Clinic</Text>
             </ScrollView>
           </View>
         );

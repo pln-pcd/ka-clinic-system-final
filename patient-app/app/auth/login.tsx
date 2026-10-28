@@ -175,7 +175,7 @@ export default function LoginScreen() {
             <Text style={styles.brandName}>
               <Text style={{ color: NAVY_BLUE }}>K&A</Text> CLINIC
             </Text>
-            <Text style={styles.brandSubtitle}>ANTI-RABIES CARE SYSTEM</Text>
+            <Text style={styles.brandSubtitle}>ANTI-RABIES VACCINE CLINIC</Text>
           </Animated.View>
 
           {/* LOGIN CARD */}

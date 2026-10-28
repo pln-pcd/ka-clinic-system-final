@@ -271,7 +271,7 @@ export default function RecordsScreen() {
             ))}
             <View style={[s.recordTableRow, { borderBottomWidth: 0 }]}>
               <Text style={[s.recordTableCellLabel, { flex: 1.2 }]}>Attending ABTC</Text>
-              <Text style={[s.recordTableCellValue, { flex: 1.8, fontWeight: '700', color: C.charcoal }]}>K&A Animal Bite Center</Text>
+              <Text style={[s.recordTableCellValue, { flex: 1.8, fontWeight: '700', color: C.charcoal }]}>K&A Anti-Rabies Vaccine Clinic</Text>
             </View>
           </View>
         </View>
