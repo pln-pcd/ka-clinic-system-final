@@ -409,7 +409,7 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
             <img src="${currentLogo}" alt="K&A Clinic Logo" class="header-logo" />
             <div>
               <div class="header-muni">Municipality of Libon, Province of Albay</div>
-              <div class="header-brand">K&amp;A ANIMAL BITE CENTER &mdash; INVENTORY REPORT</div>
+              <div class="header-brand">K&amp;A ANTI-RABIES VACCINE CLINIC &mdash; INVENTORY REPORT</div>
               <div class="header-sub">Inventory Stock Summary &mdash; ${periodLabel()}${pIdx > 0 ? ' &bull; Continuation' : ''}</div>
             </div>
           </div>
@@ -455,7 +455,7 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
           </div>
 
           <div class="footer">
-            <span>K&amp;A Animal Bite Treatment Center &bull; Rural Health Unit &bull; Official Inventory Registry Report</span>
+            <span>K&amp;A Anti-Rabies Vaccine Clinic &bull; Rural Health Unit &bull; Official Inventory Registry Report</span>
             <span>Page ${pageNum} of ${totalPages}</span>
           </div>
         </div>
@@ -472,7 +472,7 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
                 <img src="${currentLogo}" alt="K&A Clinic Logo" class="header-logo" />
                 <div>
                   <div class="header-muni">Municipality of Libon, Province of Albay</div>
-                  <div class="header-brand">K&amp;A ANIMAL BITE CENTER &mdash; INVENTORY REPORT</div>
+                  <div class="header-brand">K&amp;A ANTI-RABIES VACCINE CLINIC &mdash; INVENTORY REPORT</div>
                   <div class="header-sub">Inventory Stock Summary &mdash; ${periodLabel()} &bull; Summary</div>
                 </div>
               </div>
@@ -481,7 +481,7 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
             ${summaryHtml}
           </div>
           <div class="footer">
-            <span>K&amp;A Animal Bite Treatment Center &bull; Rural Health Unit &bull; Official Inventory Registry Report</span>
+            <span>K&amp;A Anti-Rabies Vaccine Clinic &bull; Rural Health Unit &bull; Official Inventory Registry Report</span>
             <span>Page ${totalPages} of ${totalPages}</span>
           </div>
         </div>` : '');
@@ -582,7 +582,7 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
         logo: logoToUse,
         margin: MARGIN,
         pageWidth,
-        title: 'K&A ANIMAL BITE CENTER — INVENTORY REPORT',
+        title: 'K&A ANTI-RABIES VACCINE CLINIC — INVENTORY REPORT',
         subtitle: `Inventory Stock Summary — ${periodLabel()}${isContinuation ? ' • Continuation' : ''}`,
         filters: `Category: ${categoryFilterLabel()}  |  Status: ${statusFilterLabel()}  |  Date: ${dateGeneratedStr}`,
       });
@@ -689,7 +689,7 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7);
       doc.setTextColor(148, 163, 184);
-      doc.text('K&A Animal Bite Treatment Center · Rural Health Unit · Confidential Inventory Report', MARGIN, pageHeight - 6);
+      doc.text('K&A Anti-Rabies Vaccine Clinic · Rural Health Unit · Confidential Inventory Report', MARGIN, pageHeight - 6);
       doc.text(`Page ${i} of ${totalPages}`, pageWidth - MARGIN, pageHeight - 6, { align: 'right' });
     }
 
@@ -729,7 +729,7 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
     const subtitleStr = `Period Covered: ${periodLabel()} | Category: ${categoryFilterLabel()} | Status: ${statusFilterLabel()} | Date Generated: ${new Date().toLocaleString('en-PH')}`;
 
     const aoa = [
-      ['INVENTORY & STOCK MANAGEMENT REGISTRY REPORT', '', '', '', '', '', '', ''],
+      ['K&A ANTI-RABIES VACCINE CLINIC — INVENTORY REPORT', '', '', '', '', '', '', ''],
       [subtitleStr, '', '', '', '', '', '', ''],
       [`Total Items: ${rows.length}`, '', `In Stock: ${statusCount.inStock}`, '', `Low Stock: ${statusCount.lowStock}`, '', `Out of Stock: ${statusCount.outOfStock}`, ''],
       ['', '', '', '', '', '', '', ''],
@@ -970,9 +970,9 @@ export function ExportInventoryModal({ inventory, onClose, onToast }) {
       await sendReportEmail(
         to,
         `K&A Clinic — Inventory Stock Report (${periodLabel()})`,
-        `<p>Attached is the K&amp;A Animal Bite Center official inventory stock report for <strong>${periodLabel()}</strong>.</p>`
+        `<p>Attached is the K&amp;A Anti-Rabies Vaccine Clinic official inventory stock report for <strong>${periodLabel()}</strong>.</p>`
           + `<p>Category: ${categoryFilterLabel()} &bull; Status: ${statusFilterLabel()} &bull; ${rows.length} item record${rows.length !== 1 ? 's' : ''}.</p>`
-          + `<p>&mdash; K&amp;A Animal Bite Center</p>`,
+          + `<p>&mdash; K&amp;A Anti-Rabies Vaccine Clinic</p>`,
         { base64, filename: `inventory-report-${period}${statusSlug}-${getTodayDateString()}.pdf` }
       );
     } catch (err) {

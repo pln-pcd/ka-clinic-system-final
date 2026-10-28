@@ -188,19 +188,30 @@ const DatePicker = forwardRef(function DatePicker({
   const onPopKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } };
 
   const { y: cy, m: cm } = parts(cursor);
-  const cells = useMemo(() => {
-    const lead = weekday(cy, cm, 1);
-    const out = [];
-    for (let i = 0; i < 42; i++) {
-      const s = addDays(toStr(cy, cm, 1), i - lead);
-      out.push({ s, day: parts(s).d, other: parts(s).m !== cm });
-    }
-    // Always six weeks, so the popup keeps one height between months.
-    return out;
-  }, [cy, cm]);
-
+  const totalDays = daysIn(cy, cm);
   const monthStart = toStr(cy, cm, 1);
-  const monthEnd = toStr(cy, cm, daysIn(cy, cm));
+  const monthEnd = toStr(cy, cm, totalDays);
+  const lead = weekday(cy, cm, 1);
+  const rowCount = Math.ceil((lead + totalDays) / 7);
+  const totalCells = rowCount * 7;
+
+  const cells = useMemo(() => {
+    const out = [];
+    for (let i = 0; i < totalCells; i++) {
+      const s = addDays(monthStart, i - lead);
+      const isNextMonth = s > monthEnd;
+      const isPrevMonth = s < monthStart;
+      out.push({
+        s,
+        day: parts(s).d,
+        other: isPrevMonth || isNextMonth,
+        isNextMonth,
+        isPrevMonth,
+      });
+    }
+    return out;
+  }, [cy, cm, monthStart, monthEnd, lead, totalCells]);
+
   const canPrev = !min || addDays(monthStart, -1) >= min.slice(0, 8) + '01';
   const canNext = !max || addDays(monthEnd, 1) <= max;
   const today = todayStr();
@@ -301,25 +312,30 @@ const DatePicker = forwardRef(function DatePicker({
               </div>
               <div ref={gridRef} role="grid" aria-label={`${MONTHS[cm]} ${cy}`} className={`grid grid-cols-7 ${pos.dense ? 'gap-0.5' : 'gap-1'}`} onKeyDown={onGridKey}>
                 {cells.map(c => {
-                  const ok = allowed(c.s);
+                  if (c.isNextMonth) {
+                    return <div key={c.s} aria-hidden="true" className={pos.dense ? 'h-7' : 'h-9'} />;
+                  }
+                  const ok = allowed(c.s) && !c.other;
                   const sel = c.s === value;
                   const isToday = c.s === today;
+                  const hintText = c.other ? '' : (typeof disabledHint === 'function' ? disabledHint(c.s) : disabledHint);
                   return (
                     <button
                       key={c.s}
                       type="button"
                       role="gridcell"
                       data-date={c.s}
-                      tabIndex={c.s === cursor ? 0 : -1}
+                      disabled={!ok}
+                      tabIndex={c.s === cursor && ok ? 0 : -1}
                       aria-selected={sel}
                       aria-disabled={!ok || undefined}
-                      aria-label={`${MONTHS[parts(c.s).m]} ${c.day}, ${parts(c.s).y}${ok ? '' : ` (${disabledHint})`}`}
-                      title={ok ? undefined : disabledHint}
-                      onClick={() => (ok ? pick(c.s) : setCursor(c.s))}
-                      className={`relative ${pos.dense ? 'h-7' : 'h-9'} rounded-[10px] text-[13px] font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[#3B50DF]/50
+                      aria-label={`${MONTHS[parts(c.s).m]} ${c.day}, ${parts(c.s).y}${ok ? '' : hintText ? ` (${hintText})` : ''}`}
+                      title={ok ? undefined : hintText || undefined}
+                      onClick={ok ? () => pick(c.s) : undefined}
+                      className={`relative ${pos.dense ? 'h-7' : 'h-9'} rounded-[10px] text-[13px] font-semibold outline-none transition-colors
                         ${sel ? 'bg-[#EEF2FF] text-[#3B50DF] shadow-[inset_0_0_0_2px_#6366F1]'
-                          : !ok ? 'text-slate-300 cursor-not-allowed'
-                          : `${c.other ? 'text-slate-400' : 'text-slate-800'} hover:bg-slate-100 cursor-pointer`}`}
+                          : !ok ? 'text-slate-300 cursor-not-allowed select-none'
+                          : `${c.other ? 'text-slate-400' : 'text-slate-800'} hover:bg-slate-100 cursor-pointer focus-visible:ring-2 focus-visible:ring-[#3B50DF]/50`}`}
                     >
                       {c.day}
                       {isToday && <span aria-hidden="true" className={`absolute left-1/2 -translate-x-1/2 bottom-1 w-1 h-1 rounded-full ${ok || sel ? 'bg-[#3B50DF]' : 'bg-slate-300'}`} />}

@@ -1641,7 +1641,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
           { label: 'Total Appointments', value: appointments.length, sub: 'All recorded bookings', Icon: CalendarIcon },
           { label: 'Pending Requests', value: pendingOnlineRequests.length, sub: 'Awaiting confirmation', Icon: Clock },
           { label: 'Confirmed Today', value: confirmedToday, sub: 'Ready for today’s visits', Icon: CheckCircle2 },
-          { label: 'Cancelled Records', value: allCancelledApts.length, sub: 'Cancelled & Archived', Icon: AlertCircle },
+          { label: 'Cancelled Appointments', value: allCancelledApts.length, sub: 'Cancelled bookings', Icon: AlertCircle },
         ].map((m, i) => (
           <div key={i} style={{
             background: '#FFFFFF', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 16px',
@@ -2253,8 +2253,8 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened } = {
                     const keepTime = addForm.time && !takenTimesOn(date).includes(addForm.time);
                     setAddForm({ ...addForm, date, time: keepTime ? addForm.time : '' });
                   }}
-                  isDateDisabled={d => !isWeekendDate(d)}
-                  disabledHint="Closed on weekdays"
+                  isDateDisabled={d => !isWeekendDate(d) || getDayClosure(d)?.type === 'day'}
+                  disabledHint={d => (getDayClosure(d)?.type === 'day' ? (getDayClosure(d)?.closure?.reason ? `Closed: ${getDayClosure(d).closure.reason}` : 'Clinic closed') : 'Closed on weekdays')}
                   min={getTodayDateString()}
                 />
                 {addV.error('date')

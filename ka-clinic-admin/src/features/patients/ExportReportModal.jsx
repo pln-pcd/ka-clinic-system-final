@@ -271,7 +271,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
           <!-- Center: Clinic Letterhead Text -->
           <td style="vertical-align:middle;text-align:center;padding:0;">
             <div style="font-size:9.5px;color:#64748B;letter-spacing:0.8px;font-weight:700;text-transform:uppercase;">Municipality of Libon, Province of Albay</div>
-            <div style="font-size:16px;font-weight:900;color:#0F172A;letter-spacing:0.5px;margin-top:2px;text-transform:uppercase;">K&amp;A Animal Bite Center</div>
+            <div style="font-size:16px;font-weight:900;color:#0F172A;letter-spacing:0.5px;margin-top:2px;text-transform:uppercase;">K&amp;A Anti-Rabies Vaccine Clinic</div>
           </td>
           <!-- Right: Matching Counter-balance Spacer so Center Text is 100% Optical Center -->
           <td style="vertical-align:middle;padding-left:16px;width:90px;">
@@ -434,7 +434,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     const subtitleStr = `Period Covered: ${periodLabel()} | Status: ${statusFilterLabel()} | Barangay: All Barangays | Date Generated: ${new Date().toLocaleString('en-PH')}`;
 
     const aoa = [
-      ['HEALTH MONITORING & PATIENT REGISTRY REPORT', '', '', '', '', '', '', '', '', ''],
+      ['K&A ANTI-RABIES VACCINE CLINIC — HEALTH MONITORING REPORT', '', '', '', '', '', '', '', '', ''],
       [subtitleStr, '', '', '', '', '', '', '', '', ''],
       [`Total Patients: ${rows.length}`, '', `Ongoing: ${statusCount.ongoing || 0}`, '', `Overdue: ${statusCount.overdue || 0}`, '', '', `Completed: ${statusCount.completed || 0}`, '', ''],
       ['', '', '', '', '', '', '', '', '', ''],
@@ -693,7 +693,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
             <img src="${currentLogo}" alt="K&A Clinic Logo" class="header-logo" />
             <div>
               <div class="header-muni">Municipality of Libon, Province of Albay</div>
-              <div class="header-brand">K&amp;A ANIMAL BITE CENTER &mdash; HEALTH MONITORING REPORT</div>
+              <div class="header-brand">K&amp;A ANTI-RABIES VACCINE CLINIC &mdash; HEALTH MONITORING REPORT</div>
               <div class="header-sub">Barangay Summary &mdash; ${periodLabel()}${pIdx > 0 ? ' &bull; Continuation' : ''}</div>
             </div>
           </div>
@@ -741,7 +741,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
           </div>
 
           <div class="footer">
-            <span>K&amp;A Animal Bite Treatment Center &bull; Rural Health Unit &bull; Confidential Clinical Report</span>
+            <span>K&amp;A Anti-Rabies Vaccine Clinic &bull; Rural Health Unit &bull; Confidential Clinical Report</span>
             <span>Page ${pageNum} of ${totalPages}</span>
           </div>
         </div>
@@ -758,7 +758,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
                 <img src="${currentLogo}" alt="K&A Clinic Logo" class="header-logo" />
                 <div>
                   <div class="header-muni">Municipality of Libon, Province of Albay</div>
-                  <div class="header-brand">K&amp;A ANIMAL BITE CENTER &mdash; HEALTH MONITORING REPORT</div>
+                  <div class="header-brand">K&amp;A ANTI-RABIES VACCINE CLINIC &mdash; HEALTH MONITORING REPORT</div>
                   <div class="header-sub">Barangay Summary &mdash; ${periodLabel()} &bull; Summary</div>
                 </div>
               </div>
@@ -767,7 +767,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
             ${summaryHtml}
           </div>
           <div class="footer">
-            <span>K&amp;A Animal Bite Treatment Center &bull; Rural Health Unit &bull; Confidential Clinical Report</span>
+            <span>K&amp;A Anti-Rabies Vaccine Clinic &bull; Rural Health Unit &bull; Confidential Clinical Report</span>
             <span>Page ${totalPages} of ${totalPages}</span>
           </div>
         </div>` : '');
@@ -872,7 +872,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
         logo: logoToUse,
         margin: MARGIN,
         pageWidth,
-        title: 'K&A ANIMAL BITE CENTER — HEALTH MONITORING REPORT',
+        title: 'K&A ANTI-RABIES VACCINE CLINIC — HEALTH MONITORING REPORT',
         subtitle: `Barangay Summary — ${periodLabel()}${isContinuation ? ' • Continuation' : ''}`,
         filters: `Service: ${serviceFilterLabel()}  |  Status: ${statusFilterLabel()}  |  Date: ${dateGeneratedStr}`,
       });
@@ -997,7 +997,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7);
       doc.setTextColor(148, 163, 184);
-      doc.text('K&A Animal Bite Treatment Center · Rural Health Unit · Confidential Clinical Report', MARGIN, pageHeight - 6);
+      doc.text('K&A Anti-Rabies Vaccine Clinic · Rural Health Unit · Confidential Clinical Report', MARGIN, pageHeight - 6);
       doc.text(`Page ${i} of ${totalPages}`, pageWidth - MARGIN, pageHeight - 6, { align: 'right' });
     }
 
@@ -1096,7 +1096,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
       protocol: getProtocolLabel(p),
       registered,
       attending: latestReport?.author || p.registeredByName || p.attendingName || (Array.isArray(p.doses) ? (p.doses.find(d => d.attendingName || d.givenByName)?.attendingName || p.doses.find(d => d.attendingName || d.givenByName)?.givenByName) : '') || '—',
-      facility: 'K&A Animal Bite Treatment Center · Libon, Albay',
+      facility: 'K&A Anti-Rabies Vaccine Clinic · Libon, Albay',
       status: st,
     };
 
@@ -1114,22 +1114,20 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     // Clinical Presentation & Exposure
     const exposure = isPEP ? {
       isPEP: true,
-      complaint: `Clinical evaluation and post-exposure prophylaxis following exposure to ${p.animal || 'animal'} on ${fmtDate(p.date) || registered}. Assessed as Category ${p.cat || '—'} bite exposure.`,
+      summary: `Patient evaluated and administered post-exposure prophylaxis following exposure to ${p.animal ? formatTitleCase(p.animal) : 'animal'} on ${fmtDate(p.date) || registered}. Assessed as ${p.cat ? (String(p.cat).startsWith('Category') ? p.cat : `Category ${p.cat}`) : 'Category II'} exposure.`,
       category: p.cat ? (String(p.cat).startsWith('Category') ? p.cat : `Category ${p.cat}`) : 'Category II',
-      animal: p.animal ? `${formatTitleCase(p.animal)} Exposure` : 'Animal Bite Exposure',
+      animal: p.animal ? `${formatTitleCase(p.animal)} Exposure` : 'Animal Exposure',
       woundSite: showWoundDetail
-        ? `${p.woundLocation || 'Wound site'} · ${p.woundDepth || 'Intact skin'} · ${p.numberOfBites ? `${p.numberOfBites} bite(s)` : '1 bite'}`
+        ? `${p.woundLocation || 'Wound site'}${p.woundDepth ? ` (${p.woundDepth})` : ''}`
         : PATIENT_HIDDEN_NOTE,
-      woundCondition: woundCondition || 'Clean, normal healing',
-      adverseEvent: adverseEvent || 'None reported',
+      allergies: p.allergies || 'No known allergies (NKDA)',
     } : {
       isPEP: false,
-      complaint: `Patient received clinical evaluation and vaccination under the ${serviceLabel(p.service) || 'vaccination'} protocol.`,
-      category: 'Preventive Vaccination',
+      summary: `Patient received clinical evaluation and preventive immunization under the ${serviceLabel(p.service) || 'vaccine'} protocol.`,
+      category: 'Preventive Immunization',
       animal: 'N/A',
-      woundSite: 'Intact skin / Deltoid injection site',
-      woundCondition: 'Intact skin',
-      adverseEvent: adverseEvent || 'None reported',
+      woundSite: 'Deltoid muscle (Intact skin)',
+      allergies: p.allergies || 'No known allergies (NKDA)',
     };
 
     // Dosing Schedule (The ONLY Table)
@@ -1162,7 +1160,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
       issuedDate: new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' }),
       footer: [
         `Generated by K&A Clinic EHR System · Confidential Patient Medical Record · ${new Date().getFullYear()}`,
-        'K&A Animal Bite Treatment Center · Municipality of Libon, Province of Albay',
+        'K&A Anti-Rabies Vaccine Clinic · Municipality of Libon, Province of Albay',
       ],
     };
   }
@@ -1189,8 +1187,8 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
               <img src="${logo || '/assets/dashboard/logo-white-nobg.png'}" alt="K&A Clinic Logo" style="width:58px;height:58px;object-fit:contain;display:block;" />
             </td>
             <td style="vertical-align:middle;text-align:center;padding:0 6px;">
-              <div style="font-size:15px;font-weight:900;color:#0F172A;letter-spacing:0.6px;text-transform:uppercase;">K&amp;A ANIMAL BITE CENTER</div>
-              <div style="font-size:8.5px;color:#1D4ED8;font-weight:700;margin-top:2px;">Caring for Life &bull; Animal Bite Treatment &amp; Care</div>
+              <div style="font-size:15px;font-weight:900;color:#0F172A;letter-spacing:0.6px;text-transform:uppercase;">K&amp;A ANTI-RABIES VACCINE CLINIC</div>
+              <div style="font-size:8.5px;color:#1D4ED8;font-weight:700;margin-top:2px;">Animal Bite Care &amp; Post-Exposure Prophylaxis Center</div>
               <div style="font-size:8px;color:#64748B;margin-top:2px;">Municipality of Libon, Province of Albay | Ph: (052) 742-0123 | ka.animalbitecenter@gmail.com</div>
               <div style="font-size:7.5px;color:#64748B;margin-top:1px;">DOH Accredited Animal Bite Treatment Center (ABTC) &bull; PhilHealth Accredited</div>
             </td>
@@ -1206,8 +1204,8 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
         <!-- Document Title & Header Meta -->
         <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:12px;padding-bottom:4px;">
           <div>
-            <h1 style="margin:0;font-size:13px;font-weight:900;color:#0A1D47;letter-spacing:0.8px;text-transform:uppercase;">OFFICIAL PATIENT MEDICAL REPORT</h1>
-            <div style="font-size:8px;color:#475569;font-weight:600;margin-top:2px;">Clinical Assessment, Exposure Evaluation &amp; Vaccination Administration Log</div>
+            <h1 style="margin:0;font-size:13px;font-weight:900;color:#0A1D47;letter-spacing:0.8px;text-transform:uppercase;">PATIENT IMMUNIZATION &amp; MEDICAL RECORD</h1>
+            <div style="font-size:8px;color:#475569;font-weight:600;margin-top:2px;">Official Rabies Post-Exposure Prophylaxis &amp; Vaccination Registry</div>
           </div>
           <div style="text-align:right;">
             <div style="font-size:9px;font-weight:700;color:#0F172A;">
@@ -1266,33 +1264,29 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
           </div>
         </div>
 
-        <!-- 2. Clinical Vitals Strip -->
-        <div style="background:#FFFFFF;border:1px solid #CBD5E1;border-radius:4px;padding:8px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;font-size:9px;">
-          <div><span style="color:#64748B;font-weight:700;font-size:7.5px;text-transform:uppercase;display:block;">Blood Pressure</span><strong style="color:#0F172A;">${escapeHtml(m.vitals.bp)}</strong></div>
-          ${m.vitals.pulse ? `<div><span style="color:#64748B;font-weight:700;font-size:7.5px;text-transform:uppercase;display:block;">Heart Rate</span><strong style="color:#0F172A;">${escapeHtml(m.vitals.pulse)}</strong></div>` : ''}
-          ${m.vitals.temp ? `<div><span style="color:#64748B;font-weight:700;font-size:7.5px;text-transform:uppercase;display:block;">Temperature</span><strong style="color:#0F172A;">${escapeHtml(m.vitals.temp)}</strong></div>` : ''}
-          ${m.vitals.weight || m.vitals.height ? `<div><span style="color:#64748B;font-weight:700;font-size:7.5px;text-transform:uppercase;display:block;">Weight / Height</span><strong style="color:#0F172A;">${escapeHtml(m.vitals.weight || '—')} / ${escapeHtml(m.vitals.height || '—')}</strong></div>` : ''}
-          <div><span style="color:#64748B;font-weight:700;font-size:7.5px;text-transform:uppercase;display:block;">Allergies</span><strong style="color:#0F172A;">${escapeHtml(m.vitals.allergies)}</strong></div>
-          <div><span style="color:#64748B;font-weight:700;font-size:7.5px;text-transform:uppercase;display:block;">Prior Vaccines</span><strong style="color:#0F172A;">${escapeHtml(m.vitals.pastVaccines)}</strong></div>
-        </div>
-
-        <!-- 3. Clinical Evaluation & Exposure Narrative -->
-        <div style="background:#F8FAFC;border:1px solid #CBD5E1;border-radius:4px;padding:10px 14px;margin-bottom:12px;">
-          <div style="font-size:8px;font-weight:800;color:#0F172A;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;border-bottom:1px solid #E2E8F0;padding-bottom:3px;">CLINICAL EVALUATION &amp; EXPOSURE DETAILS</div>
-          <p style="margin:4px 0 6px 0;font-size:9px;color:#1E293B;line-height:1.5;">${escapeHtml(m.exposure.complaint)}</p>
-          <div style="display:flex;gap:12px;font-size:8px;color:#475569;flex-wrap:wrap;">
-            <span><strong>Exposure:</strong> ${escapeHtml(m.exposure.category)} &bull; ${escapeHtml(m.exposure.animal)}</span>
-            <span>&bull;</span>
-            <span><strong>Wound Site:</strong> ${escapeHtml(m.exposure.woundSite)}</span>
-            <span>&bull;</span>
-            <span><strong>Wound Condition:</strong> ${escapeHtml(m.exposure.woundCondition)}</span>
-            ${m.exposure.adverseEvent && m.exposure.adverseEvent !== 'None reported' ? `<span>&bull;</span><span><strong>Reaction:</strong> ${escapeHtml(m.exposure.adverseEvent)}</span>` : ''}
+        <!-- 2. Bite Incident & Clinical Evaluation Card -->
+        <div style="background:#FFFFFF;border:1px solid #CBD5E1;border-radius:4px;padding:10px 14px;margin-bottom:12px;">
+          <div style="font-size:8px;font-weight:800;color:#0F172A;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;border-bottom:1px solid #E2E8F0;padding-bottom:3px;">BITE INCIDENT &amp; CLINICAL EVALUATION</div>
+          <p style="margin:4px 0 8px 0;font-size:9px;color:#1E293B;line-height:1.5;">${escapeHtml(m.exposure.summary)}</p>
+          <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:6px 14px;font-size:8.5px;">
+            <div>
+              <span style="font-size:7.5px;font-weight:700;color:#64748B;text-transform:uppercase;display:block;">Exposure Category</span>
+              <strong style="color:#0F172A;">${escapeHtml(m.exposure.category)} &bull; ${escapeHtml(m.exposure.animal)}</strong>
+            </div>
+            <div>
+              <span style="font-size:7.5px;font-weight:700;color:#64748B;text-transform:uppercase;display:block;">Bite / Wound Site</span>
+              <strong style="color:#0F172A;">${escapeHtml(m.exposure.woundSite)}</strong>
+            </div>
+            <div>
+              <span style="font-size:7.5px;font-weight:700;color:#64748B;text-transform:uppercase;display:block;">Known Drug Allergies</span>
+              <strong style="color:#0F172A;">${escapeHtml(m.vitals.allergies)}</strong>
+            </div>
           </div>
         </div>
 
-        <!-- 4. Vaccination Dosing Schedule (THE ONLY TABLE) -->
-        <div style="margin-bottom:16px;">
-          <div style="font-size:8px;font-weight:800;color:#0F172A;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px;">VACCINATION DOSING SCHEDULE &amp; ADMINISTRATION LOG</div>
+        <!-- 3. Vaccination Dosing Schedule (THE ONLY TABLE) -->
+        <div style="margin-bottom:14px;">
+          <div style="font-size:8px;font-weight:800;color:#0F172A;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px;">RABIES VACCINATION SCHEDULE &amp; ADMINISTRATION LOG</div>
           <table style="width:100%;border-collapse:collapse;border:1px solid #CBD5E1;border-radius:4px;overflow:hidden;font-size:9px;table-layout:fixed;">
             <thead>
               <tr style="background:#F1F5F9;color:#0F172A;border-bottom:1px solid #CBD5E1;">
@@ -1324,21 +1318,29 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
           </table>
         </div>
 
-        <!-- Attestation & Official Signature Line -->
-        <div style="display:flex;align-items:flex-end;justify-content:space-between;padding-top:24px;border-top:1px solid #CBD5E1;margin-top:20px;">
+        <!-- 4. Important Patient Reminders -->
+        <div style="background:#F8FAFC;border:1px solid #CBD5E1;border-radius:4px;padding:9px 14px;margin-bottom:14px;font-size:8.5px;color:#334155;line-height:1.6;">
+          <div style="font-size:8px;font-weight:800;color:#0A1D47;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;border-bottom:1px solid #E2E8F0;padding-bottom:2px;">IMPORTANT PATIENT REMINDERS</div>
+          <div>&bull; <strong>Complete Every Dose:</strong> Anti-rabies immunization requires finishing all scheduled sessions to ensure full, lasting protection.</div>
+          <div>&bull; <strong>14-Day Animal Observation:</strong> If the biting domestic dog or cat is alive, observe it for 14 days and notify the clinic immediately if it becomes sick or dies.</div>
+          <div>&bull; <strong>Wound Hygiene:</strong> Keep the bite area clean and dry. Avoid applying unprescribed home remedies (garlic, vinegar, or stone).</div>
+        </div>
+
+        <!-- 5. Attestation & Official Signature Line -->
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;padding-top:16px;border-top:1px solid #CBD5E1;margin-top:14px;">
           <div style="font-size:8.5px;color:#334155;">
             <div><strong>Date Issued:</strong> ${escapeHtml(m.issuedDate)}</div>
-            <div style="font-size:7.5px;color:#64748B;margin-top:2px;">Official Clinical Medical Record &bull; K&amp;A Animal Bite Treatment Center</div>
-            <div style="font-size:7px;color:#94A3B8;margin-top:2px;">This document is valid for official, medical, school, and legal reference.</div>
+            <div style="font-size:7.5px;color:#64748B;margin-top:2px;">Official Clinical Medical Record &bull; K&amp;A Anti-Rabies Vaccine Clinic</div>
+            <div style="font-size:7px;color:#94A3B8;margin-top:2px;">This document is valid for official, medical, school, employment, and legal reference.</div>
           </div>
           <div style="text-align:center;min-width:240px;">
-            <div style="border-bottom:1px solid #0F172A;width:100%;height:32px;margin-bottom:5px;"></div>
-            <div style="font-size:8.5px;font-weight:800;color:#0F172A;letter-spacing:0.3px;">Attending Physician / Authorized Staff</div>
-            <div style="font-size:7.5px;color:#64748B;margin-top:1px;">Signature over Printed Name / License No.</div>
+            <div style="border-bottom:1px solid #0F172A;width:100%;height:28px;margin-bottom:5px;"></div>
+            <div style="font-size:8.5px;font-weight:800;color:#0F172A;letter-spacing:0.3px;">Attending Healthcare Professional / Authorized Staff</div>
+            <div style="font-size:7.5px;color:#64748B;margin-top:1px;">Signature over Printed Name / Designation</div>
           </div>
         </div>
 
-        <div style="margin-top:18px;font-size:7px;color:#94A3B8;text-align:center;line-height:1.5;">
+        <div style="margin-top:14px;font-size:7px;color:#94A3B8;text-align:center;line-height:1.5;">
           ${escapeHtml(m.footer[0])}<br>${escapeHtml(m.footer[1])}
         </div>
       </div>`;
@@ -1388,12 +1390,12 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(13);
     doc.setTextColor(15, 23, 42);
-    doc.text('K&A ANIMAL BITE CENTER', pageWidth / 2, 12.5, { align: 'center' });
+    doc.text('K&A ANTI-RABIES VACCINE CLINIC', pageWidth / 2, 12.5, { align: 'center' });
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
     doc.setTextColor(29, 78, 216);
-    doc.text('Caring for Life · Animal Bite Treatment & Care', pageWidth / 2, 16.5, { align: 'center' });
+    doc.text('Animal Bite Care · Post-Exposure Prophylaxis Center', pageWidth / 2, 16.5, { align: 'center' });
 
     doc.setFontSize(6.8);
     doc.setTextColor(100, 116, 139);
@@ -1415,18 +1417,18 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     doc.setFontSize(10.5);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(10, 29, 71);
-    doc.text('OFFICIAL PATIENT MEDICAL REPORT', 14, 32);
+    doc.text('PATIENT IMMUNIZATION & MEDICAL RECORD', 14, 32);
 
     doc.setFontSize(6.8);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(100, 116, 139);
-    doc.text('Clinical Assessment, Exposure Evaluation & Vaccination Administration Log', 14, 35.5);
+    doc.text('Official Rabies Post-Exposure Prophylaxis & Vaccination Registry', 14, 35.5);
 
     const stText = (m.demographics.status || 'ongoing').toUpperCase();
     const isDone = m.demographics.status === 'completed';
     const isOverdue = m.demographics.status === 'overdue';
 
-    // Status: clean dignified text (no pill badge)
+    // Status text
     doc.setFontSize(7.5);
     doc.setFont('helvetica', 'bold');
     if (isDone) {
@@ -1463,7 +1465,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     doc.setTextColor(100, 116, 139);
     doc.text(`·  ${m.demographics.age}  ·  ${m.demographics.gender}`, 18 + nameW + 2, cardY + 5);
 
-    // Service: clean right text (no pill badge)
+    // Service
     const srvText = `Service: ${m.demographics.service}`;
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7.2);
@@ -1496,9 +1498,9 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     renderField('Address: ', m.demographics.address, 18, cardY + 22);
     renderField('Facility: ', m.demographics.facility, 108, cardY + 22);
 
-    // 4. Section 2: Clinical Vitals & Exposure (NO BLUE ACCENT STRIPE)
-    const sec2Y = cardY + cardH + 4;
-    const sec2H = 26;
+    // 4. Section 2: Bite Incident & Clinical Evaluation Card
+    const sec2Y = cardY + cardH + 3.5;
+    const sec2H = 22;
     doc.setFillColor(255, 255, 255);
     doc.setDrawColor(203, 213, 225);
     doc.roundedRect(14, sec2Y, 182, sec2H, 1, 1, 'FD');
@@ -1506,31 +1508,27 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7.2);
     doc.setTextColor(15, 23, 42);
-    doc.text('CLINICAL EVALUATION & EXPOSURE DETAILS', 18, sec2Y + 4.5);
+    doc.text('BITE INCIDENT & CLINICAL EVALUATION', 18, sec2Y + 4.5);
 
     doc.setDrawColor(226, 232, 240);
     doc.line(18, sec2Y + 6, pageWidth - 18, sec2Y + 6);
 
-    doc.setFontSize(6.5);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(51, 65, 85);
-    doc.text(`BP: ${m.vitals.bp}   |   Pulse: ${m.vitals.pulse || '—'}   |   Temp: ${m.vitals.temp || '—'}   |   Weight/Height: ${m.vitals.weight || '—'} / ${m.vitals.height || '—'}   |   Allergies: ${m.vitals.allergies}`, 18, sec2Y + 10.5);
-
     doc.setFontSize(6.8);
+    doc.setFont('helvetica', 'normal');
     doc.setTextColor(15, 23, 42);
-    const complaintLines = doc.splitTextToSize(m.exposure.complaint, 174);
-    doc.text(complaintLines, 18, sec2Y + 15.5);
+    const incidentLines = doc.splitTextToSize(m.exposure.summary, 174);
+    doc.text(incidentLines, 18, sec2Y + 10.5);
 
-    doc.setFontSize(6.5);
-    doc.setTextColor(100, 116, 139);
-    doc.text(`Exposure: ${m.exposure.category} · ${m.exposure.animal}   |   Site/Depth: ${m.exposure.woundSite}   |   Wound Condition: ${m.exposure.woundCondition}`, 18, sec2Y + 22.5);
+    renderField('Exposure: ', `${m.exposure.category} · ${m.exposure.animal}`, 18, sec2Y + 17);
+    renderField('Wound Site: ', m.exposure.woundSite, 78, sec2Y + 17);
+    renderField('Allergies: ', m.vitals.allergies, 138, sec2Y + 17);
 
     // 5. Section 3: Vaccination Dosing Schedule (THE ONLY TABLE)
-    const tableY = sec2Y + sec2H + 4;
+    const tableY = sec2Y + sec2H + 3.5;
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7.5);
     doc.setTextColor(15, 23, 42);
-    doc.text('VACCINATION DOSING SCHEDULE & ADMINISTRATION LOG', 14, tableY + 2.5);
+    doc.text('RABIES VACCINATION SCHEDULE & ADMINISTRATION LOG', 14, tableY + 2.5);
 
     autoTable(doc, {
       startY: tableY + 4.5,
@@ -1580,9 +1578,30 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
       }
     });
 
-    // 6. Attestation & Official Signature Line
-    // (NO Assessment & Care Plan, NO hardcoded officer name/PRC license, NO VERIFIED EHR pill)
-    const signY = Math.max(doc.lastAutoTable.finalY + 12, pageHeight - 44);
+    // 6. Section 4: Important Patient Reminders
+    const remY = doc.lastAutoTable.finalY + 3.5;
+    const remH = 18;
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(203, 213, 225);
+    doc.roundedRect(14, remY, 182, remH, 1, 1, 'FD');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.8);
+    doc.setTextColor(10, 29, 71);
+    doc.text('IMPORTANT PATIENT REMINDERS', 18, remY + 4.5);
+
+    doc.setDrawColor(226, 232, 240);
+    doc.line(18, remY + 6, pageWidth - 18, remY + 6);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.2);
+    doc.setTextColor(51, 65, 85);
+    doc.text('• Complete All Doses: Anti-rabies immunization requires finishing all scheduled sessions to ensure full, lasting protection.', 18, remY + 10);
+    doc.text('• 14-Day Animal Observation: If the biting dog/cat is alive, observe for 14 days and report to the clinic if it becomes sick or dies.', 18, remY + 13.5);
+    doc.text('• Wound Hygiene: Keep the bite area clean and dry. Avoid applying unprescribed home remedies (garlic, vinegar, or stone).', 18, remY + 17);
+
+    // 7. Attestation & Official Signature Line
+    const signY = Math.max(remY + remH + 5, pageHeight - 38);
 
     doc.setDrawColor(203, 213, 225);
     doc.setLineWidth(0.2);
@@ -1597,7 +1616,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(6.5);
     doc.setTextColor(100, 116, 139);
-    doc.text('Official Clinical Medical Record · K&A Animal Bite Treatment Center', 14, signY + 10.5);
+    doc.text('Official Clinical Medical Record · K&A Anti-Rabies Vaccine Clinic', 14, signY + 10.5);
     doc.text('This document is valid for official, medical, school, and legal reference.', 14, signY + 14);
 
     // Right: Signature line
@@ -1612,12 +1631,12 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7.2);
     doc.setTextColor(15, 23, 42);
-    doc.text('Attending Physician / Authorized Staff', sigX + (sigW / 2), sigLineY + 4, { align: 'center' });
+    doc.text('Attending Healthcare Professional / Authorized Staff', sigX + (sigW / 2), sigLineY + 4, { align: 'center' });
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(6.2);
     doc.setTextColor(100, 116, 139);
-    doc.text('Signature over Printed Name / PRC License No.', sigX + (sigW / 2), sigLineY + 7.5, { align: 'center' });
+    doc.text('Signature over Printed Name / Designation', sigX + (sigW / 2), sigLineY + 7.5, { align: 'center' });
 
     // Footer on every page
     const totalPages = doc.internal.getNumberOfPages();
@@ -1701,9 +1720,9 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
       await sendReportEmail(
         to,
         `K&A Clinic — Health Monitoring Report (${periodLabel()})`,
-        `<p>Attached is the K&amp;A Animal Bite Center health monitoring report for <strong>${periodLabel()}</strong>.</p>`
+        `<p>Attached is the K&amp;A Anti-Rabies Vaccine Clinic health monitoring report for <strong>${periodLabel()}</strong>.</p>`
           + `<p>Service: ${serviceFilterLabel()} &bull; Status: ${statusFilterLabel()} &bull; ${rows.length} patient record${rows.length !== 1 ? 's' : ''}.</p>`
-          + `<p>&mdash; K&amp;A Animal Bite Center</p>`,
+          + `<p>&mdash; K&amp;A Anti-Rabies Vaccine Clinic</p>`,
         { base64, filename: `health-monitoring-report-${period}${statusSlug}-${getTodayDateString()}.pdf` }
       );
     } catch (err) {
@@ -1724,7 +1743,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
       await sendReportEmail(
         to,
         `K&A Clinic — Medical Report for ${formatTitleCase(p.name)}`,
-        `<p>Dear ${formatTitleCase(p.name)},</p><p>Please find your official patient medical report from K&amp;A Animal Bite Center attached as a PDF.</p><p>&mdash; K&amp;A Animal Bite Center</p>`,
+        `<p>Dear ${formatTitleCase(p.name)},</p><p>Please find your official patient medical report from K&amp;A Anti-Rabies Vaccine Clinic attached as a PDF.</p><p>&mdash; K&amp;A Anti-Rabies Vaccine Clinic</p>`,
         { base64, filename: `medical-report-${p.id || p.mrn || p.firestoreId || 'patient'}.pdf` }
       );
     } catch (err) {
