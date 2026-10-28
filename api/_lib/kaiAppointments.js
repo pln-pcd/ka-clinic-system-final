@@ -74,12 +74,16 @@ export async function loadAppointmentAvailability(iso, now) {
 }
 
 export function availableFromRecords(iso, now, holds, appointments, closures = []) {
-  const active = closures.filter(c => c.active !== false && c.startDate <= iso && iso <= c.endDate);
+  // Same reading as the app (appt.tsx getClosureForDate): a closure without an
+  // end date covers its start date only.
+  const active = closures.filter(c => c.active !== false && c.startDate <= iso && iso <= (c.endDate || c.startDate));
   if (active.some(c => c.type === 'day')) return { mode: 'closed', open: [] };
   if (clinicKnowledge.walkInDays.includes(dow(iso))) return { mode: 'walk_in', open: [] };
   if (!clinicKnowledge.appointmentDays.includes(dow(iso))) return { mode: 'closed', open: [] };
-  const taken = new Set(holds.map(d => normTime(d.time)));
-  active.filter(c => c.type === 'slots').flatMap(c => Array.isArray(c.slots) ? c.slots : []).forEach(slot => taken.add(normTime(slot)));
+  const closedSlots = new Set(active.filter(c => c.type === 'slots').flatMap(c => Array.isArray(c.slots) ? c.slots : []).map(normTime));
+  // Every slot closed is a closed day, as the app shows it.
+  if (clinicKnowledge.timeSlots.every(slot => closedSlots.has(normTime(slot)))) return { mode: 'closed', open: [] };
+  const taken = new Set([...holds.map(d => normTime(d.time)), ...closedSlots]);
   appointments.filter(d => !['cancelled', 'declined'].includes(d.status)).forEach(d => taken.add(normTime(d.time)));
   const open = clinicKnowledge.timeSlots.filter(slot => {
     if (taken.has(normTime(slot))) return false;

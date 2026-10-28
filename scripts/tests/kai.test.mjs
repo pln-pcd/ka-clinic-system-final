@@ -260,3 +260,16 @@ test('app questions get app answers', () => {
   assert.equal(getKaiDecision('what services do the clinic offer?').intent, 'services');
   assert.match(kaiCopy.en.disclaimer, /^This chatbot does not provide medical advice\./);
 });
+
+test('closures read the same way as the app calendar', () => {
+  const now = { iso: '2026-10-28', hour: 9, minute: 0 };
+  // No end date: closes the start date only.
+  assert.equal(availableFromRecords('2026-10-31', now, [], [], [{ type: 'day', startDate: '2026-10-31' }]).mode, 'closed');
+  assert.equal(availableFromRecords('2026-11-01', now, [], [], [{ type: 'day', startDate: '2026-10-31' }]).mode, 'appointment');
+  // Every slot closed is a closed day.
+  const all = ['8:00 AM - 9:00 AM', '9:00 AM - 10:00 AM', '10:00 AM - 11:00 AM', '11:00 AM - 12:00 PM', '1:00 PM - 2:00 PM', '2:00 PM - 3:00 PM', '3:00 PM - 4:00 PM', '4:00 PM - 5:00 PM'];
+  assert.equal(availableFromRecords('2026-10-31', now, [], [], [{ type: 'slots', startDate: '2026-10-31', endDate: '2026-10-31', slots: all }]).mode, 'closed');
+  const some = availableFromRecords('2026-10-31', now, [{ time: '3:00 PM - 4:00 PM' }], [{ time: '8:00 AM - 9:00 AM', status: 'cancelled' }], [{ type: 'slots', startDate: '2026-10-31', slots: ['9:00 AM - 10:00 AM'] }]);
+  assert.equal(some.mode, 'appointment');
+  assert.deepEqual(some.open, all.filter(s => !['3:00 PM - 4:00 PM', '9:00 AM - 10:00 AM'].includes(s)));
+});
