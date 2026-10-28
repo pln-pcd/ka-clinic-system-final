@@ -1181,19 +1181,19 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
       <div style="font-family:'Plus Jakarta Sans','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0F172A;font-size:10px;line-height:1.5;padding:24px 28px;background:#FFFFFF;">
 
         <!-- Institutional letterhead -->
-        <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto 4px;border:none;width:100%;">
+        <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto 4px;border:none;">
           <tr>
-            <td style="vertical-align:middle;padding-right:14px;width:62px;text-align:right;">
-              <img src="${logo || '/assets/dashboard/logo-white-nobg.png'}" alt="K&A Clinic Logo" style="width:58px;height:58px;object-fit:contain;display:block;" />
+            <td style="vertical-align:middle;padding-right:16px;text-align:right;">
+              <img src="${logo || '/assets/dashboard/logo-white-nobg.png'}" alt="K&A Clinic Logo" style="width:56px;height:56px;object-fit:contain;display:block;" />
             </td>
-            <td style="vertical-align:middle;text-align:center;padding:0 6px;">
+            <td style="vertical-align:middle;text-align:center;padding:0 4px;">
               <div style="font-size:15px;font-weight:900;color:#0F172A;letter-spacing:0.6px;text-transform:uppercase;">K&amp;A ANTI-RABIES VACCINE CLINIC</div>
               <div style="font-size:8.5px;color:#1D4ED8;font-weight:700;margin-top:2px;">Animal Bite Care &amp; Post-Exposure Prophylaxis Center</div>
               <div style="font-size:8px;color:#64748B;margin-top:2px;">Municipality of Libon, Province of Albay | Ph: (052) 742-0123 | ka.animalbitecenter@gmail.com</div>
               <div style="font-size:7.5px;color:#64748B;margin-top:1px;">DOH Accredited Animal Bite Treatment Center (ABTC) &bull; PhilHealth Accredited</div>
             </td>
-            <td style="vertical-align:middle;padding-left:14px;width:62px;text-align:left;">
-              <img src="${LIBON_SEAL_BASE64}" alt="Municipality of Libon seal" style="width:58px;height:58px;object-fit:contain;display:block;" />
+            <td style="vertical-align:middle;padding-left:16px;text-align:left;">
+              <img src="${LIBON_SEAL_BASE64}" alt="Municipality of Libon seal" style="width:56px;height:56px;object-fit:contain;display:block;" />
             </td>
           </tr>
         </table>
@@ -1318,25 +1318,12 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
           </table>
         </div>
 
-        <!-- 4. Important Patient Reminders -->
-        <div style="background:#F8FAFC;border:1px solid #CBD5E1;border-radius:4px;padding:9px 14px;margin-bottom:14px;font-size:8.5px;color:#334155;line-height:1.6;">
-          <div style="font-size:8px;font-weight:800;color:#0A1D47;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;border-bottom:1px solid #E2E8F0;padding-bottom:2px;">IMPORTANT PATIENT REMINDERS</div>
-          <div>&bull; <strong>Complete Every Dose:</strong> Anti-rabies immunization requires finishing all scheduled sessions to ensure full, lasting protection.</div>
-          <div>&bull; <strong>14-Day Animal Observation:</strong> If the biting domestic dog or cat is alive, observe it for 14 days and notify the clinic immediately if it becomes sick or dies.</div>
-          <div>&bull; <strong>Wound Hygiene:</strong> Keep the bite area clean and dry. Avoid applying unprescribed home remedies (garlic, vinegar, or stone).</div>
-        </div>
-
-        <!-- 5. Attestation & Official Signature Line -->
-        <div style="display:flex;align-items:flex-end;justify-content:space-between;padding-top:16px;border-top:1px solid #CBD5E1;margin-top:14px;">
+        <!-- 4. Official Clinical Attestation -->
+        <div style="padding-top:14px;border-top:1px solid #CBD5E1;margin-top:14px;">
           <div style="font-size:8.5px;color:#334155;">
             <div><strong>Date Issued:</strong> ${escapeHtml(m.issuedDate)}</div>
             <div style="font-size:7.5px;color:#64748B;margin-top:2px;">Official Clinical Medical Record &bull; K&amp;A Anti-Rabies Vaccine Clinic</div>
             <div style="font-size:7px;color:#94A3B8;margin-top:2px;">This document is valid for official, medical, school, employment, and legal reference.</div>
-          </div>
-          <div style="text-align:center;min-width:240px;">
-            <div style="border-bottom:1px solid #0F172A;width:100%;height:28px;margin-bottom:5px;"></div>
-            <div style="font-size:8.5px;font-weight:800;color:#0F172A;letter-spacing:0.3px;">Attending Healthcare Professional / Authorized Staff</div>
-            <div style="font-size:7.5px;color:#64748B;margin-top:1px;">Signature over Printed Name / Designation</div>
           </div>
         </div>
 
@@ -1376,13 +1363,13 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
     // 1. Institutional header
     if (logoDataUrl) {
       try {
-        doc.addImage(logoDataUrl, 'PNG', 14, 8, 14, 14);
+        doc.addImage(logoDataUrl, 'PNG', 32, 8, 14, 14);
       } catch (e) {
         console.warn('Could not add logo to single report PDF:', e);
       }
     }
     try {
-      doc.addImage(LIBON_SEAL_BASE64, 'PNG', pageWidth - 14 - 14, 8, 14, 14);
+      doc.addImage(LIBON_SEAL_BASE64, 'PNG', pageWidth - 32 - 14, 8, 14, 14);
     } catch (e) {
       console.warn('Could not add Libon seal to single report PDF:', e);
     }
@@ -1578,65 +1565,24 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
       }
     });
 
-    // 6. Section 4: Important Patient Reminders
-    const remY = doc.lastAutoTable.finalY + 3.5;
-    const remH = 18;
-    doc.setFillColor(248, 250, 252);
-    doc.setDrawColor(203, 213, 225);
-    doc.roundedRect(14, remY, 182, remH, 1, 1, 'FD');
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(6.8);
-    doc.setTextColor(10, 29, 71);
-    doc.text('IMPORTANT PATIENT REMINDERS', 18, remY + 4.5);
-
-    doc.setDrawColor(226, 232, 240);
-    doc.line(18, remY + 6, pageWidth - 18, remY + 6);
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(6.2);
-    doc.setTextColor(51, 65, 85);
-    doc.text('• Complete All Doses: Anti-rabies immunization requires finishing all scheduled sessions to ensure full, lasting protection.', 18, remY + 10);
-    doc.text('• 14-Day Animal Observation: If the biting dog/cat is alive, observe for 14 days and report to the clinic if it becomes sick or dies.', 18, remY + 13.5);
-    doc.text('• Wound Hygiene: Keep the bite area clean and dry. Avoid applying unprescribed home remedies (garlic, vinegar, or stone).', 18, remY + 17);
-
-    // 7. Attestation & Official Signature Line
-    const signY = Math.max(remY + remH + 5, pageHeight - 38);
+    // 6. Attestation & Official Documentation
+    const signY = Math.max(doc.lastAutoTable.finalY + 8, pageHeight - 32);
 
     doc.setDrawColor(203, 213, 225);
     doc.setLineWidth(0.2);
     doc.line(14, signY, pageWidth - 14, signY);
 
-    // Left: Issuance info
+    // Issuance info
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7.2);
     doc.setTextColor(30, 41, 59);
-    doc.text(`Date Issued: ${m.issuedDate}`, 14, signY + 6.5);
+    doc.text(`Date Issued: ${m.issuedDate}`, 14, signY + 6);
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(6.5);
     doc.setTextColor(100, 116, 139);
-    doc.text('Official Clinical Medical Record · K&A Anti-Rabies Vaccine Clinic', 14, signY + 10.5);
-    doc.text('This document is valid for official, medical, school, and legal reference.', 14, signY + 14);
-
-    // Right: Signature line
-    const sigW = 65;
-    const sigX = pageWidth - 14 - sigW;
-    const sigLineY = signY + 13;
-
-    doc.setDrawColor(15, 23, 42);
-    doc.setLineWidth(0.3);
-    doc.line(sigX, sigLineY, sigX + sigW, sigLineY);
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.2);
-    doc.setTextColor(15, 23, 42);
-    doc.text('Attending Healthcare Professional / Authorized Staff', sigX + (sigW / 2), sigLineY + 4, { align: 'center' });
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(6.2);
-    doc.setTextColor(100, 116, 139);
-    doc.text('Signature over Printed Name / Designation', sigX + (sigW / 2), sigLineY + 7.5, { align: 'center' });
+    doc.text('Official Clinical Medical Record · K&A Anti-Rabies Vaccine Clinic', 14, signY + 10);
+    doc.text('This document is valid for official, medical, school, and legal reference.', 14, signY + 13.5);
 
     // Footer on every page
     const totalPages = doc.internal.getNumberOfPages();
