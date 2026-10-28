@@ -1676,38 +1676,10 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
                 {/* Export Format */}
                 <div>
                   <label style={labelStyle}>Export Format</label>
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <button
-                      type="button"
-                      onClick={() => setExportFormat('pdf')}
-                      className={`p-2.5 rounded-xl border text-left flex items-center gap-2.5 transition-all cursor-pointer ${
-                        exportFormat === 'pdf' ? 'border-[#3B50DF] bg-[#EEF2FF] shadow-xs ring-1 ring-[#3B50DF]/30' : 'border-slate-200 bg-white hover:border-slate-300'
-                      }`}
-                    >
-                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-[10px] shrink-0 ${exportFormat === 'pdf' ? 'bg-[#3B50DF] text-white' : 'bg-slate-100 text-slate-600'}`}>
-                        PDF
-                      </div>
-                      <div>
-                        <div className="text-[11px] font-bold text-slate-900">PDF</div>
-                        <div className="text-[10px] text-slate-600">Official printout</div>
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setExportFormat('xls')}
-                      className={`p-2.5 rounded-xl border text-left flex items-center gap-2.5 transition-all cursor-pointer ${
-                        exportFormat === 'xls' ? 'border-[#3B50DF] bg-[#EEF2FF] shadow-xs ring-1 ring-[#3B50DF]/30' : 'border-slate-200 bg-white hover:border-slate-300'
-                      }`}
-                    >
-                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-[10px] shrink-0 ${exportFormat === 'xls' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
-                        XLS
-                      </div>
-                      <div>
-                        <div className="text-[11px] font-bold text-slate-900">Excel</div>
-                        <div className="text-[10px] text-slate-600">Raw data</div>
-                      </div>
-                    </button>
-                  </div>
+                  <Select value={exportFormat} onChange={e => setExportFormat(e.target.value)} style={selectStyle}>
+                    <option value="pdf">PDF (Official printout)</option>
+                    <option value="xls">Excel (Raw data)</option>
+                  </Select>
                 </div>
 
                 {/* Matching result banner */}
