@@ -1,21 +1,65 @@
 import { lookup } from 'node:dns/promises';
 import nodemailer from 'nodemailer';
 
-// Two Gmail accounts: the clinic's own address (sign-in codes, invites,
-// report emails) and a reminders account (dose reminders). Each falls back
-// to the other.
+// Dedicated Gmail accounts by role:
+// - auth: sign-in OTP codes, staff invites
+// - appt: appointment booking confirmations and official patient medical reports
+// - reminders: nightly vaccine dose reminders and sweeps
+// - welcome: onboarding email sent when staff registers a new patient
+// - closures: schedule closure announcements
 const ROLES = {
   auth: {
     name: 'auth',
-    getUser: () => (process.env.GMAIL_AUTH_USER || process.env.GMAIL_USER || 'contact.knaclinic@gmail.com').trim(),
-    getPass: () => (process.env.GMAIL_AUTH_PASSWORD || process.env.GMAIL_APP_PASSWORD || '').trim().replace(/\s+/g, ''),
+    getUser: () => (
+      process.env.GMAIL_AUTH_USER ||
+      process.env.GMAIL_USER ||
+      process.env.gmail_auth_user ||
+      process.env.gmail_user ||
+      'contact.knaclinic@gmail.com'
+    ).trim(),
+    getPass: () => (
+      process.env.GMAIL_AUTH_PASSWORD ||
+      process.env.GMAIL_AUTH_PASS ||
+      process.env.GMAIL_APP_PASSWORD ||
+      process.env.gmail_auth_password ||
+      process.env.gmail_auth_pass ||
+      process.env.gmail_app_password ||
+      ''
+    ).trim().replace(/\s+/g, ''),
     displayName: 'K&A Animal Bite Center',
     fallbackRoles: ['reminders'],
   },
+  appt: {
+    name: 'appt',
+    getUser: () => (
+      process.env.GMAIL_APPT_USER ||
+      process.env.gmail_appt_user ||
+      'pcdelacruz04@gmail.com'
+    ).trim(),
+    getPass: () => (
+      process.env.GMAIL_APPT_PASSWORD ||
+      process.env.GMAIL_APPT_PASS ||
+      process.env.gmail_appt_password ||
+      process.env.gmail_appt_pass ||
+      ''
+    ).trim().replace(/\s+/g, ''),
+    displayName: 'K&A Animal Bite Center',
+    fallbackRoles: ['auth', 'reminders'],
+  },
   reminders: {
     name: 'reminders',
-    getUser: () => (process.env.GMAIL_REMINDER_USER || 'delacruzpc15@gmail.com').trim(),
-    getPass: () => (process.env.GMAIL_REMINDER_PASSWORD || '').trim().replace(/\s+/g, ''),
+    getUser: () => (
+      process.env.GMAIL_REMINDER_USER ||
+      process.env.gmail_reminder_user ||
+      'delacruzpc15@gmail.com'
+    ).trim(),
+    getPass: () => (
+      process.env.GMAIL_REMINDER_PASSWORD ||
+      process.env.GMAIL_REMINDER_PASS ||
+      process.env.gmail_reminder_password ||
+      process.env.gmail_reminder_pass ||
+      ''
+    ).trim().replace(/\s+/g, ''),
     displayName: 'K&A Animal Bite Center',
     fallbackRoles: ['auth'],
   },
@@ -24,8 +68,18 @@ const ROLES = {
   // reminder accounts' daily sending limits.
   welcome: {
     name: 'welcome',
-    getUser: () => (process.env.GMAIL_WELCOME_USER || '').trim(),
-    getPass: () => (process.env.GMAIL_WELCOME_PASSWORD || '').trim().replace(/\s+/g, ''),
+    getUser: () => (
+      process.env.GMAIL_WELCOME_USER ||
+      process.env.gmail_welcome_user ||
+      ''
+    ).trim(),
+    getPass: () => (
+      process.env.GMAIL_WELCOME_PASSWORD ||
+      process.env.GMAIL_WELCOME_PASS ||
+      process.env.gmail_welcome_password ||
+      process.env.gmail_welcome_pass ||
+      ''
+    ).trim().replace(/\s+/g, ''),
     displayName: 'K&A Animal Bite Center',
     fallbackRoles: ['auth', 'reminders'],
   },
@@ -34,8 +88,18 @@ const ROLES = {
   // reminder accounts' daily limits.
   closures: {
     name: 'closures',
-    getUser: () => (process.env.GMAIL_CLOSURE_USER || '').trim(),
-    getPass: () => (process.env.GMAIL_CLOSURE_PASSWORD || '').trim().replace(/\s+/g, ''),
+    getUser: () => (
+      process.env.GMAIL_CLOSURE_USER ||
+      process.env.gmail_closure_user ||
+      ''
+    ).trim(),
+    getPass: () => (
+      process.env.GMAIL_CLOSURE_PASSWORD ||
+      process.env.GMAIL_CLOSURE_PASS ||
+      process.env.gmail_closure_password ||
+      process.env.gmail_closure_pass ||
+      ''
+    ).trim().replace(/\s+/g, ''),
     displayName: 'K&A Animal Bite Center',
     fallbackRoles: ['reminders', 'auth'],
   },

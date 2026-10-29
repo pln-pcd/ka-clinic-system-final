@@ -429,7 +429,7 @@ async function sendFollowUp(req, res, caller) {
           dueDate,
           vaccineType,
         }),
-        role: 'reminders',
+        role: String(req.body?.source || '').startsWith('appointment-') ? 'appt' : 'reminders',
       })
     : Promise.resolve({ skipped: true });
 
@@ -1081,7 +1081,7 @@ async function patientArchiveSweep(req, res) {
 // Called when an admin opens the "Email report" box: wakes this function and
 // opens the SMTP connection the report will be sent on.
 async function warmReportMailer(req, res) {
-  const result = await warmMailer('auth');
+  const result = await warmMailer('appt');
   res.status(200).json({ success: true, ...result });
 }
 
@@ -1610,7 +1610,7 @@ async function sendPatientReport(req, res) {
       html: html || '<p>Please find your official K&amp;A Clinic report attached.</p>',
       text,
       attachments: attachments.length ? attachments : undefined,
-      role: 'auth',
+      role: 'appt',
     });
     if (sendError) {
       console.error('send-patient-report mail error:', sendError);
