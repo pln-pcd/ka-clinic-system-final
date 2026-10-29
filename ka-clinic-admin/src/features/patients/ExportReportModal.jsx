@@ -245,7 +245,7 @@ export function ExportReportModal({ patients, onClose, onToast, initialPatient }
   const SUMMARY_SERVICE_HEAD = ['Service', 'Patients', 'Completed', 'Active', 'Share'];
   // The summary shares the last page when that page has room for it,
   // otherwise it gets a page of its own — same rule in the preview and PDF.
-  const SUMMARY_FITS_AFTER_ROWS = 12;
+  const SUMMARY_FITS_AFTER_ROWS = 16;
 
   function periodLabel() {
     const now = new Date();
