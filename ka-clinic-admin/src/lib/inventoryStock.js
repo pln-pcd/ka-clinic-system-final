@@ -1,4 +1,5 @@
 import { logActivity } from './activityLog.js';
+import { getTodayDateString } from './formatters.js';
 
 // Vaccine inventory stock: the level labels the Inventory page and its export
 // show, and the transactions that move stock when a dose, RIG or
@@ -19,7 +20,8 @@ export const formatVials = (item) => {
   return `${n} vial${n === 1 ? '' : 's'}`;
 };
 
-export function deriveStockStatus(item) {
+export function deriveStockStatus(item, today = getTodayDateString()) {
+  if (isExpired(item, today)) return 'out-of-stock';
   const stock = vialsOf(item);
   const min = parseInt(item.minStock, 10) || 10;
   if (stock <= 0) return 'out-of-stock';
@@ -27,8 +29,9 @@ export function deriveStockStatus(item) {
   return 'in-stock';
 }
 
-export function deriveStockLabel(item) {
-  const st = deriveStockStatus(item);
+export function deriveStockLabel(item, today = getTodayDateString()) {
+  if (isExpired(item, today)) return 'Expired';
+  const st = deriveStockStatus(item, today);
   if (st === 'out-of-stock') return 'Out of Stock';
   if (st === 'low-stock') return 'Low Stock';
   return 'In Stock';
@@ -37,9 +40,10 @@ export function deriveStockLabel(item) {
 /** YYYY-MM-DD expiry of an item, or ''. */
 export const expiryOf = (item) => String(item?.expiryDate || item?.expiry || '').slice(0, 10);
 /** Expired on or before `today` (clinic date): the item cannot be used. */
-export const isExpired = (item, today) => {
+export const isExpired = (item, today = getTodayDateString()) => {
   const e = expiryOf(item);
-  return Boolean(e && today && e < today);
+  const t = today || getTodayDateString();
+  return Boolean(e && t && e <= t);
 };
 export const EXPIRED_NOTE = 'Expired';
 

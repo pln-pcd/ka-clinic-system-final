@@ -575,12 +575,15 @@ export default function VaccineInventoryPage() {
                   </td>
                   <td style={{ padding: '16px 12px', color: '#64748B', fontWeight: 400 }}>
                     {item.expiry || '—'}
-                    {/* Expired shows in the Status column only. */}
-                    {isExpiringSoon(item) && !isExpired(item, today) && (
+                    {isExpired(item, today) ? (
+                      <span style={{ display: 'block', fontSize: '.6875rem', fontWeight: 600, color: '#DC2626', marginTop: 2 }}>
+                        Expired
+                      </span>
+                    ) : isExpiringSoon(item) ? (
                       <span style={{ display: 'block', fontSize: '.6875rem', fontWeight: 600, color: '#D97706', marginTop: 2 }}>
                         Expiring soon
                       </span>
-                    )}
+                    ) : null}
                   </td>
                   <td style={{ padding: '16px 12px' }}>
                     {(() => {
