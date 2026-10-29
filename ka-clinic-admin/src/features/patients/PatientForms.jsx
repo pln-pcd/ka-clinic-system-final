@@ -1061,7 +1061,7 @@ export function EditPatientModal({ patient, onClose, onSave, inventoryItems = []
   // handleEditSave (parent) persists and closes this modal itself; the
   // checks here are the same inline ones as the Register wizard.
   const v = useFieldErrors(EDIT_RULES, form, 'edit');
-  const editFields = ['name', 'age', 'dob', 'email', 'contact', ...(isPep ? ['date', 'animal', 'cat'] : []), 'pastVaccinesOther', 'pneumoHistoryOther', 'riskConditionOther', 'allergiesOther'];
+  const editFields = ['name', 'age', 'dob', 'email', 'contact', 'service', ...(isPep ? ['date', 'animal', 'cat'] : []), 'pastVaccinesOther', 'pneumoHistoryOther', 'riskConditionOther', 'allergiesOther'];
   function handleSave() {
     if (!v.validate(editFields)) return;
     onSave(form);
@@ -1234,18 +1234,37 @@ export function EditPatientModal({ patient, onClose, onSave, inventoryItems = []
               </div>
             </div>
 
-            {/* RIGHT COLUMN: Exposure Details & Medical History */}
+            {/* RIGHT COLUMN: Service, Exposure Details & Medical History */}
             <div className="space-y-4">
-              {/* PEP Exposure Details */}
-              {isPep && (
-                <div className="space-y-3 bg-slate-50/70 p-5 rounded-2xl border border-slate-200/80 shadow-2xs">
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-                    <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#0a1d47] flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-[#1D4ED8]" />
-                      Exposure Details
-                    </span>
-                    <span className="text-[10px] text-slate-400 font-normal">Bite incident & category</span>
-                  </div>
+              {/* Service & Exposure Details */}
+              <div className="space-y-3 bg-slate-50/70 p-5 rounded-2xl border border-slate-200/80 shadow-2xs">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#0a1d47] flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-[#1D4ED8]" />
+                    Service {isPep ? '& Exposure Details' : ''}
+                  </span>
+                </div>
+                <div>
+                  <label htmlFor="edit-service" className="block mb-1.5 text-slate-500">Service <span style={{ color: '#C8151A' }}>*</span></label>
+                  <Select
+                    {...v.field('service', { withBlur: false })}
+                    value={form.service}
+                    onChange={e => {
+                      const newSvc = e.target.value;
+                      setForm(f => ({ ...f, service: newSvc }));
+                    }}
+                    className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                  >
+                    <option value="">Select service</option>
+                    {SERVICE_TYPES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+                  </Select>
+                  <FieldError v={v} name="service" />
+                </div>
+
+                {/* PEP Exposure Details */}
+                {isPep && (
+                  <div className="pt-2 border-t border-slate-200/70 space-y-3">
+                    <span className="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">Exposure Details</span>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block mb-1.5 text-slate-500">Date of Exposure</label>
@@ -1321,6 +1340,7 @@ export function EditPatientModal({ patient, onClose, onSave, inventoryItems = []
                   </div>
                 </div>
               )}
+            </div>
 
               {/* Medical History & Notes */}
               <div className="space-y-3 bg-slate-50/70 p-5 rounded-2xl border border-slate-200/80 shadow-2xs">
