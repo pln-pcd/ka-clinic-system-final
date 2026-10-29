@@ -1057,19 +1057,11 @@ export function EditPatientModal({ patient, onClose, onSave, inventoryItems = []
   const editDobAge = ageFromDob(form.dob);
   const [requestClose, discardDialog] = useDiscardGuard(form, onClose);
   const isPep = form.service === 'PEP';
-  // Only brands for the chosen service; none until a service is chosen.
-  const eligibleVaccines = form.service ? getEligibleVaccinesForService(form.service, inventoryItems) : [];
-  // Every eligible brand is listed; out-of-stock and expired ones are shown
-  // disabled with a badge instead of silently missing.
-  const vaccineItems = [...eligibleVaccines];
-  if (form.vaccineBrand && !vaccineItems.some(item => item.name === form.vaccineBrand)) {
-    vaccineItems.unshift({ id: 'current_assigned', name: form.vaccineBrand, stock: '?' });
-  }
 
   // handleEditSave (parent) persists and closes this modal itself; the
   // checks here are the same inline ones as the Register wizard.
   const v = useFieldErrors(EDIT_RULES, form, 'edit');
-  const editFields = ['name', 'age', 'dob', 'email', 'contact', 'service', 'vaccineBrand', ...(isPep ? ['date', 'animal', 'cat'] : []), 'pastVaccinesOther', 'pneumoHistoryOther', 'riskConditionOther', 'allergiesOther'];
+  const editFields = ['name', 'age', 'dob', 'email', 'contact', ...(isPep ? ['date', 'animal', 'cat'] : []), 'pastVaccinesOther', 'pneumoHistoryOther', 'riskConditionOther', 'allergiesOther'];
   function handleSave() {
     if (!v.validate(editFields)) return;
     onSave(form);
@@ -1242,133 +1234,93 @@ export function EditPatientModal({ patient, onClose, onSave, inventoryItems = []
               </div>
             </div>
 
-            {/* RIGHT COLUMN: Service, Exposure & Medical History */}
+            {/* RIGHT COLUMN: Exposure Details & Medical History */}
             <div className="space-y-4">
-              {/* Service & Vaccine Brand */}
-              <div className="space-y-3 bg-slate-50/70 p-5 rounded-2xl border border-slate-200/80 shadow-2xs">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#0a1d47] flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-[#1D4ED8]" />
-                    Service & Vaccine Brand
-                  </span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label htmlFor="edit-service" className="block mb-1.5 text-slate-500">Service <span style={{ color: '#C8151A' }}>*</span></label>
-                    {/* Changing the service always clears the brand: brands are per service. */}
-                    <Select
-                      {...v.field('service', { withBlur: false })}
-                      value={form.service}
-                      onChange={e => {
-                        const newSvc = e.target.value;
-                        setForm(f => ({ ...f, service: newSvc, vaccineBrand: newSvc === f.service ? f.vaccineBrand : '' }));
-                      }}
-                      className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                    >
-                      <option value="">Select service</option>
-                      {SERVICE_TYPES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
-                    </Select>
-                    <FieldError v={v} name="service" />
+              {/* PEP Exposure Details */}
+              {isPep && (
+                <div className="space-y-3 bg-slate-50/70 p-5 rounded-2xl border border-slate-200/80 shadow-2xs">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                    <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#0a1d47] flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-[#1D4ED8]" />
+                      Exposure Details
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-normal">Bite incident & category</span>
                   </div>
-                  <div>
-                    <label htmlFor="edit-vaccineBrand" className="block mb-1.5 text-slate-500">Vaccine Brand <span style={{ color: '#C8151A' }}>*</span></label>
-                    <Select
-                      {...v.field('vaccineBrand', { withBlur: false })}
-                      value={form.vaccineBrand}
-                      disabled={!form.service}
-                      onChange={e => set('vaccineBrand', e.target.value)}
-                      className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                    >
-                      <option value="">{form.service ? 'Select brand' : 'Choose a service first'}</option>
-                      {vaccineItems.map(item => (
-                        (() => { const a = brandAvailability(item, today());
-                          return <option key={item.id} value={item.name} disabled={a.disabled} data-badge={a.badge} data-badge-tone={a.tone}>{item.name}</option>; })()
-                      ))}
-                    </Select>
-                    <FieldError v={v} name="vaccineBrand" />
-                  </div>
-                </div>
-
-                {/* PEP Exposure Details */}
-                {isPep && (
-                  <div className="pt-2 border-t border-slate-200/70 space-y-3">
-                    <span className="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">Exposure Details</span>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block mb-1.5 text-slate-500">Date of Exposure</label>
-                        <DatePicker
-                          {...v.field('date')}
-                          value={form.date}
-                          max={today()}
-                          onChange={e => set('date', e.target.value || form.date)}
-                          className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                        />
-                        <FieldError v={v} name="date" />
-                      </div>
-                      <div>
-                        <label className="block mb-1.5 text-slate-500">Biting Animal</label>
-                        <Select
-                          {...v.field('animal', { withBlur: false })}
-                          value={form.animal}
-                          onChange={e => { const a = e.target.value; setForm(f => ({ ...f, animal: a, cat: a === 'Bat' ? 'Category III' : f.cat })); }}
-                          className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                        >
-                          <option value="">Select animal</option>
-                          <option>Dog</option><option>Cat</option><option>Monkey</option><option>Bat</option><option>Rat</option><option>Other</option>
-                        </Select>
-                        <FieldError v={v} name="animal" />
-                      </div>
-                      <div>
-                        <label className="block mb-1.5 text-slate-500">Exposure Category</label>
-                        <Select
-                          {...v.field('cat', { withBlur: false })}
-                          value={form.cat || ''}
-                          onChange={e => set('cat', e.target.value)}
-                          placeholder="Select category"
-                          className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                        >
-                          <option value="">Select category</option><option disabled={form.animal === 'Bat'}>Category II</option><option>Category III</option>
-                        </Select>
-                        <FieldError v={v} name="cat" />
-                        {form.animal === 'Bat' && !v.error('cat') && <p className="mt-1 text-[11px] font-semibold text-amber-700">Bat exposure is always Category III (WHO). Give ERIG.</p>}
-                      </div>
-                      <div>
-                        <label className="block mb-1.5 text-slate-500">No. of Bites / Wounds</label>
-                        <Select
-                          value={form.numberOfBites}
-                          onChange={e => set('numberOfBites', e.target.value)}
-                          className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                        >
-                          <option value="">Select number</option>
-                          <option>1</option><option>2</option><option>3</option><option>4+</option>
-                        </Select>
-                      </div>
-                      <div>
-                        <label className="block mb-1.5 text-slate-500">Wound Location</label>
-                        <Select
-                          value={form.woundLocation || ''}
-                          onChange={e => set('woundLocation', e.target.value)}
-                          className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                        >
-                          <option value="">Select location</option>
-                          {WOUND_LOCATION_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                        </Select>
-                      </div>
-                      <div>
-                        <label className="block mb-1.5 text-slate-500">Wound Depth</label>
-                        <Select
-                          value={form.woundDepth}
-                          onChange={e => set('woundDepth', e.target.value)}
-                          className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
-                        >
-                          <option value="">Select depth</option>
-                          <option>Superficial</option><option>Deep / Penetrating</option><option>Multiple</option><option>Unknown</option>
-                        </Select>
-                      </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block mb-1.5 text-slate-500">Date of Exposure</label>
+                      <DatePicker
+                        {...v.field('date')}
+                        value={form.date}
+                        max={today()}
+                        onChange={e => set('date', e.target.value || form.date)}
+                        className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                      />
+                      <FieldError v={v} name="date" />
+                    </div>
+                    <div>
+                      <label className="block mb-1.5 text-slate-500">Biting Animal</label>
+                      <Select
+                        {...v.field('animal', { withBlur: false })}
+                        value={form.animal}
+                        onChange={e => { const a = e.target.value; setForm(f => ({ ...f, animal: a, cat: a === 'Bat' ? 'Category III' : f.cat })); }}
+                        className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                      >
+                        <option value="">Select animal</option>
+                        <option>Dog</option><option>Cat</option><option>Monkey</option><option>Bat</option><option>Rat</option><option>Other</option>
+                      </Select>
+                      <FieldError v={v} name="animal" />
+                    </div>
+                    <div>
+                      <label className="block mb-1.5 text-slate-500">Exposure Category</label>
+                      <Select
+                        {...v.field('cat', { withBlur: false })}
+                        value={form.cat || ''}
+                        onChange={e => set('cat', e.target.value)}
+                        placeholder="Select category"
+                        className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                      >
+                        <option value="">Select category</option><option disabled={form.animal === 'Bat'}>Category II</option><option>Category III</option>
+                      </Select>
+                      <FieldError v={v} name="cat" />
+                      {form.animal === 'Bat' && !v.error('cat') && <p className="mt-1 text-[11px] font-semibold text-amber-700">Bat exposure is always Category III (WHO). Give ERIG.</p>}
+                    </div>
+                    <div>
+                      <label className="block mb-1.5 text-slate-500">No. of Bites / Wounds</label>
+                      <Select
+                        value={form.numberOfBites}
+                        onChange={e => set('numberOfBites', e.target.value)}
+                        className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                      >
+                        <option value="">Select number</option>
+                        <option>1</option><option>2</option><option>3</option><option>4+</option>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="block mb-1.5 text-slate-500">Wound Location</label>
+                      <Select
+                        value={form.woundLocation || ''}
+                        onChange={e => set('woundLocation', e.target.value)}
+                        className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                      >
+                        <option value="">Select location</option>
+                        {WOUND_LOCATION_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="block mb-1.5 text-slate-500">Wound Depth</label>
+                      <Select
+                        value={form.woundDepth}
+                        onChange={e => set('woundDepth', e.target.value)}
+                        className="w-full py-2.5 px-3 border border-slate-300 rounded-xl outline-none focus:border-[#3B50DF] bg-white font-medium text-slate-800"
+                      >
+                        <option value="">Select depth</option>
+                        <option>Superficial</option><option>Deep / Penetrating</option><option>Multiple</option><option>Unknown</option>
+                      </Select>
                     </div>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
 
               {/* Medical History & Notes */}
               <div className="space-y-3 bg-slate-50/70 p-5 rounded-2xl border border-slate-200/80 shadow-2xs">
