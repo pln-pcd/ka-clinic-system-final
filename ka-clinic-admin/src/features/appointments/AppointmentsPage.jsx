@@ -1835,21 +1835,13 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened, init
             {(() => {
               // Queues and closures tabs
               const TABS = [
-                { key: 'requests', label: 'Requests', count: pendingOnlineRequests.length, action: true,
-                  desc: 'New bookings from the app and website, waiting for you to confirm.' },
-                { key: 'closures', label: 'Closures', count: activeClosures.length, action: false,
-                  desc: 'Closed dates and hours. Patients cannot book closed schedules.' },
-                ...(cancellationRequests.length > 0 ? [{ key: 'cancel-requests', label: 'Cancel Requests', count: cancellationRequests.length, action: true,
-                  desc: 'Patients asked to cancel a confirmed visit. Staff can keep or review.' }] : []),
-                { key: 'cancelled', label: 'Cancelled', count: allCancelledApts.length, action: false,
-                  desc: 'Visits cancelled by the patient, kept here for 90 days.' },
+                { key: 'requests', label: 'Requests', count: pendingOnlineRequests.length, action: true },
+                { key: 'closures', label: 'Closures', count: activeClosures.length, action: false },
+                ...(cancellationRequests.length > 0 ? [{ key: 'cancel-requests', label: 'Cancel Requests', count: cancellationRequests.length, action: true }] : []),
+                { key: 'cancelled', label: 'Cancelled', count: allCancelledApts.length, action: false },
               ];
-              const active = TABS.find(t => t.key === rightPanelTab) || TABS[0];
               return (
-                <>
-                  <SegmentedTabs tabs={TABS} value={rightPanelTab} onChange={setRightPanelTab} label="Appointment queues" fill className="shrink-0" />
-                  <p style={{ fontSize: '.75rem', color: '#64748B', margin: '10px 2px 12px', flexShrink: 0 }}>{active.desc}</p>
-                </>
+                <SegmentedTabs tabs={TABS} value={rightPanelTab} onChange={setRightPanelTab} label="Appointment queues" fill className="shrink-0 mb-3" />
               );
             })()}
 
