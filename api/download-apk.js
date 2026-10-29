@@ -1,6 +1,7 @@
 export default function handler(req, res) {
   res.writeHead(302, {
-    Location: '/downloads/ka-clinic.apk',
+    'Location': '/downloads/ka-clinic.apk',
+    'Content-Disposition': 'attachment; filename="ka-clinic.apk"',
   });
   res.end();
 }

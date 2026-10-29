@@ -1477,7 +1477,10 @@ async function patientWelcome(req, res) {
 
   const DEFAULT_APK_DOWNLOAD_URL = 'https://ka-clinic-system-final.vercel.app/downloads/ka-clinic.apk';
   const rawDownloadUrl = (process.env.PATIENT_APP_DOWNLOAD_URL || '').trim();
-  const downloadUrl = /^https:\/\//i.test(rawDownloadUrl) ? rawDownloadUrl : DEFAULT_APK_DOWNLOAD_URL;
+  let downloadUrl = /^https:\/\//i.test(rawDownloadUrl) ? rawDownloadUrl : DEFAULT_APK_DOWNLOAD_URL;
+  if (/github\.com\/[^/]+\/[^/]+\/releases(\/tag|\/?$)/i.test(downloadUrl)) {
+    downloadUrl = DEFAULT_APK_DOWNLOAD_URL;
+  }
   const content = { patientName: patient.name || '', mrn, email, downloadUrl };
   const { error, skipped } = await sendMail({
     to: email,

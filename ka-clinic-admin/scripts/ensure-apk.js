@@ -6,7 +6,9 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const targetDir = path.resolve(__dirname, '../public/downloads');
 const targetFile = path.join(targetDir, 'ka-clinic.apk');
-const APK_URL = 'https://github.com/pln-pcd/ka-clinic-system-final/releases/download/v1.0.27/ka-clinic-1.0.27.apk';
+const APK_URL = 'https://github.com/pln-pcd/ka-clinic-system-final/releases/download/v1.0.28/ka-clinic-1.0.28.apk';
+const EXPECTED_VERSION = '1.0.28';
+const versionFile = path.join(targetDir, '.version');
 
 async function downloadFile(url, dest) {
   return new Promise((resolve, reject) => {
@@ -32,16 +34,19 @@ async function main() {
     fs.mkdirSync(targetDir, { recursive: true });
   }
 
-  if (fs.existsSync(targetFile)) {
+  const currentVersion = fs.existsSync(versionFile) ? fs.readFileSync(versionFile, 'utf8').trim() : '';
+
+  if (fs.existsSync(targetFile) && currentVersion === EXPECTED_VERSION) {
     const stats = fs.statSync(targetFile);
     if (stats.size > 10 * 1024 * 1024) {
-      console.log(`[ensure-apk] APK already present (${Math.round(stats.size / 1024 / 1024)} MB).`);
+      console.log(`[ensure-apk] APK (v${EXPECTED_VERSION}) already present (${Math.round(stats.size / 1024 / 1024)} MB).`);
       return;
     }
   }
 
-  console.log(`[ensure-apk] Downloading latest APK for direct hosting...`);
+  console.log(`[ensure-apk] Downloading latest APK (v${EXPECTED_VERSION}) for direct hosting...`);
   await downloadFile(APK_URL, targetFile);
+  fs.writeFileSync(versionFile, EXPECTED_VERSION, 'utf8');
   const finalStats = fs.statSync(targetFile);
   console.log(`[ensure-apk] APK downloaded successfully (${Math.round(finalStats.size / 1024 / 1024)} MB).`);
 }

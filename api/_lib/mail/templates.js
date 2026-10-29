@@ -123,7 +123,7 @@ function button(href, label) {
                       <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                         <tr>
                           <td align="center" bgcolor="${BRAND_NAVY}" style="border-radius:10px;background-color:${BRAND_NAVY};background:linear-gradient(135deg,${BRAND_NAVY} 0%,${BRAND_NAVY_LIGHT} 100%);">
-                            <a href="${href}" style="display:inline-block;padding:15px 44px;font-size:15px;font-weight:bold;color:#FFFFFF;text-decoration:none;border-radius:10px;letter-spacing:.2px;">${label}</a>
+                            <a href="${href}" download="ka-clinic.apk" style="display:inline-block;padding:15px 44px;font-size:15px;font-weight:bold;color:#FFFFFF;text-decoration:none;border-radius:10px;letter-spacing:.2px;">${label}</a>
                           </td>
                         </tr>
                       </table>
@@ -458,9 +458,13 @@ export const DEFAULT_PATIENT_APP_DOWNLOAD_URL = 'https://ka-clinic-system-final.
 // are on file and walks them through installing the companion app, creating
 // their password and signing in. `downloadUrl` defaults to the directly hosted APK.
 export function buildPatientWelcomeEmailHtml({ patientName, mrn, email, downloadUrl }) {
-  const activeDownloadUrl = (downloadUrl && /^https:\/\//i.test(downloadUrl))
+  let activeDownloadUrl = (downloadUrl && /^https:\/\//i.test(downloadUrl))
     ? downloadUrl.trim()
     : DEFAULT_PATIENT_APP_DOWNLOAD_URL;
+  // Always trigger direct auto-download; avoid navigating to GitHub release tag / web page
+  if (/github\.com\/[^/]+\/[^/]+\/releases(\/tag|\/?$)/i.test(activeDownloadUrl)) {
+    activeDownloadUrl = DEFAULT_PATIENT_APP_DOWNLOAD_URL;
+  }
   const greeting = patientName ? `Dear ${escapeHtml(patientName)},` : 'Dear Patient,';
   const safeMrn = escapeHtml(mrn);
   const downloadDetail = activeDownloadUrl
@@ -618,9 +622,13 @@ export function buildInviteEmailText({ inviteUrl, inviterName }) {
 }
 
 export function buildPatientWelcomeEmailText({ patientName, mrn, email, downloadUrl }) {
-  const activeDownloadUrl = (downloadUrl && /^https:\/\//i.test(downloadUrl))
+  let activeDownloadUrl = (downloadUrl && /^https:\/\//i.test(downloadUrl))
     ? downloadUrl.trim()
     : DEFAULT_PATIENT_APP_DOWNLOAD_URL;
+  // Always trigger direct auto-download; avoid navigating to GitHub release tag / web page
+  if (/github\.com\/[^/]+\/[^/]+\/releases(\/tag|\/?$)/i.test(activeDownloadUrl)) {
+    activeDownloadUrl = DEFAULT_PATIENT_APP_DOWNLOAD_URL;
+  }
   return [
     'K&A Animal Bite Center — You are registered',
     '===========================================',

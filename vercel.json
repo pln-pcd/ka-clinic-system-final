@@ -68,6 +68,14 @@
       "destination": "/api/notifications?route=archive-read-conversations"
     },
     {
+      "source": "/download",
+      "destination": "/downloads/ka-clinic.apk"
+    },
+    {
+      "source": "/download-apk",
+      "destination": "/downloads/ka-clinic.apk"
+    },
+    {
       "source": "/((?!api/)(?!@)(?!src/)(?!node_modules/)(?!.*\\.).*)",
       "destination": "/index.html"
     }
@@ -148,7 +156,7 @@
       ]
     },
     {
-      "source": "/downloads/(.*\\.apk)",
+      "source": "/(downloads/.*\\.apk|download|download-apk)",
       "headers": [
         {
           "key": "Content-Type",
