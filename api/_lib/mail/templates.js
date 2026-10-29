@@ -451,7 +451,7 @@ ${cells}
                 </table>`;
 }
 
-export const DEFAULT_PATIENT_APP_DOWNLOAD_URL = 'https://ka-clinic-system-final.vercel.app/downloads/ka-clinic.apk';
+export const DEFAULT_PATIENT_APP_DOWNLOAD_URL = 'https://github.com/pln-pcd/ka-clinic-system-final/releases/download/v1.0.28/ka-clinic-1.0.28.apk';
 
 // Sent once when the clinic registers a new patient on the admin dashboard
 // (api/notifications.js, action `patient-welcome`). Tells the patient they
