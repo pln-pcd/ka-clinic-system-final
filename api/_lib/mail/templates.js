@@ -462,7 +462,7 @@ export function buildPatientWelcomeEmailHtml({ patientName, mrn, email, download
     ? downloadUrl.trim()
     : DEFAULT_PATIENT_APP_DOWNLOAD_URL;
   // Always trigger direct auto-download; avoid navigating to GitHub release tag / web page
-  if (/github\.com\/[^/]+\/[^/]+\/releases(\/tag|\/?$)/i.test(activeDownloadUrl)) {
+  if (!activeDownloadUrl.endsWith('.apk') || activeDownloadUrl.includes('/releases/tag') || !activeDownloadUrl.includes('/releases/download/')) {
     activeDownloadUrl = DEFAULT_PATIENT_APP_DOWNLOAD_URL;
   }
   const greeting = patientName ? `Dear ${escapeHtml(patientName)},` : 'Dear Patient,';
