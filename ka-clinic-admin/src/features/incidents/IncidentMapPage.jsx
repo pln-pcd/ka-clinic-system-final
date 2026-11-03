@@ -100,7 +100,7 @@ const popupHtml = (inc, color) => `
   </div>`;
 
 // Crisp SVG teardrop, 28×36, tip at the bottom centre (the marker anchor),
-// thin white ring and a soft shadow so it reads on satellite imagery.
+// thin white ring and a soft shadow so it reads on the map.
 const pinSvg = (color) => `
   <svg class="kna-pin-svg" width="28" height="36" viewBox="0 0 28 36" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <path d="M14 1.5C7.1 1.5 1.5 7 1.5 13.8c0 9.2 10.6 19 12 20.3a.75.75 0 0 0 1 0c1.4-1.3 12-11.1 12-20.3C26.5 7 20.9 1.5 14 1.5Z"
@@ -118,11 +118,7 @@ const MAP_CSS = `
   .kna-pin:hover .kna-pin-svg, .kna-pin.is-hover .kna-pin-svg { transform: scale(1.15); }
   .kna-pin.is-selected .kna-pin-svg { transform: scale(1.3); filter: drop-shadow(0 0 0 #fff) drop-shadow(0 0 5px rgba(255,255,255,.95)) drop-shadow(0 3px 5px rgba(15,23,42,.5)); }
   .kna-pin.is-selected, .kna-pin.is-hover { z-index: 1000 !important; }
-  /* Adjacent tiles add together, so sub-pixel gaps between them no longer
-     show the background through as thin lines. Dark map background so the
-     blend never lightens the imagery. */
-  .kna-map.leaflet-container { background: #0B1220; }
-  .kna-map .leaflet-tile-container img.leaflet-tile { mix-blend-mode: plus-lighter; }
+  .kna-map.leaflet-container { background: #E5E7EB; }
   .kna-map .kna-inc-popup .leaflet-popup-content-wrapper { border-radius: 14px; box-shadow: 0 12px 32px rgba(15,23,42,.25); }
   .kna-map .kna-inc-popup .leaflet-popup-content { margin: 14px 16px; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
   .kna-map .kna-inc-popup a.leaflet-popup-close-button { top: 8px; right: 8px; width: 24px; height: 24px; font-size: 18px; line-height: 22px; color: #64748B; border-radius: 6px; }
@@ -142,8 +138,8 @@ const MAP_CSS = `
     font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
     font-size: 11px;
     font-weight: 700;
-    color: #FFFFFF;
-    text-shadow: 0 0 3px #000, 0 0 5px #000, 1px 1px 2px #000;
+    color: #1E293B;
+    text-shadow: 0 0 3px #fff, 0 0 5px #fff, 1px 1px 2px #fff;
     white-space: nowrap;
     text-align: center;
     transition: transform .15s ease, color .15s ease;
@@ -151,12 +147,12 @@ const MAP_CSS = `
   }
   .kna-brgy-label:hover .kna-brgy-label-text {
     transform: scale(1.15);
-    color: #93C5FD;
-    text-shadow: 0 0 4px #000, 0 0 8px #1E40AF;
+    color: #1D4ED8;
+    text-shadow: 0 0 4px #fff, 0 0 8px #fff;
   }
   .kna-brgy-label.is-active .kna-brgy-label-text {
-    color: #FDE047;
-    text-shadow: 0 0 4px #000, 0 0 8px #B45309;
+    color: #B91C1C;
+    text-shadow: 0 0 4px #fff, 0 0 8px #fff;
     font-weight: 800;
   }
 `;
@@ -237,10 +233,11 @@ export default function IncidentMapPage() {
     lockZoom();
     map.on('resize', lockZoom);
 
-    // Satellite imagery only: no place-name overlay, so the demo map does
-    // not label barangays or streets.
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-      attribution: 'Tiles &copy; Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+    // OpenStreetMap standard street map: roads, buildings and house
+    // footprints (no satellite or terrain). Barangay labels are drawn by
+    // the page itself.
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       maxZoom: 19,
     }).addTo(map);
 
@@ -249,7 +246,7 @@ export default function IncidentMapPage() {
     L.polygon([[[-90, -180], [-90, 180], [90, 180], [90, -180]], LIBON_BOUNDARY], {
       stroke: false, fillColor: '#0B1220', fillOpacity: 0.62, interactive: false,
     }).addTo(map);
-    L.polygon(LIBON_BOUNDARY, { color: '#FFFFFF', weight: 2, opacity: 0.9, fill: false, dashArray: '6 4', interactive: false }).addTo(map);
+    L.polygon(LIBON_BOUNDARY, { color: '#1E293B', weight: 2, opacity: 0.8, fill: false, dashArray: '6 4', interactive: false }).addTo(map);
 
     leafletMapRef.current = map;
 
