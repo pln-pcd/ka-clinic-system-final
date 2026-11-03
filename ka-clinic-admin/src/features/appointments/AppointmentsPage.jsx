@@ -1997,7 +1997,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened, init
                 if (pendingOnlineRequests.length === 0) return empty(CheckCircle2, 'All caught up', 'No booking requests are waiting.');
                 return pendingOnlineRequests.map(apt => (
                   <QueueCard key={apt.id} apt={apt} onOpen={openEditModal}
-                    badge={isAptInClosure(apt) ? <StatusBadge tone="amber" label="Can Be Rescheduled by Patient" /> : null}
+                    badge={isAptInClosure(apt) ? <StatusBadge tone="amber" label="Open for Resched" /> : null}
                     reason={apt.notes} reasonLabel="Patient note"
                     actions={<>
                       {isAptInClosure(apt) ? (
@@ -2139,7 +2139,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened, init
                             {isAptInClosure(apt) ? (
                               <StatusBadge
                                 tone="amber"
-                                label="Can Be Rescheduled by Patient"
+                                label="Open for Resched"
                                 title="The clinic schedule is closed for this date/time. The patient can reschedule through the app."
                               />
                             ) : (
@@ -2408,7 +2408,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened, init
                   {isAptInClosure(apt) ? (
                     <StatusBadge
                       tone="amber"
-                      label="Can Be Rescheduled by Patient"
+                      label="Open for Resched"
                       size="md"
                       title="The clinic schedule is closed for this date/time. The patient can reschedule through the app."
                     />
@@ -2788,7 +2788,7 @@ export default function AppointmentPage({ openPreviewDate, onPreviewOpened, init
                           <span className="font-semibold text-slate-900">{a.name}</span>
                           <div className="flex items-center gap-2">
                             <span className="text-slate-500">{a.time}</span>
-                            <StatusBadge tone="amber" label="Can Be Rescheduled by Patient" />
+                            <StatusBadge tone="amber" label="Open for Resched" />
                           </div>
                         </div>
                       ))}

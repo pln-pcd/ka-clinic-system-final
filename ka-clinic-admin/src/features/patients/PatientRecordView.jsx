@@ -675,7 +675,7 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
                           {apt.affectedByClosure ? (
                             <StatusBadge
                               tone="amber"
-                              label="Can Be Rescheduled by Patient"
+                              label="Open for Resched"
                               title="The clinic schedule is closed for this date/time. The patient can reschedule through the app."
                             />
                           ) : (
