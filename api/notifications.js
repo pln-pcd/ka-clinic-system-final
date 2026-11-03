@@ -196,8 +196,22 @@ async function resolveOwnedPatientRef(req, res) {
   if (!snap.exists) { res.status(404).json({ success: false, error: 'No patient record found.' }); return null; }
   const data = snap.data() || {};
   const emailMatch = decoded.email && data.email && decoded.email.toLowerCase() === String(data.email).toLowerCase();
-  const uidMatch = data.authUid && data.authUid === decoded.uid;
-  if (!emailMatch && !uidMatch) { res.status(403).json({ success: false, error: 'This record does not belong to your account.' }); return null; }
+  const uidMatch = (data.authUid && data.authUid === decoded.uid) || (data.uid && data.uid === decoded.uid);
+  if (!emailMatch && !uidMatch) {
+    const authSnap = await db.collection('authorizedPatients').doc(mrn).get();
+    if (authSnap.exists) {
+      const aData = authSnap.data() || {};
+      const aEmailMatch = decoded.email && aData.email && decoded.email.toLowerCase() === String(aData.email).toLowerCase();
+      const aUidMatch = (aData.authUid && aData.authUid === decoded.uid) || (aData.uid && aData.uid === decoded.uid);
+      if (!aEmailMatch && !aUidMatch) {
+        res.status(403).json({ success: false, error: 'This record does not belong to your account.' });
+        return null;
+      }
+    } else {
+      res.status(403).json({ success: false, error: 'This record does not belong to your account.' });
+      return null;
+    }
+  }
   return { ref, data, decoded };
 }
 
@@ -332,6 +346,71 @@ async function hideAppointment(req, res) {
     updatedAt: Date.now(),
   });
   res.status(200).json({ success: true });
+}
+
+// ── Patient App recovery monitoring: wound photos & notes ───────────────────
+async function addRecoveryLog(req, res) {
+  const owned = await resolveOwnedPatientRef(req, res);
+  if (!owned) return;
+  const entry = req.body?.entry;
+  if (!entry || typeof entry !== 'object') {
+    res.status(400).json({ success: false, error: 'Missing entry.' });
+    return;
+  }
+  const cleanEntry = {
+    id: String(entry.id || Date.now()),
+    type: entry.type === 'wound' ? 'wound' : 'note',
+    note: String(entry.note || '').slice(0, 500),
+    photoUrl: typeof entry.photoUrl === 'string' && entry.photoUrl.startsWith('http') ? entry.photoUrl : null,
+    symptoms: Array.isArray(entry.symptoms) ? entry.symptoms.map(String).slice(0, 20) : [],
+    by: 'Patient (App)',
+    date: String(entry.date || new Date().toISOString().slice(0, 10)),
+    createdAt: Number(entry.createdAt) || Date.now(),
+  };
+
+  const existing = Array.isArray(owned.data.woundLog) ? owned.data.woundLog : [];
+  if (existing.length >= 200) {
+    res.status(400).json({ success: false, error: 'Maximum log entries reached.' });
+    return;
+  }
+  const updated = [cleanEntry, ...existing.filter(e => e.id !== cleanEntry.id)];
+  await owned.ref.update({ woundLog: updated });
+  res.status(200).json({ success: true, woundLog: updated });
+}
+
+async function editRecoveryLog(req, res) {
+  const owned = await resolveOwnedPatientRef(req, res);
+  if (!owned) return;
+  const { id, note, symptoms } = req.body || {};
+  if (!id) {
+    res.status(400).json({ success: false, error: 'Missing log ID.' });
+    return;
+  }
+  const existing = Array.isArray(owned.data.woundLog) ? owned.data.woundLog : [];
+  const updated = existing.map(item => {
+    if (item.id !== id) return item;
+    return {
+      ...item,
+      note: typeof note === 'string' ? note.slice(0, 500) : item.note,
+      symptoms: Array.isArray(symptoms) ? symptoms.map(String).slice(0, 20) : item.symptoms,
+    };
+  });
+  await owned.ref.update({ woundLog: updated });
+  res.status(200).json({ success: true, woundLog: updated });
+}
+
+async function deleteRecoveryLog(req, res) {
+  const owned = await resolveOwnedPatientRef(req, res);
+  if (!owned) return;
+  const { id } = req.body || {};
+  if (!id) {
+    res.status(400).json({ success: false, error: 'Missing log ID.' });
+    return;
+  }
+  const existing = Array.isArray(owned.data.woundLog) ? owned.data.woundLog : [];
+  const updated = existing.filter(item => item.id !== id);
+  await owned.ref.update({ woundLog: updated });
+  res.status(200).json({ success: true, woundLog: updated });
 }
 
 // Fire-and-report Expo push. A failed push never fails the whole send — the
@@ -1479,7 +1558,7 @@ async function patientWelcome(req, res) {
     return;
   }
 
-  const DEFAULT_APK_DOWNLOAD_URL = 'https://github.com/pln-pcd/ka-clinic-system-final/releases/download/v1.0.29/ka-clinic-1.0.29.apk';
+  const DEFAULT_APK_DOWNLOAD_URL = 'https://github.com/pln-pcd/ka-clinic-system-final/releases/download/v1.0.30/ka-clinic-1.0.30.apk';
   const rawDownloadUrl = (process.env.PATIENT_APP_DOWNLOAD_URL || '').trim();
   let downloadUrl = /^https:\/\//i.test(rawDownloadUrl) ? rawDownloadUrl : DEFAULT_APK_DOWNLOAD_URL;
   if (!downloadUrl.endsWith('.apk') || downloadUrl.includes('/releases/tag') || !downloadUrl.includes('/releases/download/')) {
@@ -1535,6 +1614,9 @@ const OPEN_ACTIONS = {
   bookAppointment: bookAppointment,
   'hide-appointment': hideAppointment,
   hideAppointment: hideAppointment,
+  'add-recovery-log': addRecoveryLog,
+  'edit-recovery-log': editRecoveryLog,
+  'delete-recovery-log': deleteRecoveryLog,
 };
 const CRON_ACTIONS = { 'dose-sweep': doseSweep, 'backup-cron': backupCron, 'patient-archive-sweep': patientArchiveSweep };
 

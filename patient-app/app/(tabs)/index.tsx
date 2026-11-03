@@ -51,7 +51,7 @@ import { historyRows } from '../../utils/serviceFields';
 import { GUEST_PLACEHOLDER_DOSES } from '../../utils/cardData';
 import { saveImageToGallery } from '../../utils/saveImage';
 import ViewShot from 'react-native-view-shot';
-import { db } from '../../config/backend';
+import { auth, db, API_BASE_URL } from '../../config/backend';
 import {
   acknowledgeNotification,
   ensureNotificationPermission,
@@ -86,13 +86,41 @@ export type LogEntry = {
   createdAt: number;
 };
 
-async function uploadToCloudinary(localUri: string): Promise<string> {
+async function uploadToCloudinary(localUri: string, base64?: string | null): Promise<string> {
+  // If base64 is available from image picker, send directly as JSON data URI (most reliable in React Native, no native FormData file resolver issues)
+  if (base64) {
+    const dataUri = `data:image/jpeg;base64,${base64}`;
+    const res = await fetch(CLOUDINARY_UPLOAD_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        file: dataUri,
+        upload_preset: CLOUDINARY_UPLOAD_PRESET,
+      }),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      console.warn('Cloudinary JSON upload failed:', errText);
+      throw new Error(`Cloudinary error: ${errText}`);
+    }
+    const data = await res.json();
+    if (!data.secure_url) throw new Error('Cloudinary response missing secure_url');
+    return data.secure_url as string;
+  }
+
+  // Fallback: multipart FormData
   const formData = new FormData();
-  formData.append('file', { uri: localUri, type: 'image/jpeg', name: `wound_${Date.now()}.jpg` } as any);
+  const uri = Platform.OS === 'android' ? localUri : localUri.replace('file://', '');
+  formData.append('file', { uri, type: 'image/jpeg', name: `wound_${Date.now()}.jpg` } as any);
   formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
   const res = await fetch(CLOUDINARY_UPLOAD_URL, { method: 'POST', body: formData });
-  if (!res.ok) throw new Error(`Cloudinary error: ${await res.text()}`);
+  if (!res.ok) {
+    const errText = await res.text();
+    console.warn('Cloudinary FormData upload failed:', errText);
+    throw new Error(`Cloudinary error: ${errText}`);
+  }
   const data = await res.json();
+  if (!data.secure_url) throw new Error('Cloudinary response missing secure_url');
   return data.secure_url as string;
 }
 
@@ -335,6 +363,7 @@ export default function RabiesRecoveryApp() {
   const [logsError, setLogsError] = useState('');
   const [showWoundModal, setShowWoundModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedImageBase64, setSelectedImageBase64] = useState<string | null>(null);
   const [description, setDescription] = useState('');
   const [symptoms, setSymptoms] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -565,10 +594,11 @@ export default function RabiesRecoveryApp() {
         return;
       }
       const result = useCamera
-        ? await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.7 })
-        : await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.7 });
+        ? await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.7, base64: true })
+        : await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.7, base64: true });
       if (!result.canceled && result.assets?.[0]?.uri) {
         setSelectedImage(result.assets[0].uri);
+        setSelectedImageBase64(result.assets[0].base64 || null);
         setShowWoundModal(true);
       }
     } catch (err) {
@@ -587,7 +617,7 @@ export default function RabiesRecoveryApp() {
     let photoUrl: string | null = null;
     if (selectedImage) {
       try {
-        photoUrl = await uploadToCloudinary(selectedImage);
+        photoUrl = await uploadToCloudinary(selectedImage, selectedImageBase64);
       } catch (e) {
         console.warn('Cloudinary upload failed:', e);
         setUploading(false);
@@ -602,20 +632,43 @@ export default function RabiesRecoveryApp() {
       const composedNote = symptoms.length
         ? `Symptoms: ${symptoms.join(', ')}.${description.trim() ? ' ' + description.trim() : ''}`
         : description.trim();
-      const entry = {
+      const entry: LogEntry = {
         id: Date.now().toString(),
         type: selectedImage ? 'wound' : 'note',
         note: composedNote,
         photoUrl,
         symptoms: [...symptoms],
         by: 'Patient (App)',
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         date: formatDoseDate(new Date().toISOString().slice(0, 10)),
         createdAt: Date.now(),
       };
-      const ref = doc(db, 'vaccinations', mrn);
-      const fresh = await getDoc(ref);
-      const existing: any[] = Array.isArray(fresh.data()?.woundLog) ? fresh.data()!.woundLog : [];
-      await updateDoc(ref, { woundLog: [...existing, entry] });
+
+      // Try serverless API first (avoids cloud firestore.rules permission-denied)
+      let saved = false;
+      try {
+        const idToken = await auth.currentUser?.getIdToken();
+        const resp = await fetch(`${API_BASE_URL}/api/notifications`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+          body: JSON.stringify({ action: 'add-recovery-log', mrn, entry }),
+        });
+        const resData = await resp.json();
+        if (resData?.success) {
+          saved = true;
+          setLogs(prev => [entry, ...prev.filter(l => l.id !== entry.id)]);
+        }
+      } catch (apiErr) {
+        console.warn('API save failed, falling back to direct firestore:', apiErr);
+      }
+
+      if (!saved) {
+        const ref = doc(db, 'vaccinations', mrn);
+        const fresh = await getDoc(ref);
+        const existing: any[] = Array.isArray(fresh.data()?.woundLog) ? fresh.data()!.woundLog : [];
+        await updateDoc(ref, { woundLog: [entry, ...existing.filter(e => e.id !== entry.id)] });
+        setLogs(prev => [entry, ...prev.filter(l => l.id !== entry.id)]);
+      }
       closeModal();
     } catch (e: any) {
       Alert.alert('Could not save entry', e?.code === 'permission-denied'
@@ -629,6 +682,7 @@ export default function RabiesRecoveryApp() {
   const closeModal = () => {
     setShowWoundModal(false);
     setSelectedImage(null);
+    setSelectedImageBase64(null);
     setDescription('');
     setSymptoms([]);
   };
@@ -642,8 +696,24 @@ export default function RabiesRecoveryApp() {
       { text: 'Delete', style: 'destructive', onPress: async () => {
         if (!mrn) return;
         try {
-          const existing: any[] = Array.isArray(patientRecord?.woundLog) ? patientRecord!.woundLog : [];
-          await updateDoc(doc(db, 'vaccinations', mrn), { woundLog: existing.filter(e => e.id !== id) });
+          let deleted = false;
+          try {
+            const idToken = await auth.currentUser?.getIdToken();
+            const resp = await fetch(`${API_BASE_URL}/api/notifications`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+              body: JSON.stringify({ action: 'delete-recovery-log', mrn, id }),
+            });
+            const resData = await resp.json();
+            if (resData?.success) deleted = true;
+          } catch {}
+          if (!deleted) {
+            const ref = doc(db, 'vaccinations', mrn);
+            const fresh = await getDoc(ref);
+            const existing: any[] = Array.isArray(fresh.data()?.woundLog) ? fresh.data()!.woundLog : [];
+            await updateDoc(ref, { woundLog: existing.filter(e => e.id !== id) });
+          }
+          setLogs(prev => prev.filter(l => l.id !== id));
           setViewingLog(null);
         } catch (e: any) {
           Alert.alert('Could not delete entry', e?.message || 'Please try again.');
@@ -664,9 +734,27 @@ export default function RabiesRecoveryApp() {
       const composedNote = editSymptoms.length
         ? `Symptoms: ${editSymptoms.join(', ')}.${editDesc.trim() ? ' ' + editDesc.trim() : ''}`
         : editDesc.trim();
-      const existing: any[] = Array.isArray(patientRecord?.woundLog) ? patientRecord!.woundLog : [];
-      const updated = existing.map(e => e.id === editingLog.id ? { ...e, note: composedNote, symptoms: [...editSymptoms] } : e);
-      await updateDoc(doc(db, 'vaccinations', mrn), { woundLog: updated });
+
+      let edited = false;
+      try {
+        const idToken = await auth.currentUser?.getIdToken();
+        const resp = await fetch(`${API_BASE_URL}/api/notifications`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+          body: JSON.stringify({ action: 'edit-recovery-log', mrn, id: editingLog.id, note: composedNote, symptoms: [...editSymptoms] }),
+        });
+        const resData = await resp.json();
+        if (resData?.success) edited = true;
+      } catch {}
+
+      if (!edited) {
+        const ref = doc(db, 'vaccinations', mrn);
+        const fresh = await getDoc(ref);
+        const existing: any[] = Array.isArray(fresh.data()?.woundLog) ? fresh.data()!.woundLog : [];
+        const updated = existing.map(e => e.id === editingLog.id ? { ...e, note: composedNote, symptoms: [...editSymptoms] } : e);
+        await updateDoc(ref, { woundLog: updated });
+      }
+      setLogs(prev => prev.map(l => l.id === editingLog.id ? { ...l, note: composedNote, symptoms: [...editSymptoms] } : l));
       setEditingLog(null);
     } catch (e: any) {
       Alert.alert('Could not save changes', e?.message || 'Please try again.');
@@ -999,7 +1087,7 @@ export default function RabiesRecoveryApp() {
                   <View style={s.recordsTableRow}>
                     <Text style={[s.recordsTableCellLabel, { flex: 1.2 }]}>Service</Text>
                     <Text style={[s.recordsTableCellValue, { flex: 1.8, fontWeight: '700', color: C.charcoal }]}>
-                      {vaccineCopy.badge}
+                      {vaccineCopy.long || vaccineCopy.short || 'PEP'}
                     </Text>
                   </View>
 
@@ -1122,50 +1210,44 @@ export default function RabiesRecoveryApp() {
                   <Text style={s.sectionTitle}>Recovery Monitoring</Text>
                 </View>
 
-                {/* One Single Unified Action Card Container */}
-                <View style={s.unifiedActionCard}>
+                {/* 3 Visible Distinct Action Cards */}
+                <View style={s.actionCardsRow}>
                   {/* Take Photo */}
                   <TouchableOpacity 
-                    style={s.unifiedActionItem} 
+                    style={s.actionCardItem} 
                     onPress={() => handleMediaAction(true)} 
-                    activeOpacity={0.85}
+                    activeOpacity={0.8}
                   >
                     <View style={s.hubIconBoxCameraSolid}>
-                      <Ionicons name="camera" size={20} color="#FFFFFF" />
+                      <Ionicons name="camera" size={scale(20)} color="#FFFFFF" />
                     </View>
                     <Text style={s.hubTitleCol} numberOfLines={1}>Take Photo</Text>
                     <Text style={s.hubDescCol} numberOfLines={1}>Camera</Text>
                   </TouchableOpacity>
 
-                  {/* Vertical Divider */}
-                  <View style={s.unifiedCardDivider} />
-
                   {/* Upload Photo */}
                   <TouchableOpacity 
-                    style={s.unifiedActionItem} 
+                    style={s.actionCardItem} 
                     onPress={() => handleMediaAction(false)} 
-                    activeOpacity={0.85}
+                    activeOpacity={0.8}
                   >
                     <View style={s.hubIconBoxGallerySolid}>
-                      <Ionicons name="image" size={20} color="#FFFFFF" />
+                      <Ionicons name="image" size={scale(20)} color="#FFFFFF" />
                     </View>
                     <Text style={s.hubTitleCol} numberOfLines={1}>Upload Photo</Text>
                     <Text style={s.hubDescCol} numberOfLines={1}>Gallery</Text>
                   </TouchableOpacity>
 
-                  {/* Vertical Divider */}
-                  <View style={s.unifiedCardDivider} />
-
-                  {/* Add Recovery Note */}
+                  {/* New Log Entry / Add Note */}
                   <TouchableOpacity 
-                    style={s.unifiedActionItem} 
-                    onPress={() => { setSelectedImage(null); setShowWoundModal(true); }} 
-                    activeOpacity={0.85}
+                    style={s.actionCardItem} 
+                    onPress={() => { setSelectedImage(null); setSelectedImageBase64(null); setShowWoundModal(true); }} 
+                    activeOpacity={0.8}
                   >
                     <View style={s.hubIconBoxNoteSolid}>
-                      <Ionicons name="document-text" size={20} color="#FFFFFF" />
+                      <Ionicons name="document-text" size={scale(20)} color="#FFFFFF" />
                     </View>
-                    <Text style={s.hubTitleCol} numberOfLines={1}>Add Note</Text>
+                    <Text style={s.hubTitleCol} numberOfLines={1}>New Entry</Text>
                     <Text style={s.hubDescCol} numberOfLines={1}>Log progress</Text>
                   </TouchableOpacity>
                 </View>
@@ -1375,8 +1457,19 @@ export default function RabiesRecoveryApp() {
                   </TouchableOpacity>
                 </LinearGradient>
 
-                <View style={{ padding: scale(20) }}>
-                  {selectedImage && <Image source={{ uri: selectedImage }} style={s.popupImage} />}
+                <View style={{ padding: scale(20), backgroundColor: '#FFFFFF' }}>
+                  {selectedImage && (
+                    <View style={s.photoPreviewContainer}>
+                      <Image source={{ uri: selectedImage }} style={s.popupImage} resizeMode="cover" />
+                      <TouchableOpacity
+                        style={s.photoRemoveBtn}
+                        onPress={() => { setSelectedImage(null); setSelectedImageBase64(null); }}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="close-circle" size={scale(24)} color="#EF4444" />
+                      </TouchableOpacity>
+                    </View>
+                  )}
                   <Text style={s.fieldLabel}>Symptoms</Text>
                   <View style={s.chipGroup}>
                     {SYMPTOMS_LIST.map(sym => (
@@ -1769,6 +1862,27 @@ const s = StyleSheet.create({
   sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: verticalScale(14), gap: scale(8) },
   sectionAccent: { width: scale(4), height: verticalScale(18), borderRadius: scale(2), backgroundColor: '#1E3A8A' },
   sectionTitle: { fontSize: moderateScale(18), fontWeight: '900', color: C.charcoal, flex: 1 },
+  actionCardsRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: scale(10),
+  },
+  actionCardItem: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: scale(16),
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingVertical: verticalScale(14),
+    paddingHorizontal: scale(4),
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
   unifiedActionCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1907,7 +2021,7 @@ const s = StyleSheet.create({
   timelineRowSnippet: { fontSize: moderateScale(13.5), color: '#64748B', marginTop: verticalScale(3), fontWeight: '500' },
   timelineRowSnippetPhoto: { fontSize: moderateScale(13.5), color: '#E31837', marginTop: verticalScale(3), fontWeight: '600' },
   timelineRowSnippetEmpty: { fontSize: moderateScale(13.5), color: '#94A3B8', marginTop: verticalScale(3), fontWeight: '500', fontStyle: 'italic' },
-  popupImage: { width: '100%', height: verticalScale(150), borderRadius: scale(14), marginBottom: verticalScale(12), backgroundColor: '#F1F5F9' },
+  popupImage: { width: '100%', height: '100%', backgroundColor: '#F1F5F9' },
   fieldLabel: { fontSize: moderateScale(12), fontWeight: '700', color: '#64748B', marginBottom: verticalScale(6) },
   chipGroup: { flexDirection: 'row', flexWrap: 'wrap', gap: scale(8), marginTop: verticalScale(4) },
   chip: { paddingHorizontal: scale(11), paddingVertical: verticalScale(6), borderRadius: scale(10), backgroundColor: SOFT_GRAY_BG, borderWidth: 1, borderColor: C.border },
@@ -2581,7 +2695,37 @@ const s = StyleSheet.create({
   caseStatusPillTextResolved: { color: '#64748B' },
 
   // MODAL OVERLAY & SHEETS
-  centeredOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: scale(20) },
+  centeredOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: scale(20) },
+  centeredSheet: {
+    width: '100%',
+    maxHeight: '90%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: scale(24),
+    overflow: 'hidden',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 12,
+  },
+  photoPreviewContainer: {
+    position: 'relative',
+    width: '100%',
+    height: verticalScale(160),
+    borderRadius: scale(16),
+    overflow: 'hidden',
+    marginBottom: verticalScale(12),
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  photoRemoveBtn: {
+    position: 'absolute',
+    top: scale(8),
+    right: scale(8),
+    backgroundColor: '#FFFFFF',
+    borderRadius: scale(12),
+  },
   popupHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(16) },
   popupTitle: { fontSize: moderateScale(19), fontWeight: '900', color: C.charcoal, letterSpacing: -0.3 },
   popupTitleIconBox: { width: scale(30), height: verticalScale(30), borderRadius: scale(10), backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0', justifyContent: 'center', alignItems: 'center' },

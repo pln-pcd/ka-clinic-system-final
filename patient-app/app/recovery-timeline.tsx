@@ -19,7 +19,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { db } from '../config/backend';
+import { auth, db, API_BASE_URL } from '../config/backend';
 import { usePatientAuth } from '../context/PatientAuthContext';
 import { moderateScale, scale, verticalScale } from '../utils/scale';
 
@@ -111,9 +111,22 @@ export default function RecoveryTimelineScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const vaccineRef = doc(db, 'vaccinations', mrn);
-              const updated = logs.filter(l => l.id !== logId);
-              await updateDoc(vaccineRef, { woundLog: updated });
+              let deleted = false;
+              try {
+                const idToken = await auth.currentUser?.getIdToken();
+                const resp = await fetch(`${API_BASE_URL}/api/notifications`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+                  body: JSON.stringify({ action: 'delete-recovery-log', mrn, id: logId }),
+                });
+                const resData = await resp.json();
+                if (resData?.success) deleted = true;
+              } catch {}
+              if (!deleted) {
+                const vaccineRef = doc(db, 'vaccinations', mrn);
+                const updated = logs.filter(l => l.id !== logId);
+                await updateDoc(vaccineRef, { woundLog: updated });
+              }
               if (viewingLog?.id === logId) setViewingLog(null);
             } catch (err) {
               console.error('Delete log failed:', err);
@@ -142,9 +155,22 @@ export default function RecoveryTimelineScreen() {
       const composedNote = editSymptoms.length
         ? `Symptoms: ${editSymptoms.join(', ')}.${editDesc.trim() ? ' ' + editDesc.trim() : ''}`
         : editDesc.trim();
-      const vaccineRef = doc(db, 'vaccinations', mrn);
-      const updated = logs.map(l => l.id === editingLog.id ? { ...l, note: composedNote, symptoms: [...editSymptoms] } : l);
-      await updateDoc(vaccineRef, { woundLog: updated });
+      let edited = false;
+      try {
+        const idToken = await auth.currentUser?.getIdToken();
+        const resp = await fetch(`${API_BASE_URL}/api/notifications`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+          body: JSON.stringify({ action: 'edit-recovery-log', mrn, id: editingLog.id, note: composedNote, symptoms: [...editSymptoms] }),
+        });
+        const resData = await resp.json();
+        if (resData?.success) edited = true;
+      } catch {}
+      if (!edited) {
+        const vaccineRef = doc(db, 'vaccinations', mrn);
+        const updated = logs.map(l => l.id === editingLog.id ? { ...l, note: composedNote, symptoms: [...editSymptoms] } : l);
+        await updateDoc(vaccineRef, { woundLog: updated });
+      }
       setEditingLog(null);
     } catch (err) {
       console.error('Save edit failed:', err);
