@@ -24,6 +24,7 @@
     },
     "production": {
       "node": "24.18.0",
+      "distribution": "internal",
       "android": {
         "buildType": "apk"
       },
