@@ -227,9 +227,13 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
 
   async function handleAddPatient(form, setSaving, returningPatientOrOptions = null) {
     if (!form.fname.trim() || !form.lname.trim()) { showToast('Please fill in first and last name', 'error'); return; }
-    if (!form.email.trim()) { showToast('Email is required so the patient can log in to the app', 'error'); return; }
+    const trimmedEmail = (form.email || '').trim();
+    const normalEmail = trimmedEmail.toLowerCase();
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(form.email.trim())) { showToast('Please enter a valid email address', 'error'); return; }
+    if (trimmedEmail && !emailRegex.test(trimmedEmail)) {
+      showToast('Please enter a valid email address', 'error');
+      return;
+    }
     if (!form.age) { showToast('Age is required', 'error'); return; }
     if (form.contact && !isValidPHPhone(form.contact)) { showToast('Enter a valid Philippine mobile number', 'error'); return; }
 
@@ -238,13 +242,13 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
     const skipDuplicateCheck = isReturning || Boolean(returningPatientOrOptions?.skipDuplicateCheck);
     const returningMrn = returningPatient ? (returningPatient.id || returningPatient.mrn || returningPatient.firestoreId) : null;
 
-    const normalEmail = form.email.toLowerCase().trim();
-
     // Prevent duplicate emails across patient records for patient-app uniqueness
-    const existingLocal = patients.find(p => (p.email || '').toLowerCase().trim() === normalEmail);
-    if (existingLocal && (!isReturning || (existingLocal.firestoreId !== returningPatient.firestoreId && existingLocal.id !== returningMrn))) {
-      showToast(`Email "${normalEmail}" is already registered to ${formatTitleCase(existingLocal.name)} (MRN: ${existingLocal.id || existingLocal.mrn || '—'}). Patient records require a unique email for the Patient App.`, 'error');
-      return;
+    if (normalEmail) {
+      const existingLocal = patients.find(p => (p.email || '').toLowerCase().trim() === normalEmail);
+      if (existingLocal && (!isReturning || (existingLocal.firestoreId !== returningPatient.firestoreId && existingLocal.id !== returningMrn))) {
+        showToast(`Email "${normalEmail}" is already registered to ${formatTitleCase(existingLocal.name)} (MRN: ${existingLocal.id || existingLocal.mrn || '—'}). Patient records require a unique email for the Patient App.`, 'error');
+        return;
+      }
     }
 
     if (!skipDuplicateCheck) {
@@ -277,17 +281,19 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
 
     try {
       // Query authorizedPatients in Firestore to ensure uniqueness across entire database
-      const existingEmailSnap = await getDocs(
-        query(collection(db, 'authorizedPatients'), where('email', '==', normalEmail), limit(1))
-      );
-      if (!existingEmailSnap.empty) {
-        const existingData = existingEmailSnap.docs[0].data();
-        const existingDocId = existingEmailSnap.docs[0].id;
-        const isSameReturning = isReturning && (existingDocId === returningMrn || existingData.mrn === returningMrn);
-        if (!isSameReturning) {
-          showToast(`Email "${normalEmail}" is already registered in patient records to ${existingData.name || 'another patient'} (MRN: ${existingData.mrn || existingDocId}). Each patient must have a unique email for the Patient App.`, 'error');
-          if (typeof setSaving === 'function') setSaving(false);
-          return;
+      if (normalEmail) {
+        const existingEmailSnap = await getDocs(
+          query(collection(db, 'authorizedPatients'), where('email', '==', normalEmail), limit(1))
+        );
+        if (!existingEmailSnap.empty) {
+          const existingData = existingEmailSnap.docs[0].data();
+          const existingDocId = existingEmailSnap.docs[0].id;
+          const isSameReturning = isReturning && (existingDocId === returningMrn || existingData.mrn === returningMrn);
+          if (!isSameReturning) {
+            showToast(`Email "${normalEmail}" is already registered in patient records to ${existingData.name || 'another patient'} (MRN: ${existingData.mrn || existingDocId}). Each patient must have a unique email for the Patient App.`, 'error');
+            if (typeof setSaving === 'function') setSaving(false);
+            return;
+          }
         }
       }
 
@@ -473,17 +479,19 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
       trackEvent(isReturning ? 'patient_service_added' : 'patient_registered');
       showToast(isReturning
         ? `New service (${form.service || 'PEP'}) added for ${fullName} under MRN ${caseNo}`
-        : `${fullName} registered and authorized for app login`, 'success');
+        : normalEmail
+          ? `${fullName} registered and authorized for app login`
+          : `${fullName} registered successfully`, 'success');
       handleCloseAddModal();
       // New patients get a welcome email with the companion app download and
       // sign-up steps. Not awaited: the record is already saved, and a mail
       // failure must not read as a failed registration. The server sends it
       // at most once per MRN.
-      if (!isReturning) {
+      if (!isReturning && normalEmail) {
         authedPostJson('/api/notifications', { action: 'patient-welcome', mrn: caseNo })
           .then(data => {
             if (data?.emailed) showToast(`Welcome email with app instructions sent to ${normalEmail}`, 'success');
-            else if (!data?.success) showToast(`${fullName} was registered, but the welcome email could not be sent`, 'error');
+            else if (!data?.success && !data?.skipped) showToast(`${fullName} was registered, but the welcome email could not be sent`, 'error');
           })
           .catch(() => showToast(`${fullName} was registered, but the welcome email could not be sent`, 'error'));
       }
@@ -568,7 +576,24 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
       showToast('Failed to update patient.', 'error');
     });
     if (mrnKey) {
-      setDoc(doc(db, 'authorizedPatients', mrnKey), { email: cleanEmail, name: newName }, { merge: true }).catch(() => {});
+      const isNewEmail = !String(editPatient.email || '').trim() && cleanEmail;
+      const authPayload = { email: cleanEmail, name: newName, authorized: true };
+      if (isNewEmail) {
+        authPayload.registered = false;
+        authPayload.uid = null;
+        authPayload.createdAt = serverTimestamp();
+      }
+      setDoc(doc(db, 'authorizedPatients', mrnKey), authPayload, { merge: true })
+        .then(() => {
+          if (isNewEmail) {
+            authedPostJson('/api/notifications', { action: 'patient-welcome', mrn: mrnKey })
+              .then(data => {
+                if (data?.emailed) showToast(`Welcome email with app instructions sent to ${cleanEmail}`, 'success');
+              })
+              .catch(() => {});
+          }
+        })
+        .catch(() => {});
     }
   }
 
@@ -1169,7 +1194,7 @@ export default function App({ initialOpenAddModal = false, onAddModalClosed, ini
                           <div style={{ fontWeight: 600, color: '#0F172A', fontSize: '.8125rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={formattedName}>
                             {formattedName}
                           </div>
-                          {p.email && (
+                          {p.email?.trim() && (
                             <div style={{ fontWeight: 400, color: '#94A3B8', fontSize: '.6875rem', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={p.email}>
                               {p.email}
                             </div>

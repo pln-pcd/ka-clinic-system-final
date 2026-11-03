@@ -373,7 +373,11 @@ export default function VaccinationTrackerPage({ selectedPatientId, onClearSelec
       const channels = [];
       if (res.pushSent > 0) channels.push('app');
       if (res.emailed) channels.push('email');
-      showToast(`Follow-up reminder sent to ${name}${channels.length ? ` via ${channels.join(' and ')}` : ''}!`, 'success');
+      if (channels.length) {
+        showToast(`Follow-up reminder sent to ${name} via ${channels.join(' and ')}!`, 'success');
+      } else {
+        showToast(`No email or active app device on file for ${name}. Reminder saved to records, but could not be delivered.`, 'info');
+      }
     } catch (err) {
       console.error('Manual follow-up error:', err);
       showToast(err?.message || 'Failed to send follow-up reminder.', 'error');

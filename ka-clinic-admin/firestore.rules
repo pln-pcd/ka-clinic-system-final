@@ -44,6 +44,15 @@ service cloud.firestore {
       allow read: if isAdmin() || owns(resource.data);
       allow write: if isAdmin();
     }
+    // Recovery monitoring: patient app appends wound/symptom log entries to
+    // woundLog on their own vaccinations document. woundLog must be the ONLY
+    // field changed to protect clinical records from arbitrary modifications.
+    function onlyChangesWoundLog() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['woundLog'])
+        && request.resource.data.woundLog is list
+        && request.resource.data.woundLog.size() <= 200;
+    }
+
     // A patient reads only the MRN their verified sign-in session was issued
     // for (securitySessions, written by the server), never another MRN, even
     // one that carries their email. The case history (caseHistory, earlier
@@ -51,7 +60,8 @@ service cloud.firestore {
     match /vaccinations/{mrn} {
       allow read: if isAdmin() || (owns(resource.data) && mrn == session().mrn && resource.data.get('isArchived', false) != true);
       allow create: if isAdmin() && request.resource.data.get('isArchived', false) != true;
-      allow update: if isAdmin() && !(request.resource.data.get('isArchived', false) == true && resource.data.get('isArchived', false) != true);
+      allow update: if (isAdmin() && !(request.resource.data.get('isArchived', false) == true && resource.data.get('isArchived', false) != true))
+        || (owns(resource.data) && mrn == session().mrn && resource.data.get('isArchived', false) != true && onlyChangesWoundLog());
       allow delete: if isAdmin();
     }
     match /appointments/{id} {

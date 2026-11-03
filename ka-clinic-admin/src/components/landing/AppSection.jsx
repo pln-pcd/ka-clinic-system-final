@@ -247,9 +247,9 @@ export default function AppSection() {
 
             {/* Simple & Compact APK Download Button */}
             <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-              <a href="https://github.com/pln-pcd/ka-clinic-system-final/releases/download/v1.0.28/ka-clinic-1.0.28.apk"
-                download="ka-clinic-1.0.28.apk"
-                onClick={() => showToast('Downloading K&A Clinic APK (v1.0.28)... 🚀')}
+              <a href="https://github.com/pln-pcd/ka-clinic-system-final/releases/download/v1.0.29/ka-clinic-1.0.29.apk"
+                download="ka-clinic-1.0.29.apk"
+                onClick={() => showToast('Downloading K&A Clinic APK (v1.0.29)... 🚀')}
                 style={{
                   background: '#EF4444',
                   border: 'none',
@@ -277,7 +277,7 @@ export default function AppSection() {
                   e.currentTarget.style.boxShadow = '0 4px 14px rgba(239, 68, 68, 0.35)';
                 }}>
                 <Download size={18} color="#FFFFFF" />
-                <span>Download APK (v1.0.28)</span>
+                <span>Download APK (v1.0.29)</span>
               </a>
             </div>
 

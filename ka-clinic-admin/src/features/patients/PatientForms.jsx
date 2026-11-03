@@ -265,8 +265,7 @@ const REGISTER_RULES = {
     if (Number(age) < 1 || Number(age) > 120) return 'Enter an age from 1 to 120';
     return '';
   },
-  email: f => (!f.email.trim() ? 'Enter an email; the patient signs in to the app with it'
-    : !EMAIL_RE.test(f.email.trim()) ? 'Enter a valid email, e.g. name@gmail.com' : ''),
+  email: f => (f.email.trim() && !EMAIL_RE.test(f.email.trim()) ? 'Enter a valid email, e.g. name@gmail.com' : ''),
   contact: f => (f.contact && !isValidPHPhone(f.contact) ? 'Enter a PH mobile number, e.g. 0917 123 4567' : ''),
   sex: f => (f.sex ? '' : 'Choose the sex'),
   barangay: f => (f.barangay ? '' : 'Choose the barangay'),
@@ -698,9 +697,10 @@ export function AddPatientModal({ onClose, onAdd, initialPatient = null }) {
                 </FormGroup>
 
                 <FormGroup title="Contact" hint="The email is the patient's app sign-in.">
-                  <div className="form-field span-2"><label htmlFor="reg-email">Email <Req /> <Opt>for app login</Opt></label>
+                  <div className="form-field span-2"><label htmlFor="reg-email">Email (optional)</label>
                     <input type="email" {...v.field('email')} value={form.email} onChange={e => set('email', e.target.value)} placeholder="patient@gmail.com" autoComplete="off" />
                     <FieldError v={v} name="email" />
+                    <span className="apw-help">Needed for the patient app and for emails. Without an email, the patient cannot sign in to the app.</span>
                   </div>
                   <div className="form-field span-2"><label htmlFor="reg-contact">Contact number <Opt /></label>
                     <input type="text" inputMode="numeric" {...v.field('contact')} value={form.contact} onChange={e => set('contact', e.target.value.replace(/[^\d+\s-]/g, ''))} placeholder="0917 123 4567" />
@@ -947,7 +947,7 @@ export function AddPatientModal({ onClose, onAdd, initialPatient = null }) {
                 </div>
                 <div className="flex flex-col gap-3 min-w-0">
                 <SummaryCard title="Contact & address" stepId="identity" rows={[
-                  ['Email', form.email],
+                  ['Email', form.email?.trim() || 'Not provided'],
                   ['Contact', form.contact],
                   ['Address', form.address],
                 ]} />

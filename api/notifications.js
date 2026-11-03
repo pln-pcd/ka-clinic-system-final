@@ -1470,12 +1470,16 @@ async function patientWelcome(req, res) {
   }
 
   const email = String(patient.email || '').trim().toLowerCase();
-  if (!email || !isValidEmail(email)) {
+  if (!email) {
+    res.status(200).json({ success: true, emailed: false, skipped: true, reason: 'no_email' });
+    return;
+  }
+  if (!isValidEmail(email)) {
     res.status(422).json({ success: false, error: 'This patient has no valid email address on file.' });
     return;
   }
 
-  const DEFAULT_APK_DOWNLOAD_URL = 'https://github.com/pln-pcd/ka-clinic-system-final/releases/download/v1.0.28/ka-clinic-1.0.28.apk';
+  const DEFAULT_APK_DOWNLOAD_URL = 'https://github.com/pln-pcd/ka-clinic-system-final/releases/download/v1.0.29/ka-clinic-1.0.29.apk';
   const rawDownloadUrl = (process.env.PATIENT_APP_DOWNLOAD_URL || '').trim();
   let downloadUrl = /^https:\/\//i.test(rawDownloadUrl) ? rawDownloadUrl : DEFAULT_APK_DOWNLOAD_URL;
   if (!downloadUrl.endsWith('.apk') || downloadUrl.includes('/releases/tag') || !downloadUrl.includes('/releases/download/')) {

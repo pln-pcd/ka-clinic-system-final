@@ -9,7 +9,7 @@ import IconButton from '../../components/IconButton';
 import Select from '../../components/Select';
 import StatusBadge from '../../components/StatusBadge';
 import EmptyState from '../../components/EmptyState';
-import { CalendarDays, Download, Eye, History, Plus, Syringe } from 'lucide-react';
+import { CalendarDays, Camera, Download, Eye, History, Plus, Syringe, Trash2 } from 'lucide-react';
 import { formatTitleCase, formatDateLong as fmtDate, formatDateMedium, getTodayDateString, formatServiceType, serviceLabel } from "../../lib/formatters";
 import { collection, doc, getDoc, query, updateDoc } from "firebase/firestore";
 import { useEffect, useState } from "react";
@@ -88,6 +88,93 @@ function SectionTitle({ title, subtitle, action }) {
         <div className="flex items-center gap-2.5 min-w-0">
           {subtitle && <span className="text-[10px] text-slate-400 font-normal truncate">{subtitle}</span>}
           {action}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────── RECOVERY NOTES FROM PATIENT ─────────────────────────── */
+function RecoveryNotesFromPatient({ patientId, woundLog = [], onDelete }) {
+  const [selectedPhoto, setSelectedPhoto] = useState(null);
+  const entries = [...woundLog].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+  return (
+    <div className="bg-slate-50/70 rounded-2xl border border-slate-200/80 shadow-2xs p-5 mt-4 flex flex-col">
+      <SectionTitle
+        title="Recovery Notes & Wound Photos"
+        subtitle="Patient-submitted progress updates, symptoms, and photos from the companion app"
+      />
+
+      {entries.length === 0 ? (
+        <div className="p-6 text-center bg-white rounded-xl border border-dashed border-slate-200">
+          <p className="text-xs font-medium text-slate-500">No recovery notes or wound photos submitted by the patient yet.</p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {entries.map((entry, i) => (
+            <div key={entry.id || i} className="flex items-start gap-3 p-3.5 bg-white rounded-xl border border-slate-200">
+              <div className="w-2 h-2 rounded-full bg-[#3B50DF] mt-1.5 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
+                  <span className="text-xs font-semibold text-slate-900">{entry.note || 'Recovery update'}</span>
+                  <span className="text-[11px] text-slate-400 font-medium">
+                    {entry.date ? entry.date : ''}
+                    {entry.time ? ` · ${entry.time}` : ''}
+                    {entry.by ? ` (${entry.by})` : ''}
+                  </span>
+                </div>
+
+                {Array.isArray(entry.symptoms) && entry.symptoms.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-1 mb-2">
+                    {entry.symptoms.map((s, sIdx) => (
+                      <span key={sIdx} className="px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-100 text-indigo-700 text-[10px] font-medium">
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {entry.photoUrl && (
+                  <div className="mt-2">
+                    <img
+                      src={entry.photoUrl}
+                      alt="Patient recovery wound photo"
+                      onClick={() => setSelectedPhoto(entry.photoUrl)}
+                      className="w-24 h-24 sm:w-32 sm:h-32 object-cover rounded-lg border border-slate-200 cursor-pointer hover:opacity-90 transition-opacity"
+                    />
+                  </div>
+                )}
+              </div>
+              {onDelete && (
+                <button
+                  type="button"
+                  onClick={() => onDelete(entry.id || i)}
+                  className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                  title="Delete log entry"
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {selectedPhoto && (
+        <div
+          className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 backdrop-blur-xs"
+          onClick={() => setSelectedPhoto(null)}
+        >
+          <div className="relative max-w-2xl max-h-[90vh] bg-white rounded-2xl overflow-hidden p-2 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <button
+              onClick={() => setSelectedPhoto(null)}
+              className="absolute top-4 right-4 z-10 p-2 rounded-full bg-slate-900/70 text-white hover:bg-slate-900 transition-colors cursor-pointer"
+            >
+              <X size={18} />
+            </button>
+            <img src={selectedPhoto} alt="Enlarged wound photo" className="max-w-full max-h-[80vh] object-contain rounded-xl" />
+          </div>
         </div>
       )}
     </div>
@@ -194,6 +281,21 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
     } catch (err) {
       console.error(err);
       onToast('Failed to delete report', 'error');
+    }
+  }
+
+  const woundLog = rec.woundLog || patient.woundLog || [];
+
+  async function handleDeleteWoundLog(entryId) {
+    const docId = patient.firestoreId || patient.id || patient.mrn;
+    if (!docId) return;
+    try {
+      const updated = woundLog.filter((e, i) => (e.id || i.toString()) !== entryId.toString());
+      await updateDoc(doc(db, 'vaccinations', docId), { woundLog: updated });
+      if (typeof onToast === 'function') onToast('Recovery log entry deleted', 'success');
+    } catch (err) {
+      console.error(err);
+      if (typeof onToast === 'function') onToast('Failed to delete recovery entry', 'error');
     }
   }
 
@@ -324,10 +426,13 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-500 mt-1 truncate">
-            {patient.email || 'No email registered'}
-            {completedOn && <span className="text-slate-400"> · Completed on {formatDateMedium(completedOn)}</span>}
-          </p>
+          {(patient.email?.trim() || completedOn) && (
+            <p className="text-xs text-slate-500 mt-1 truncate">
+              {patient.email?.trim() || null}
+              {patient.email?.trim() && completedOn && <span className="text-slate-400"> · </span>}
+              {completedOn && <span className="text-slate-400">Completed on {formatDateMedium(completedOn)}</span>}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2.5 shrink-0">
           <div className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-center min-w-[92px]">
@@ -638,6 +743,13 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
           </ul>
         )}
       </div>
+
+      {/* ── RECOVERY NOTES & WOUND PHOTOS FROM PATIENT ── */}
+      <RecoveryNotesFromPatient
+        patientId={patient.firestoreId || patient.id || patient.mrn}
+        woundLog={woundLog}
+        onDelete={!readOnly ? handleDeleteWoundLog : undefined}
+      />
 
       {/* ── PREVIOUS SERVICES (RETURNING PATIENT PRIOR CASES) ── */}
       {(() => {
@@ -1557,14 +1669,14 @@ export function FollowUpModal({ patient, onClose, onToast }) {
       setSentSuccess({
         message: parts.length
           ? `Follow-up notification sent successfully to ${formatTitleCase(patient.name)} via ${parts.join(' and ')}.`
-          : `Follow-up notification logged for ${formatTitleCase(patient.name)}.`,
+          : `No email or active app device on file for ${formatTitleCase(patient.name)}. The notification was saved to clinic records, but could not be delivered to the patient.`,
         channels: parts
       });
       onToast(
         parts.length
           ? `Follow-up sent via ${parts.join(' and ')} to ${formatTitleCase(patient.name)}`
-          : `Notification saved for ${formatTitleCase(patient.name)}`,
-        'success'
+          : `Saved to records (no email or app device on file)`,
+        parts.length ? 'success' : 'info'
       );
     } catch (err) {
       console.error('Follow-up send error:', err);
@@ -1590,22 +1702,46 @@ export function FollowUpModal({ patient, onClose, onToast }) {
 
         {sentSuccess ? (
           <div style={{ padding: '32px 24px', textAlign: 'center' }}>
-            <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#DCFCE7', border: '2px solid #86EFAC', color: '#16A34A', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+            <div style={{
+              width: 56, height: 56, borderRadius: '50%',
+              background: sentSuccess.channels.length ? '#DCFCE7' : '#FEF3C7',
+              border: `2px solid ${sentSuccess.channels.length ? '#86EFAC' : '#FDE68A'}`,
+              color: sentSuccess.channels.length ? '#16A34A' : '#D97706',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px'
+            }}>
+              {sentSuccess.channels.length ? (
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+              ) : (
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
+              )}
             </div>
             <h4 style={{ fontSize: '1.125rem', fontWeight: 800, color: '#0F172A', marginBottom: 8 }}>
-              Follow-up Sent to Patient!
+              {sentSuccess.channels.length ? 'Follow-up Sent to Patient!' : 'Follow-up Saved to Records'}
             </h4>
-            <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 12, padding: '14px 18px', maxWidth: 460, margin: '0 auto 18px', textAlign: 'left' }}>
-              <p style={{ fontSize: '.875rem', color: '#15803D', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span>✓</span> Delivered to {formatTitleCase(patient.name)}
+            <div style={{
+              background: sentSuccess.channels.length ? '#F0FDF4' : '#FFFBEB',
+              border: `1px solid ${sentSuccess.channels.length ? '#BBF7D0' : '#FDE68A'}`,
+              borderRadius: 12, padding: '14px 18px', maxWidth: 460, margin: '0 auto 18px', textAlign: 'left'
+            }}>
+              <p style={{
+                fontSize: '.875rem',
+                color: sentSuccess.channels.length ? '#15803D' : '#B45309',
+                fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: 6
+              }}>
+                <span>{sentSuccess.channels.length ? '✓' : 'ℹ'}</span> {sentSuccess.channels.length ? `Delivered to ${formatTitleCase(patient.name)}` : `Recorded for ${formatTitleCase(patient.name)}`}
               </p>
-              <p style={{ fontSize: '.75rem', color: '#166534', margin: '4px 0 0', lineHeight: 1.4 }}>
+              <p style={{
+                fontSize: '.75rem',
+                color: sentSuccess.channels.length ? '#166534' : '#92400E',
+                margin: '4px 0 0', lineHeight: 1.4
+              }}>
                 {sentSuccess.message}
               </p>
             </div>
             <p style={{ fontSize: '.75rem', color: '#64748B', maxWidth: 420, margin: '0 auto 24px', lineHeight: 1.4 }}>
-              The patient has received this reminder on their registered channels and can acknowledge it directly in the app.
+              {sentSuccess.channels.length
+                ? 'The patient has received this reminder on their registered channels and can acknowledge it directly in the app.'
+                : 'When the patient adds an email or logs in to the companion app, future reminders will be delivered directly to them.'}
             </p>
             <button
               type="button"

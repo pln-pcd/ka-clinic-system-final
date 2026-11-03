@@ -6,11 +6,11 @@
 // with no notice sent. The records are simulated test data (study rules), and
 // the page says so. The map is locked to Libon's municipal boundary. Only
 // signed-in staff reach it (dashboard route + firestore.rules).
-import { CheckCircle2, ChevronDown, Layers, MapPin, ShieldAlert } from 'lucide-react';
+import { CheckCircle2, ChevronDown, Layers, MapPin, ShieldAlert, Tag } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveCollection } from '../../lib/liveStore';
 import { serviceKey } from '../../lib/serviceFields';
-import { LIBON_BARANGAYS, LIBON_BOUNDARY, POBLACION, geocodeLibonAddress, insideLibon, knownBarangay, poblacionZone, recordBarangay } from '../../lib/libonGeo';
+import { LIBON_BARANGAYS, LIBON_BARANGAY_COORDS, LIBON_BOUNDARY, POBLACION, geocodeLibonAddress, insideLibon, knownBarangay, poblacionZone, recordBarangay } from '../../lib/libonGeo';
 
 import { SkeletonRows } from '../../components/Skeleton';
 // Severity colors mirror the Category II/III convention used across the
@@ -23,6 +23,12 @@ const UNKNOWN_COLOR = '#64748B';
 
 // Barangay filter: Libon's barangays (Poblacion as one).
 const MAP_BARANGAYS = LIBON_BARANGAYS;
+
+// Prominent barangays shown when zoomed out to keep the map readable.
+const MAJOR_BARANGAYS = new Set([
+  'Poblacion', 'Buga', 'Pantao', 'Rawis', 'Apud', 'San Agustin',
+  'Alongong', 'Bonbon', 'Matara', 'Caguscos', 'East Carisac', 'Linao', 'San Antonio'
+]);
 const categoryColor = (cat) => CATEGORY_COLOR[cat] || UNKNOWN_COLOR;
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -90,7 +96,7 @@ const popupHtml = (inc, color) => `
       <div class="kna-pop-cell"><span>Barangay</span><b>${esc(inc.barangay)}</b></div>
       <div class="kna-pop-cell"><span>Month</span><b>${esc(monthLabel(inc.date) || '—')}</b></div>
     </div>
-    <div class="kna-pop-anon">Simulated data · barangay-level point</div>
+    <div class="kna-pop-anon">Barangay-level point</div>
   </div>`;
 
 // Crisp SVG teardrop, 28×36, tip at the bottom centre (the marker anchor),
@@ -131,6 +137,28 @@ const MAP_CSS = `
   .kna-pop-wide { grid-column: 1 / -1; }
   .kna-pop-anon { margin-top: 10px; display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 700; color: #92400E; background: #FEF3C7; border: 1px solid #FDE68A; border-radius: 6px; padding: 2px 8px; }
   .kna-map .kna-pin-tip { font: 600 11px/1.3 'Plus Jakarta Sans', system-ui, sans-serif; color: #0F172A; border-radius: 8px; border: 1px solid #E2E8F0; box-shadow: 0 4px 12px rgba(15,23,42,.18); padding: 4px 8px; }
+  .kna-brgy-label { background: transparent; border: none; box-shadow: none; pointer-events: auto; cursor: pointer; }
+  .kna-brgy-label-text {
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    color: #FFFFFF;
+    text-shadow: 0 0 3px #000, 0 0 5px #000, 1px 1px 2px #000;
+    white-space: nowrap;
+    text-align: center;
+    transition: transform .15s ease, color .15s ease;
+    user-select: none;
+  }
+  .kna-brgy-label:hover .kna-brgy-label-text {
+    transform: scale(1.15);
+    color: #93C5FD;
+    text-shadow: 0 0 4px #000, 0 0 8px #1E40AF;
+  }
+  .kna-brgy-label.is-active .kna-brgy-label-text {
+    color: #FDE047;
+    text-shadow: 0 0 4px #000, 0 0 8px #B45309;
+    font-weight: 800;
+  }
 `;
 
 // Pins come from the live patient records (the same shared listener the
@@ -142,9 +170,11 @@ export default function IncidentMapPage() {
   const mapRef = useRef(null);
   const leafletMapRef = useRef(null);
   const layerGroupRef = useRef([]);
+  const labelsLayerRef = useRef(null);
   const markersRef = useRef({});
 
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [showLabels, setShowLabels] = useState(true);
   // The incident whose popup is open (list row highlighted to match).
   const [selectedId, setSelectedId] = useState(null);
   const hoverPin = (id, on) => markersRef.current[id]?.marker?.getElement()?.classList.toggle('is-hover', on);
@@ -296,6 +326,68 @@ export default function IncidentMapPage() {
     layerGroupRef.current.push(pinLayer);
   }, [memoizedIncidentLayers, mapLoaded]);
 
+  // ── Sync Barangay Labels on Map ─────────────────────────────
+  useEffect(() => {
+    if (!leafletMapRef.current || !mapLoaded || !window.L) return;
+    const L = window.L;
+    const map = leafletMapRef.current;
+
+    if (labelsLayerRef.current) {
+      map.removeLayer(labelsLayerRef.current);
+      labelsLayerRef.current = null;
+    }
+
+    if (!showLabels) return;
+
+    const labelsLayer = L.layerGroup();
+
+    const renderLabels = () => {
+      labelsLayer.clearLayers();
+      const zoom = map.getZoom();
+      const showAll = zoom >= 14;
+
+      MAP_BARANGAYS.forEach(name => {
+        if (!showAll && !MAJOR_BARANGAYS.has(name)) return;
+        const coords = LIBON_BARANGAY_COORDS[name];
+        if (!coords) return;
+
+        const isFiltered = barangayFilter === name;
+        const labelIcon = L.divIcon({
+          className: `kna-brgy-label ${isFiltered ? 'is-active' : ''}`,
+          html: `<div class="kna-brgy-label-text">${esc(name)}</div>`,
+          iconSize: [90, 20],
+          iconAnchor: [45, 10],
+        });
+
+        const marker = L.marker([coords.lat, coords.lng], {
+          icon: labelIcon,
+          interactive: true,
+          zIndexOffset: -500,
+        });
+
+        marker.on('click', (e) => {
+          L.DomEvent.stopPropagation(e);
+          setBarangayFilter(prev => (prev === name ? 'all' : name));
+        });
+
+        labelsLayer.addLayer(marker);
+      });
+    };
+
+    renderLabels();
+    map.addLayer(labelsLayer);
+    labelsLayerRef.current = labelsLayer;
+
+    map.on('zoomend', renderLabels);
+    return () => {
+      map.off('zoomend', renderLabels);
+      if (labelsLayerRef.current) {
+        map.removeLayer(labelsLayerRef.current);
+        labelsLayerRef.current = null;
+      }
+    };
+  }, [mapLoaded, showLabels, barangayFilter]);
+
   // Selected pin: bigger marker with a ring; its list row scrolls into view.
   useEffect(() => {
     Object.entries(markersRef.current).forEach(([id, { marker }]) => {
@@ -351,6 +443,21 @@ export default function IncidentMapPage() {
             ))}
           </div>
 
+          {/* Labels toggle */}
+          <button
+            type="button"
+            onClick={() => setShowLabels(v => !v)}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${
+              showLabels
+                ? 'bg-indigo-50 text-[#3B50DF] border-indigo-200'
+                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+            }`}
+            title={showLabels ? 'Hide barangay name labels on map' : 'Show barangay name labels on map'}
+          >
+            <Tag size={13} className={showLabels ? 'text-[#3B50DF]' : 'text-gray-400'} />
+            Labels
+          </button>
+
           {/* Barangay dropdown */}
           <div ref={filterRef} className="relative">
             <button
@@ -393,9 +500,6 @@ export default function IncidentMapPage() {
         <div className="col-span-8 bg-white rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden flex flex-col relative">
           <style>{MAP_CSS}</style>
           <div ref={mapRef} className="kna-map w-full h-full z-10" />
-          <span className="absolute top-3 right-3 z-20 pointer-events-none px-2 py-1 rounded-md bg-white/90 text-[10px] font-extrabold tracking-wider text-slate-700 shadow-sm">
-            SIMULATED DATA
-          </span>
         </div>
 
         {/* Incident List Sidebar — iOS Notes-Style List */}

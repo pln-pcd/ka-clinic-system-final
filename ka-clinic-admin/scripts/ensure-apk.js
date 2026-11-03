@@ -6,8 +6,8 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const targetDir = path.resolve(__dirname, '../public/downloads');
 const targetFile = path.join(targetDir, 'ka-clinic.apk');
-const APK_URL = 'https://github.com/pln-pcd/ka-clinic-system-final/releases/download/v1.0.28/ka-clinic-1.0.28.apk';
-const EXPECTED_VERSION = '1.0.28';
+const APK_URL = 'https://github.com/pln-pcd/ka-clinic-system-final/releases/download/v1.0.29/ka-clinic-1.0.29.apk';
+const EXPECTED_VERSION = '1.0.29';
 const versionFile = path.join(targetDir, '.version');
 
 async function downloadFile(url, dest) {

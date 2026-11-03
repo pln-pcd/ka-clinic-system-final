@@ -247,7 +247,7 @@ function ArchivedPatients({ canAct, onToast }) {
                       {/* Name with the email under it, as on the Patients table. */}
                       <td style={{ padding: '8px 16px', overflow: 'hidden' }}>
                         <div style={{ color: '#0F172A', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={getName(p)}>{getName(p)}</div>
-                        {p.email && (
+                        {p.email?.trim() && (
                           <div style={{ fontWeight: 400, color: '#94A3B8', fontSize: '.6875rem', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={p.email}>{p.email}</div>
                         )}
                       </td>

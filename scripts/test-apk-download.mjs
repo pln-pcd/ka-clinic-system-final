@@ -3,7 +3,7 @@ import https from 'node:https';
 import { buildPatientWelcomeEmailHtml, DEFAULT_PATIENT_APP_DOWNLOAD_URL } from '../api/_lib/mail/templates.js';
 import downloadApkHandler from '../api/download-apk.js';
 
-const EXPECTED_URL = 'https://github.com/pln-pcd/ka-clinic-system-final/releases/download/v1.0.28/ka-clinic-1.0.28.apk';
+const EXPECTED_URL = 'https://github.com/pln-pcd/ka-clinic-system-final/releases/download/v1.0.29/ka-clinic-1.0.29.apk';
 
 console.log('=== TEST 1: Default APK Download URL Constant ===');
 assert.strictEqual(DEFAULT_PATIENT_APP_DOWNLOAD_URL, EXPECTED_URL);
@@ -26,10 +26,10 @@ const htmlTagOverride = buildPatientWelcomeEmailHtml({
   patientName: 'Juan Dela Cruz',
   mrn: '2026-999',
   email: 'test@example.com',
-  downloadUrl: 'https://github.com/pln-pcd/ka-clinic-system-final/releases/tag/v1.0.28',
+  downloadUrl: 'https://github.com/pln-pcd/ka-clinic-system-final/releases/tag/v1.0.29',
 });
 assert(htmlTagOverride.includes(`href="${EXPECTED_URL}"`), 'Tag URL should be replaced with direct APK URL');
-assert(!htmlTagOverride.includes('/releases/tag/v1.0.28'), 'Email must NOT contain release tag web page URL');
+assert(!htmlTagOverride.includes('/releases/tag/v1.0.29'), 'Email must NOT contain release tag web page URL');
 console.log('✔ Tag web page URL is intercepted and replaced with direct download APK link');
 
 console.log('\n=== TEST 3: api/download-apk.js Handler Redirection ===');
@@ -62,7 +62,7 @@ function checkRemoteUrl(url) {
           console.log(`Content-Length: ${redirRes.headers['content-length']} bytes (~${Math.round(redirRes.headers['content-length'] / (1024 * 1024))} MB)`);
           assert.strictEqual(redirRes.statusCode, 200, 'Target should be 200 OK');
           assert.strictEqual(redirRes.headers['content-type'], 'application/vnd.android.package-archive');
-          assert(redirRes.headers['content-disposition'].includes('attachment; filename=ka-clinic-1.0.28.apk'));
+          assert(redirRes.headers['content-disposition'].includes('attachment; filename=ka-clinic-1.0.29.apk'));
           redirRes.destroy();
           resolve(true);
         }).on('error', reject);
@@ -76,6 +76,6 @@ function checkRemoteUrl(url) {
 }
 
 await checkRemoteUrl(EXPECTED_URL);
-console.log('✔ GitHub release URL directly streams ka-clinic-1.0.28.apk without web page navigation!');
+console.log('✔ GitHub release URL directly streams ka-clinic-1.0.29.apk without web page navigation!');
 
 console.log('\n🎉 ALL DOWNLOAD TESTS PASSED SUCCESSFULLY!');
