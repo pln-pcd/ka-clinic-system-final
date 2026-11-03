@@ -40,6 +40,7 @@ import { useLiveCollection } from '../../lib/liveStore';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { deriveStockStatus, formatVials } from '../../lib/inventoryStock';
 import ReportSendToasts from '../../components/ReportSendToasts';
+import HomeCharts from './HomeCharts';
 import { NotFoundPage, PageErrorBoundary } from '../../components/ErrorPages';
 
 import { PageSkeleton } from '../../components/Skeleton';
@@ -1499,6 +1500,9 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
                       ))}
                     </div>
                   </div>
+
+                  {/* ── GRAPHS: patients by category, open cases per barangay, vaccine stock ── */}
+                  <HomeCharts patients={allPatients} inventory={invLive.rows || []} onNavigate={setActivePage} />
 
                   {/* ── MAIN DASHBOARD GRID: three equal panels, a fixed number of
                       rows each (no inner scrollbars), "View all" for the rest ── */}
