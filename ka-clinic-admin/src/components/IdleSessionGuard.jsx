@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { signOut } from 'firebase/auth';
 import { auth } from '../lib/firebase';
-import { authedPostJson, getAdminLastActivity, recordAdminActivity, ADMIN_LAST_ACTIVITY_KEY } from '../lib/adminSession';
+import { authedPostJson, getAdminLastActivity, recordAdminActivity, clearAdminActivity, ADMIN_LAST_ACTIVITY_KEY } from '../lib/adminSession';
 
 export const IDLE_MS = 30 * 60 * 1000;
 export const WARNING_MS = 60 * 1000;
@@ -15,14 +15,26 @@ export function idleState(lastActivity, now = Date.now()) {
 }
 
 export default function IdleSessionGuard({ onLogout, children }) {
-  const lastActivity = useRef(getAdminLastActivity());
+  const getSafeInitialActivity = () => {
+    const stored = getAdminLastActivity();
+    // If stored activity is expired (> 30 min old) when guard mounts,
+    // treat mount as fresh active session (user just authenticated or session restored)
+    if (Date.now() - stored >= IDLE_MS) {
+      const now = Date.now();
+      recordAdminActivity(now);
+      return now;
+    }
+    return stored;
+  };
+
+  const lastActivity = useRef(getSafeInitialActivity());
   const lastHeartbeat = useRef(Date.now());
   const leaving = useRef(false);
   const [seconds, setSeconds] = useState(null);
 
   useEffect(() => {
     // Initialize current tab with latest activity from storage or now
-    const initialActivity = Math.max(lastActivity.current, getAdminLastActivity());
+    const initialActivity = Math.max(lastActivity.current, getSafeInitialActivity());
     lastActivity.current = initialActivity;
     recordAdminActivity(initialActivity);
 
@@ -49,6 +61,7 @@ export default function IdleSessionGuard({ onLogout, children }) {
       // Broadcast logout to other tabs
       try {
         localStorage.setItem(LOGOUT_EVENT_KEY, String(Date.now()));
+        clearAdminActivity();
       } catch {}
 
       if (reason) {
@@ -115,6 +128,7 @@ export default function IdleSessionGuard({ onLogout, children }) {
         // Another tab signed out; sign out here too
         if (!leaving.current) {
           leaving.current = true;
+          clearAdminActivity();
           onLogout();
           signOut(auth).catch(() => {});
         }
@@ -148,6 +162,7 @@ export default function IdleSessionGuard({ onLogout, children }) {
   const stay = async () => {
     const data = await authedPostJson('/api/devices', { action: 'heartbeat' }).catch(() => null);
     if (data && data.success === false && data.unauthorized) {
+      clearAdminActivity();
       await signOut(auth).catch(() => {});
       onLogout();
       return;

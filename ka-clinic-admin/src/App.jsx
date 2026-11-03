@@ -1,7 +1,7 @@
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { auth } from "./lib/firebase";
-import { authedPostJson } from "./lib/adminSession";
+import { authedPostJson, getAdminLastActivity, recordAdminActivity } from "./lib/adminSession";
 import { PageErrorBoundary } from "./components/ErrorPages";
 import BrandLoader from "./components/BrandLoader";
 import IdleSessionGuard from './components/IdleSessionGuard';
@@ -72,6 +72,10 @@ export default function App() {
       try {
         const data = await authedPostJson('/api/devices', { action: 'check-session' });
         if (data?.success && data.authorized) {
+          const current = getAdminLastActivity();
+          if (Date.now() - current >= 30 * 60 * 1000) {
+            recordAdminActivity(Date.now());
+          }
           setView('dashboard');
         } else {
           await signOut(auth).catch(() => {});

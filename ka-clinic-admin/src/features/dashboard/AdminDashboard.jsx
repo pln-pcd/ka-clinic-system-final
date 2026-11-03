@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { auth, db, listen } from '../../lib/firebase';
-import { authedPostJson, useAuth } from '../../lib/adminSession';
+import { authedPostJson, useAuth, clearAdminActivity } from '../../lib/adminSession';
 import Avatar from '../../components/Avatar';
 import { useAdminAvatar } from '../../lib/adminAvatars';
 import { buildDoses } from '../../lib/doseSchedules';
@@ -319,6 +319,7 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
   const myAvatar = useAdminAvatar(auth.currentUser?.uid);
   useEffect(() => {
     if (adminStatus !== null && adminStatus !== 'active') {
+      clearAdminActivity();
       signOut(auth).finally(() => { if (onLogout) onLogout(); });
     }
   }, [adminStatus]);
@@ -841,6 +842,7 @@ export default function AdminDashboard({ onLogout, notFound = false }) {
   const confirmLogout = async () => {
     try {
       const revocation = authedPostJson('/api/devices', { action: 'logout' }).catch(() => {});
+      clearAdminActivity();
       if (onLogout) onLogout();
       else window.location.href = '/';
       await signOut(auth);

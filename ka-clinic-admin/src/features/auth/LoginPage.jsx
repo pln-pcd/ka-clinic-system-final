@@ -9,7 +9,7 @@ import BrandLoader from '../../components/BrandLoader';
 import { doc, getDoc } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
 import { auth, db } from '../../lib/firebase';
-import { getClientDeviceKey, postJson } from '../../lib/adminSession';
+import { getClientDeviceKey, postJson, recordAdminActivity } from '../../lib/adminSession';
 import PasswordChecklist, { PasswordMatch } from '../../components/PasswordChecklist';
 import { meetsPasswordPolicy, passwordPolicyError } from '../../lib/passwordPolicy';
 import {
@@ -225,6 +225,10 @@ export default function AdminLogin({ onSuccess, onBack }) {
   }
 
   function completeLogin() {
+    recordAdminActivity(Date.now());
+    try {
+      sessionStorage.removeItem('kna_admin_logout_reason');
+    } catch {}
     setShowSuccess(true);
     setTimeout(() => { if (onSuccess) onSuccess(); }, 2200);
   }
@@ -280,6 +284,7 @@ export default function AdminLogin({ onSuccess, onBack }) {
       const cred = await signInWithCustomToken(auth, data.customToken);
 
       await verifyAdminAccess(cred.user.uid);
+      recordAdminActivity(Date.now());
 
       if (rememberMe) {
         localStorage.setItem(REMEMBER_KEY, trimmedEmail);
@@ -312,6 +317,7 @@ export default function AdminLogin({ onSuccess, onBack }) {
         return;
       }
       setOtpStep(false);
+      recordAdminActivity(Date.now());
       completeLogin();
     } catch {
       setOtpError('Network error. Please check your connection and try again.');

@@ -80,10 +80,17 @@ export function recordAdminActivity(timestamp = Date.now()) {
   } catch {}
 }
 
+export function clearAdminActivity() {
+  try {
+    localStorage.removeItem(ADMIN_LAST_ACTIVITY_KEY);
+  } catch {}
+}
+
 export function getAdminLastActivity() {
   try {
     const val = localStorage.getItem(ADMIN_LAST_ACTIVITY_KEY);
-    return val ? Number(val) : Date.now();
+    const num = val ? Number(val) : 0;
+    return Number.isFinite(num) && num > 0 ? num : Date.now();
   } catch {
     return Date.now();
   }
