@@ -9,7 +9,7 @@ import IconButton from '../../components/IconButton';
 import Select from '../../components/Select';
 import StatusBadge from '../../components/StatusBadge';
 import EmptyState from '../../components/EmptyState';
-import { CalendarDays, Camera, Download, Eye, History, Plus, Syringe, Trash2 } from 'lucide-react';
+import { CalendarDays, Camera, Download, Eye, History, Plus, Syringe } from 'lucide-react';
 import { formatTitleCase, formatDateLong as fmtDate, formatDateMedium, getTodayDateString, formatServiceType, serviceLabel } from "../../lib/formatters";
 import { collection, doc, getDoc, query, updateDoc } from "firebase/firestore";
 import { useEffect, useState } from "react";
@@ -95,7 +95,7 @@ function SectionTitle({ title, subtitle, action }) {
 }
 
 /* ─────────────────────────── RECOVERY NOTES FROM PATIENT ─────────────────────────── */
-function RecoveryNotesFromPatient({ patientId, woundLog = [], onDelete }) {
+function RecoveryNotesFromPatient({ patientId, woundLog = [] }) {
   const [selected, setSelected] = useState(null);
   const [zoomPhoto, setZoomPhoto] = useState(null);
   const entries = [...woundLog].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
@@ -131,16 +131,6 @@ function RecoveryNotesFromPatient({ patientId, woundLog = [], onDelete }) {
                 {entry.photoUrl && <Camera size={14} className="text-slate-400 shrink-0" aria-label="Has photo" />}
                 <span className="text-[11px] text-slate-400 font-medium shrink-0 hidden sm:block">{stamp(entry)}</span>
               </button>
-              {onDelete && (
-                <button
-                  type="button"
-                  onClick={() => onDelete(entry.id || i)}
-                  className="text-slate-400 hover:text-rose-600 p-1.5 mr-2 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
-                  title="Delete log entry"
-                >
-                  <Trash2 size={14} />
-                </button>
-              )}
             </li>
           ))}
         </ul>
@@ -301,19 +291,6 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
   }
 
   const woundLog = rec.woundLog || patient.woundLog || [];
-
-  async function handleDeleteWoundLog(entryId) {
-    const docId = patient.firestoreId || patient.id || patient.mrn;
-    if (!docId) return;
-    try {
-      const updated = woundLog.filter((e, i) => (e.id || i.toString()) !== entryId.toString());
-      await updateDoc(doc(db, 'vaccinations', docId), { woundLog: updated });
-      if (typeof onToast === 'function') onToast('Recovery log entry deleted', 'success');
-    } catch (err) {
-      console.error(err);
-      if (typeof onToast === 'function') onToast('Failed to delete recovery entry', 'error');
-    }
-  }
 
   // Archiving is automatic — the nightly sweep moves a record to the Archive
   // a full year after its completion date (lib/patientArchive.js). There
@@ -764,7 +741,6 @@ export function MedicalRecordDetail({ patient, records, patients, onBack, onToas
       <RecoveryNotesFromPatient
         patientId={patient.firestoreId || patient.id || patient.mrn}
         woundLog={woundLog}
-        onDelete={!readOnly ? handleDeleteWoundLog : undefined}
       />
 
       {/* ── PREVIOUS SERVICES (RETURNING PATIENT PRIOR CASES) ── */}
