@@ -96,8 +96,10 @@ function SectionTitle({ title, subtitle, action }) {
 
 /* ─────────────────────────── RECOVERY NOTES FROM PATIENT ─────────────────────────── */
 function RecoveryNotesFromPatient({ patientId, woundLog = [], onDelete }) {
-  const [selectedPhoto, setSelectedPhoto] = useState(null);
+  const [selected, setSelected] = useState(null);
+  const [zoomPhoto, setZoomPhoto] = useState(null);
   const entries = [...woundLog].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const stamp = e => [e.date, e.time].filter(Boolean).join(' · ');
 
   return (
     <div className="bg-slate-50/70 rounded-2xl border border-slate-200/80 shadow-2xs p-5 mt-4 flex flex-col">
@@ -111,71 +113,85 @@ function RecoveryNotesFromPatient({ patientId, woundLog = [], onDelete }) {
           <p className="text-xs font-medium text-slate-500">No recovery notes or wound photos submitted by the patient yet.</p>
         </div>
       ) : (
-        <div className="flex flex-col gap-3">
+        <ul className="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100 overflow-hidden">
           {entries.map((entry, i) => (
-            <div key={entry.id || i} className="flex items-start gap-3 p-3.5 bg-white rounded-xl border border-slate-200">
-              <div className="w-2 h-2 rounded-full bg-[#3B50DF] mt-1.5 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
-                  <span className="text-xs font-semibold text-slate-900">{entry.note || 'Recovery update'}</span>
-                  <span className="text-[11px] text-slate-400 font-medium">
-                    {entry.date ? entry.date : ''}
-                    {entry.time ? ` · ${entry.time}` : ''}
-                    {entry.by ? ` (${entry.by})` : ''}
-                  </span>
-                </div>
-
-                {Array.isArray(entry.symptoms) && entry.symptoms.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-1 mb-2">
-                    {entry.symptoms.map((s, sIdx) => (
-                      <span key={sIdx} className="px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-100 text-indigo-700 text-[10px] font-medium">
-                        {s}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                {entry.photoUrl && (
-                  <div className="mt-2">
-                    <img
-                      src={entry.photoUrl}
-                      alt="Patient recovery wound photo"
-                      onClick={() => setSelectedPhoto(entry.photoUrl)}
-                      className="w-24 h-24 sm:w-32 sm:h-32 object-cover rounded-lg border border-slate-200 cursor-pointer hover:opacity-90 transition-opacity"
-                    />
-                  </div>
-                )}
-              </div>
+            <li key={entry.id || i} className="flex items-center gap-1 hover:bg-slate-50 transition-colors">
+              <button
+                type="button"
+                onClick={() => setSelected(entry)}
+                className="flex-1 min-w-0 flex items-center gap-3 px-3.5 py-3 text-left cursor-pointer"
+              >
+                <span className="w-2 h-2 rounded-full bg-[#3B50DF] shrink-0" />
+                <span className="flex-1 min-w-0">
+                  <span className="block text-xs font-semibold text-slate-900 truncate">{entry.note || 'Recovery update'}</span>
+                  {Array.isArray(entry.symptoms) && entry.symptoms.length > 0 && (
+                    <span className="block text-[10px] text-indigo-700 truncate mt-0.5">{entry.symptoms.join(', ')}</span>
+                  )}
+                </span>
+                {entry.photoUrl && <Camera size={14} className="text-slate-400 shrink-0" aria-label="Has photo" />}
+                <span className="text-[11px] text-slate-400 font-medium shrink-0 hidden sm:block">{stamp(entry)}</span>
+              </button>
               {onDelete && (
                 <button
                   type="button"
                   onClick={() => onDelete(entry.id || i)}
-                  className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                  className="text-slate-400 hover:text-rose-600 p-1.5 mr-2 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
                   title="Delete log entry"
                 >
                   <Trash2 size={14} />
                 </button>
               )}
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
 
-      {selectedPhoto && (
-        <div
-          className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 backdrop-blur-xs"
-          onClick={() => setSelectedPhoto(null)}
-        >
-          <div className="relative max-w-2xl max-h-[90vh] bg-white rounded-2xl overflow-hidden p-2 shadow-2xl" onClick={e => e.stopPropagation()}>
+      {selected && (
+        <Modal onClose={() => setSelected(null)}>
+          <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl p-5 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <button
-              onClick={() => setSelectedPhoto(null)}
-              className="absolute top-4 right-4 z-10 p-2 rounded-full bg-slate-900/70 text-white hover:bg-slate-900 transition-colors cursor-pointer"
+              type="button"
+              onClick={() => setSelected(null)}
+              className="absolute top-3 right-3 p-1.5 rounded-full text-slate-500 hover:bg-slate-100 cursor-pointer"
+              aria-label="Close"
             >
-              <X size={18} />
+              <X size={16} />
             </button>
-            <img src={selectedPhoto} alt="Enlarged wound photo" className="max-w-full max-h-[80vh] object-contain rounded-xl" />
+            <h4 className="text-[11px] font-extrabold uppercase tracking-wider text-[#0a1d47] mb-3">Recovery Log Details</h4>
+            <div className="grid gap-3">
+              <InfoField label="Date & time" value={stamp(selected)} />
+              <InfoField label="Submitted by" value={selected.by} />
+              <InfoField label="Note" value={selected.note} full />
+              <div className={FIELD}>
+                <span className={FIELD_LABEL}>Symptoms</span>
+                {Array.isArray(selected.symptoms) && selected.symptoms.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {selected.symptoms.map((s, k) => (
+                      <span key={k} className="px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-100 text-indigo-700 text-[11px] font-medium">{s}</span>
+                    ))}
+                  </div>
+                ) : <span className={`${FIELD_VALUE} text-slate-400`}>—</span>}
+              </div>
+              {selected.photoUrl && (
+                <div>
+                  <span className={FIELD_LABEL}>Photo</span>
+                  <img
+                    src={selected.photoUrl}
+                    alt="Patient recovery wound photo"
+                    onClick={() => setZoomPhoto(selected.photoUrl)}
+                    className="mt-1.5 w-full max-h-80 object-contain bg-slate-50 rounded-xl border border-slate-200 cursor-zoom-in"
+                  />
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        </Modal>
+      )}
+
+      {zoomPhoto && (
+        <Modal onClose={() => setZoomPhoto(null)} backdrop="rgba(0,0,0,0.8)">
+          <img src={zoomPhoto} alt="Enlarged wound photo" className="max-w-full max-h-[90vh] object-contain rounded-xl" />
+        </Modal>
       )}
     </div>
   );
