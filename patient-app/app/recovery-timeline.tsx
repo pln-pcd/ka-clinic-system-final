@@ -7,10 +7,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  SafeAreaView,
+  Keyboard,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -22,6 +19,7 @@ import {
 import { auth, db, API_BASE_URL } from '../config/backend';
 import { usePatientAuth } from '../context/PatientAuthContext';
 import { moderateScale, scale, verticalScale } from '../utils/scale';
+import RecoveryModal, { RecoveryDetailsInput } from '../components/RecoveryModal';
 
 const SYMPTOMS_LIST = ['Redness', 'Swelling', 'Discharge', 'Bleeding', 'Itching', 'Pain', 'Warmth', 'Fever', 'Numbness', 'Pus'];
 
@@ -289,7 +287,7 @@ export default function RecoveryTimelineScreen() {
               <TouchableOpacity
                 key={log.id}
                 style={[styles.timelineRow, idx === filteredLogs.length - 1 && styles.timelineRowLast]}
-                onPress={() => setViewingLog(log)}
+                onPress={() => { Keyboard.dismiss(); setViewingLog(log); }}
                 activeOpacity={0.6}
               >
                 {/* Type Icon */}
@@ -321,133 +319,119 @@ export default function RecoveryTimelineScreen() {
       </ScrollView>
 
       {/* Log Detail Modal */}
-      <Modal visible={!!viewingLog} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalSheet, { padding: 0, overflow: 'hidden' }]}>
-            {/* Dark Navy / Blue Header */}
-            <LinearGradient
-              colors={['#0F172A', '#1E293B']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.modalBlueHeader}
+      <RecoveryModal
+        visible={!!viewingLog}
+        onRequestClose={() => setViewingLog(null)}
+        animationType="slide"
+        header={(
+          <LinearGradient
+            colors={['#0F172A', '#1E293B']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.modalBlueHeader}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={styles.modalBlueHeaderTitle}>{viewingLog?.date} · {viewingLog?.time}</Text>
+              <Text style={styles.modalBlueHeaderSub}>
+                {viewingLog?.type === 'wound' ? 'Wound Photo Update' : 'Recovery Note'}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => setViewingLog(null)} style={styles.modalBlueCloseBtn} activeOpacity={0.8}>
+              <Ionicons name="close" size={18} color="#FFFFFF" />
+            </TouchableOpacity>
+          </LinearGradient>
+        )}
+        footer={(
+          <View style={styles.modalFooterRow}>
+            <TouchableOpacity
+              style={styles.modalDeleteBtn}
+              onPress={() => viewingLog && deleteLog(viewingLog.id)}
             >
-              <View style={{ flex: 1 }}>
-                <Text style={styles.modalBlueHeaderTitle}>{viewingLog?.date} · {viewingLog?.time}</Text>
-                <Text style={styles.modalBlueHeaderSub}>
-                  {viewingLog?.type === 'wound' ? 'Wound Photo Update' : 'Recovery Note'}
-                </Text>
-              </View>
-              <TouchableOpacity onPress={() => setViewingLog(null)} style={styles.modalBlueCloseBtn} activeOpacity={0.8}>
-                <Ionicons name="close" size={18} color="#FFFFFF" />
-              </TouchableOpacity>
-            </LinearGradient>
+              <Ionicons name="trash-outline" size={16} color="#64748B" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.modalEditBtn}
+              onPress={() => viewingLog && openEdit(viewingLog)}
+            >
+              <Ionicons name="create-outline" size={15} color="#334155" />
+              <Text style={styles.modalEditText}>Edit</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      >
+        {viewingLog?.photoUrl && (
+          <Image source={{ uri: viewingLog.photoUrl }} style={styles.detailImage} resizeMode="contain" />
+        )}
 
-            <View style={{ padding: scale(20) }}>
-              {/* maxHeight was capping this below the height a full-width
-                  square photo needs (aspectRatio: 1), clipping the bottom of
-                  the image. modalSheet's own maxHeight (below) now bounds the
-                  overall popup instead, so this only needs to scroll long note
-                  text, not fight the photo for vertical space. */}
-              <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: verticalScale(560) }}>
-                {viewingLog?.photoUrl && (
-                  <Image source={{ uri: viewingLog.photoUrl }} style={styles.detailImage} resizeMode="contain" />
-                )}
+        {viewingLog?.note ? (
+          <Text style={styles.detailNoteText}>{viewingLog.note}</Text>
+        ) : null}
 
-                {viewingLog?.note ? (
-                  <Text style={styles.detailNoteText}>{viewingLog.note}</Text>
-                ) : null}
-
-                {viewingLog?.symptoms && viewingLog.symptoms.length > 0 ? (
-                  <View style={styles.symptomsWrap}>
-                    <Text style={styles.symptomsTitle}>Symptoms Logged</Text>
-                    <View style={styles.chipsRow}>
-                      {viewingLog.symptoms.map(s => (
-                        <View key={s} style={styles.symptomChip}>
-                          <Text style={styles.symptomChipText}>{s}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                ) : null}
-              </ScrollView>
-
-              <View style={styles.modalFooterRow}>
-                <TouchableOpacity
-                  style={styles.modalDeleteBtn}
-                  onPress={() => viewingLog && deleteLog(viewingLog.id)}
-                >
-                  <Ionicons name="trash-outline" size={16} color="#64748B" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.modalEditBtn}
-                  onPress={() => viewingLog && openEdit(viewingLog)}
-                >
-                  <Ionicons name="create-outline" size={15} color="#334155" />
-                  <Text style={styles.modalEditText}>Edit</Text>
-                </TouchableOpacity>
-              </View>
+        {viewingLog?.symptoms && viewingLog.symptoms.length > 0 ? (
+          <View style={styles.symptomsWrap}>
+            <Text style={styles.symptomsTitle}>Symptoms Logged</Text>
+            <View style={styles.chipsRow}>
+              {viewingLog.symptoms.map(s => (
+                <View key={s} style={styles.symptomChip}>
+                  <Text style={styles.symptomChipText}>{s}</Text>
+                </View>
+              ))}
             </View>
           </View>
-        </View>
-      </Modal>
+        ) : null}
+      </RecoveryModal>
 
       {/* Edit Entry Modal */}
-      <Modal visible={!!editingLog} animationType="fade" transparent>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <View style={styles.modalOverlay}>
-            <View style={[styles.modalSheet, { padding: 0, overflow: 'hidden' }]}>
-              {/* Dark Navy / Blue Header */}
-              <LinearGradient
-                colors={['#0F172A', '#1E293B']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.modalBlueHeader}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.modalBlueHeaderTitle}>Edit Log Entry</Text>
-                  <Text style={styles.modalBlueHeaderSub}>Update symptoms or notes</Text>
-                </View>
-                <TouchableOpacity onPress={() => setEditingLog(null)} style={styles.modalBlueCloseBtn} activeOpacity={0.8}>
-                  <Ionicons name="close" size={18} color="#FFFFFF" />
-                </TouchableOpacity>
-              </LinearGradient>
-
-              <View style={{ padding: scale(20) }}>
-                <Text style={styles.symptomsTitle}>Symptoms</Text>
-                <View style={[styles.chipsRow, { marginTop: verticalScale(8), marginBottom: verticalScale(14) }]}>
-                  {SYMPTOMS_LIST.map(sym => (
-                    <TouchableOpacity
-                      key={sym}
-                      style={[styles.editChip, editSymptoms.includes(sym) && styles.editChipActive]}
-                      onPress={() => toggleEditSymptom(sym)}
-                    >
-                      <Text style={[styles.editChipText, editSymptoms.includes(sym) && styles.editChipTextActive]}>{sym}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                <Text style={styles.symptomsTitle}>Details</Text>
-                <TextInput
-                  style={styles.editTextArea}
-                  placeholder="Add details..."
-                  multiline
-                  value={editDesc}
-                  onChangeText={setEditDesc}
-                />
-
-                <View style={styles.modalFooterRow}>
-                  <TouchableOpacity style={styles.editCancelBtn} onPress={() => setEditingLog(null)}>
-                    <Text style={styles.editCancelText}>Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.editSaveBtn, saving && { opacity: 0.6 }]} onPress={saveEdit} disabled={saving}>
-                    {saving ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={styles.editSaveText}>Save Changes</Text>}
-                  </TouchableOpacity>
-                </View>
-              </View>
+      <RecoveryModal
+        visible={!!editingLog}
+        onRequestClose={() => setEditingLog(null)}
+        header={(
+          <LinearGradient
+            colors={['#0F172A', '#1E293B']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.modalBlueHeader}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={styles.modalBlueHeaderTitle}>Edit Log Entry</Text>
+              <Text style={styles.modalBlueHeaderSub}>Update symptoms or notes</Text>
             </View>
+            <TouchableOpacity onPress={() => setEditingLog(null)} style={styles.modalBlueCloseBtn} activeOpacity={0.8}>
+              <Ionicons name="close" size={18} color="#FFFFFF" />
+            </TouchableOpacity>
+          </LinearGradient>
+        )}
+        footer={(
+          <View style={styles.modalFooterRow}>
+            <TouchableOpacity style={styles.editCancelBtn} onPress={() => setEditingLog(null)}>
+              <Text style={styles.editCancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.editSaveBtn, saving && { opacity: 0.6 }]} onPress={saveEdit} disabled={saving}>
+              {saving ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={styles.editSaveText}>Save Changes</Text>}
+            </TouchableOpacity>
           </View>
-        </KeyboardAvoidingView>
-      </Modal>
+        )}
+      >
+        <Text style={styles.symptomsTitle}>Symptoms</Text>
+        <View style={[styles.chipsRow, { marginTop: verticalScale(8), marginBottom: verticalScale(14) }]}>
+          {SYMPTOMS_LIST.map(sym => (
+            <TouchableOpacity
+              key={sym}
+              style={[styles.editChip, editSymptoms.includes(sym) && styles.editChipActive]}
+              onPress={() => toggleEditSymptom(sym)}
+            >
+              <Text style={[styles.editChipText, editSymptoms.includes(sym) && styles.editChipTextActive]}>{sym}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <Text style={styles.symptomsTitle}>Details</Text>
+        <RecoveryDetailsInput
+          placeholder="Add details..."
+          value={editDesc}
+          onChangeText={setEditDesc}
+        />
+      </RecoveryModal>
     </View>
   );
 }
@@ -585,8 +569,6 @@ const styles = StyleSheet.create({
   noteSnippetEmpty: { fontSize: moderateScale(13.5), color: '#94A3B8', marginTop: verticalScale(3), fontWeight: '500', fontStyle: 'italic' },
   photoSnippet: { fontSize: moderateScale(13.5), color: '#E31837', marginTop: verticalScale(3), fontWeight: '600' },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: scale(20) },
-  modalSheet: { width: '100%', maxHeight: '90%', backgroundColor: '#FFFFFF', borderRadius: scale(24), padding: scale(20) },
   modalBlueHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -659,7 +641,6 @@ const styles = StyleSheet.create({
   editChipActive: { backgroundColor: '#F1F5F9', borderColor: '#334155' },
   editChipText: { fontSize: moderateScale(11.5), color: '#475569', fontWeight: '700' },
   editChipTextActive: { fontSize: moderateScale(11.5), color: '#0F172A', fontWeight: '800' },
-  editTextArea: { backgroundColor: '#F8FAFC', borderRadius: scale(14), padding: scale(12), height: verticalScale(86), fontSize: moderateScale(11.5), color: '#0F172A', borderWidth: 1, borderColor: '#E2E8F0', marginTop: verticalScale(8), lineHeight: moderateScale(17) },
   editCancelBtn: { flex: 1, height: scale(38), borderRadius: scale(10), backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#E2E8F0' },
   editCancelText: { fontSize: moderateScale(12.5), fontWeight: '800', color: '#475569' },
   editSaveBtn: { flex: 1, height: scale(38), borderRadius: scale(10), backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center' },
