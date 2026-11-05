@@ -1,0 +1,22 @@
+{
+  "version": "1.0.31",
+  "versionCode": 31,
+  "package": "com.anonymous.knarabiesmonitoring",
+  "signatureVerified": true,
+  "certificateMatchesPreviousRelease": true,
+  "certificateSha256": "4fef45c1eae069ede9b94c98567b94116f9765e778257a69ab729a3391b62bfe",
+  "sha256": "75cfdd58c77e44ed5f07b39308fad784c706b580d006b5fd0db8ecf27165f09d",
+  "bytes": 30551693,
+  "architectures": [
+    "arm64-v8a",
+    "armeabi-v7a"
+  ],
+  "cleartextTraffic": false,
+  "backupAllowed": false,
+  "debuggable": false,
+  "productionApiConfigured": true,
+  "bundleSha256": "d820253087a4aebd510004b30fee84784df60175f026f176ac9cd955ea50924c",
+  "sourceCommit": "b4cf1f3c5f2cb9d3ac8d0a59067f0b12c6d2a0ff",
+  "easBuildId": "14f32fb2-bda1-4f69-a917-1b61cab93776",
+  "easMirror": "https://expo.dev/artifacts/eas/gwVttZsIIMV29GylTPBR0yWJGth5BFpshBiyeGhT9HE.apk"
+}
